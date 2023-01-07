@@ -18,7 +18,7 @@ struct<>
 -- !query
 select country, count(*) from data group by ALL
 -- !query schema
-struct<country:string,count(1):bigint>
+struct<country:string,count(*):bigint>
 -- !query output
 China	2
 Korea	1
@@ -29,7 +29,7 @@ USA	3
 -- !query
 select country, count(*) from data group by aLl
 -- !query schema
-struct<country:string,count(1):bigint>
+struct<country:string,count(*):bigint>
 -- !query output
 China	2
 Korea	1
@@ -40,7 +40,7 @@ USA	3
 -- !query
 select all, city, count(*) from (select country as all, city, id from data) group by all, city
 -- !query schema
-struct<all:string,city:string,count(1):bigint>
+struct<all:string,city:string,count(*):bigint>
 -- !query output
 China	Hangzhou	1
 China	Shanghai	1
@@ -63,7 +63,7 @@ struct<count(1):bigint>
 -- !query
 select country, city, count(*), sum(power) from data group by all
 -- !query schema
-struct<country:string,city:string,count(1):bigint,sum(power):decimal(13,1)>
+struct<country:string,city:string,count(*):bigint,sum(power):decimal(13,1)>
 -- !query output
 China	Hangzhou	1	14.0
 China	Shanghai	1	15.0
@@ -76,7 +76,7 @@ USA	San Francisco	2	23.0
 -- !query
 select count(*), country, city, sum(power) from data group by all
 -- !query schema
-struct<count(1):bigint,country:string,city:string,sum(power):decimal(13,1)>
+struct<count(*):bigint,country:string,city:string,sum(power):decimal(13,1)>
 -- !query output
 1	China	Hangzhou	14.0
 1	China	Shanghai	15.0
@@ -89,7 +89,7 @@ struct<count(1):bigint,country:string,city:string,sum(power):decimal(13,1)>
 -- !query
 select country as con, count(*) from data group by all
 -- !query schema
-struct<con:string,count(1):bigint>
+struct<con:string,count(*):bigint>
 -- !query output
 China	2
 Korea	1
@@ -175,7 +175,7 @@ struct<count(id):bigint>
 -- !query
 select count(id + power / 2) * 3 from data group by all
 -- !query schema
-struct<(count((id + (power / 2))) * 3):bigint>
+struct<count(id + power / 2)* 3:bigint>
 -- !query output
 21
 
@@ -183,7 +183,7 @@ struct<(count((id + (power / 2))) * 3):bigint>
 -- !query
 select count(*) from (select * from data where country = "DNS") group by all
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 0
 
@@ -240,7 +240,7 @@ USA	7	3
 -- !query
 select (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
 -- !query schema
-struct<scalarsubquery(country):bigint,count(id):bigint>
+struct<(select count(*)from data d1 where d1 . country = d2 . country):bigint,count(id):bigint>
 -- !query output
 1	2
 2	2

@@ -10,7 +10,7 @@ struct<>
 -- !query
 SELECT nanvl(c2, c1/c2 + c1/c2) FROM conditional_t
 -- !query schema
-struct<nanvl(c2, ((c1 / c2) + (c1 / c2))):double>
+struct<nanvl(c2, c1 / c2 + c1 / c2):double>
 -- !query output
 0.0
 0.0
@@ -21,7 +21,7 @@ struct<nanvl(c2, ((c1 / c2) + (c1 / c2))):double>
 -- !query
 SELECT nanvl(c2, 1/0) FROM conditional_t
 -- !query schema
-struct<nanvl(c2, (1 / 0)):double>
+struct<nanvl(c2, 1 / 0):double>
 -- !query output
 0.0
 0.0
@@ -32,7 +32,7 @@ struct<nanvl(c2, (1 / 0)):double>
 -- !query
 SELECT nanvl(1-0, 1/0) FROM conditional_t
 -- !query schema
-struct<nanvl((1 - 0), (1 / 0)):double>
+struct<nanvl(1 - 0, 1 / 0):double>
 -- !query output
 1.0
 1.0
@@ -43,7 +43,7 @@ struct<nanvl((1 - 0), (1 / 0)):double>
 -- !query
 SELECT if(c2 >= 0, 1-0, 1/0) from conditional_t
 -- !query schema
-struct<(IF((c2 >= 0), (1 - 0), (1 / 0))):double>
+struct<if(c2 >= 0, 1 - 0, 1 / 0):double>
 -- !query output
 1.0
 1.0
@@ -54,7 +54,7 @@ struct<(IF((c2 >= 0), (1 - 0), (1 / 0))):double>
 -- !query
 SELECT if(1 == 1, 1, 1/0)
 -- !query schema
-struct<(IF((1 = 1), 1, (1 / 0))):double>
+struct<if(1 == 1, 1, 1 / 0):double>
 -- !query output
 1.0
 
@@ -62,7 +62,7 @@ struct<(IF((1 = 1), 1, (1 / 0))):double>
 -- !query
 SELECT if(1 != 1, 1/0, 1)
 -- !query schema
-struct<(IF((NOT (1 = 1)), (1 / 0), 1)):double>
+struct<if(1 != 1, 1 / 0, 1):double>
 -- !query output
 1.0
 
@@ -70,7 +70,7 @@ struct<(IF((NOT (1 = 1)), (1 / 0), 1)):double>
 -- !query
 SELECT coalesce(c2, 1/0) from conditional_t
 -- !query schema
-struct<coalesce(c2, (1 / 0)):double>
+struct<coalesce(c2, 1 / 0):double>
 -- !query output
 0.0
 0.0
@@ -81,7 +81,7 @@ struct<coalesce(c2, (1 / 0)):double>
 -- !query
 SELECT coalesce(1, 1/0)
 -- !query schema
-struct<coalesce(1, (1 / 0)):double>
+struct<coalesce(1, 1 / 0):double>
 -- !query output
 1.0
 
@@ -89,7 +89,7 @@ struct<coalesce(1, (1 / 0)):double>
 -- !query
 SELECT coalesce(null, 1, 1/0)
 -- !query schema
-struct<coalesce(NULL, 1, (1 / 0)):double>
+struct<coalesce(null, 1, 1 / 0):double>
 -- !query output
 1.0
 
@@ -97,7 +97,7 @@ struct<coalesce(NULL, 1, (1 / 0)):double>
 -- !query
 SELECT case when c2 >= 0 then 1 else 1/0 end from conditional_t
 -- !query schema
-struct<CASE WHEN (c2 >= 0) THEN 1 ELSE (1 / 0) END:double>
+struct<case when c2 >= 0 then 1 else 1 / 0 end:double>
 -- !query output
 1.0
 1.0
@@ -108,7 +108,7 @@ struct<CASE WHEN (c2 >= 0) THEN 1 ELSE (1 / 0) END:double>
 -- !query
 SELECT case when 1 < 2 then 1 else 1/0 end
 -- !query schema
-struct<CASE WHEN (1 < 2) THEN 1 ELSE (1 / 0) END:double>
+struct<case when 1 < 2 then 1 else 1 / 0 end:double>
 -- !query output
 1.0
 
@@ -116,7 +116,7 @@ struct<CASE WHEN (1 < 2) THEN 1 ELSE (1 / 0) END:double>
 -- !query
 SELECT case when 1 > 2 then 1/0 else 1 end
 -- !query schema
-struct<CASE WHEN (1 > 2) THEN (1 / 0) ELSE 1 END:double>
+struct<case when 1 > 2 then 1 / 0 else 1 end:double>
 -- !query output
 1.0
 

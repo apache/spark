@@ -71,7 +71,7 @@ WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,avg(t1b):double>
+struct<t1a:string,Avg(t1b):double>
 -- !query output
 val1a	11.0
 val1d	10.0
@@ -86,7 +86,7 @@ WHERE  t1d NOT IN (SELECT t2d
                    WHERE  t1h < t2h)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,sum(DISTINCT t1b):bigint>
+struct<t1a:string,Sum(DISTINCT(t1b)):bigint>
 -- !query output
 val1a	22
 val1d	10
@@ -105,7 +105,7 @@ WHERE  t2b NOT IN (SELECT Min(t2b)
                    WHERE  t2b = t2b
                    GROUP  BY t2c)
 -- !query schema
-struct<count(1):bigint>
+struct<Count(*):bigint>
 -- !query output
 4
 

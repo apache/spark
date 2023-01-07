@@ -322,6 +322,6 @@ struct<v:array<int>>
 -- !query
 select aggregate(split('abcdefgh',''), array(array('')), (acc, x) -> array(array(x)))
 -- !query schema
-struct<aggregate(split(abcdefgh, , -1), array(array()), lambdafunction(array(array(namedlambdavariable())), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable())):array<array<string>>>
+struct<aggregate(split('abcdefgh', ''), array(array('')),(acc, x)-> array(array(x))):array<array<string>>>
 -- !query output
 [["h"]]

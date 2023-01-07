@@ -10,7 +10,7 @@ struct<>
 -- !query
 select date '2019-01-01\t'
 -- !query schema
-struct<DATE '2019-01-01':date>
+struct<date '2019-01-01\t':date>
 -- !query output
 2019-01-01
 
@@ -111,7 +111,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select current_date = current_date
 -- !query schema
-struct<(current_date() = current_date()):boolean>
+struct<current_date = current_date:boolean>
 -- !query output
 true
 
@@ -119,7 +119,7 @@ true
 -- !query
 select current_date() = current_date()
 -- !query schema
-struct<(current_date() = current_date()):boolean>
+struct<current_date()= current_date():boolean>
 -- !query output
 true
 
@@ -150,7 +150,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(null)
 -- !query schema
-struct<date_from_unix_date(0):date,date_from_unix_date(1000):date,date_from_unix_date(NULL):date>
+struct<DATE_FROM_UNIX_DATE(0):date,DATE_FROM_UNIX_DATE(1000):date,DATE_FROM_UNIX_DATE(null):date>
 -- !query output
 1970-01-01	1972-09-27	NULL
 
@@ -158,7 +158,7 @@ struct<date_from_unix_date(0):date,date_from_unix_date(1000):date,date_from_unix
 -- !query
 select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(null)
 -- !query schema
-struct<unix_date(1970-01-01):int,unix_date(2020-12-04):int,unix_date(NULL):int>
+struct<UNIX_DATE(DATE('1970-01-01')):int,UNIX_DATE(DATE('2020-12-04')):int,UNIX_DATE(null):int>
 -- !query output
 0	18600	NULL
 
@@ -166,7 +166,7 @@ struct<unix_date(1970-01-01):int,unix_date(2020-12-04):int,unix_date(NULL):int>
 -- !query
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<to_date(NULL):date,to_date(2016-12-31):date,to_date(2016-12-31, yyyy-MM-dd):date>
+struct<to_date(null):date,to_date('2016-12-31'):date,to_date('2016-12-31', 'yyyy-MM-dd'):date>
 -- !query output
 NULL	2016-12-31	2016-12-31
 
@@ -174,7 +174,7 @@ NULL	2016-12-31	2016-12-31
 -- !query
 select to_date("16", "dd")
 -- !query schema
-struct<to_date(16, dd):date>
+struct<to_date("16", "dd"):date>
 -- !query output
 1970-01-16
 
@@ -182,7 +182,7 @@ struct<to_date(16, dd):date>
 -- !query
 select to_date("02-29", "MM-dd")
 -- !query schema
-struct<to_date(02-29, MM-dd):date>
+struct<to_date("02-29", "MM-dd"):date>
 -- !query output
 NULL
 
@@ -191,7 +191,7 @@ NULL
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null),
   dayofweek('1582-10-15 13:10:15'), dayofweek(timestamp_ltz'1582-10-15 13:10:15'), dayofweek(timestamp_ntz'1582-10-15 13:10:15')
 -- !query schema
-struct<dayofweek(2007-02-03):int,dayofweek(2009-07-30):int,dayofweek(2017-05-27):int,dayofweek(NULL):int,dayofweek(1582-10-15 13:10:15):int,dayofweek(TIMESTAMP '1582-10-15 13:10:15'):int,dayofweek(TIMESTAMP_NTZ '1582-10-15 13:10:15'):int>
+struct<dayofweek('2007-02-03'):int,dayofweek('2009-07-30'):int,dayofweek('2017-05-27'):int,dayofweek(null):int,dayofweek('1582-10-15 13:10:15'):int,dayofweek(timestamp_ltz '1582-10-15 13:10:15'):int,dayofweek(timestamp_ntz '1582-10-15 13:10:15'):int>
 -- !query output
 7	5	7	NULL	6	6	6
 
@@ -200,7 +200,7 @@ struct<dayofweek(2007-02-03):int,dayofweek(2009-07-30):int,dayofweek(2017-05-27)
 select weekday('2007-02-03'), weekday('2009-07-30'), weekday('2017-05-27'), weekday(null),
   weekday('1582-10-15 13:10:15'), weekday(timestamp_ltz'1582-10-15 13:10:15'), weekday(timestamp_ntz'1582-10-15 13:10:15')
 -- !query schema
-struct<weekday(2007-02-03):int,weekday(2009-07-30):int,weekday(2017-05-27):int,weekday(NULL):int,weekday(1582-10-15 13:10:15):int,weekday(TIMESTAMP '1582-10-15 13:10:15'):int,weekday(TIMESTAMP_NTZ '1582-10-15 13:10:15'):int>
+struct<weekday('2007-02-03'):int,weekday('2009-07-30'):int,weekday('2017-05-27'):int,weekday(null):int,weekday('1582-10-15 13:10:15'):int,weekday(timestamp_ltz '1582-10-15 13:10:15'):int,weekday(timestamp_ntz '1582-10-15 13:10:15'):int>
 -- !query output
 5	3	5	NULL	4	4	4
 
@@ -208,7 +208,7 @@ struct<weekday(2007-02-03):int,weekday(2009-07-30):int,weekday(2017-05-27):int,w
 -- !query
 select year('1500-01-01'), year('1582-10-15 13:10:15'), year(timestamp_ltz'1582-10-15 13:10:15'), year(timestamp_ntz'1582-10-15 13:10:15')
 -- !query schema
-struct<year(1500-01-01):int,year(1582-10-15 13:10:15):int,year(TIMESTAMP '1582-10-15 13:10:15'):int,year(TIMESTAMP_NTZ '1582-10-15 13:10:15'):int>
+struct<year('1500-01-01'):int,year('1582-10-15 13:10:15'):int,year(timestamp_ltz '1582-10-15 13:10:15'):int,year(timestamp_ntz '1582-10-15 13:10:15'):int>
 -- !query output
 1500	1582	1582	1582
 
@@ -216,7 +216,7 @@ struct<year(1500-01-01):int,year(1582-10-15 13:10:15):int,year(TIMESTAMP '1582-1
 -- !query
 select month('1500-01-01'), month('1582-10-15 13:10:15'), month(timestamp_ltz'1582-10-15 13:10:15'), month(timestamp_ntz'1582-10-15 13:10:15')
 -- !query schema
-struct<month(1500-01-01):int,month(1582-10-15 13:10:15):int,month(TIMESTAMP '1582-10-15 13:10:15'):int,month(TIMESTAMP_NTZ '1582-10-15 13:10:15'):int>
+struct<month('1500-01-01'):int,month('1582-10-15 13:10:15'):int,month(timestamp_ltz '1582-10-15 13:10:15'):int,month(timestamp_ntz '1582-10-15 13:10:15'):int>
 -- !query output
 1	10	10	10
 
@@ -224,7 +224,7 @@ struct<month(1500-01-01):int,month(1582-10-15 13:10:15):int,month(TIMESTAMP '158
 -- !query
 select dayOfYear('1500-01-01'), dayOfYear('1582-10-15 13:10:15'), dayOfYear(timestamp_ltz'1582-10-15 13:10:15'), dayOfYear(timestamp_ntz'1582-10-15 13:10:15')
 -- !query schema
-struct<dayofyear(1500-01-01):int,dayofyear(1582-10-15 13:10:15):int,dayofyear(TIMESTAMP '1582-10-15 13:10:15'):int,dayofyear(TIMESTAMP_NTZ '1582-10-15 13:10:15'):int>
+struct<dayOfYear('1500-01-01'):int,dayOfYear('1582-10-15 13:10:15'):int,dayOfYear(timestamp_ltz '1582-10-15 13:10:15'):int,dayOfYear(timestamp_ntz '1582-10-15 13:10:15'):int>
 -- !query output
 1	288	288	288
 
@@ -232,7 +232,7 @@ struct<dayofyear(1500-01-01):int,dayofyear(1582-10-15 13:10:15):int,dayofyear(TI
 -- !query
 select next_day("2015-07-23", "Mon")
 -- !query schema
-struct<next_day(2015-07-23, Mon):date>
+struct<next_day("2015-07-23", "Mon"):date>
 -- !query output
 2015-07-27
 
@@ -240,7 +240,7 @@ struct<next_day(2015-07-23, Mon):date>
 -- !query
 select next_day("2015-07-23", "xx")
 -- !query schema
-struct<next_day(2015-07-23, xx):date>
+struct<next_day("2015-07-23", "xx"):date>
 -- !query output
 NULL
 
@@ -248,7 +248,7 @@ NULL
 -- !query
 select next_day("2015-07-23 12:12:12", "Mon")
 -- !query schema
-struct<next_day(2015-07-23 12:12:12, Mon):date>
+struct<next_day("2015-07-23 12:12:12", "Mon"):date>
 -- !query output
 2015-07-27
 
@@ -256,7 +256,7 @@ struct<next_day(2015-07-23 12:12:12, Mon):date>
 -- !query
 select next_day(timestamp_ltz"2015-07-23 12:12:12", "Mon")
 -- !query schema
-struct<next_day(TIMESTAMP '2015-07-23 12:12:12', Mon):date>
+struct<next_day(timestamp_ltz "2015-07-23 12:12:12", "Mon"):date>
 -- !query output
 2015-07-27
 
@@ -264,7 +264,7 @@ struct<next_day(TIMESTAMP '2015-07-23 12:12:12', Mon):date>
 -- !query
 select next_day(timestamp_ntz"2015-07-23 12:12:12", "Mon")
 -- !query schema
-struct<next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon):date>
+struct<next_day(timestamp_ntz "2015-07-23 12:12:12", "Mon"):date>
 -- !query output
 2015-07-27
 
@@ -272,7 +272,7 @@ struct<next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon):date>
 -- !query
 select next_day("xx", "Mon")
 -- !query schema
-struct<next_day(xx, Mon):date>
+struct<next_day("xx", "Mon"):date>
 -- !query output
 NULL
 
@@ -280,7 +280,7 @@ NULL
 -- !query
 select next_day(null, "Mon")
 -- !query schema
-struct<next_day(NULL, Mon):date>
+struct<next_day(null, "Mon"):date>
 -- !query output
 NULL
 
@@ -288,7 +288,7 @@ NULL
 -- !query
 select next_day(null, "xx")
 -- !query schema
-struct<next_day(NULL, xx):date>
+struct<next_day(null, "xx"):date>
 -- !query output
 NULL
 
@@ -296,7 +296,7 @@ NULL
 -- !query
 select date_add(date'2011-11-11', 1)
 -- !query schema
-struct<date_add(DATE '2011-11-11', 1):date>
+struct<date_add(date '2011-11-11', 1):date>
 -- !query output
 2011-11-12
 
@@ -304,7 +304,7 @@ struct<date_add(DATE '2011-11-11', 1):date>
 -- !query
 select date_add('2011-11-11', 1)
 -- !query schema
-struct<date_add(2011-11-11, 1):date>
+struct<date_add('2011-11-11', 1):date>
 -- !query output
 2011-11-12
 
@@ -312,7 +312,7 @@ struct<date_add(2011-11-11, 1):date>
 -- !query
 select date_add('2011-11-11', 1Y)
 -- !query schema
-struct<date_add(2011-11-11, 1):date>
+struct<date_add('2011-11-11', 1Y):date>
 -- !query output
 2011-11-12
 
@@ -320,7 +320,7 @@ struct<date_add(2011-11-11, 1):date>
 -- !query
 select date_add('2011-11-11', 1S)
 -- !query schema
-struct<date_add(2011-11-11, 1):date>
+struct<date_add('2011-11-11', 1S):date>
 -- !query output
 2011-11-12
 
@@ -403,7 +403,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_add('2011-11-11', '1')
 -- !query schema
-struct<date_add(2011-11-11, 1):date>
+struct<date_add('2011-11-11', '1'):date>
 -- !query output
 2011-11-12
 
@@ -426,7 +426,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_add(null, 1)
 -- !query schema
-struct<date_add(NULL, 1):date>
+struct<date_add(null, 1):date>
 -- !query output
 NULL
 
@@ -434,7 +434,7 @@ NULL
 -- !query
 select date_add(date'2011-11-11', null)
 -- !query schema
-struct<date_add(DATE '2011-11-11', NULL):date>
+struct<date_add(date '2011-11-11', null):date>
 -- !query output
 NULL
 
@@ -442,7 +442,7 @@ NULL
 -- !query
 select date_add(timestamp_ltz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<date_add(TIMESTAMP '2011-11-11 12:12:12', 1):date>
+struct<date_add(timestamp_ltz '2011-11-11 12:12:12', 1):date>
 -- !query output
 2011-11-12
 
@@ -450,7 +450,7 @@ struct<date_add(TIMESTAMP '2011-11-11 12:12:12', 1):date>
 -- !query
 select date_add(timestamp_ntz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<date_add(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1):date>
+struct<date_add(timestamp_ntz '2011-11-11 12:12:12', 1):date>
 -- !query output
 2011-11-12
 
@@ -458,7 +458,7 @@ struct<date_add(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1):date>
 -- !query
 select date_sub(date'2011-11-11', 1)
 -- !query schema
-struct<date_sub(DATE '2011-11-11', 1):date>
+struct<date_sub(date '2011-11-11', 1):date>
 -- !query output
 2011-11-10
 
@@ -466,7 +466,7 @@ struct<date_sub(DATE '2011-11-11', 1):date>
 -- !query
 select date_sub('2011-11-11', 1)
 -- !query schema
-struct<date_sub(2011-11-11, 1):date>
+struct<date_sub('2011-11-11', 1):date>
 -- !query output
 2011-11-10
 
@@ -474,7 +474,7 @@ struct<date_sub(2011-11-11, 1):date>
 -- !query
 select date_sub('2011-11-11', 1Y)
 -- !query schema
-struct<date_sub(2011-11-11, 1):date>
+struct<date_sub('2011-11-11', 1Y):date>
 -- !query output
 2011-11-10
 
@@ -482,7 +482,7 @@ struct<date_sub(2011-11-11, 1):date>
 -- !query
 select date_sub('2011-11-11', 1S)
 -- !query schema
-struct<date_sub(2011-11-11, 1):date>
+struct<date_sub('2011-11-11', 1S):date>
 -- !query output
 2011-11-10
 
@@ -565,7 +565,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_sub(date'2011-11-11', '1')
 -- !query schema
-struct<date_sub(DATE '2011-11-11', 1):date>
+struct<date_sub(date '2011-11-11', '1'):date>
 -- !query output
 2011-11-10
 
@@ -588,7 +588,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_sub(null, 1)
 -- !query schema
-struct<date_sub(NULL, 1):date>
+struct<date_sub(null, 1):date>
 -- !query output
 NULL
 
@@ -596,7 +596,7 @@ NULL
 -- !query
 select date_sub(date'2011-11-11', null)
 -- !query schema
-struct<date_sub(DATE '2011-11-11', NULL):date>
+struct<date_sub(date '2011-11-11', null):date>
 -- !query output
 NULL
 
@@ -604,7 +604,7 @@ NULL
 -- !query
 select date_sub(timestamp_ltz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<date_sub(TIMESTAMP '2011-11-11 12:12:12', 1):date>
+struct<date_sub(timestamp_ltz '2011-11-11 12:12:12', 1):date>
 -- !query output
 2011-11-10
 
@@ -612,7 +612,7 @@ struct<date_sub(TIMESTAMP '2011-11-11 12:12:12', 1):date>
 -- !query
 select date_sub(timestamp_ntz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<date_sub(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1):date>
+struct<date_sub(timestamp_ntz '2011-11-11 12:12:12', 1):date>
 -- !query output
 2011-11-10
 
@@ -711,7 +711,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date '2001-09-28' + 7Y
 -- !query schema
-struct<date_add(DATE '2001-09-28', 7):date>
+struct<date '2001-09-28' + 7Y:date>
 -- !query output
 2001-10-05
 
@@ -719,7 +719,7 @@ struct<date_add(DATE '2001-09-28', 7):date>
 -- !query
 select 7S + date '2001-09-28'
 -- !query schema
-struct<date_add(DATE '2001-09-28', 7):date>
+struct<7S + date '2001-09-28':date>
 -- !query output
 2001-10-05
 
@@ -727,7 +727,7 @@ struct<date_add(DATE '2001-09-28', 7):date>
 -- !query
 select date '2001-10-01' - 7
 -- !query schema
-struct<date_sub(DATE '2001-10-01', 7):date>
+struct<date '2001-10-01' - 7:date>
 -- !query output
 2001-09-24
 
@@ -735,7 +735,7 @@ struct<date_sub(DATE '2001-10-01', 7):date>
 -- !query
 select date '2001-10-01' - date '2001-09-28'
 -- !query schema
-struct<(DATE '2001-10-01' - DATE '2001-09-28'):interval day>
+struct<date '2001-10-01' - date '2001-09-28':interval day>
 -- !query output
 3 00:00:00.000000000
 
@@ -768,7 +768,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '2001-10-01' - date '2001-09-28'
 -- !query schema
-struct<(2001-10-01 - DATE '2001-09-28'):interval day>
+struct<'2001-10-01' - date '2001-09-28':interval day>
 -- !query output
 3 00:00:00.000000000
 
@@ -776,7 +776,7 @@ struct<(2001-10-01 - DATE '2001-09-28'):interval day>
 -- !query
 select date '2001-09-28' - null
 -- !query schema
-struct<date_sub(DATE '2001-09-28', NULL):date>
+struct<date '2001-09-28' - null:date>
 -- !query output
 NULL
 
@@ -784,7 +784,7 @@ NULL
 -- !query
 select null - date '2019-10-06'
 -- !query schema
-struct<(NULL - DATE '2019-10-06'):interval day>
+struct<null - date '2019-10-06':interval day>
 -- !query output
 NULL
 
@@ -792,7 +792,7 @@ NULL
 -- !query
 select date_str - date '2001-09-28' from date_view
 -- !query schema
-struct<(date_str - DATE '2001-09-28'):interval day>
+struct<date_str - date '2001-09-28':interval day>
 -- !query output
 3696 00:00:00.000000000
 
@@ -875,7 +875,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date'2011-11-11' + null
 -- !query schema
-struct<date_add(DATE '2011-11-11', NULL):date>
+struct<date '2011-11-11' + null:date>
 -- !query output
 NULL
 
@@ -883,7 +883,7 @@ NULL
 -- !query
 select null + date'2011-11-11'
 -- !query schema
-struct<date_add(DATE '2011-11-11', NULL):date>
+struct<null + date '2011-11-11':date>
 -- !query output
 NULL
 
@@ -896,7 +896,7 @@ select date '2012-01-01' - interval '2-2' year to month,
        - interval '2-2' year to month + date '2012-01-01',
        interval '-2' day + date '2011-11-11'
 -- !query schema
-struct<DATE '2012-01-01' - INTERVAL '2-2' YEAR TO MONTH:date,date_add(DATE '2011-11-11', (- extractansiintervaldays(INTERVAL '2' DAY))):date,DATE '2012-01-01' + INTERVAL '-2-2' YEAR TO MONTH:date,DATE '2011-11-11' + INTERVAL '-2' MONTH:date,DATE '2012-01-01' + (- INTERVAL '2-2' YEAR TO MONTH):date,date_add(DATE '2011-11-11', extractansiintervaldays(INTERVAL '-2' DAY)):date>
+struct<date '2012-01-01' - interval '2-2' year to month:date,date '2011-11-11' - interval '2' day:date,date '2012-01-01' + interval '-2-2' year to month:date,date '2011-11-11' + interval '-2' month:date,- interval '2-2' year to month + date '2012-01-01':date,interval '-2' day + date '2011-11-11':date>
 -- !query output
 2009-11-01	2011-11-09	2009-11-01	2011-09-11	2009-11-01	2011-11-09
 
@@ -949,7 +949,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select dateadd(MICROSECOND, 1001, timestamp'2022-02-25 01:02:03.123')
 -- !query schema
-struct<timestampadd(MICROSECOND, 1001, TIMESTAMP '2022-02-25 01:02:03.123'):timestamp>
+struct<dateadd(MICROSECOND, 1001, timestamp '2022-02-25 01:02:03.123'):timestamp>
 -- !query output
 2022-02-25 01:02:03.124001
 
@@ -957,7 +957,7 @@ struct<timestampadd(MICROSECOND, 1001, TIMESTAMP '2022-02-25 01:02:03.123'):time
 -- !query
 select dateadd(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456')
 -- !query schema
-struct<timestampadd(MILLISECOND, -1, TIMESTAMP '2022-02-25 01:02:03.456'):timestamp>
+struct<dateadd(MILLISECOND, - 1, timestamp '2022-02-25 01:02:03.456'):timestamp>
 -- !query output
 2022-02-25 01:02:03.455
 
@@ -965,7 +965,7 @@ struct<timestampadd(MILLISECOND, -1, TIMESTAMP '2022-02-25 01:02:03.456'):timest
 -- !query
 select dateadd(SECOND, 58, timestamp'2022-02-25 01:02:03')
 -- !query schema
-struct<timestampadd(SECOND, 58, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
+struct<dateadd(SECOND, 58, timestamp '2022-02-25 01:02:03'):timestamp>
 -- !query output
 2022-02-25 01:03:01
 
@@ -973,7 +973,7 @@ struct<timestampadd(SECOND, 58, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 -- !query
 select dateadd(MINUTE, -100, date'2022-02-25')
 -- !query schema
-struct<timestampadd(MINUTE, -100, DATE '2022-02-25'):timestamp>
+struct<dateadd(MINUTE, - 100, date '2022-02-25'):timestamp>
 -- !query output
 2022-02-24 22:20:00
 
@@ -981,7 +981,7 @@ struct<timestampadd(MINUTE, -100, DATE '2022-02-25'):timestamp>
 -- !query
 select dateadd(HOUR, -1, timestamp'2022-02-25 01:02:03')
 -- !query schema
-struct<timestampadd(HOUR, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
+struct<dateadd(HOUR, - 1, timestamp '2022-02-25 01:02:03'):timestamp>
 -- !query output
 2022-02-25 00:02:03
 
@@ -989,7 +989,7 @@ struct<timestampadd(HOUR, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 -- !query
 select dateadd(DAY, 367, date'2022-02-25')
 -- !query schema
-struct<timestampadd(DAY, 367, DATE '2022-02-25'):timestamp>
+struct<dateadd(DAY, 367, date '2022-02-25'):timestamp>
 -- !query output
 2023-02-27 00:00:00
 
@@ -997,7 +997,7 @@ struct<timestampadd(DAY, 367, DATE '2022-02-25'):timestamp>
 -- !query
 select dateadd(WEEK, -4, timestamp'2022-02-25 01:02:03')
 -- !query schema
-struct<timestampadd(WEEK, -4, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
+struct<dateadd(WEEK, - 4, timestamp '2022-02-25 01:02:03'):timestamp>
 -- !query output
 2022-01-28 01:02:03
 
@@ -1005,7 +1005,7 @@ struct<timestampadd(WEEK, -4, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 -- !query
 select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03')
 -- !query schema
-struct<timestampadd(MONTH, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
+struct<dateadd(MONTH, - 1, timestamp '2022-02-25 01:02:03'):timestamp>
 -- !query output
 2022-01-25 01:02:03
 
@@ -1013,7 +1013,7 @@ struct<timestampadd(MONTH, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 -- !query
 select dateadd(QUARTER, 5, date'2022-02-25')
 -- !query schema
-struct<timestampadd(QUARTER, 5, DATE '2022-02-25'):timestamp>
+struct<dateadd(QUARTER, 5, date '2022-02-25'):timestamp>
 -- !query output
 2023-05-25 00:00:00
 
@@ -1021,7 +1021,7 @@ struct<timestampadd(QUARTER, 5, DATE '2022-02-25'):timestamp>
 -- !query
 select dateadd(YEAR, 1, date'2022-02-25')
 -- !query schema
-struct<timestampadd(YEAR, 1, DATE '2022-02-25'):timestamp>
+struct<dateadd(YEAR, 1, date '2022-02-25'):timestamp>
 -- !query output
 2023-02-25 00:00:00
 
@@ -1029,7 +1029,7 @@ struct<timestampadd(YEAR, 1, DATE '2022-02-25'):timestamp>
 -- !query
 select datediff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-02-25 01:02:03.124001')
 -- !query schema
-struct<timestampdiff(MICROSECOND, TIMESTAMP '2022-02-25 01:02:03.123', TIMESTAMP '2022-02-25 01:02:03.124001'):bigint>
+struct<datediff(MICROSECOND, timestamp '2022-02-25 01:02:03.123', timestamp '2022-02-25 01:02:03.124001'):bigint>
 -- !query output
 1001
 
@@ -1037,7 +1037,7 @@ struct<timestampdiff(MICROSECOND, TIMESTAMP '2022-02-25 01:02:03.123', TIMESTAMP
 -- !query
 select datediff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
 -- !query schema
-struct<timestampdiff(MILLISECOND, TIMESTAMP '2022-02-25 01:02:03.456', TIMESTAMP '2022-02-25 01:02:03.455'):bigint>
+struct<datediff(MILLISECOND, timestamp '2022-02-25 01:02:03.456', timestamp '2022-02-25 01:02:03.455'):bigint>
 -- !query output
 -1
 
@@ -1045,7 +1045,7 @@ struct<timestampdiff(MILLISECOND, TIMESTAMP '2022-02-25 01:02:03.456', TIMESTAMP
 -- !query
 select datediff(SECOND, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 01:03:01')
 -- !query schema
-struct<timestampdiff(SECOND, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02-25 01:03:01'):bigint>
+struct<datediff(SECOND, timestamp '2022-02-25 01:02:03', timestamp '2022-02-25 01:03:01'):bigint>
 -- !query output
 58
 
@@ -1053,7 +1053,7 @@ struct<timestampdiff(SECOND, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02
 -- !query
 select datediff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00')
 -- !query schema
-struct<timestampdiff(MINUTE, DATE '2022-02-25', TIMESTAMP '2022-02-24 22:20:00'):bigint>
+struct<datediff(MINUTE, date '2022-02-25', timestamp '2022-02-24 22:20:00'):bigint>
 -- !query output
 -100
 
@@ -1061,7 +1061,7 @@ struct<timestampdiff(MINUTE, DATE '2022-02-25', TIMESTAMP '2022-02-24 22:20:00')
 -- !query
 select datediff(HOUR, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 00:02:03')
 -- !query schema
-struct<timestampdiff(HOUR, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02-25 00:02:03'):bigint>
+struct<datediff(HOUR, timestamp '2022-02-25 01:02:03', timestamp '2022-02-25 00:02:03'):bigint>
 -- !query output
 -1
 
@@ -1069,7 +1069,7 @@ struct<timestampdiff(HOUR, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02-2
 -- !query
 select datediff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00')
 -- !query schema
-struct<timestampdiff(DAY, DATE '2022-02-25', TIMESTAMP '2023-02-27 00:00:00'):bigint>
+struct<datediff(DAY, date '2022-02-25', timestamp '2023-02-27 00:00:00'):bigint>
 -- !query output
 367
 
@@ -1077,7 +1077,7 @@ struct<timestampdiff(DAY, DATE '2022-02-25', TIMESTAMP '2023-02-27 00:00:00'):bi
 -- !query
 select datediff(WEEK, timestamp'2022-02-25 01:02:03', timestamp'2022-01-28 01:02:03')
 -- !query schema
-struct<timestampdiff(WEEK, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-28 01:02:03'):bigint>
+struct<datediff(WEEK, timestamp '2022-02-25 01:02:03', timestamp '2022-01-28 01:02:03'):bigint>
 -- !query output
 -4
 
@@ -1085,7 +1085,7 @@ struct<timestampdiff(WEEK, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-2
 -- !query
 select datediff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03')
 -- !query schema
-struct<timestampdiff(MONTH, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-25 01:02:03'):bigint>
+struct<datediff(MONTH, timestamp '2022-02-25 01:02:03', timestamp '2022-01-25 01:02:03'):bigint>
 -- !query output
 -1
 
@@ -1093,7 +1093,7 @@ struct<timestampdiff(MONTH, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-
 -- !query
 select datediff(QUARTER, date'2022-02-25', date'2023-05-25')
 -- !query schema
-struct<timestampdiff(QUARTER, DATE '2022-02-25', DATE '2023-05-25'):bigint>
+struct<datediff(QUARTER, date '2022-02-25', date '2023-05-25'):bigint>
 -- !query output
 5
 
@@ -1101,6 +1101,6 @@ struct<timestampdiff(QUARTER, DATE '2022-02-25', DATE '2023-05-25'):bigint>
 -- !query
 select datediff(YEAR, date'2022-02-25', date'2023-02-25')
 -- !query schema
-struct<timestampdiff(YEAR, DATE '2022-02-25', DATE '2023-02-25'):bigint>
+struct<datediff(YEAR, date '2022-02-25', date '2023-02-25'):bigint>
 -- !query output
 1

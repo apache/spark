@@ -3810,7 +3810,7 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 40)
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 40)
 -- !query schema
-struct<id1:int,id2:int,result:decimal(38,10),round(expected, 40):decimal(38,10)>
+struct<id1:int,id2:int,result:decimal(38,10),round(t2 . expected, 40):decimal(38,10)>
 -- !query output
 
 
@@ -4215,7 +4215,7 @@ struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query
 SELECT AVG(val) FROM num_data
 -- !query schema
-struct<avg(val):decimal(38,14)>
+struct<AVG(val):decimal(38,14)>
 -- !query output
 -13430913.59224232070000
 
@@ -4300,7 +4300,7 @@ struct<>
 -- !query
 SELECT decimal(double('NaN'))
 -- !query schema
-struct<NaN:decimal(10,0)>
+struct<decimal(double('NaN')):decimal(10,0)>
 -- !query output
 NULL
 
@@ -4308,7 +4308,7 @@ NULL
 -- !query
 SELECT decimal(double('Infinity'))
 -- !query schema
-struct<Infinity:decimal(10,0)>
+struct<decimal(double('Infinity')):decimal(10,0)>
 -- !query output
 NULL
 
@@ -4316,7 +4316,7 @@ NULL
 -- !query
 SELECT decimal(double('-Infinity'))
 -- !query schema
-struct<-Infinity:decimal(10,0)>
+struct<decimal(double('-Infinity')):decimal(10,0)>
 -- !query output
 NULL
 
@@ -4324,7 +4324,7 @@ NULL
 -- !query
 SELECT decimal(float('NaN'))
 -- !query schema
-struct<NaN:decimal(10,0)>
+struct<decimal(float('NaN')):decimal(10,0)>
 -- !query output
 NULL
 
@@ -4332,7 +4332,7 @@ NULL
 -- !query
 SELECT decimal(float('Infinity'))
 -- !query schema
-struct<Infinity:decimal(10,0)>
+struct<decimal(float('Infinity')):decimal(10,0)>
 -- !query output
 NULL
 
@@ -4340,7 +4340,7 @@ NULL
 -- !query
 SELECT decimal(float('-Infinity'))
 -- !query schema
-struct<-Infinity:decimal(10,0)>
+struct<decimal(float('-Infinity')):decimal(10,0)>
 -- !query output
 NULL
 
@@ -4412,7 +4412,7 @@ struct<>
 -- !query
 SELECT a, ceil(a), ceiling(a), floor(a), round(a) FROM ceil_floor_round
 -- !query schema
-struct<a:decimal(38,18),CEIL(a):decimal(21,0),ceiling(a):decimal(21,0),FLOOR(a):decimal(21,0),round(a, 0):decimal(21,0)>
+struct<a:decimal(38,18),ceil(a):decimal(21,0),ceiling(a):decimal(21,0),floor(a):decimal(21,0),round(a):decimal(21,0)>
 -- !query output
 -0.000001000000000000	0	0	-1	0
 -5.499999000000000000	-5	-5	-6	-5
@@ -4442,7 +4442,7 @@ NULL
 -- !query
 SELECT width_bucket(5.0, 3.0, 4.0, -5)
 -- !query schema
-struct<width_bucket(5.0, 3.0, 4.0, -5):bigint>
+struct<width_bucket(5.0, 3.0, 4.0, - 5):bigint>
 -- !query output
 NULL
 
@@ -4458,7 +4458,7 @@ NULL
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), 0)
 -- !query schema
-struct<width_bucket(5.0, 3.0, 4.0, 0):bigint>
+struct<width_bucket(double(5.0), double(3.0), double(4.0), 0):bigint>
 -- !query output
 NULL
 
@@ -4466,7 +4466,7 @@ NULL
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), -5)
 -- !query schema
-struct<width_bucket(5.0, 3.0, 4.0, -5):bigint>
+struct<width_bucket(double(5.0), double(3.0), double(4.0), - 5):bigint>
 -- !query output
 NULL
 
@@ -4474,7 +4474,7 @@ NULL
 -- !query
 SELECT width_bucket(double(3.5), double(3.0), double(3.0), 888)
 -- !query schema
-struct<width_bucket(3.5, 3.0, 3.0, 888):bigint>
+struct<width_bucket(double(3.5), double(3.0), double(3.0), 888):bigint>
 -- !query output
 NULL
 
@@ -4482,7 +4482,7 @@ NULL
 -- !query
 SELECT width_bucket('NaN', 3.0, 4.0, 888)
 -- !query schema
-struct<width_bucket(NaN, 3.0, 4.0, 888):bigint>
+struct<width_bucket('NaN', 3.0, 4.0, 888):bigint>
 -- !query output
 NULL
 
@@ -4490,7 +4490,7 @@ NULL
 -- !query
 SELECT width_bucket(double(0), 'NaN', double(4.0), 888)
 -- !query schema
-struct<width_bucket(0, NaN, 4.0, 888):bigint>
+struct<width_bucket(double(0), 'NaN', double(4.0), 888):bigint>
 -- !query output
 NULL
 
@@ -4572,7 +4572,7 @@ struct<operand_num:decimal(30,15),wb_1:bigint,wb_1f:bigint,wb_2:bigint,wb_2f:big
 -- !query
 SELECT width_bucket(double(0.0), double('Infinity'), 5, 10)
 -- !query schema
-struct<width_bucket(0.0, Infinity, 5, 10):bigint>
+struct<width_bucket(double(0.0), double('Infinity'), 5, 10):bigint>
 -- !query output
 NULL
 
@@ -4580,7 +4580,7 @@ NULL
 -- !query
 SELECT width_bucket(double(0.0), 5, double('-Infinity'), 20)
 -- !query schema
-struct<width_bucket(0.0, 5, -Infinity, 20):bigint>
+struct<width_bucket(double(0.0), 5, double('-Infinity'), 20):bigint>
 -- !query output
 NULL
 
@@ -4589,7 +4589,7 @@ NULL
 SELECT width_bucket(double('Infinity'), 1, 10, 10),
        width_bucket(double('-Infinity'), 1, 10, 10)
 -- !query schema
-struct<width_bucket(Infinity, 1, 10, 10):bigint,width_bucket(-Infinity, 1, 10, 10):bigint>
+struct<width_bucket(double('Infinity'), 1, 10, 10):bigint,width_bucket(double('-Infinity'), 1, 10, 10):bigint>
 -- !query output
 11	0
 
@@ -4606,7 +4606,7 @@ struct<>
 SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR'), val
 FROM num_data
 -- !query schema
-struct<to_char_3:string,to_char(val, 9999999999999999.999999999999999PR):string,val:decimal(38,10)>
+struct<to_char_3:string,to_char(val, '9999999999999999.999999999999999PR'):string,val:decimal(38,10)>
 -- !query output
 	               0.000000000000000  	0.0000000000
 	               0.000000000000000  	0.0000000000
@@ -4624,7 +4624,7 @@ struct<to_char_3:string,to_char(val, 9999999999999999.999999999999999PR):string,
 SELECT '' AS to_char_4, to_char(val, '9999999999999999.999999999999999S'), val
 FROM num_data
 -- !query schema
-struct<to_char_4:string,to_char(val, 9999999999999999.999999999999999S):string,val:decimal(38,10)>
+struct<to_char_4:string,to_char(val, '9999999999999999.999999999999999S'):string,val:decimal(38,10)>
 -- !query output
 	               0.000000000000000+	0.0000000000
 	               0.000000000000000+	0.0000000000
@@ -4641,7 +4641,7 @@ struct<to_char_4:string,to_char(val, 9999999999999999.999999999999999S):string,v
 -- !query
 SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999'), val     FROM num_data
 -- !query schema
-struct<to_char_5:string,to_char(val, MI9999999999999999.999999999999999):string,val:decimal(38,10)>
+struct<to_char_5:string,to_char(val, 'MI9999999999999999.999999999999999'):string,val:decimal(38,10)>
 -- !query output
 	                0.000000000000000	0.0000000000
 	                0.000000000000000	0.0000000000
@@ -4658,7 +4658,7 @@ struct<to_char_5:string,to_char(val, MI9999999999999999.999999999999999):string,
 -- !query
 SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999'), val       FROM num_data
 -- !query schema
-struct<to_char_9:string,to_char(val, 0999999999999999.999999999999999):string,val:decimal(38,10)>
+struct<to_char_9:string,to_char(val, '0999999999999999.999999999999999'):string,val:decimal(38,10)>
 -- !query output
 	0000000000000000.000000000000000	0.0000000000
 	0000000000000000.000000000000000	0.0000000000
@@ -4675,7 +4675,7 @@ struct<to_char_9:string,to_char(val, 0999999999999999.999999999999999):string,va
 -- !query
 SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999'), val      FROM num_data
 -- !query schema
-struct<to_char_10:string,to_char(val, S0999999999999999.999999999999999):string,val:decimal(38,10)>
+struct<to_char_10:string,to_char(val, 'S0999999999999999.999999999999999'):string,val:decimal(38,10)>
 -- !query output
 	+0000000000000000.000000000000000	0.0000000000
 	+0000000000000000.000000000000000	0.0000000000
@@ -4729,7 +4729,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT '' AS to_number_4,  to_number('0.00001-', '9.999999S')
 -- !query schema
-struct<to_number_4:string,to_number(0.00001-, 9.999999S):decimal(7,6)>
+struct<to_number_4:string,to_number('0.00001-', '9.999999S'):decimal(7,6)>
 -- !query output
 	-0.000010
 
@@ -4737,7 +4737,7 @@ struct<to_number_4:string,to_number(0.00001-, 9.999999S):decimal(7,6)>
 -- !query
 SELECT '' AS to_number_9,  to_number('.0', '99999999.99999999')
 -- !query schema
-struct<to_number_9:string,to_number(.0, 99999999.99999999):decimal(16,8)>
+struct<to_number_9:string,to_number('.0', '99999999.99999999'):decimal(16,8)>
 -- !query output
 	0.00000000
 
@@ -4745,7 +4745,7 @@ struct<to_number_9:string,to_number(.0, 99999999.99999999):decimal(16,8)>
 -- !query
 SELECT '' AS to_number_10, to_number('0', '99.99')
 -- !query schema
-struct<to_number_10:string,to_number(0, 99.99):decimal(4,2)>
+struct<to_number_10:string,to_number('0', '99.99'):decimal(4,2)>
 -- !query output
 	0.00
 
@@ -4753,7 +4753,7 @@ struct<to_number_10:string,to_number(0, 99.99):decimal(4,2)>
 -- !query
 SELECT '' AS to_number_12, to_number('.01-', '99.99S')
 -- !query schema
-struct<to_number_12:string,to_number(.01-, 99.99S):decimal(4,2)>
+struct<to_number_12:string,to_number('.01-', '99.99S'):decimal(4,2)>
 -- !query output
 	-0.01
 
@@ -4761,7 +4761,7 @@ struct<to_number_12:string,to_number(.01-, 99.99S):decimal(4,2)>
 -- !query
 SELECT '' AS to_number_14, to_number('34,50','999,99')
 -- !query schema
-struct<to_number_14:string,to_number(34,50, 999,99):decimal(5,0)>
+struct<to_number_14:string,to_number('34,50', '999,99'):decimal(5,0)>
 -- !query output
 	3450
 
@@ -4866,7 +4866,7 @@ struct<n1:decimal(38,18)>
 -- !query
 select cast(999999999999999999999 as decimal(38, 0))/1000000000000000000000
 -- !query schema
-struct<(CAST(999999999999999999999 AS DECIMAL(38,0)) / 1000000000000000000000):decimal(38,6)>
+struct<cast(999999999999999999999 as decimal(38, 0))/ 1000000000000000000000:decimal(38,6)>
 -- !query output
 1.000000
 
@@ -4874,7 +4874,7 @@ struct<(CAST(999999999999999999999 AS DECIMAL(38,0)) / 1000000000000000000000):d
 -- !query
 select div(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(CAST(999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000):bigint>
+struct<div(cast(999999999999999999999 as decimal(38, 0)), 1000000000000000000000):bigint>
 -- !query output
 0
 
@@ -4882,7 +4882,7 @@ struct<(CAST(999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000)
 -- !query
 select mod(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<mod(CAST(999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000):decimal(22,0)>
+struct<mod(cast(999999999999999999999 as decimal(38, 0)), 1000000000000000000000):decimal(22,0)>
 -- !query output
 999999999999999999999
 
@@ -4890,7 +4890,7 @@ struct<mod(CAST(999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000)
 -- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(CAST(-9999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000):bigint>
+struct<div(cast(- 9999999999999999999999 as decimal(38, 0)), 1000000000000000000000):bigint>
 -- !query output
 -9
 
@@ -4898,7 +4898,7 @@ struct<(CAST(-9999999999999999999999 AS DECIMAL(38,0)) div 100000000000000000000
 -- !query
 select mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<mod(CAST(-9999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000):decimal(22,0)>
+struct<mod(cast(- 9999999999999999999999 as decimal(38, 0)), 1000000000000000000000):decimal(22,0)>
 -- !query output
 -999999999999999999999
 
@@ -4906,7 +4906,7 @@ struct<mod(CAST(-9999999999999999999999 AS DECIMAL(38,0)), 100000000000000000000
 -- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)*1000000000000000000000 + mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(((CAST(-9999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000) * 1000000000000000000000) + mod(CAST(-9999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000)):decimal(38,0)>
+struct<div(cast(- 9999999999999999999999 as decimal(38, 0)), 1000000000000000000000)* 1000000000000000000000 + mod(cast(- 9999999999999999999999 as decimal(38, 0)), 1000000000000000000000):decimal(38,0)>
 -- !query output
 -9999999999999999999999
 
@@ -4922,7 +4922,7 @@ struct<mod(70.0, 70):decimal(3,1)>
 -- !query
 select div (70.0,70)
 -- !query schema
-struct<(70.0 div 70):bigint>
+struct<div(70.0, 70):bigint>
 -- !query output
 1
 
@@ -4930,7 +4930,7 @@ struct<(70.0 div 70):bigint>
 -- !query
 select 70.0 / 70
 -- !query schema
-struct<(70.0 / 70):decimal(8,6)>
+struct<70.0 / 70:decimal(8,6)>
 -- !query output
 1.000000
 
@@ -4938,7 +4938,7 @@ struct<(70.0 / 70):decimal(8,6)>
 -- !query
 select 12345678901234567890 % 123
 -- !query schema
-struct<(12345678901234567890 % 123):decimal(3,0)>
+struct<12345678901234567890 % 123:decimal(3,0)>
 -- !query output
 78
 
@@ -4946,7 +4946,7 @@ struct<(12345678901234567890 % 123):decimal(3,0)>
 -- !query
 select exp(0.0)
 -- !query schema
-struct<EXP(0.0):double>
+struct<exp(0.0):double>
 -- !query output
 1.0
 
@@ -4954,7 +4954,7 @@ struct<EXP(0.0):double>
 -- !query
 select exp(1.0)
 -- !query schema
-struct<EXP(1.0):double>
+struct<exp(1.0):double>
 -- !query output
 2.7182818284590455
 
@@ -4962,7 +4962,7 @@ struct<EXP(1.0):double>
 -- !query
 select exp(32.999)
 -- !query schema
-struct<EXP(32.999):double>
+struct<exp(32.999):double>
 -- !query output
 2.1442904349215556E14
 
@@ -4970,7 +4970,7 @@ struct<EXP(32.999):double>
 -- !query
 select exp(-32.999)
 -- !query schema
-struct<EXP(-32.999):double>
+struct<exp(- 32.999):double>
 -- !query output
 4.663547361468238E-15
 
@@ -4978,7 +4978,7 @@ struct<EXP(-32.999):double>
 -- !query
 select exp(123.456)
 -- !query schema
-struct<EXP(123.456):double>
+struct<exp(123.456):double>
 -- !query output
 4.132944352778106E53
 
@@ -4986,7 +4986,7 @@ struct<EXP(123.456):double>
 -- !query
 select exp(-123.456)
 -- !query schema
-struct<EXP(-123.456):double>
+struct<exp(- 123.456):double>
 -- !query output
 2.4195825412645934E-54
 
@@ -4994,7 +4994,7 @@ struct<EXP(-123.456):double>
 -- !query
 select exp(1234.5678)
 -- !query schema
-struct<EXP(1234.5678):double>
+struct<exp(1234.5678):double>
 -- !query output
 Infinity
 
@@ -5034,7 +5034,7 @@ struct<id:bigint>
 -- !query
 select ln(1.2345678e-28)
 -- !query schema
-struct<ln(1.2345678E-28):double>
+struct<ln(1.2345678e-28):double>
 -- !query output
 -64.26166165451762
 
@@ -5074,7 +5074,7 @@ struct<ln(1234.567890123456789):double>
 -- !query
 select ln(5.80397490724e5)
 -- !query schema
-struct<ln(580397.490724):double>
+struct<ln(5.80397490724e5):double>
 -- !query output
 13.271468476626518
 
@@ -5082,7 +5082,7 @@ struct<ln(580397.490724):double>
 -- !query
 select ln(9.342536355e34)
 -- !query schema
-struct<ln(9.342536355E34):double>
+struct<ln(9.342536355e34):double>
 -- !query output
 80.52247093552418
 
@@ -5090,7 +5090,7 @@ struct<ln(9.342536355E34):double>
 -- !query
 select log(3.4634998359873254962349856073435545)
 -- !query schema
-struct<LOG(E(), 3.4634998359873254962349856073435545):double>
+struct<log(3.4634998359873254962349856073435545):double>
 -- !query output
 1.2422795911259166
 
@@ -5098,7 +5098,7 @@ struct<LOG(E(), 3.4634998359873254962349856073435545):double>
 -- !query
 select log(9.999999999999999999)
 -- !query schema
-struct<LOG(E(), 9.999999999999999999):double>
+struct<log(9.999999999999999999):double>
 -- !query output
 2.302585092994046
 
@@ -5106,7 +5106,7 @@ struct<LOG(E(), 9.999999999999999999):double>
 -- !query
 select log(10.00000000000000000)
 -- !query schema
-struct<LOG(E(), 10.00000000000000000):double>
+struct<log(10.00000000000000000):double>
 -- !query output
 2.302585092994046
 
@@ -5114,7 +5114,7 @@ struct<LOG(E(), 10.00000000000000000):double>
 -- !query
 select log(10.00000000000000001)
 -- !query schema
-struct<LOG(E(), 10.00000000000000001):double>
+struct<log(10.00000000000000001):double>
 -- !query output
 2.302585092994046
 
@@ -5122,7 +5122,7 @@ struct<LOG(E(), 10.00000000000000001):double>
 -- !query
 select log(590489.45235237)
 -- !query schema
-struct<LOG(E(), 590489.45235237):double>
+struct<log(590489.45235237):double>
 -- !query output
 13.288707052228641
 
@@ -5130,7 +5130,7 @@ struct<LOG(E(), 590489.45235237):double>
 -- !query
 select log(0.99923, 4.58934e34)
 -- !query schema
-struct<LOG(0.99923, 4.58934E34):double>
+struct<log(0.99923, 4.58934e34):double>
 -- !query output
 -103611.55579543479
 
@@ -5138,7 +5138,7 @@ struct<LOG(0.99923, 4.58934E34):double>
 -- !query
 select log(1.000016, 8.452010e18)
 -- !query schema
-struct<LOG(1.000016, 8.45201E18):double>
+struct<log(1.000016, 8.452010e18):double>
 -- !query output
 2723830.287707013
 
@@ -5146,7 +5146,7 @@ struct<LOG(1.000016, 8.45201E18):double>
 -- !query
 SELECT SUM(decimal(9999)) FROM range(1, 100001)
 -- !query schema
-struct<sum(9999):decimal(20,0)>
+struct<SUM(decimal(9999)):decimal(20,0)>
 -- !query output
 999900000
 
@@ -5154,7 +5154,7 @@ struct<sum(9999):decimal(20,0)>
 -- !query
 SELECT SUM(decimal(-9999)) FROM range(1, 100001)
 -- !query schema
-struct<sum(-9999):decimal(20,0)>
+struct<SUM(decimal(- 9999)):decimal(20,0)>
 -- !query output
 -999900000
 

@@ -66,7 +66,7 @@ struct<>
 -- !query
 select a, b+c from t1
 -- !query schema
-struct<a:int,(b + c):int>
+struct<a:int,b + c:int>
 -- !query output
 1	0
 2	1
@@ -80,7 +80,7 @@ struct<a:int,(b + c):int>
 -- !query
 select a+10, b*0 from t1
 -- !query schema
-struct<(a + 10):int,(b * 0):int>
+struct<a + 10:int,b * 0:int>
 -- !query output
 11	0
 12	0
@@ -114,7 +114,7 @@ NULL
 -- !query
 select a+20, case b when c then 1 else 0 end from t1
 -- !query schema
-struct<(a + 20):int,CASE WHEN (b = c) THEN 1 ELSE 0 END:int>
+struct<a + 20:int,case b when c then 1 else 0 end:int>
 -- !query output
 21	1
 22	0
@@ -128,7 +128,7 @@ struct<(a + 20):int,CASE WHEN (b = c) THEN 1 ELSE 0 END:int>
 -- !query
 select a+30, case c when b then 1 else 0 end from t1
 -- !query schema
-struct<(a + 30):int,CASE WHEN (c = b) THEN 1 ELSE 0 END:int>
+struct<a + 30:int,case c when b then 1 else 0 end:int>
 -- !query output
 31	1
 32	0
@@ -142,7 +142,7 @@ struct<(a + 30):int,CASE WHEN (c = b) THEN 1 ELSE 0 END:int>
 -- !query
 select a+40, case when b<>0 then 1 else 0 end from t1
 -- !query schema
-struct<(a + 40):int,CASE WHEN (NOT (b = 0)) THEN 1 ELSE 0 END:int>
+struct<a + 40:int,case when b <> 0 then 1 else 0 end:int>
 -- !query output
 41	0
 42	0
@@ -156,7 +156,7 @@ struct<(a + 40):int,CASE WHEN (NOT (b = 0)) THEN 1 ELSE 0 END:int>
 -- !query
 select a+50, case when not b<>0 then 1 else 0 end from t1
 -- !query schema
-struct<(a + 50):int,CASE WHEN (NOT (NOT (b = 0))) THEN 1 ELSE 0 END:int>
+struct<a + 50:int,case when not b <> 0 then 1 else 0 end:int>
 -- !query output
 51	1
 52	1
@@ -170,7 +170,7 @@ struct<(a + 50):int,CASE WHEN (NOT (NOT (b = 0))) THEN 1 ELSE 0 END:int>
 -- !query
 select a+60, case when b<>0 and c<>0 then 1 else 0 end from t1
 -- !query schema
-struct<(a + 60):int,CASE WHEN ((NOT (b = 0)) AND (NOT (c = 0))) THEN 1 ELSE 0 END:int>
+struct<a + 60:int,case when b <> 0 and c <> 0 then 1 else 0 end:int>
 -- !query output
 61	0
 62	0
@@ -184,7 +184,7 @@ struct<(a + 60):int,CASE WHEN ((NOT (b = 0)) AND (NOT (c = 0))) THEN 1 ELSE 0 EN
 -- !query
 select a+70, case when not (b<>0 and c<>0) then 1 else 0 end from t1
 -- !query schema
-struct<(a + 70):int,CASE WHEN (NOT ((NOT (b = 0)) AND (NOT (c = 0)))) THEN 1 ELSE 0 END:int>
+struct<a + 70:int,case when not(b <> 0 and c <> 0)then 1 else 0 end:int>
 -- !query output
 71	1
 72	1
@@ -198,7 +198,7 @@ struct<(a + 70):int,CASE WHEN (NOT ((NOT (b = 0)) AND (NOT (c = 0)))) THEN 1 ELS
 -- !query
 select a+80, case when b<>0 or c<>0 then 1 else 0 end from t1
 -- !query schema
-struct<(a + 80):int,CASE WHEN ((NOT (b = 0)) OR (NOT (c = 0))) THEN 1 ELSE 0 END:int>
+struct<a + 80:int,case when b <> 0 or c <> 0 then 1 else 0 end:int>
 -- !query output
 81	0
 82	1
@@ -212,7 +212,7 @@ struct<(a + 80):int,CASE WHEN ((NOT (b = 0)) OR (NOT (c = 0))) THEN 1 ELSE 0 END
 -- !query
 select a+90, case when not (b<>0 or c<>0) then 1 else 0 end from t1
 -- !query schema
-struct<(a + 90):int,CASE WHEN (NOT ((NOT (b = 0)) OR (NOT (c = 0)))) THEN 1 ELSE 0 END:int>
+struct<a + 90:int,case when not(b <> 0 or c <> 0)then 1 else 0 end:int>
 -- !query output
 91	1
 92	0
@@ -226,7 +226,7 @@ struct<(a + 90):int,CASE WHEN (NOT ((NOT (b = 0)) OR (NOT (c = 0)))) THEN 1 ELSE
 -- !query
 select count(*), count(b), sum(b), avg(b), min(b), max(b) from t1
 -- !query schema
-struct<count(1):bigint,count(b):bigint,sum(b):bigint,avg(b):double,min(b):int,max(b):int>
+struct<count(*):bigint,count(b):bigint,sum(b):bigint,avg(b):double,min(b):int,max(b):int>
 -- !query output
 7	4	2	0.5	0	1
 
@@ -234,7 +234,7 @@ struct<count(1):bigint,count(b):bigint,sum(b):bigint,avg(b):double,min(b):int,ma
 -- !query
 select a+100 from t1 where b<10
 -- !query schema
-struct<(a + 100):int>
+struct<a + 100:int>
 -- !query output
 101
 102
@@ -245,7 +245,7 @@ struct<(a + 100):int>
 -- !query
 select a+110 from t1 where not b>10
 -- !query schema
-struct<(a + 110):int>
+struct<a + 110:int>
 -- !query output
 111
 112
@@ -256,7 +256,7 @@ struct<(a + 110):int>
 -- !query
 select a+120 from t1 where b<10 OR c=1
 -- !query schema
-struct<(a + 120):int>
+struct<a + 120:int>
 -- !query output
 121
 122
@@ -268,7 +268,7 @@ struct<(a + 120):int>
 -- !query
 select a+130 from t1 where b<10 AND c=1
 -- !query schema
-struct<(a + 130):int>
+struct<a + 130:int>
 -- !query output
 132
 134
@@ -277,7 +277,7 @@ struct<(a + 130):int>
 -- !query
 select a+140 from t1 where not (b<10 AND c=1)
 -- !query schema
-struct<(a + 140):int>
+struct<a + 140:int>
 -- !query output
 141
 143
@@ -287,7 +287,7 @@ struct<(a + 140):int>
 -- !query
 select a+150 from t1 where not (c=1 AND b<10)
 -- !query schema
-struct<(a + 150):int>
+struct<a + 150:int>
 -- !query output
 151
 153

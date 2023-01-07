@@ -10,7 +10,7 @@ struct<>
 -- !query
 SELECT true = cast(1 as tinyint) FROM t
 -- !query schema
-struct<(true = CAST(1 AS TINYINT)):boolean>
+struct<true = cast(1 as tinyint):boolean>
 -- !query output
 true
 
@@ -18,7 +18,7 @@ true
 -- !query
 SELECT true = cast(1 as smallint) FROM t
 -- !query schema
-struct<(true = CAST(1 AS SMALLINT)):boolean>
+struct<true = cast(1 as smallint):boolean>
 -- !query output
 true
 
@@ -26,7 +26,7 @@ true
 -- !query
 SELECT true = cast(1 as int) FROM t
 -- !query schema
-struct<(true = CAST(1 AS INT)):boolean>
+struct<true = cast(1 as int):boolean>
 -- !query output
 true
 
@@ -34,7 +34,7 @@ true
 -- !query
 SELECT true = cast(1 as bigint) FROM t
 -- !query schema
-struct<(true = CAST(1 AS BIGINT)):boolean>
+struct<true = cast(1 as bigint):boolean>
 -- !query output
 true
 
@@ -42,7 +42,7 @@ true
 -- !query
 SELECT true = cast(1 as float) FROM t
 -- !query schema
-struct<(true = CAST(1 AS FLOAT)):boolean>
+struct<true = cast(1 as float):boolean>
 -- !query output
 true
 
@@ -50,7 +50,7 @@ true
 -- !query
 SELECT true = cast(1 as double) FROM t
 -- !query schema
-struct<(true = CAST(1 AS DOUBLE)):boolean>
+struct<true = cast(1 as double):boolean>
 -- !query output
 true
 
@@ -58,7 +58,7 @@ true
 -- !query
 SELECT true = cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(true = CAST(1 AS DECIMAL(10,0))):boolean>
+struct<true = cast(1 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -66,7 +66,7 @@ true
 -- !query
 SELECT true = cast(1 as string) FROM t
 -- !query schema
-struct<(true = CAST(1 AS STRING)):boolean>
+struct<true = cast(1 as string):boolean>
 -- !query output
 true
 
@@ -97,7 +97,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT true = cast(1 as boolean) FROM t
 -- !query schema
-struct<(true = CAST(1 AS BOOLEAN)):boolean>
+struct<true = cast(1 as boolean):boolean>
 -- !query output
 true
 
@@ -151,7 +151,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT true <=> cast(1 as tinyint) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS TINYINT)):boolean>
+struct<true <=> cast(1 as tinyint):boolean>
 -- !query output
 true
 
@@ -159,7 +159,7 @@ true
 -- !query
 SELECT true <=> cast(1 as smallint) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS SMALLINT)):boolean>
+struct<true <=> cast(1 as smallint):boolean>
 -- !query output
 true
 
@@ -167,7 +167,7 @@ true
 -- !query
 SELECT true <=> cast(1 as int) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS INT)):boolean>
+struct<true <=> cast(1 as int):boolean>
 -- !query output
 true
 
@@ -175,7 +175,7 @@ true
 -- !query
 SELECT true <=> cast(1 as bigint) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS BIGINT)):boolean>
+struct<true <=> cast(1 as bigint):boolean>
 -- !query output
 true
 
@@ -183,7 +183,7 @@ true
 -- !query
 SELECT true <=> cast(1 as float) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS FLOAT)):boolean>
+struct<true <=> cast(1 as float):boolean>
 -- !query output
 true
 
@@ -191,7 +191,7 @@ true
 -- !query
 SELECT true <=> cast(1 as double) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS DOUBLE)):boolean>
+struct<true <=> cast(1 as double):boolean>
 -- !query output
 true
 
@@ -199,7 +199,7 @@ true
 -- !query
 SELECT true <=> cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS DECIMAL(10,0))):boolean>
+struct<true <=> cast(1 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -207,7 +207,7 @@ true
 -- !query
 SELECT true <=> cast(1 as string) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS STRING)):boolean>
+struct<true <=> cast(1 as string):boolean>
 -- !query output
 true
 
@@ -238,7 +238,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT true <=> cast(1 as boolean) FROM t
 -- !query schema
-struct<(true <=> CAST(1 AS BOOLEAN)):boolean>
+struct<true <=> cast(1 as boolean):boolean>
 -- !query output
 true
 
@@ -292,7 +292,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as tinyint) = true FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) = true):boolean>
+struct<cast(1 as tinyint)= true:boolean>
 -- !query output
 true
 
@@ -300,7 +300,7 @@ true
 -- !query
 SELECT cast(1 as smallint) = true FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) = true):boolean>
+struct<cast(1 as smallint)= true:boolean>
 -- !query output
 true
 
@@ -308,7 +308,7 @@ true
 -- !query
 SELECT cast(1 as int) = true FROM t
 -- !query schema
-struct<(CAST(1 AS INT) = true):boolean>
+struct<cast(1 as int)= true:boolean>
 -- !query output
 true
 
@@ -316,7 +316,7 @@ true
 -- !query
 SELECT cast(1 as bigint) = true FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) = true):boolean>
+struct<cast(1 as bigint)= true:boolean>
 -- !query output
 true
 
@@ -324,7 +324,7 @@ true
 -- !query
 SELECT cast(1 as float) = true FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) = true):boolean>
+struct<cast(1 as float)= true:boolean>
 -- !query output
 true
 
@@ -332,7 +332,7 @@ true
 -- !query
 SELECT cast(1 as double) = true FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) = true):boolean>
+struct<cast(1 as double)= true:boolean>
 -- !query output
 true
 
@@ -340,7 +340,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) = true FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) = true):boolean>
+struct<cast(1 as decimal(10, 0))= true:boolean>
 -- !query output
 true
 
@@ -348,7 +348,7 @@ true
 -- !query
 SELECT cast(1 as string) = true FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) = true):boolean>
+struct<cast(1 as string)= true:boolean>
 -- !query output
 true
 
@@ -379,7 +379,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as boolean) = true FROM t
 -- !query schema
-struct<(CAST(1 AS BOOLEAN) = true):boolean>
+struct<cast(1 as boolean)= true:boolean>
 -- !query output
 true
 
@@ -433,7 +433,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as tinyint) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) <=> true):boolean>
+struct<cast(1 as tinyint)<=> true:boolean>
 -- !query output
 true
 
@@ -441,7 +441,7 @@ true
 -- !query
 SELECT cast(1 as smallint) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) <=> true):boolean>
+struct<cast(1 as smallint)<=> true:boolean>
 -- !query output
 true
 
@@ -449,7 +449,7 @@ true
 -- !query
 SELECT cast(1 as int) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS INT) <=> true):boolean>
+struct<cast(1 as int)<=> true:boolean>
 -- !query output
 true
 
@@ -457,7 +457,7 @@ true
 -- !query
 SELECT cast(1 as bigint) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) <=> true):boolean>
+struct<cast(1 as bigint)<=> true:boolean>
 -- !query output
 true
 
@@ -465,7 +465,7 @@ true
 -- !query
 SELECT cast(1 as float) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) <=> true):boolean>
+struct<cast(1 as float)<=> true:boolean>
 -- !query output
 true
 
@@ -473,7 +473,7 @@ true
 -- !query
 SELECT cast(1 as double) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) <=> true):boolean>
+struct<cast(1 as double)<=> true:boolean>
 -- !query output
 true
 
@@ -481,7 +481,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) <=> true):boolean>
+struct<cast(1 as decimal(10, 0))<=> true:boolean>
 -- !query output
 true
 
@@ -489,7 +489,7 @@ true
 -- !query
 SELECT cast(1 as string) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) <=> true):boolean>
+struct<cast(1 as string)<=> true:boolean>
 -- !query output
 true
 
@@ -520,7 +520,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as boolean) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS BOOLEAN) <=> true):boolean>
+struct<cast(1 as boolean)<=> true:boolean>
 -- !query output
 true
 
@@ -574,7 +574,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT false = cast(0 as tinyint) FROM t
 -- !query schema
-struct<(false = CAST(0 AS TINYINT)):boolean>
+struct<false = cast(0 as tinyint):boolean>
 -- !query output
 true
 
@@ -582,7 +582,7 @@ true
 -- !query
 SELECT false = cast(0 as smallint) FROM t
 -- !query schema
-struct<(false = CAST(0 AS SMALLINT)):boolean>
+struct<false = cast(0 as smallint):boolean>
 -- !query output
 true
 
@@ -590,7 +590,7 @@ true
 -- !query
 SELECT false = cast(0 as int) FROM t
 -- !query schema
-struct<(false = CAST(0 AS INT)):boolean>
+struct<false = cast(0 as int):boolean>
 -- !query output
 true
 
@@ -598,7 +598,7 @@ true
 -- !query
 SELECT false = cast(0 as bigint) FROM t
 -- !query schema
-struct<(false = CAST(0 AS BIGINT)):boolean>
+struct<false = cast(0 as bigint):boolean>
 -- !query output
 true
 
@@ -606,7 +606,7 @@ true
 -- !query
 SELECT false = cast(0 as float) FROM t
 -- !query schema
-struct<(false = CAST(0 AS FLOAT)):boolean>
+struct<false = cast(0 as float):boolean>
 -- !query output
 true
 
@@ -614,7 +614,7 @@ true
 -- !query
 SELECT false = cast(0 as double) FROM t
 -- !query schema
-struct<(false = CAST(0 AS DOUBLE)):boolean>
+struct<false = cast(0 as double):boolean>
 -- !query output
 true
 
@@ -622,7 +622,7 @@ true
 -- !query
 SELECT false = cast(0 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(false = CAST(0 AS DECIMAL(10,0))):boolean>
+struct<false = cast(0 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -630,7 +630,7 @@ true
 -- !query
 SELECT false = cast(0 as string) FROM t
 -- !query schema
-struct<(false = CAST(0 AS STRING)):boolean>
+struct<false = cast(0 as string):boolean>
 -- !query output
 true
 
@@ -661,7 +661,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT false = cast(0 as boolean) FROM t
 -- !query schema
-struct<(false = CAST(0 AS BOOLEAN)):boolean>
+struct<false = cast(0 as boolean):boolean>
 -- !query output
 true
 
@@ -715,7 +715,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT false <=> cast(0 as tinyint) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS TINYINT)):boolean>
+struct<false <=> cast(0 as tinyint):boolean>
 -- !query output
 true
 
@@ -723,7 +723,7 @@ true
 -- !query
 SELECT false <=> cast(0 as smallint) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS SMALLINT)):boolean>
+struct<false <=> cast(0 as smallint):boolean>
 -- !query output
 true
 
@@ -731,7 +731,7 @@ true
 -- !query
 SELECT false <=> cast(0 as int) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS INT)):boolean>
+struct<false <=> cast(0 as int):boolean>
 -- !query output
 true
 
@@ -739,7 +739,7 @@ true
 -- !query
 SELECT false <=> cast(0 as bigint) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS BIGINT)):boolean>
+struct<false <=> cast(0 as bigint):boolean>
 -- !query output
 true
 
@@ -747,7 +747,7 @@ true
 -- !query
 SELECT false <=> cast(0 as float) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS FLOAT)):boolean>
+struct<false <=> cast(0 as float):boolean>
 -- !query output
 true
 
@@ -755,7 +755,7 @@ true
 -- !query
 SELECT false <=> cast(0 as double) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS DOUBLE)):boolean>
+struct<false <=> cast(0 as double):boolean>
 -- !query output
 true
 
@@ -763,7 +763,7 @@ true
 -- !query
 SELECT false <=> cast(0 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS DECIMAL(10,0))):boolean>
+struct<false <=> cast(0 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -771,7 +771,7 @@ true
 -- !query
 SELECT false <=> cast(0 as string) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS STRING)):boolean>
+struct<false <=> cast(0 as string):boolean>
 -- !query output
 true
 
@@ -802,7 +802,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT false <=> cast(0 as boolean) FROM t
 -- !query schema
-struct<(false <=> CAST(0 AS BOOLEAN)):boolean>
+struct<false <=> cast(0 as boolean):boolean>
 -- !query output
 true
 
@@ -856,7 +856,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(0 as tinyint) = false FROM t
 -- !query schema
-struct<(CAST(0 AS TINYINT) = false):boolean>
+struct<cast(0 as tinyint)= false:boolean>
 -- !query output
 true
 
@@ -864,7 +864,7 @@ true
 -- !query
 SELECT cast(0 as smallint) = false FROM t
 -- !query schema
-struct<(CAST(0 AS SMALLINT) = false):boolean>
+struct<cast(0 as smallint)= false:boolean>
 -- !query output
 true
 
@@ -872,7 +872,7 @@ true
 -- !query
 SELECT cast(0 as int) = false FROM t
 -- !query schema
-struct<(CAST(0 AS INT) = false):boolean>
+struct<cast(0 as int)= false:boolean>
 -- !query output
 true
 
@@ -880,7 +880,7 @@ true
 -- !query
 SELECT cast(0 as bigint) = false FROM t
 -- !query schema
-struct<(CAST(0 AS BIGINT) = false):boolean>
+struct<cast(0 as bigint)= false:boolean>
 -- !query output
 true
 
@@ -888,7 +888,7 @@ true
 -- !query
 SELECT cast(0 as float) = false FROM t
 -- !query schema
-struct<(CAST(0 AS FLOAT) = false):boolean>
+struct<cast(0 as float)= false:boolean>
 -- !query output
 true
 
@@ -896,7 +896,7 @@ true
 -- !query
 SELECT cast(0 as double) = false FROM t
 -- !query schema
-struct<(CAST(0 AS DOUBLE) = false):boolean>
+struct<cast(0 as double)= false:boolean>
 -- !query output
 true
 
@@ -904,7 +904,7 @@ true
 -- !query
 SELECT cast(0 as decimal(10, 0)) = false FROM t
 -- !query schema
-struct<(CAST(0 AS DECIMAL(10,0)) = false):boolean>
+struct<cast(0 as decimal(10, 0))= false:boolean>
 -- !query output
 true
 
@@ -912,7 +912,7 @@ true
 -- !query
 SELECT cast(0 as string) = false FROM t
 -- !query schema
-struct<(CAST(0 AS STRING) = false):boolean>
+struct<cast(0 as string)= false:boolean>
 -- !query output
 true
 
@@ -943,7 +943,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(0 as boolean) = false FROM t
 -- !query schema
-struct<(CAST(0 AS BOOLEAN) = false):boolean>
+struct<cast(0 as boolean)= false:boolean>
 -- !query output
 true
 
@@ -997,7 +997,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(0 as tinyint) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS TINYINT) <=> false):boolean>
+struct<cast(0 as tinyint)<=> false:boolean>
 -- !query output
 true
 
@@ -1005,7 +1005,7 @@ true
 -- !query
 SELECT cast(0 as smallint) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS SMALLINT) <=> false):boolean>
+struct<cast(0 as smallint)<=> false:boolean>
 -- !query output
 true
 
@@ -1013,7 +1013,7 @@ true
 -- !query
 SELECT cast(0 as int) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS INT) <=> false):boolean>
+struct<cast(0 as int)<=> false:boolean>
 -- !query output
 true
 
@@ -1021,7 +1021,7 @@ true
 -- !query
 SELECT cast(0 as bigint) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS BIGINT) <=> false):boolean>
+struct<cast(0 as bigint)<=> false:boolean>
 -- !query output
 true
 
@@ -1029,7 +1029,7 @@ true
 -- !query
 SELECT cast(0 as float) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS FLOAT) <=> false):boolean>
+struct<cast(0 as float)<=> false:boolean>
 -- !query output
 true
 
@@ -1037,7 +1037,7 @@ true
 -- !query
 SELECT cast(0 as double) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS DOUBLE) <=> false):boolean>
+struct<cast(0 as double)<=> false:boolean>
 -- !query output
 true
 
@@ -1045,7 +1045,7 @@ true
 -- !query
 SELECT cast(0 as decimal(10, 0)) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS DECIMAL(10,0)) <=> false):boolean>
+struct<cast(0 as decimal(10, 0))<=> false:boolean>
 -- !query output
 true
 
@@ -1053,7 +1053,7 @@ true
 -- !query
 SELECT cast(0 as string) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS STRING) <=> false):boolean>
+struct<cast(0 as string)<=> false:boolean>
 -- !query output
 true
 
@@ -1084,7 +1084,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(0 as boolean) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS BOOLEAN) <=> false):boolean>
+struct<cast(0 as boolean)<=> false:boolean>
 -- !query output
 true
 

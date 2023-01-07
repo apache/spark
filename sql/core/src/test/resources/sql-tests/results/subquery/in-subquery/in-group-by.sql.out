@@ -71,7 +71,7 @@ WHERE  t1a IN (SELECT t2a
                FROM   t2)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,avg(t1b):double>
+struct<t1a:string,Avg(t1b):double>
 -- !query output
 t1b	8.0
 t1c	8.0
@@ -88,7 +88,7 @@ WHERE  t1b IN (SELECT t2b
 GROUP  BY t1a,
           t1d
 -- !query schema
-struct<t1a:string,max(t1b):smallint>
+struct<t1a:string,Max(t1b):smallint>
 -- !query output
 t1b	8
 
@@ -122,7 +122,7 @@ WHERE  t1c IN (SELECT t2c
 GROUP  BY t1a,
           t1c
 -- !query schema
-struct<t1a:string,sum(DISTINCT t1b):bigint>
+struct<t1a:string,Sum(DISTINCT(t1b)):bigint>
 -- !query output
 t1b	8
 t1c	8
@@ -141,7 +141,7 @@ WHERE  t1c IN (SELECT t2c
 GROUP  BY t1a,
           t1c
 -- !query schema
-struct<t1a:string,sum(DISTINCT t1b):bigint>
+struct<t1a:string,Sum(DISTINCT(t1b)):bigint>
 -- !query output
 t1b	8
 
@@ -157,7 +157,7 @@ GROUP  BY t1a,
           t1c
 HAVING t1a = "t1b"
 -- !query schema
-struct<t1a:string,count(DISTINCT t1b):bigint>
+struct<t1a:string,Count(DISTINCT(t1b)):bigint>
 -- !query output
 t1b	1
 
@@ -206,7 +206,7 @@ WHERE  t1b IN (SELECT Min(t2b)
                       AND t1c = t2c
                GROUP  BY t2a)
 -- !query schema
-struct<count(DISTINCT t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i):bigint>
+struct<Count(DISTINCT(*)):bigint>
 -- !query output
 1
 
@@ -260,7 +260,7 @@ WHERE  t1c IN (SELECT Min(t2c)
                GROUP  BY t2a)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,min(t1b):smallint>
+struct<t1a:string,Min(t1b):smallint>
 -- !query output
 t1b	8
 t1c	8
@@ -280,7 +280,7 @@ WHERE  t1c IN (SELECT Min(t2c)
 GROUP  BY t1a,
           t1d
 -- !query schema
-struct<t1a:string,min(t1b):smallint>
+struct<t1a:string,Min(t1b):smallint>
 -- !query output
 t1b	8
 t1c	8
@@ -302,7 +302,7 @@ WHERE  t1c IN (SELECT Min(t2c)
                    GROUP  BY t3d)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,min(t1b):smallint>
+struct<t1a:string,Min(t1b):smallint>
 -- !query output
 t1b	8
 t1c	8
@@ -322,7 +322,7 @@ WHERE  t1c IN (SELECT Min(t2c)
                    GROUP  BY t3d)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,min(t1b):smallint>
+struct<t1a:string,Min(t1b):smallint>
 -- !query output
 t1a	16
 t1b	8
@@ -347,7 +347,7 @@ WHERE  t1c IN (SELECT Min(t2c)
 GROUP  BY t1a
 HAVING Min(t1b) IS NOT NULL
 -- !query schema
-struct<t1a:string,min(t1b):smallint>
+struct<t1a:string,Min(t1b):smallint>
 -- !query output
 t1a	16
 t1b	8

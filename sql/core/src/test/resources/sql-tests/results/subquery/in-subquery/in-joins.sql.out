@@ -131,7 +131,7 @@ GROUP BY  t1a,
           t3c
 ORDER BY  t1a DESC, t3b DESC, t3c ASC
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint,t3a:string,t3b:smallint,t3c:int>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint,t3a:string,t3b:smallint,t3c:int>
 -- !query output
 1	10	val3b	8	NULL
 1	10	val1b	8	16
@@ -157,7 +157,7 @@ AND        t1a = t3a
 GROUP BY   t1a
 ORDER BY   t1a
 -- !query schema
-struct<count(DISTINCT t1a):bigint>
+struct<Count(DISTINCT(t1a)):bigint>
 -- !query output
 1
 
@@ -209,7 +209,7 @@ GROUP BY   t1a,
 HAVING     t1b > 8
 ORDER BY   t1a
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	10
 
@@ -227,7 +227,7 @@ WHERE    t1a IN
 GROUP BY t1a
 ORDER BY t1a
 -- !query schema
-struct<count(DISTINCT t1a):bigint>
+struct<Count(DISTINCT(t1a)):bigint>
 -- !query output
 1
 1
@@ -252,7 +252,7 @@ OR       t1a IN
 GROUP BY t1b
 HAVING   t1b > 6
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	10
 1	8
@@ -277,7 +277,7 @@ AND      t1h IN
 GROUP BY t1b
 HAVING t1b > 8
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	10
 
@@ -308,7 +308,7 @@ AND       t1b IN
 GROUP BY t1b
 HAVING   t1b > 8
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	10
 
@@ -342,7 +342,7 @@ AND        t1a = t2a
 GROUP BY   t1b
 ORDER BY   t1b DESC
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	8
 
@@ -373,7 +373,7 @@ Group By t1a, t1b, t1c, t2a, t2b, t2c
 HAVING t2c IS NOT NULL
 ORDER By t2b DESC nulls last
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,count(DISTINCT t2a):bigint,t2b:smallint,t2c:int>
+struct<t1a:string,t1b:smallint,t1c:int,count(distinct(t2a)):bigint,t2b:smallint,t2c:int>
 -- !query output
 val1b	8	16	1	10	12
 val1b	8	16	1	8	16

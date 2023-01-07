@@ -55,7 +55,7 @@ struct<a:int,1:int,sum(b):bigint>
 -- !query
 select a, b + 2, count(2) from data group by a, 2
 -- !query schema
-struct<a:int,(b + 2):int,count(2):bigint>
+struct<a:int,b + 2:int,count(2):bigint>
 -- !query output
 1	3	1
 1	4	1
@@ -188,7 +188,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_AGGREGATE",
   "sqlState" : "42000",
   "messageParameters" : {
-    "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`",
+    "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `sum(b)+ 2`",
     "index" : "3"
   },
   "queryContext" : [ {

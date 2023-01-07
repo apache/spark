@@ -31,7 +31,7 @@ GROUP BY GREATEST(COALESCE(t2.int_col1, 109), COALESCE(t1.int_col1, -449)),
 HAVING (SUM(COALESCE(t1.int_col1, t2.int_col0)))
             > ((COALESCE(t1.int_col1, t2.int_col0)) * 2)
 -- !query schema
-struct<sum(coalesce(int_col1, int_col0)):bigint,(coalesce(int_col1, int_col0) * 2):int>
+struct<(SUM(COALESCE(t1 . int_col1, t2 . int_col0))):bigint,((COALESCE(t1 . int_col1, t2 . int_col0))* 2):int>
 -- !query output
 -367	-734
 -507	-1014

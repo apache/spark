@@ -190,7 +190,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select to_unix_timestamp(a) from t
 -- !query schema
-struct<to_unix_timestamp(a, yyyy-MM-dd HH:mm:ss):bigint>
+struct<to_unix_timestamp(a):bigint>
 -- !query output
 NULL
 
@@ -213,7 +213,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select unix_timestamp(a) from t
 -- !query schema
-struct<unix_timestamp(a, yyyy-MM-dd HH:mm:ss):bigint>
+struct<unix_timestamp(a):bigint>
 -- !query output
 NULL
 
@@ -236,7 +236,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select from_unixtime(a) from t
 -- !query schema
-struct<from_unixtime(a, yyyy-MM-dd HH:mm:ss):string>
+struct<from_unixtime(a):string>
 -- !query output
 NULL
 
@@ -244,7 +244,7 @@ NULL
 -- !query
 select from_unixtime('2018-01-01', a) from t
 -- !query schema
-struct<from_unixtime(2018-01-01, a):string>
+struct<from_unixtime('2018-01-01', a):string>
 -- !query output
 NULL
 
@@ -252,7 +252,7 @@ NULL
 -- !query
 select next_day(a, 'MO') from t
 -- !query schema
-struct<next_day(a, MO):date>
+struct<next_day(a, 'MO'):date>
 -- !query output
 NULL
 
@@ -260,7 +260,7 @@ NULL
 -- !query
 select next_day('2018-01-01', a) from t
 -- !query schema
-struct<next_day(2018-01-01, a):date>
+struct<next_day('2018-01-01', a):date>
 -- !query output
 NULL
 
@@ -268,7 +268,7 @@ NULL
 -- !query
 select trunc(a, 'MM') from t
 -- !query schema
-struct<trunc(a, MM):date>
+struct<trunc(a, 'MM'):date>
 -- !query output
 NULL
 
@@ -276,7 +276,7 @@ NULL
 -- !query
 select trunc('2018-01-01', a) from t
 -- !query schema
-struct<trunc(2018-01-01, a):date>
+struct<trunc('2018-01-01', a):date>
 -- !query output
 NULL
 
@@ -284,7 +284,7 @@ NULL
 -- !query
 select unhex('-123')
 -- !query schema
-struct<unhex(-123):binary>
+struct<unhex('-123'):binary>
 -- !query output
 NULL
 
@@ -316,6 +316,6 @@ NULL
 -- !query
 select from_json(a, 'a INT') from t
 -- !query schema
-struct<from_json(a):struct<a:int>>
+struct<from_json(a, 'a INT'):struct<a:int>>
 -- !query output
 {"a":null}

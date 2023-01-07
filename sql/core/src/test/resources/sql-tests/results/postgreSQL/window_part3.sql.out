@@ -93,7 +93,7 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following)
 -- !query schema
-struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING):bigint>
+struct<x:bigint,(sum(x)over w):bigint>
 -- !query output
 1	4
 11	33
@@ -123,7 +123,7 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following)
 -- !query schema
-struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING):bigint>
+struct<x:bigint,(sum(x)over w):bigint>
 -- !query output
 1	1
 11	11
@@ -154,7 +154,7 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following)
 -- !query schema
-struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING):bigint>
+struct<x:bigint,(sum(x)over w):bigint>
 -- !query output
 1	2
 1	3
@@ -193,7 +193,7 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following)
 -- !query schema
-struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING):bigint>
+struct<x:bigint,(sum(x)over w):bigint>
 -- !query output
 1	3
 1	3
@@ -226,7 +226,7 @@ struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLL
 -- !query
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0
 -- !query schema
-struct<count(1) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
+struct<count(*)OVER(PARTITION BY four):bigint>
 -- !query output
 
 
@@ -275,7 +275,7 @@ select f1, sum(f1) over (partition by f1 order by f2
 range between 1 preceding and 1 following)
 from t1 where f1 = f2
 -- !query schema
-struct<f1:int,sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):bigint>
+struct<f1:int,sum(f1)over(partition by f1 order by f2 range between 1 preceding and 1 following):bigint>
 -- !query output
 1	1
 2	2
@@ -286,7 +286,7 @@ select f1, sum(f1) over (partition by f1, f1 order by f2
 range between 2 preceding and 1 preceding)
 from t1 where f1 = f2
 -- !query schema
-struct<f1:int,sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING):bigint>
+struct<f1:int,sum(f1)over(partition by f1, f1 order by f2 range between 2 preceding and 1 preceding):bigint>
 -- !query output
 1	NULL
 2	NULL
@@ -297,7 +297,7 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2
 -- !query schema
-struct<f1:int,sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING):bigint>
+struct<f1:int,sum(f1)over(partition by f1, f2 order by f2 range between 1 following and 2 following):bigint>
 -- !query output
 1	NULL
 2	NULL
@@ -306,7 +306,7 @@ struct<f1:int,sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANG
 -- !query
 SELECT rank() OVER (ORDER BY length('abc'))
 -- !query schema
-struct<RANK() OVER (ORDER BY length(abc) ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<rank()OVER(ORDER BY length('abc')):int>
 -- !query output
 1
 

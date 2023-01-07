@@ -57,7 +57,7 @@ HAVING EXISTS (SELECT 1
                FROM   bonus 
                WHERE  bonus_amt < min(emp.salary))
 -- !query schema
-struct<dept_id:int,count(1):bigint>
+struct<dept_id:int,count(*):bigint>
 -- !query output
 10	3
 100	2
@@ -101,7 +101,7 @@ WHERE  EXISTS (SELECT dept_id,
                               WHERE  bonus_amt < Min(p.salary))) 
 GROUP  BY gp.dept_id
 -- !query schema
-struct<dept_id:int,max(salary):double>
+struct<dept_id:int,Max(salary):double>
 -- !query output
 10	200.0
 100	400.0

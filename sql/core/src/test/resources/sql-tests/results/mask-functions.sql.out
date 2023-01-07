@@ -2,7 +2,7 @@
 -- !query
 SELECT mask('AbCD123-@$#')
 -- !query schema
-struct<mask(AbCD123-@$#, X, x, n, -1):string>
+struct<mask('AbCD123-@$#'):string>
 -- !query output
 XxXXnnn-@$#
 
@@ -10,7 +10,7 @@ XxXXnnn-@$#
 -- !query
 SELECT mask('AbCD123-@$#', 'Q')
 -- !query schema
-struct<mask(AbCD123-@$#, Q, x, n, -1):string>
+struct<mask('AbCD123-@$#', 'Q'):string>
 -- !query output
 QxQQnnn-@$#
 
@@ -18,7 +18,7 @@ QxQQnnn-@$#
 -- !query
 SELECT mask('AbCD123-@$#', 'Q', 'q')
 -- !query schema
-struct<mask(AbCD123-@$#, Q, q, n, -1):string>
+struct<mask('AbCD123-@$#', 'Q', 'q'):string>
 -- !query output
 QqQQnnn-@$#
 
@@ -26,7 +26,7 @@ QqQQnnn-@$#
 -- !query
 SELECT mask('AbCD123-@$#', 'Q', 'q', 'd')
 -- !query schema
-struct<mask(AbCD123-@$#, Q, q, d, -1):string>
+struct<mask('AbCD123-@$#', 'Q', 'q', 'd'):string>
 -- !query output
 QqQQddd-@$#
 
@@ -34,7 +34,7 @@ QqQQddd-@$#
 -- !query
 SELECT mask('AbCD123-@$#', 'Q', 'q', 'd', 'o')
 -- !query schema
-struct<mask(AbCD123-@$#, Q, q, d, o):string>
+struct<mask('AbCD123-@$#', 'Q', 'q', 'd', 'o'):string>
 -- !query output
 QqQQdddoooo
 
@@ -64,7 +64,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT mask('AbCD123-@$#', -1, 'q', 'd', 'o')
 -- !query schema
-struct<mask(AbCD123-@$#, -1, q, d, o):string>
+struct<mask('AbCD123-@$#', - 1, 'q', 'd', 'o'):string>
 -- !query output
 AqCDdddoooo
 
@@ -72,7 +72,7 @@ AqCDdddoooo
 -- !query
 SELECT mask('AbCD123-@$#', -1, -1, 'd', 'o')
 -- !query schema
-struct<mask(AbCD123-@$#, -1, -1, d, o):string>
+struct<mask('AbCD123-@$#', - 1, - 1, 'd', 'o'):string>
 -- !query output
 AbCDdddoooo
 
@@ -80,7 +80,7 @@ AbCDdddoooo
 -- !query
 SELECT mask('AbCD123-@$#', -1, -1, -1, 'o')
 -- !query schema
-struct<mask(AbCD123-@$#, -1, -1, -1, o):string>
+struct<mask('AbCD123-@$#', - 1, - 1, - 1, 'o'):string>
 -- !query output
 AbCD123oooo
 
@@ -88,7 +88,7 @@ AbCD123oooo
 -- !query
 SELECT mask('AbCD123-@$#', -1, -1, -1, -1)
 -- !query schema
-struct<mask(AbCD123-@$#, -1, -1, -1, -1):string>
+struct<mask('AbCD123-@$#', - 1, - 1, - 1, - 1):string>
 -- !query output
 AbCD123-@$#
 
@@ -96,7 +96,7 @@ AbCD123-@$#
 -- !query
 SELECT mask(NULL)
 -- !query schema
-struct<mask(NULL, X, x, n, -1):string>
+struct<mask(NULL):string>
 -- !query output
 NULL
 
@@ -104,7 +104,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, 'q', 'd', 'o')
 -- !query schema
-struct<mask(NULL, -1, q, d, o):string>
+struct<mask(NULL, - 1, 'q', 'd', 'o'):string>
 -- !query output
 NULL
 
@@ -112,7 +112,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, -1, 'd', 'o')
 -- !query schema
-struct<mask(NULL, -1, -1, d, o):string>
+struct<mask(NULL, - 1, - 1, 'd', 'o'):string>
 -- !query output
 NULL
 
@@ -120,7 +120,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, -1, -1, 'o')
 -- !query schema
-struct<mask(NULL, -1, -1, -1, o):string>
+struct<mask(NULL, - 1, - 1, - 1, 'o'):string>
 -- !query output
 NULL
 
@@ -128,7 +128,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, -1, -1, -1)
 -- !query schema
-struct<mask(NULL, -1, -1, -1, -1):string>
+struct<mask(NULL, - 1, - 1, - 1, - 1):string>
 -- !query output
 NULL
 
@@ -246,7 +246,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT mask(c1) from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, X, x, n, -1):string>
+struct<mask(c1):string>
 -- !query output
 XxXXnnn-@$#
 
@@ -254,7 +254,7 @@ XxXXnnn-@$#
 -- !query
 SELECT mask(c1, 'Q') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, x, n, -1):string>
+struct<mask(c1, 'Q'):string>
 -- !query output
 QxQQnnn-@$#
 
@@ -262,7 +262,7 @@ QxQQnnn-@$#
 -- !query
 SELECT mask(c1, 'Q', 'q')from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, n, -1):string>
+struct<mask(c1, 'Q', 'q'):string>
 -- !query output
 QqQQnnn-@$#
 
@@ -270,7 +270,7 @@ QqQQnnn-@$#
 -- !query
 SELECT mask(c1, 'Q', 'q', 'd') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, d, -1):string>
+struct<mask(c1, 'Q', 'q', 'd'):string>
 -- !query output
 QqQQddd-@$#
 
@@ -278,7 +278,7 @@ QqQQddd-@$#
 -- !query
 SELECT mask(c1, 'Q', 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, d, o):string>
+struct<mask(c1, 'Q', 'q', 'd', 'o'):string>
 -- !query output
 QqQQdddoooo
 
@@ -286,7 +286,7 @@ QqQQdddoooo
 -- !query
 SELECT mask(c1, -1, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, q, d, o):string>
+struct<mask(c1, - 1, 'q', 'd', 'o'):string>
 -- !query output
 AqCDdddoooo
 
@@ -294,7 +294,7 @@ AqCDdddoooo
 -- !query
 SELECT mask(c1, -1, -1, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, d, o):string>
+struct<mask(c1, - 1, - 1, 'd', 'o'):string>
 -- !query output
 AbCDdddoooo
 
@@ -302,7 +302,7 @@ AbCDdddoooo
 -- !query
 SELECT mask(c1, -1, -1, -1, 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, o):string>
+struct<mask(c1, - 1, - 1, - 1, 'o'):string>
 -- !query output
 AbCD123oooo
 
@@ -310,7 +310,7 @@ AbCD123oooo
 -- !query
 SELECT mask(c1, -1, -1, -1, -1) from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, -1):string>
+struct<mask(c1, - 1, - 1, - 1, - 1):string>
 -- !query output
 AbCD123-@$#
 
@@ -450,7 +450,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT mask('abcd-EFGH-8765-4321')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, X, x, n, -1):string>
+struct<mask('abcd-EFGH-8765-4321'):string>
 -- !query output
 xxxx-XXXX-nnnn-nnnn
 
@@ -458,7 +458,7 @@ xxxx-XXXX-nnnn-nnnn
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'Q')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, Q, x, n, -1):string>
+struct<mask('abcd-EFGH-8765-4321', 'Q'):string>
 -- !query output
 xxxx-QQQQ-nnnn-nnnn
 
@@ -466,7 +466,7 @@ xxxx-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'Q', 'q')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, Q, q, n, -1):string>
+struct<mask('abcd-EFGH-8765-4321', 'Q', 'q'):string>
 -- !query output
 qqqq-QQQQ-nnnn-nnnn
 
@@ -474,7 +474,7 @@ qqqq-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'Q', 'q', 'd')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, Q, q, d, -1):string>
+struct<mask('abcd-EFGH-8765-4321', 'Q', 'q', 'd'):string>
 -- !query output
 qqqq-QQQQ-dddd-dddd
 
@@ -482,7 +482,7 @@ qqqq-QQQQ-dddd-dddd
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'Q', 'q', 'd', '*')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, Q, q, d, *):string>
+struct<mask('abcd-EFGH-8765-4321', 'Q', 'q', 'd', '*'):string>
 -- !query output
 qqqq*QQQQ*dddd*dddd
 
@@ -490,7 +490,7 @@ qqqq*QQQQ*dddd*dddd
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', -1, 'q', 'd', '*')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, q, d, *):string>
+struct<mask('abcd-EFGH-8765-4321', - 1, 'q', 'd', '*'):string>
 -- !query output
 qqqq*EFGH*dddd*dddd
 
@@ -498,7 +498,7 @@ qqqq*EFGH*dddd*dddd
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', -1, -1, 'd', '*')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, -1, d, *):string>
+struct<mask('abcd-EFGH-8765-4321', - 1, - 1, 'd', '*'):string>
 -- !query output
 abcd*EFGH*dddd*dddd
 
@@ -506,7 +506,7 @@ abcd*EFGH*dddd*dddd
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', -1, -1, -1, '*')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, -1, -1, *):string>
+struct<mask('abcd-EFGH-8765-4321', - 1, - 1, - 1, '*'):string>
 -- !query output
 abcd*EFGH*8765*4321
 
@@ -514,7 +514,7 @@ abcd*EFGH*8765*4321
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', -1, -1, -1, -1)
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, -1, -1, -1):string>
+struct<mask('abcd-EFGH-8765-4321', - 1, - 1, - 1, - 1):string>
 -- !query output
 abcd-EFGH-8765-4321
 
@@ -522,7 +522,7 @@ abcd-EFGH-8765-4321
 -- !query
 SELECT mask(NULL)
 -- !query schema
-struct<mask(NULL, X, x, n, -1):string>
+struct<mask(NULL):string>
 -- !query output
 NULL
 
@@ -530,7 +530,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, 'q', 'd', '*')
 -- !query schema
-struct<mask(NULL, -1, q, d, *):string>
+struct<mask(NULL, - 1, 'q', 'd', '*'):string>
 -- !query output
 NULL
 
@@ -538,7 +538,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, -1, 'd', '*')
 -- !query schema
-struct<mask(NULL, -1, -1, d, *):string>
+struct<mask(NULL, - 1, - 1, 'd', '*'):string>
 -- !query output
 NULL
 
@@ -546,7 +546,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, -1, -1, '*')
 -- !query schema
-struct<mask(NULL, -1, -1, -1, *):string>
+struct<mask(NULL, - 1, - 1, - 1, '*'):string>
 -- !query output
 NULL
 
@@ -554,7 +554,7 @@ NULL
 -- !query
 SELECT mask(NULL, -1, -1, -1, -1)
 -- !query schema
-struct<mask(NULL, -1, -1, -1, -1):string>
+struct<mask(NULL, - 1, - 1, - 1, - 1):string>
 -- !query output
 NULL
 
@@ -562,7 +562,7 @@ NULL
 -- !query
 SELECT mask(c1) from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, X, x, n, -1):string>
+struct<mask(c1):string>
 -- !query output
 xxxx-XXXX-nnnn-nnnn
 
@@ -570,7 +570,7 @@ xxxx-XXXX-nnnn-nnnn
 -- !query
 SELECT mask(c1, 'Q') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, x, n, -1):string>
+struct<mask(c1, 'Q'):string>
 -- !query output
 xxxx-QQQQ-nnnn-nnnn
 
@@ -578,7 +578,7 @@ xxxx-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask(c1, 'Q', 'q')from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, n, -1):string>
+struct<mask(c1, 'Q', 'q'):string>
 -- !query output
 qqqq-QQQQ-nnnn-nnnn
 
@@ -586,7 +586,7 @@ qqqq-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask(c1, 'Q', 'q', 'd') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, d, -1):string>
+struct<mask(c1, 'Q', 'q', 'd'):string>
 -- !query output
 qqqq-QQQQ-dddd-dddd
 
@@ -594,7 +594,7 @@ qqqq-QQQQ-dddd-dddd
 -- !query
 SELECT mask(c1, 'Q', 'q', 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, d, *):string>
+struct<mask(c1, 'Q', 'q', 'd', '*'):string>
 -- !query output
 qqqq*QQQQ*dddd*dddd
 
@@ -602,7 +602,7 @@ qqqq*QQQQ*dddd*dddd
 -- !query
 SELECT mask(c1, -1, 'q', 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, q, d, *):string>
+struct<mask(c1, - 1, 'q', 'd', '*'):string>
 -- !query output
 qqqq*EFGH*dddd*dddd
 
@@ -610,7 +610,7 @@ qqqq*EFGH*dddd*dddd
 -- !query
 SELECT mask(c1, -1, -1, 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, d, *):string>
+struct<mask(c1, - 1, - 1, 'd', '*'):string>
 -- !query output
 abcd*EFGH*dddd*dddd
 
@@ -618,7 +618,7 @@ abcd*EFGH*dddd*dddd
 -- !query
 SELECT mask(c1, -1, -1, -1, '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, *):string>
+struct<mask(c1, - 1, - 1, - 1, '*'):string>
 -- !query output
 abcd*EFGH*8765*4321
 
@@ -626,7 +626,7 @@ abcd*EFGH*8765*4321
 -- !query
 SELECT mask(c1, -1, -1, -1, -1) from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, -1):string>
+struct<mask(c1, - 1, - 1, - 1, - 1):string>
 -- !query output
 abcd-EFGH-8765-4321
 

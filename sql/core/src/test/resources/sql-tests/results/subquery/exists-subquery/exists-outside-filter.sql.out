@@ -58,7 +58,7 @@ SELECT
             AND dept.dept_id < 30)
 FROM   emp
 -- !query schema
-struct<emp_name:string,exists():boolean>
+struct<emp_name:string,EXISTS(SELECT 1 FROM dept WHERE dept . dept_id > 10 AND dept . dept_id < 30):boolean>
 -- !query output
 emp 1	true
 emp 1	true
@@ -79,7 +79,7 @@ SELECT
           WHERE  emp.dept_id = dept.dept_id)
 FROM   emp
 -- !query schema
-struct<emp_name:string,exists(dept_id):boolean>
+struct<emp_name:string,EXISTS(SELECT 1 FROM dept WHERE emp . dept_id = dept . dept_id):boolean>
 -- !query output
 emp 1	true
 emp 1	true
@@ -101,7 +101,7 @@ SELECT
                                       AND dept.dept_id < 30))
 FROM   emp
 -- !query schema
-struct<sum(salary):double,sum(salary) FILTER (WHERE exists()):double>
+struct<sum(salary):double,sum(salary)FILTER(WHERE EXISTS(SELECT 1 FROM dept WHERE dept . dept_id > 10 AND dept . dept_id < 30)):double>
 -- !query output
 2450.0	2450.0
 
@@ -114,7 +114,7 @@ SELECT
                                     WHERE  emp.dept_id = dept.dept_id))
 FROM   emp
 -- !query schema
-struct<sum(salary):double,sum(salary) FILTER (WHERE exists(dept_id)):double>
+struct<sum(salary):double,sum(salary)FILTER(WHERE EXISTS(SELECT 1 FROM dept WHERE emp . dept_id = dept . dept_id)):double>
 -- !query output
 2450.0	1250.0
 
@@ -130,7 +130,7 @@ SELECT
                                     WHERE  emp.emp_name = bonus.emp_name))
 FROM   emp
 -- !query schema
-struct<sum(salary):double,sum(salary) FILTER (WHERE (exists(dept_id) OR exists(emp_name))):double>
+struct<sum(salary):double,sum(salary)FILTER(WHERE EXISTS(SELECT 1 FROM dept WHERE emp . dept_id = dept . dept_id)OR EXISTS(SELECT 1 FROM bonus WHERE emp . emp_name = bonus . emp_name)):double>
 -- !query output
 2450.0	2050.0
 
@@ -143,7 +143,7 @@ SELECT
                                     WHERE  emp.dept_id = dept.dept_id))
 FROM   emp
 -- !query schema
-struct<sum(DISTINCT salary):double,count(DISTINCT hiredate) FILTER (WHERE exists(dept_id)):bigint>
+struct<sum(DISTINCT salary):double,count(DISTINCT hiredate)FILTER(WHERE EXISTS(SELECT 1 FROM dept WHERE emp . dept_id = dept . dept_id)):bigint>
 -- !query output
 1150.0	4
 
@@ -190,7 +190,7 @@ SELECT
                             AND dept.dept_id < 30) THEN salary END)
 FROM   emp
 -- !query schema
-struct<count(CASE WHEN exists() THEN 1 END):bigint,sum(CASE WHEN exists() THEN salary END):double>
+struct<count(CASE WHEN EXISTS(SELECT 1 FROM dept WHERE dept . dept_id > 10 AND dept . dept_id < 30)THEN 1 END):bigint,sum(CASE WHEN EXISTS(SELECT 1 FROM dept WHERE dept . dept_id > 10 AND dept . dept_id < 30)THEN salary END):double>
 -- !query output
 9	2450.0
 
@@ -205,7 +205,7 @@ SELECT
                           WHERE  emp.dept_id = dept.dept_id) THEN salary END)
 FROM   emp
 -- !query schema
-struct<count(CASE WHEN exists(dept_id) THEN 1 END):bigint,sum(CASE WHEN exists(dept_id) THEN salary END):double>
+struct<count(CASE WHEN EXISTS(SELECT 1 FROM dept WHERE emp . dept_id = dept . dept_id)THEN 1 END):bigint,sum(CASE WHEN EXISTS(SELECT 1 FROM dept WHERE emp . dept_id = dept . dept_id)THEN salary END):double>
 -- !query output
 6	1250.0
 
@@ -219,7 +219,7 @@ SELECT
                                              AND dept.dept_id < 30))
 FROM   emp
 -- !query schema
-struct<emp_name:string,sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<emp_name:string,sum(salary)OVER(PARTITION BY EXISTS(SELECT 1 FROM dept WHERE dept . dept_id > 10 AND dept . dept_id < 30)):double>
 -- !query output
 emp 1	2450.0
 emp 1	2450.0
@@ -240,7 +240,7 @@ SELECT
                                            WHERE  emp.dept_id = dept.dept_id))
 FROM   emp
 -- !query schema
-struct<emp_name:string,sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<emp_name:string,sum(salary)OVER(PARTITION BY EXISTS(SELECT 1 FROM dept WHERE emp . dept_id = dept . dept_id)):double>
 -- !query output
 emp 1	1250.0
 emp 1	1250.0

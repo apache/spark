@@ -11,7 +11,7 @@ struct<>
 SELECT four, ten, SUM(SUM(four)) OVER (PARTITION BY four), AVG(ten) FROM tenk1
 GROUP BY four, ten ORDER BY four, ten
 -- !query schema
-struct<four:int,ten:int,sum(sum(four)) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,avg(ten):double>
+struct<four:int,ten:int,SUM(SUM(four))OVER(PARTITION BY four):bigint,AVG(ten):double>
 -- !query output
 0	0	0	0.0
 0	2	0	2.0
@@ -38,7 +38,7 @@ struct<four:int,ten:int,sum(sum(four)) OVER (PARTITION BY four ROWS BETWEEN UNBO
 -- !query
 SELECT COUNT(*) OVER () FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
+struct<COUNT(*)OVER():bigint>
 -- !query output
 10
 10
@@ -55,7 +55,7 @@ struct<count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):
 -- !query
 SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ()
 -- !query schema
-struct<count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
+struct<COUNT(*)OVER w:bigint>
 -- !query output
 10
 10
@@ -97,7 +97,7 @@ struct<sum_1:bigint,ten:int,four:int>
 -- !query
 SELECT row_number() OVER (ORDER BY unique2) FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<row_number() OVER (ORDER BY unique2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<row_number()OVER(ORDER BY unique2):int>
 -- !query output
 1
 10
@@ -131,7 +131,7 @@ struct<rank_1:int,ten:int,four:int>
 -- !query
 SELECT dense_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<DENSE_RANK() OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,ten:int,four:int>
+struct<dense_rank()OVER(PARTITION BY four ORDER BY ten):int,ten:int,four:int>
 -- !query output
 1	0	0
 1	0	0
@@ -148,7 +148,7 @@ struct<DENSE_RANK() OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BE
 -- !query
 SELECT percent_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<PERCENT_RANK() OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,ten:int,four:int>
+struct<percent_rank()OVER(PARTITION BY four ORDER BY ten):double,ten:int,four:int>
 -- !query output
 0.0	0	0
 0.0	0	0
@@ -165,7 +165,7 @@ struct<PERCENT_RANK() OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS 
 -- !query
 SELECT cume_dist() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<cume_dist() OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,ten:int,four:int>
+struct<cume_dist()OVER(PARTITION BY four ORDER BY ten):double,ten:int,four:int>
 -- !query output
 0.5	1	1
 0.5	1	1
@@ -182,7 +182,7 @@ struct<cume_dist() OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BE
 -- !query
 SELECT ntile(3) OVER (ORDER BY ten, four), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<ntile(3) OVER (ORDER BY ten ASC NULLS FIRST, four ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,ten:int,four:int>
+struct<ntile(3)OVER(ORDER BY ten, four):int,ten:int,four:int>
 -- !query output
 1	0	0
 1	0	0
@@ -199,7 +199,7 @@ struct<ntile(3) OVER (ORDER BY ten ASC NULLS FIRST, four ASC NULLS FIRST ROWS BE
 -- !query
 SELECT lag(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<lag(ten, 1, NULL) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING):int,ten:int,four:int>
+struct<lag(ten)OVER(PARTITION BY four ORDER BY ten):int,ten:int,four:int>
 -- !query output
 0	0	0
 0	4	0
@@ -216,7 +216,7 @@ NULL	1	3
 -- !query
 SELECT lead(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<lead(ten, 1, NULL) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING):int,ten:int,four:int>
+struct<lead(ten)OVER(PARTITION BY four ORDER BY ten):int,ten:int,four:int>
 -- !query output
 0	0	0
 1	1	1
@@ -233,7 +233,7 @@ NULL	9	1
 -- !query
 SELECT lead(ten * 2, 1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<lead((ten * 2), 1, NULL) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING):int,ten:int,four:int>
+struct<lead(ten * 2, 1)OVER(PARTITION BY four ORDER BY ten):int,ten:int,four:int>
 -- !query output
 0	0	0
 14	1	1
@@ -250,7 +250,7 @@ NULL	9	1
 -- !query
 SELECT lead(ten * 2, 1, -1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<lead((ten * 2), 1, -1) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING):int,ten:int,four:int>
+struct<lead(ten * 2, 1, - 1)OVER(PARTITION BY four ORDER BY ten):int,ten:int,four:int>
 -- !query output
 -1	0	2
 -1	3	3
@@ -267,7 +267,7 @@ struct<lead((ten * 2), 1, -1) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIR
 -- !query
 SELECT first(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<first(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,ten:int,four:int>
+struct<first(ten)OVER(PARTITION BY four ORDER BY ten):int,ten:int,four:int>
 -- !query output
 0	0	0
 0	0	0
@@ -284,7 +284,7 @@ struct<first(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BET
 -- !query
 SELECT last(four) OVER (ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<last(four) OVER (ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,ten:int,four:int>
+struct<last(four)OVER(ORDER BY ten):int,ten:int,four:int>
 -- !query output
 0	4	0
 1	1	1
@@ -303,7 +303,7 @@ SELECT last(ten) OVER (PARTITION BY four), ten, four FROM
 (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s
 ORDER BY four, ten
 -- !query schema
-struct<last(ten) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,ten:int,four:int>
+struct<last(ten)OVER(PARTITION BY four):int,ten:int,four:int>
 -- !query output
 4	0	0
 4	0	0
@@ -338,7 +338,7 @@ struct<ten:int,two:int,gsum:bigint,wsum:bigint>
 -- !query
 SELECT count(*) OVER (PARTITION BY four), four FROM (SELECT * FROM tenk1 WHERE two = 1)s WHERE unique2 < 10
 -- !query schema
-struct<count(1) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,four:int>
+struct<count(*)OVER(PARTITION BY four):bigint,four:int>
 -- !query output
 2	3
 2	3
@@ -384,7 +384,7 @@ struct<total:bigint,fourcount:bigint,twosum:bigint>
 -- !query
 SELECT avg(four) OVER (PARTITION BY four ORDER BY thousand / 100) FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<avg(four) OVER (PARTITION BY four ORDER BY (thousand / 100) ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
+struct<avg(four)OVER(PARTITION BY four ORDER BY thousand / 100):double>
 -- !query output
 0.0
 0.0
@@ -419,7 +419,7 @@ struct<ten:int,two:int,gsum:bigint,wsum:bigint>
 -- !query
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 -- !query schema
-struct<count(1) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
+struct<count(*)OVER(PARTITION BY four):bigint>
 -- !query output
 
 
@@ -441,7 +441,7 @@ struct<>
 -- !query
 SELECT SUM(COUNT(f1)) OVER () FROM int4_tbl WHERE f1=42
 -- !query schema
-struct<sum(count(f1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
+struct<SUM(COUNT(f1))OVER():bigint>
 -- !query output
 0
 
@@ -473,7 +473,7 @@ sum(ten) over (partition by four order by ten),
 last(ten) over (partition by four order by ten)
 FROM (select distinct ten, four from tenk1) ss
 -- !query schema
-struct<four:int,ten:int,sum(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint,last(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<four:int,ten:int,sum(ten)over(partition by four order by ten):bigint,last(ten)over(partition by four order by ten):int>
 -- !query output
 0	0	0	0
 0	2	2	2
@@ -503,7 +503,7 @@ sum(ten) over (partition by four order by ten range between unbounded preceding 
 last(ten) over (partition by four order by ten range between unbounded preceding and current row)
 FROM (select distinct ten, four from tenk1) ss
 -- !query schema
-struct<four:int,ten:int,sum(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint,last(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<four:int,ten:int,sum(ten)over(partition by four order by ten range between unbounded preceding and current row):bigint,last(ten)over(partition by four order by ten range between unbounded preceding and current row):int>
 -- !query output
 0	0	0	0
 0	2	2	2
@@ -533,7 +533,7 @@ sum(ten) over (partition by four order by ten range between unbounded preceding 
 last(ten) over (partition by four order by ten range between unbounded preceding and unbounded following)
 FROM (select distinct ten, four from tenk1) ss
 -- !query schema
-struct<four:int,ten:int,sum(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,last(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<four:int,ten:int,sum(ten)over(partition by four order by ten range between unbounded preceding and unbounded following):bigint,last(ten)over(partition by four order by ten range between unbounded preceding and unbounded following):int>
 -- !query output
 0	0	20	8
 0	2	20	8
@@ -562,7 +562,7 @@ SELECT sum(unique1) over (order by four range between current row and unbounded 
 unique1, four
 FROM tenk1 WHERE unique1 < 10
 -- !query schema
-struct<sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):bigint,unique1:int,four:int>
+struct<sum(unique1)over(order by four range between current row and unbounded following):bigint,unique1:int,four:int>
 -- !query output
 10	3	3
 10	7	3
@@ -581,7 +581,7 @@ SELECT sum(unique1) over (rows between current row and unbounded following),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
 -- !query schema
-struct<sum(unique1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):bigint,unique1:int,four:int>
+struct<sum(unique1)over(rows between current row and unbounded following):bigint,unique1:int,four:int>
 -- !query output
 0	0	0
 10	3	3
@@ -600,7 +600,7 @@ SELECT sum(unique1) over (rows between 2 preceding and 2 following),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
 -- !query schema
-struct<sum(unique1) OVER (ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING):bigint,unique1:int,four:int>
+struct<sum(unique1)over(rows between 2 preceding and 2 following):bigint,unique1:int,four:int>
 -- !query output
 10	0	0
 13	2	2
@@ -619,7 +619,7 @@ SELECT sum(unique1) over (rows between 2 preceding and 1 preceding),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
 -- !query schema
-struct<sum(unique1) OVER (ROWS BETWEEN 2 PRECEDING AND 1 PRECEDING):bigint,unique1:int,four:int>
+struct<sum(unique1)over(rows between 2 preceding and 1 preceding):bigint,unique1:int,four:int>
 -- !query output
 10	0	0
 13	3	3
@@ -638,7 +638,7 @@ SELECT sum(unique1) over (rows between 1 following and 3 following),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
 -- !query schema
-struct<sum(unique1) OVER (ROWS BETWEEN 1 FOLLOWING AND 3 FOLLOWING):bigint,unique1:int,four:int>
+struct<sum(unique1)over(rows between 1 following and 3 following):bigint,unique1:int,four:int>
 -- !query output
 0	7	3
 10	5	1
@@ -657,7 +657,7 @@ SELECT sum(unique1) over (rows between unbounded preceding and 1 following),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
 -- !query schema
-struct<sum(unique1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):bigint,unique1:int,four:int>
+struct<sum(unique1)over(rows between unbounded preceding and 1 following):bigint,unique1:int,four:int>
 -- !query output
 13	1	1
 22	6	2

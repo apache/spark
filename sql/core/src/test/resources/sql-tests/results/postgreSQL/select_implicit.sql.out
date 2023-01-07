@@ -90,7 +90,7 @@ struct<>
 -- !query
 SELECT c, count(*) FROM test_missing_target GROUP BY test_missing_target.c ORDER BY c
 -- !query schema
-struct<c:string,count(1):bigint>
+struct<c:string,count(*):bigint>
 -- !query output
 ABAB	2
 BBBB	2
@@ -103,7 +103,7 @@ cccc	2
 -- !query
 SELECT count(*) FROM test_missing_target GROUP BY test_missing_target.c ORDER BY c
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 2
 2
@@ -124,7 +124,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "proposal" : "`count(1)`"
+    "proposal" : "`count(*)`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -139,7 +139,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT count(*) FROM test_missing_target GROUP BY b ORDER BY b
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 1
 2
@@ -151,7 +151,7 @@ struct<count(1):bigint>
 SELECT test_missing_target.b, count(*)
   FROM test_missing_target GROUP BY b ORDER BY b
 -- !query schema
-struct<b:int,count(1):bigint>
+struct<b:int,count(*):bigint>
 -- !query output
 1	1
 2	2
@@ -179,7 +179,7 @@ CCCC
 -- !query
 SELECT count(*) FROM test_missing_target GROUP BY b ORDER BY b desc
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 4
 3
@@ -190,7 +190,7 @@ struct<count(1):bigint>
 -- !query
 SELECT count(*) FROM test_missing_target ORDER BY 1 desc
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 10
 
@@ -198,7 +198,7 @@ struct<count(1):bigint>
 -- !query
 SELECT c, count(*) FROM test_missing_target GROUP BY 1 ORDER BY 1
 -- !query schema
-struct<c:string,count(1):bigint>
+struct<c:string,count(*):bigint>
 -- !query output
 ABAB	2
 BBBB	2
@@ -277,7 +277,7 @@ struct<a:int,a:int>
 SELECT a/2, a/2 FROM test_missing_target
 	ORDER BY a/2
 -- !query schema
-struct<(a / 2):double,(a / 2):double>
+struct<a / 2:double,a / 2:double>
 -- !query output
 0.0	0.0
 0.5	0.5
@@ -295,7 +295,7 @@ struct<(a / 2):double,(a / 2):double>
 SELECT a/2, a/2 FROM test_missing_target
 	GROUP BY a/2 ORDER BY a/2
 -- !query schema
-struct<(a / 2):double,(a / 2):double>
+struct<a / 2:double,a / 2:double>
 -- !query output
 0.0	0.0
 0.5	0.5
@@ -314,7 +314,7 @@ SELECT x.b, count(*) FROM test_missing_target x, test_missing_target y
 	WHERE x.a = y.a
 	GROUP BY x.b ORDER BY x.b
 -- !query schema
-struct<b:int,count(1):bigint>
+struct<b:int,count(*):bigint>
 -- !query output
 1	1
 2	2
@@ -327,7 +327,7 @@ SELECT count(*) FROM test_missing_target x, test_missing_target y
 	WHERE x.a = y.a
 	GROUP BY x.b ORDER BY x.b
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 1
 2
@@ -340,7 +340,7 @@ SELECT a%2, count(b) FROM test_missing_target
 GROUP BY test_missing_target.a%2
 ORDER BY test_missing_target.a%2
 -- !query schema
-struct<(a % 2):int,count(b):bigint>
+struct<a % 2:int,count(b):bigint>
 -- !query output
 0	5
 1	5
@@ -397,7 +397,7 @@ struct<count(b):bigint>
 SELECT lower(test_missing_target.c), count(c)
   FROM test_missing_target GROUP BY lower(c) ORDER BY lower(c)
 -- !query schema
-struct<lower(c):string,count(c):bigint>
+struct<lower(test_missing_target . c):string,count(c):bigint>
 -- !query output
 abab	2
 bbbb	3
@@ -463,7 +463,7 @@ SELECT x.b/2, count(x.b) FROM test_missing_target x, test_missing_target y
 	WHERE x.a = y.a
 	GROUP BY x.b/2 ORDER BY x.b/2
 -- !query schema
-struct<(b / 2):double,count(b):bigint>
+struct<x . b / 2:double,count(x . b):bigint>
 -- !query output
 0.5	1
 1.0	2

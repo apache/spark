@@ -43,7 +43,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "leftColumns" : "\"a1\", \"b1\"",
     "leftLength" : "2",
-    "rightColumns" : "\"named_struct(a2, a2, b2, b2)\"",
+    "rightColumns" : "\"(a2, b2)\"",
     "rightLength" : "1",
     "sqlExpr" : "\"(named_struct('a1', a1, 'b1', b1) IN (listquery()))\""
   },
@@ -61,7 +61,7 @@ org.apache.spark.sql.AnalysisException
 select count(*) from struct_tab where record in
   (select (a2 as a, b2 as b) from tab_b)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 1
 
@@ -70,6 +70,6 @@ struct<count(1):bigint>
 select count(*) from struct_tab where record not in
   (select (a2 as a, b2 as b) from tab_b)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 3

@@ -72,7 +72,7 @@ NULL	b	1	2
 -- !query
 SELECT a + b, b, udaf(c) FROM (VALUES (1,1,1),(2,2,2)) AS t(a,b,c) GROUP BY GROUPING SETS ( (a + b), (b))
 -- !query schema
-struct<(a + b):int,b:int,udaf(c):int>
+struct<a + b:int,b:int,udaf(c):int>
 -- !query output
 2	NULL	1
 4	NULL	1
@@ -83,7 +83,7 @@ NULL	2	1
 -- !query
 SELECT a + b, b, udaf(c) FROM (VALUES (1,1,1),(2,2,2)) AS t(a,b,c) GROUP BY GROUPING SETS ( (a + b), (b + a), (b))
 -- !query schema
-struct<(a + b):int,b:int,udaf(c):int>
+struct<a + b:int,b:int,udaf(c):int>
 -- !query output
 2	NULL	1
 2	NULL	1

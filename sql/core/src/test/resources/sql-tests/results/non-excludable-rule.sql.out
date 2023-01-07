@@ -13,7 +13,7 @@ SELECT
   (SELECT sum(id) FROM range(10)),
   (SELECT count(distinct id) FROM range(10))
 -- !query schema
-struct<scalarsubquery():bigint,scalarsubquery():bigint,scalarsubquery():bigint>
+struct<(SELECT min(id)FROM range(10)):bigint,(SELECT sum(id)FROM range(10)):bigint,(SELECT count(distinct id)FROM range(10)):bigint>
 -- !query output
 0	45	10
 

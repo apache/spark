@@ -72,7 +72,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp
 -- !query schema
-struct<a:string,b:boolean,decode(c, UTF-8):string,d:tinyint,e:int,f:smallint,g:bigint,h:float,i:double,j:decimal(38,18),k:timestamp,l:date>
+struct<a:string,b:boolean,decode(c, 'UTF-8'):string,d:tinyint,e:int,f:smallint,g:bigint,h:float,i:double,j:decimal(38,18),k:timestamp,l:date>
 -- !query output
 1	true	Spark SQL	1	1	100	1	1.0	1.0	1.000000000000000000	1997-01-02 00:00:00	2000-04-01
 2	false	Spark SQL	2	2	200	2	2.0	2.0	2.000000000000000000	1997-01-02 03:04:05	2000-04-02
@@ -98,7 +98,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp
 -- !query schema
-struct<a:string,b:string,decode(c, UTF-8):string,d:string,e:string,f:string,g:string,h:string,i:string,j:string,k:string,l:string>
+struct<a:string,b:string,decode(c, 'UTF-8'):string,d:string,e:string,f:string,g:string,h:string,i:string,j:string,k:string,l:string>
 -- !query output
 1	true	Spark SQL	1	1	100	1	1.0	1.0	1	1997-01-02 00:00:00	2000-04-01
 2	false	Spark SQL	2	2	200	2	2.0	2.0	2	1997-01-02 03:04:05	2000-04-02
@@ -329,7 +329,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp
 -- !query schema
-struct<a:string,b:boolean,decode(c, UTF-8):string,d:tinyint,e:int,f:smallint,g:bigint,h:float,i:double,j:decimal(38,18),k:timestamp,l:date>
+struct<a:string,b:boolean,decode(c, 'UTF-8'):string,d:tinyint,e:int,f:smallint,g:bigint,h:float,i:double,j:decimal(38,18),k:timestamp,l:date>
 -- !query output
 1	true	Spark SQL	1	1	100	1	1.0	1.0	1.000000000000000000	1997-01-02 00:00:00	2000-04-01
 2	false	Spark SQL	2	2	200	2	2.0	2.0	2.000000000000000000	1997-01-02 03:04:05	2000-04-02
@@ -363,7 +363,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp
 -- !query schema
-struct<a:string,b:bigint,decode(c, UTF-8):string,d:tinyint,e:int,f:smallint,g:bigint,h:float,i:double,j:decimal(38,18),k:int,l:bigint>
+struct<a:string,b:bigint,decode(c, 'UTF-8'):string,d:tinyint,e:int,f:smallint,g:bigint,h:float,i:double,j:decimal(38,18),k:int,l:bigint>
 -- !query output
 1	NULL	Spark SQL	1	1	100	1	1.0	1.0	1.000000000000000000	NULL	NULL
 2	NULL	Spark SQL	2	2	200	2	2.0	2.0	2.000000000000000000	NULL	NULL
@@ -594,7 +594,7 @@ FROM(
 ) t
 SELECT a + 1
 -- !query schema
-struct<(a + 1):int>
+struct<a + 1:int>
 -- !query output
 2
 5

@@ -2,7 +2,7 @@
 -- !query
 SELECT ifnull(null, 'x'), ifnull('y', 'x'), ifnull(null, null)
 -- !query schema
-struct<ifnull(NULL, x):string,ifnull(y, x):string,ifnull(NULL, NULL):void>
+struct<ifnull(null, 'x'):string,ifnull('y', 'x'):string,ifnull(null, null):void>
 -- !query output
 x	y	NULL
 
@@ -10,7 +10,7 @@ x	y	NULL
 -- !query
 SELECT nullif('x', 'x'), nullif('x', 'y')
 -- !query schema
-struct<nullif(x, x):string,nullif(x, y):string>
+struct<nullif('x', 'x'):string,nullif('x', 'y'):string>
 -- !query output
 NULL	x
 
@@ -18,7 +18,7 @@ NULL	x
 -- !query
 SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)
 -- !query schema
-struct<nvl(NULL, x):string,nvl(y, x):string,nvl(NULL, NULL):void>
+struct<nvl(null, 'x'):string,nvl('y', 'x'):string,nvl(null, null):void>
 -- !query output
 x	y	NULL
 
@@ -26,7 +26,7 @@ x	y	NULL
 -- !query
 SELECT nvl2(null, 'x', 'y'), nvl2('n', 'x', 'y'), nvl2(null, null, null)
 -- !query schema
-struct<nvl2(NULL, x, y):string,nvl2(n, x, y):string,nvl2(NULL, NULL, NULL):void>
+struct<nvl2(null, 'x', 'y'):string,nvl2('n', 'x', 'y'):string,nvl2(null, null, null):void>
 -- !query output
 y	x	NULL
 
@@ -34,7 +34,7 @@ y	x	NULL
 -- !query
 SELECT ifnull(1, 2.1d), ifnull(null, 2.1d)
 -- !query schema
-struct<ifnull(1, 2.1):double,ifnull(NULL, 2.1):double>
+struct<ifnull(1, 2.1d):double,ifnull(null, 2.1d):double>
 -- !query output
 1.0	2.1
 
@@ -42,7 +42,7 @@ struct<ifnull(1, 2.1):double,ifnull(NULL, 2.1):double>
 -- !query
 SELECT nullif(1, 2.1d), nullif(1, 1.0d)
 -- !query schema
-struct<nullif(1, 2.1):int,nullif(1, 1.0):int>
+struct<nullif(1, 2.1d):int,nullif(1, 1.0d):int>
 -- !query output
 1	NULL
 
@@ -50,7 +50,7 @@ struct<nullif(1, 2.1):int,nullif(1, 1.0):int>
 -- !query
 SELECT nvl(1, 2.1d), nvl(null, 2.1d)
 -- !query schema
-struct<nvl(1, 2.1):double,nvl(NULL, 2.1):double>
+struct<nvl(1, 2.1d):double,nvl(null, 2.1d):double>
 -- !query output
 1.0	2.1
 
@@ -58,7 +58,7 @@ struct<nvl(1, 2.1):double,nvl(NULL, 2.1):double>
 -- !query
 SELECT nvl2(null, 1, 2.1d), nvl2('n', 1, 2.1d)
 -- !query schema
-struct<nvl2(NULL, 1, 2.1):double,nvl2(n, 1, 2.1):double>
+struct<nvl2(null, 1, 2.1d):double,nvl2('n', 1, 2.1d):double>
 -- !query output
 2.1	1.0
 
@@ -66,7 +66,7 @@ struct<nvl2(NULL, 1, 2.1):double,nvl2(n, 1, 2.1):double>
 -- !query
 SELECT boolean(1), tinyint(1), smallint(1), int(1), bigint(1)
 -- !query schema
-struct<1:boolean,1:tinyint,1:smallint,1:int,1:bigint>
+struct<boolean(1):boolean,tinyint(1):tinyint,smallint(1):smallint,int(1):int,bigint(1):bigint>
 -- !query output
 true	1	1	1	1
 
@@ -74,7 +74,7 @@ true	1	1	1	1
 -- !query
 SELECT float(1), double(1), decimal(1)
 -- !query schema
-struct<1:float,1:double,1:decimal(10,0)>
+struct<float(1):float,double(1):double,decimal(1):decimal(10,0)>
 -- !query output
 1.0	1.0	1
 
@@ -82,7 +82,7 @@ struct<1:float,1:double,1:decimal(10,0)>
 -- !query
 SELECT date("2014-04-04"), timestamp(date("2014-04-04"))
 -- !query schema
-struct<2014-04-04:date,2014-04-04:timestamp>
+struct<date("2014-04-04"):date,timestamp(date("2014-04-04")):timestamp>
 -- !query output
 2014-04-04	2014-04-04 00:00:00
 
@@ -121,6 +121,6 @@ struct<>
 -- !query
 SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1, "value")
 -- !query schema
-struct<nvl(st.col1, value):string,FROM:bigint>
+struct<nvl(st . col1, "value"):string,FROM:bigint>
 -- !query output
 gamma	1

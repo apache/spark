@@ -50,7 +50,7 @@ struct<>
 -- !query
 SELECT float('NaN')
 -- !query schema
-struct<NaN:float>
+struct<float('NaN'):float>
 -- !query output
 NaN
 
@@ -58,7 +58,7 @@ NaN
 -- !query
 SELECT float('nan')
 -- !query schema
-struct<nan:float>
+struct<float('nan'):float>
 -- !query output
 NaN
 
@@ -66,7 +66,7 @@ NaN
 -- !query
 SELECT float('   NAN  ')
 -- !query schema
-struct<   NAN  :float>
+struct<float('   NAN  '):float>
 -- !query output
 NaN
 
@@ -74,7 +74,7 @@ NaN
 -- !query
 SELECT float('infinity')
 -- !query schema
-struct<infinity:float>
+struct<float('infinity'):float>
 -- !query output
 Infinity
 
@@ -82,7 +82,7 @@ Infinity
 -- !query
 SELECT float('          -INFINiTY   ')
 -- !query schema
-struct<          -INFINiTY   :float>
+struct<float('          -INFINiTY   '):float>
 -- !query output
 -Infinity
 
@@ -165,7 +165,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT float('Infinity') + 100.0
 -- !query schema
-struct<(Infinity + 100.0):double>
+struct<float('Infinity')+ 100.0:double>
 -- !query output
 Infinity
 
@@ -173,7 +173,7 @@ Infinity
 -- !query
 SELECT float('Infinity') / float('Infinity')
 -- !query schema
-struct<(Infinity / Infinity):double>
+struct<float('Infinity')/ float('Infinity'):double>
 -- !query output
 NaN
 
@@ -181,7 +181,7 @@ NaN
 -- !query
 SELECT float('nan') / float('nan')
 -- !query schema
-struct<(nan / nan):double>
+struct<float('nan')/ float('nan'):double>
 -- !query output
 NaN
 
@@ -346,7 +346,7 @@ struct<five:string,f1:float>
 -- !query
 SELECT smallint(float('32767.4'))
 -- !query schema
-struct<32767.4:smallint>
+struct<smallint(float('32767.4')):smallint>
 -- !query output
 32767
 
@@ -354,7 +354,7 @@ struct<32767.4:smallint>
 -- !query
 SELECT smallint(float('32767.6'))
 -- !query schema
-struct<32767.6:smallint>
+struct<smallint(float('32767.6')):smallint>
 -- !query output
 32767
 
@@ -362,7 +362,7 @@ struct<32767.6:smallint>
 -- !query
 SELECT smallint(float('-32768.4'))
 -- !query schema
-struct<-32768.4:smallint>
+struct<smallint(float('-32768.4')):smallint>
 -- !query output
 -32768
 
@@ -370,7 +370,7 @@ struct<-32768.4:smallint>
 -- !query
 SELECT smallint(float('-32768.6'))
 -- !query schema
-struct<-32768.6:smallint>
+struct<smallint(float('-32768.6')):smallint>
 -- !query output
 -32768
 
@@ -378,7 +378,7 @@ struct<-32768.6:smallint>
 -- !query
 SELECT int(float('2147483520'))
 -- !query schema
-struct<2147483520:int>
+struct<int(float('2147483520')):int>
 -- !query output
 2147483520
 
@@ -404,7 +404,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT int(float('-2147483648.5'))
 -- !query schema
-struct<-2147483648.5:int>
+struct<int(float('-2147483648.5')):int>
 -- !query output
 -2147483648
 
@@ -430,7 +430,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT bigint(float('9223369837831520256'))
 -- !query schema
-struct<9223369837831520256:bigint>
+struct<bigint(float('9223369837831520256')):bigint>
 -- !query output
 9223369837831520256
 
@@ -438,7 +438,7 @@ struct<9223369837831520256:bigint>
 -- !query
 SELECT bigint(float('9223372036854775807'))
 -- !query schema
-struct<9223372036854775807:bigint>
+struct<bigint(float('9223372036854775807')):bigint>
 -- !query output
 9223372036854775807
 
@@ -446,7 +446,7 @@ struct<9223372036854775807:bigint>
 -- !query
 SELECT bigint(float('-9223372036854775808.5'))
 -- !query schema
-struct<-9223372036854775808.5:bigint>
+struct<bigint(float('-9223372036854775808.5')):bigint>
 -- !query output
 -9223372036854775808
 

@@ -447,7 +447,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 select count(*) from
   ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 5000
 
@@ -464,7 +464,7 @@ struct<unique1:int>
 select count(*) from
   ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 5000
 

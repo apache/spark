@@ -16,7 +16,7 @@ SELECT count(*) FROM (
     SELECT * FROM q1
 ) ss
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 5
 

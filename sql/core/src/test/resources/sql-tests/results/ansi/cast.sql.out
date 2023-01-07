@@ -352,7 +352,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT CAST(NULL AS int)
 -- !query schema
-struct<CAST(NULL AS INT):int>
+struct<CAST(NULL AS int):int>
 -- !query output
 NULL
 
@@ -360,7 +360,7 @@ NULL
 -- !query
 SELECT CAST(NULL AS long)
 -- !query schema
-struct<CAST(NULL AS BIGINT):bigint>
+struct<CAST(NULL AS long):bigint>
 -- !query output
 NULL
 
@@ -468,7 +468,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT CAST('-2147483648' AS int)
 -- !query schema
-struct<CAST(-2147483648 AS INT):int>
+struct<CAST('-2147483648' AS int):int>
 -- !query output
 -2147483648
 
@@ -501,7 +501,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT CAST('2147483647' AS int)
 -- !query schema
-struct<CAST(2147483647 AS INT):int>
+struct<CAST('2147483647' AS int):int>
 -- !query output
 2147483647
 
@@ -534,7 +534,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT CAST('-9223372036854775808' AS long)
 -- !query schema
-struct<CAST(-9223372036854775808 AS BIGINT):bigint>
+struct<CAST('-9223372036854775808' AS long):bigint>
 -- !query output
 -9223372036854775808
 
@@ -567,7 +567,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT CAST('9223372036854775807' AS long)
 -- !query schema
-struct<CAST(9223372036854775807 AS BIGINT):bigint>
+struct<CAST('9223372036854775807' AS long):bigint>
 -- !query output
 9223372036854775807
 
@@ -600,7 +600,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT HEX(CAST('abc' AS binary))
 -- !query schema
-struct<hex(CAST(abc AS BINARY)):string>
+struct<HEX(CAST('abc' AS binary)):string>
 -- !query output
 616263
 
@@ -833,7 +833,7 @@ Usage: boolean(expr) - Casts the value `expr` to the target data type `boolean`.
 -- !query
 SELECT CAST('interval 3 month 1 hour' AS interval)
 -- !query schema
-struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
+struct<CAST('interval 3 month 1 hour' AS interval):interval>
 -- !query output
 3 months 1 hours
 
@@ -841,7 +841,7 @@ struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
 -- !query
 SELECT CAST("interval '3-1' year to month" AS interval year to month)
 -- !query schema
-struct<CAST(interval '3-1' year to month AS INTERVAL YEAR TO MONTH):interval year to month>
+struct<CAST("interval '3-1' year to month" AS interval year to month):interval year to month>
 -- !query output
 3-1
 
@@ -849,7 +849,7 @@ struct<CAST(interval '3-1' year to month AS INTERVAL YEAR TO MONTH):interval yea
 -- !query
 SELECT CAST("interval '3 00:00:01' day to second" AS interval day to second)
 -- !query schema
-struct<CAST(interval '3 00:00:01' day to second AS INTERVAL DAY TO SECOND):interval day to second>
+struct<CAST("interval '3 00:00:01' day to second" AS interval day to second):interval day to second>
 -- !query output
 3 00:00:01.000000000
 
@@ -878,7 +878,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT CAST(interval 3 year 1 month AS string)
 -- !query schema
-struct<CAST(INTERVAL '3-1' YEAR TO MONTH AS STRING):string>
+struct<CAST(interval 3 year 1 month AS string):string>
 -- !query output
 INTERVAL '3-1' YEAR TO MONTH
 
@@ -886,7 +886,7 @@ INTERVAL '3-1' YEAR TO MONTH
 -- !query
 SELECT CAST(interval 3 day 1 second AS string)
 -- !query schema
-struct<CAST(INTERVAL '3 00:00:01' DAY TO SECOND AS STRING):string>
+struct<CAST(interval 3 day 1 second AS string):string>
 -- !query output
 INTERVAL '3 00:00:01' DAY TO SECOND
 
@@ -894,7 +894,7 @@ INTERVAL '3 00:00:01' DAY TO SECOND
 -- !query
 select cast(' 1' as tinyint)
 -- !query schema
-struct<CAST( 1 AS TINYINT):tinyint>
+struct<cast(' 1' as tinyint):tinyint>
 -- !query output
 1
 
@@ -902,7 +902,7 @@ struct<CAST( 1 AS TINYINT):tinyint>
 -- !query
 select cast(' 1\t' as tinyint)
 -- !query schema
-struct<CAST( 1	 AS TINYINT):tinyint>
+struct<cast(' 1\t' as tinyint):tinyint>
 -- !query output
 1
 
@@ -910,7 +910,7 @@ struct<CAST( 1	 AS TINYINT):tinyint>
 -- !query
 select cast(' 1' as smallint)
 -- !query schema
-struct<CAST( 1 AS SMALLINT):smallint>
+struct<cast(' 1' as smallint):smallint>
 -- !query output
 1
 
@@ -918,7 +918,7 @@ struct<CAST( 1 AS SMALLINT):smallint>
 -- !query
 select cast(' 1' as INT)
 -- !query schema
-struct<CAST( 1 AS INT):int>
+struct<cast(' 1' as INT):int>
 -- !query output
 1
 
@@ -926,7 +926,7 @@ struct<CAST( 1 AS INT):int>
 -- !query
 select cast(' 1' as bigint)
 -- !query schema
-struct<CAST( 1 AS BIGINT):bigint>
+struct<cast(' 1' as bigint):bigint>
 -- !query output
 1
 
@@ -934,7 +934,7 @@ struct<CAST( 1 AS BIGINT):bigint>
 -- !query
 select cast(' 1' as float)
 -- !query schema
-struct<CAST( 1 AS FLOAT):float>
+struct<cast(' 1' as float):float>
 -- !query output
 1.0
 
@@ -942,7 +942,7 @@ struct<CAST( 1 AS FLOAT):float>
 -- !query
 select cast(' 1 ' as DOUBLE)
 -- !query schema
-struct<CAST( 1  AS DOUBLE):double>
+struct<cast(' 1 ' as DOUBLE):double>
 -- !query output
 1.0
 
@@ -950,7 +950,7 @@ struct<CAST( 1  AS DOUBLE):double>
 -- !query
 select cast('1.0 ' as DEC)
 -- !query schema
-struct<CAST(1.0  AS DECIMAL(10,0)):decimal(10,0)>
+struct<cast('1.0 ' as DEC):decimal(10,0)>
 -- !query output
 1
 
@@ -1083,8 +1083,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 select cast('\t\t true \n\r ' as boolean)
 -- !query schema
-struct<CAST(		 true 
-  AS BOOLEAN):boolean>
+struct<cast('\t\t true \n\r ' as boolean):boolean>
 -- !query output
 true
 
@@ -1092,8 +1091,7 @@ true
 -- !query
 select cast('\t\n false \t\r' as boolean)
 -- !query schema
-struct<CAST(	
- false 	 AS BOOLEAN):boolean>
+struct<cast('\t\n false \t\r' as boolean):boolean>
 -- !query output
 false
 
@@ -1126,7 +1124,7 @@ org.apache.spark.SparkRuntimeException
 -- !query
 select cast('23.45' as decimal(4, 2))
 -- !query schema
-struct<CAST(23.45 AS DECIMAL(4,2)):decimal(4,2)>
+struct<cast('23.45' as decimal(4, 2)):decimal(4,2)>
 -- !query output
 23.45
 
@@ -1184,7 +1182,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 select cast('2022-01-01' as date)
 -- !query schema
-struct<CAST(2022-01-01 AS DATE):date>
+struct<cast('2022-01-01' as date):date>
 -- !query output
 2022-01-01
 
@@ -1217,7 +1215,7 @@ org.apache.spark.SparkDateTimeException
 -- !query
 select cast('2022-01-01 00:00:00' as timestamp)
 -- !query schema
-struct<CAST(2022-01-01 00:00:00 AS TIMESTAMP):timestamp>
+struct<cast('2022-01-01 00:00:00' as timestamp):timestamp>
 -- !query output
 2022-01-01 00:00:00
 
@@ -1250,7 +1248,7 @@ org.apache.spark.SparkDateTimeException
 -- !query
 select cast('2022-01-01 00:00:00' as timestamp_ntz)
 -- !query schema
-struct<CAST(2022-01-01 00:00:00 AS TIMESTAMP_NTZ):timestamp_ntz>
+struct<cast('2022-01-01 00:00:00' as timestamp_ntz):timestamp_ntz>
 -- !query output
 2022-01-01 00:00:00
 
@@ -1333,7 +1331,7 @@ org.apache.spark.SparkDateTimeException
 -- !query
 select cast(interval '1' year as tinyint)
 -- !query schema
-struct<CAST(INTERVAL '1' YEAR AS TINYINT):tinyint>
+struct<cast(interval '1' year as tinyint):tinyint>
 -- !query output
 1
 
@@ -1341,7 +1339,7 @@ struct<CAST(INTERVAL '1' YEAR AS TINYINT):tinyint>
 -- !query
 select cast(interval '-10-2' year to month as smallint)
 -- !query schema
-struct<CAST(INTERVAL '-10-2' YEAR TO MONTH AS SMALLINT):smallint>
+struct<cast(interval '-10-2' year to month as smallint):smallint>
 -- !query output
 -122
 
@@ -1349,7 +1347,7 @@ struct<CAST(INTERVAL '-10-2' YEAR TO MONTH AS SMALLINT):smallint>
 -- !query
 select cast(interval '1000' month as int)
 -- !query schema
-struct<CAST(INTERVAL '1000' MONTH AS INT):int>
+struct<cast(interval '1000' month as int):int>
 -- !query output
 1000
 
@@ -1357,7 +1355,7 @@ struct<CAST(INTERVAL '1000' MONTH AS INT):int>
 -- !query
 select cast(interval -'10.123456' second as tinyint)
 -- !query schema
-struct<CAST(INTERVAL '-10.123456' SECOND AS TINYINT):tinyint>
+struct<cast(interval - '10.123456' second as tinyint):tinyint>
 -- !query output
 -10
 
@@ -1383,7 +1381,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 select cast(interval -'1 02:03:04.123' day to second as int)
 -- !query schema
-struct<CAST(INTERVAL '-1 02:03:04.123' DAY TO SECOND AS INT):int>
+struct<cast(interval - '1 02:03:04.123' day to second as int):int>
 -- !query output
 -93784
 
@@ -1391,7 +1389,7 @@ struct<CAST(INTERVAL '-1 02:03:04.123' DAY TO SECOND AS INT):int>
 -- !query
 select cast(interval '10' day as bigint)
 -- !query schema
-struct<CAST(INTERVAL '10' DAY AS BIGINT):bigint>
+struct<cast(interval '10' day as bigint):bigint>
 -- !query output
 10
 
@@ -1435,7 +1433,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 select cast(1Y as interval year)
 -- !query schema
-struct<CAST(1 AS INTERVAL YEAR):interval year>
+struct<cast(1Y as interval year):interval year>
 -- !query output
 1-0
 
@@ -1443,7 +1441,7 @@ struct<CAST(1 AS INTERVAL YEAR):interval year>
 -- !query
 select cast(-122S as interval year to month)
 -- !query schema
-struct<CAST(-122 AS INTERVAL YEAR TO MONTH):interval year to month>
+struct<cast(- 122S as interval year to month):interval year to month>
 -- !query output
 -10-2
 
@@ -1459,7 +1457,7 @@ struct<ym:interval year to month>
 -- !query
 select cast(1000 as interval month)
 -- !query schema
-struct<CAST(1000 AS INTERVAL MONTH):interval month>
+struct<cast(1000 as interval month):interval month>
 -- !query output
 83-4
 
@@ -1467,7 +1465,7 @@ struct<CAST(1000 AS INTERVAL MONTH):interval month>
 -- !query
 select cast(-10L as interval second)
 -- !query schema
-struct<CAST(-10 AS INTERVAL SECOND):interval second>
+struct<cast(- 10L as interval second):interval second>
 -- !query output
 -0 00:00:10.000000000
 
@@ -1475,7 +1473,7 @@ struct<CAST(-10 AS INTERVAL SECOND):interval second>
 -- !query
 select cast(100Y as interval hour to second)
 -- !query schema
-struct<CAST(100 AS INTERVAL HOUR TO SECOND):interval hour to second>
+struct<cast(100Y as interval hour to second):interval hour to second>
 -- !query output
 0 00:01:40.000000000
 
@@ -1491,7 +1489,7 @@ struct<dt:interval hour to second>
 -- !query
 select cast(-1000S as interval day to second)
 -- !query schema
-struct<CAST(-1000 AS INTERVAL DAY TO SECOND):interval day to second>
+struct<cast(- 1000S as interval day to second):interval day to second>
 -- !query output
 -0 00:16:40.000000000
 
@@ -1499,7 +1497,7 @@ struct<CAST(-1000 AS INTERVAL DAY TO SECOND):interval day to second>
 -- !query
 select cast(10 as interval day)
 -- !query schema
-struct<CAST(10 AS INTERVAL DAY):interval day>
+struct<cast(10 as interval day):interval day>
 -- !query output
 10 00:00:00.000000000
 
@@ -1543,7 +1541,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 select cast(interval '-1' year as decimal(10, 0))
 -- !query schema
-struct<CAST(INTERVAL '-1' YEAR AS DECIMAL(10,0)):decimal(10,0)>
+struct<cast(interval '-1' year as decimal(10, 0)):decimal(10,0)>
 -- !query output
 -1
 
@@ -1551,7 +1549,7 @@ struct<CAST(INTERVAL '-1' YEAR AS DECIMAL(10,0)):decimal(10,0)>
 -- !query
 select cast(interval '1.000001' second as decimal(10, 6))
 -- !query schema
-struct<CAST(INTERVAL '01.000001' SECOND AS DECIMAL(10,6)):decimal(10,6)>
+struct<cast(interval '1.000001' second as decimal(10, 6)):decimal(10,6)>
 -- !query output
 1.000001
 
@@ -1559,7 +1557,7 @@ struct<CAST(INTERVAL '01.000001' SECOND AS DECIMAL(10,6)):decimal(10,6)>
 -- !query
 select cast(interval '08:11:10.001' hour to second as decimal(10, 4))
 -- !query schema
-struct<CAST(INTERVAL '08:11:10.001' HOUR TO SECOND AS DECIMAL(10,4)):decimal(10,4)>
+struct<cast(interval '08:11:10.001' hour to second as decimal(10, 4)):decimal(10,4)>
 -- !query output
 29470.0010
 
@@ -1567,7 +1565,7 @@ struct<CAST(INTERVAL '08:11:10.001' HOUR TO SECOND AS DECIMAL(10,4)):decimal(10,
 -- !query
 select cast(interval '1 01:02:03.1' day to second as decimal(8, 1))
 -- !query schema
-struct<CAST(INTERVAL '1 01:02:03.1' DAY TO SECOND AS DECIMAL(8,1)):decimal(8,1)>
+struct<cast(interval '1 01:02:03.1' day to second as decimal(8, 1)):decimal(8,1)>
 -- !query output
 90123.1
 
@@ -1575,7 +1573,7 @@ struct<CAST(INTERVAL '1 01:02:03.1' DAY TO SECOND AS DECIMAL(8,1)):decimal(8,1)>
 -- !query
 select cast(interval '10.123' second as decimal(4, 2))
 -- !query schema
-struct<CAST(INTERVAL '10.123' SECOND AS DECIMAL(4,2)):decimal(4,2)>
+struct<cast(interval '10.123' second as decimal(4, 2)):decimal(4,2)>
 -- !query output
 10.12
 
@@ -1583,7 +1581,7 @@ struct<CAST(INTERVAL '10.123' SECOND AS DECIMAL(4,2)):decimal(4,2)>
 -- !query
 select cast(interval '10.005' second as decimal(4, 2))
 -- !query schema
-struct<CAST(INTERVAL '10.005' SECOND AS DECIMAL(4,2)):decimal(4,2)>
+struct<cast(interval '10.005' second as decimal(4, 2)):decimal(4,2)>
 -- !query output
 10.01
 
@@ -1591,7 +1589,7 @@ struct<CAST(INTERVAL '10.005' SECOND AS DECIMAL(4,2)):decimal(4,2)>
 -- !query
 select cast(interval '10.123' second as decimal(5, 2))
 -- !query schema
-struct<CAST(INTERVAL '10.123' SECOND AS DECIMAL(5,2)):decimal(5,2)>
+struct<cast(interval '10.123' second as decimal(5, 2)):decimal(5,2)>
 -- !query output
 10.12
 
@@ -1624,7 +1622,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 select cast(10.123456BD as interval day to second)
 -- !query schema
-struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
+struct<cast(10.123456BD as interval day to second):interval day to second>
 -- !query output
 0 00:00:10.123456000
 
@@ -1632,7 +1630,7 @@ struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
 -- !query
 select cast(80.654321BD as interval hour to minute)
 -- !query schema
-struct<CAST(80.654321 AS INTERVAL HOUR TO MINUTE):interval hour to minute>
+struct<cast(80.654321BD as interval hour to minute):interval hour to minute>
 -- !query output
 0 01:20:00.000000000
 
@@ -1640,7 +1638,7 @@ struct<CAST(80.654321 AS INTERVAL HOUR TO MINUTE):interval hour to minute>
 -- !query
 select cast(-10.123456BD as interval year to month)
 -- !query schema
-struct<CAST(-10.123456 AS INTERVAL YEAR TO MONTH):interval year to month>
+struct<cast(- 10.123456BD as interval year to month):interval year to month>
 -- !query output
 -0-10
 
@@ -1648,6 +1646,6 @@ struct<CAST(-10.123456 AS INTERVAL YEAR TO MONTH):interval year to month>
 -- !query
 select cast(10.654321BD as interval month)
 -- !query schema
-struct<CAST(10.654321 AS INTERVAL MONTH):interval month>
+struct<cast(10.654321BD as interval month):interval month>
 -- !query output
 0-11

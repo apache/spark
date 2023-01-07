@@ -179,7 +179,7 @@ struct<Three:date>
 -- !query
 SELECT date '1999-01-08'
 -- !query schema
-struct<DATE '1999-01-08':date>
+struct<date '1999-01-08':date>
 -- !query output
 1999-01-08
 
@@ -187,7 +187,7 @@ struct<DATE '1999-01-08':date>
 -- !query
 SELECT date '1999-01-18'
 -- !query schema
-struct<DATE '1999-01-18':date>
+struct<date '1999-01-18':date>
 -- !query output
 1999-01-18
 
@@ -241,7 +241,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query schema
-struct<DATE '1999-01-08':date>
+struct<date '1999-01-08':date>
 -- !query output
 1999-01-08
 
@@ -249,7 +249,7 @@ struct<DATE '1999-01-08':date>
 -- !query
 SELECT date '1999-08-01'
 -- !query schema
-struct<DATE '1999-08-01':date>
+struct<date '1999-08-01':date>
 -- !query output
 1999-08-01
 
@@ -303,7 +303,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query schema
-struct<DATE '1999-01-08':date>
+struct<date '1999-01-08':date>
 -- !query output
 1999-01-08
 
@@ -357,7 +357,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query schema
-struct<DATE '1999-01-08':date>
+struct<date '1999-01-08':date>
 -- !query output
 1999-01-08
 
@@ -365,7 +365,7 @@ struct<DATE '1999-01-08':date>
 -- !query
 SELECT date '1999-08-01'
 -- !query schema
-struct<DATE '1999-08-01':date>
+struct<date '1999-08-01':date>
 -- !query output
 1999-08-01
 
@@ -419,7 +419,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query schema
-struct<DATE '1999-01-08':date>
+struct<date '1999-01-08':date>
 -- !query output
 1999-01-08
 
@@ -427,7 +427,7 @@ struct<DATE '1999-01-08':date>
 -- !query
 SELECT date '1999-01-18'
 -- !query schema
-struct<DATE '1999-01-18':date>
+struct<date '1999-01-18':date>
 -- !query output
 1999-01-18
 
@@ -481,7 +481,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query schema
-struct<DATE '1999-01-08':date>
+struct<date '1999-01-08':date>
 -- !query output
 1999-01-08
 
@@ -489,7 +489,7 @@ struct<DATE '1999-01-08':date>
 -- !query
 SELECT date '1999-08-01'
 -- !query schema
-struct<DATE '1999-08-01':date>
+struct<date '1999-08-01':date>
 -- !query output
 1999-08-01
 
@@ -543,7 +543,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '4714-11-24 BC'
 -- !query schema
-struct<DATE '4714-11-24':date>
+struct<date '4714-11-24 BC':date>
 -- !query output
 4714-11-24
 
@@ -551,7 +551,7 @@ struct<DATE '4714-11-24':date>
 -- !query
 SELECT date '4714-11-23 BC'
 -- !query schema
-struct<DATE '4714-11-23':date>
+struct<date '4714-11-23 BC':date>
 -- !query output
 4714-11-23
 
@@ -559,7 +559,7 @@ struct<DATE '4714-11-23':date>
 -- !query
 SELECT date '5874897-12-31'
 -- !query schema
-struct<DATE '+5874897-12-31':date>
+struct<date '5874897-12-31':date>
 -- !query output
 +5874897-12-31
 
@@ -567,7 +567,7 @@ struct<DATE '+5874897-12-31':date>
 -- !query
 SELECT date '5874898-01-01'
 -- !query schema
-struct<DATE '+5874898-01-01':date>
+struct<date '5874898-01-01':date>
 -- !query output
 +5874898-01-01
 
@@ -675,7 +675,7 @@ struct<make_date(2013, 7, 15):date>
 -- !query
 select make_date(-44, 3, 15)
 -- !query schema
-struct<make_date(-44, 3, 15):date>
+struct<make_date(- 44, 3, 15):date>
 -- !query output
 -0044-03-15
 

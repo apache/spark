@@ -2,7 +2,7 @@
 -- !query
 select try_to_binary('', 'base64')
 -- !query schema
-struct<try_to_binary(, base64):binary>
+struct<try_to_binary('', 'base64'):binary>
 -- !query output
 
 
@@ -10,7 +10,7 @@ struct<try_to_binary(, base64):binary>
 -- !query
 select try_to_binary('  ', 'base64')
 -- !query schema
-struct<try_to_binary(  , base64):binary>
+struct<try_to_binary('  ', 'base64'):binary>
 -- !query output
 
 
@@ -18,7 +18,7 @@ struct<try_to_binary(  , base64):binary>
 -- !query
 select try_to_binary(' ab cd ', 'base64')
 -- !query schema
-struct<try_to_binary( ab cd , base64):binary>
+struct<try_to_binary(' ab cd ', 'base64'):binary>
 -- !query output
 i�
 
@@ -26,7 +26,7 @@ i�
 -- !query
 select try_to_binary(' ab c=', 'base64')
 -- !query schema
-struct<try_to_binary( ab c=, base64):binary>
+struct<try_to_binary(' ab c=', 'base64'):binary>
 -- !query output
 i�
 
@@ -34,7 +34,7 @@ i�
 -- !query
 select try_to_binary(' ab cdef= = ', 'base64')
 -- !query schema
-struct<try_to_binary( ab cdef= = , base64):binary>
+struct<try_to_binary(' ab cdef= = ', 'base64'):binary>
 -- !query output
 NULL
 
@@ -44,7 +44,7 @@ select try_to_binary(
   concat(' b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0',
          'd2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl'), 'base64')
 -- !query schema
-struct<try_to_binary(concat( b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0, d2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl), base64):binary>
+struct<try_to_binary(concat(' b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0', 'd2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl'), 'base64'):binary>
 -- !query output
 one two three four five six seven eight nine ten eleven twelve thirteen fourteen fivteen sixteen seventeen eightee
 
@@ -52,7 +52,7 @@ one two three four five six seven eight nine ten eleven twelve thirteen fourteen
 -- !query
 select try_to_binary('a', 'base64')
 -- !query schema
-struct<try_to_binary(a, base64):binary>
+struct<try_to_binary('a', 'base64'):binary>
 -- !query output
 NULL
 
@@ -60,7 +60,7 @@ NULL
 -- !query
 select try_to_binary('a?', 'base64')
 -- !query schema
-struct<try_to_binary(a?, base64):binary>
+struct<try_to_binary('a?', 'base64'):binary>
 -- !query output
 NULL
 
@@ -68,7 +68,7 @@ NULL
 -- !query
 select try_to_binary('abcde', 'base64')
 -- !query schema
-struct<try_to_binary(abcde, base64):binary>
+struct<try_to_binary('abcde', 'base64'):binary>
 -- !query output
 NULL
 
@@ -76,7 +76,7 @@ NULL
 -- !query
 select try_to_binary('abcd=', 'base64')
 -- !query schema
-struct<try_to_binary(abcd=, base64):binary>
+struct<try_to_binary('abcd=', 'base64'):binary>
 -- !query output
 NULL
 
@@ -84,7 +84,7 @@ NULL
 -- !query
 select try_to_binary('a===', 'base64')
 -- !query schema
-struct<try_to_binary(a===, base64):binary>
+struct<try_to_binary('a===', 'base64'):binary>
 -- !query output
 NULL
 
@@ -92,7 +92,7 @@ NULL
 -- !query
 select try_to_binary('ab==f', 'base64')
 -- !query schema
-struct<try_to_binary(ab==f, base64):binary>
+struct<try_to_binary('ab==f', 'base64'):binary>
 -- !query output
 NULL
 
@@ -101,7 +101,7 @@ NULL
 select try_to_binary(
   '∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)', 'utf-8')
 -- !query schema
-struct<try_to_binary(∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β), utf-8):binary>
+struct<try_to_binary('∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)', 'utf-8'):binary>
 -- !query output
 ∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)
 
@@ -109,7 +109,7 @@ struct<try_to_binary(∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ
 -- !query
 select try_to_binary('大千世界', 'utf8')
 -- !query schema
-struct<try_to_binary(大千世界, utf8):binary>
+struct<try_to_binary('大千世界', 'utf8'):binary>
 -- !query output
 大千世界
 
@@ -117,7 +117,7 @@ struct<try_to_binary(大千世界, utf8):binary>
 -- !query
 select try_to_binary('', 'utf-8')
 -- !query schema
-struct<try_to_binary(, utf-8):binary>
+struct<try_to_binary('', 'utf-8'):binary>
 -- !query output
 
 
@@ -125,7 +125,7 @@ struct<try_to_binary(, utf-8):binary>
 -- !query
 select try_to_binary('  ', 'utf8')
 -- !query schema
-struct<try_to_binary(  , utf8):binary>
+struct<try_to_binary('  ', 'utf8'):binary>
 -- !query output
 
 
@@ -133,7 +133,7 @@ struct<try_to_binary(  , utf8):binary>
 -- !query
 select try_to_binary('737472696E67')
 -- !query schema
-struct<try_to_binary(737472696E67):binary>
+struct<try_to_binary('737472696E67'):binary>
 -- !query output
 string
 
@@ -141,7 +141,7 @@ string
 -- !query
 select try_to_binary('737472696E67', 'hex')
 -- !query schema
-struct<try_to_binary(737472696E67, hex):binary>
+struct<try_to_binary('737472696E67', 'hex'):binary>
 -- !query output
 string
 
@@ -149,7 +149,7 @@ string
 -- !query
 select try_to_binary('')
 -- !query schema
-struct<try_to_binary():binary>
+struct<try_to_binary(''):binary>
 -- !query output
 
 
@@ -157,7 +157,7 @@ struct<try_to_binary():binary>
 -- !query
 select try_to_binary('1', 'hex')
 -- !query schema
-struct<try_to_binary(1, hex):binary>
+struct<try_to_binary('1', 'hex'):binary>
 -- !query output
 
 
@@ -165,7 +165,7 @@ struct<try_to_binary(1, hex):binary>
 -- !query
 select try_to_binary('FF')
 -- !query schema
-struct<try_to_binary(FF):binary>
+struct<try_to_binary('FF'):binary>
 -- !query output
 �
 
@@ -173,7 +173,7 @@ struct<try_to_binary(FF):binary>
 -- !query
 select try_to_binary('123')
 -- !query schema
-struct<try_to_binary(123):binary>
+struct<try_to_binary('123'):binary>
 -- !query output
 #
 
@@ -181,7 +181,7 @@ struct<try_to_binary(123):binary>
 -- !query
 select try_to_binary('12345')
 -- !query schema
-struct<try_to_binary(12345):binary>
+struct<try_to_binary('12345'):binary>
 -- !query output
 #E
 
@@ -189,7 +189,7 @@ struct<try_to_binary(12345):binary>
 -- !query
 select try_to_binary('GG')
 -- !query schema
-struct<try_to_binary(GG):binary>
+struct<try_to_binary('GG'):binary>
 -- !query output
 NULL
 
@@ -197,7 +197,7 @@ NULL
 -- !query
 select try_to_binary('01 AF', 'hex')
 -- !query schema
-struct<try_to_binary(01 AF, hex):binary>
+struct<try_to_binary('01 AF', 'hex'):binary>
 -- !query output
 NULL
 
@@ -205,7 +205,7 @@ NULL
 -- !query
 select try_to_binary('abc', concat('utf', '-8'))
 -- !query schema
-struct<try_to_binary(abc, concat(utf, -8)):binary>
+struct<try_to_binary('abc', concat('utf', '-8')):binary>
 -- !query output
 abc
 
@@ -213,7 +213,7 @@ abc
 -- !query
 select try_to_binary(' ab cdef= = ', substr('base64whynot', 0, 6))
 -- !query schema
-struct<try_to_binary( ab cdef= = , substr(base64whynot, 0, 6)):binary>
+struct<try_to_binary(' ab cdef= = ', substr('base64whynot', 0, 6)):binary>
 -- !query output
 NULL
 
@@ -221,7 +221,7 @@ NULL
 -- !query
 select try_to_binary(' ab cdef= = ', replace('HEX0', '0'))
 -- !query schema
-struct<try_to_binary( ab cdef= = , replace(HEX0, 0, )):binary>
+struct<try_to_binary(' ab cdef= = ', replace('HEX0', '0')):binary>
 -- !query output
 NULL
 
@@ -229,7 +229,7 @@ NULL
 -- !query
 select try_to_binary('abc', 'Hex')
 -- !query schema
-struct<try_to_binary(abc, Hex):binary>
+struct<try_to_binary('abc', 'Hex'):binary>
 -- !query output
 
 �
@@ -238,7 +238,7 @@ struct<try_to_binary(abc, Hex):binary>
 -- !query
 select try_to_binary('abc', null)
 -- !query schema
-struct<try_to_binary(abc, NULL):binary>
+struct<try_to_binary('abc', null):binary>
 -- !query output
 NULL
 
@@ -246,7 +246,7 @@ NULL
 -- !query
 select try_to_binary(null, 'utf-8')
 -- !query schema
-struct<try_to_binary(NULL, utf-8):binary>
+struct<try_to_binary(null, 'utf-8'):binary>
 -- !query output
 NULL
 
@@ -254,7 +254,7 @@ NULL
 -- !query
 select try_to_binary(null, null)
 -- !query schema
-struct<try_to_binary(NULL, NULL):binary>
+struct<try_to_binary(null, null):binary>
 -- !query output
 NULL
 
@@ -262,7 +262,7 @@ NULL
 -- !query
 select try_to_binary(null, cast(null as string))
 -- !query schema
-struct<try_to_binary(NULL, CAST(NULL AS STRING)):binary>
+struct<try_to_binary(null, cast(null as string)):binary>
 -- !query output
 NULL
 
@@ -270,7 +270,7 @@ NULL
 -- !query
 select try_to_binary('abc', 1)
 -- !query schema
-struct<try_to_binary(abc, 1):binary>
+struct<try_to_binary('abc', 1):binary>
 -- !query output
 NULL
 
@@ -278,6 +278,6 @@ NULL
 -- !query
 select try_to_binary('abc', 'invalidFormat')
 -- !query schema
-struct<try_to_binary(abc, invalidFormat):binary>
+struct<try_to_binary('abc', 'invalidFormat'):binary>
 -- !query output
 NULL

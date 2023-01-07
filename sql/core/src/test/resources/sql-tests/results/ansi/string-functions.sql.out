@@ -50,7 +50,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select 'a' || 'b' || 'c'
 -- !query schema
-struct<concat(concat(a, b), c):string>
+struct<'a' || 'b' || 'c':string>
 -- !query output
 abc
 
@@ -58,7 +58,7 @@ abc
 -- !query
 select replace('abc', 'b', '123')
 -- !query schema
-struct<replace(abc, b, 123):string>
+struct<replace('abc', 'b', '123'):string>
 -- !query output
 a123c
 
@@ -66,7 +66,7 @@ a123c
 -- !query
 select replace('abc', 'b')
 -- !query schema
-struct<replace(abc, b, ):string>
+struct<replace('abc', 'b'):string>
 -- !query output
 ac
 
@@ -74,7 +74,7 @@ ac
 -- !query
 select length(uuid()), (uuid() <> uuid())
 -- !query schema
-struct<length(uuid()):int,(NOT (uuid() = uuid())):boolean>
+struct<length(uuid()):int,(uuid()<> uuid()):boolean>
 -- !query output
 36	true
 
@@ -82,7 +82,7 @@ struct<length(uuid()):int,(NOT (uuid() = uuid())):boolean>
 -- !query
 select position('bar' in 'foobarbar'), position(null, 'foobarbar'), position('aaads', null)
 -- !query schema
-struct<locate(bar, foobarbar, 1):int,position(NULL, foobarbar, 1):int,position(aaads, NULL, 1):int>
+struct<position('bar' in 'foobarbar'):int,position(null, 'foobarbar'):int,position('aaads', null):int>
 -- !query output
 4	NULL	NULL
 
@@ -90,7 +90,7 @@ struct<locate(bar, foobarbar, 1):int,position(NULL, foobarbar, 1):int,position(a
 -- !query
 select left("abcd", 2), left("abcd", 5), left("abcd", '2'), left("abcd", null)
 -- !query schema
-struct<left(abcd, 2):string,left(abcd, 5):string,left(abcd, 2):string,left(abcd, NULL):string>
+struct<left("abcd", 2):string,left("abcd", 5):string,left("abcd", '2'):string,left("abcd", null):string>
 -- !query output
 ab	abcd	ab	NULL
 
@@ -98,7 +98,7 @@ ab	abcd	ab	NULL
 -- !query
 select left(null, -2)
 -- !query schema
-struct<left(NULL, -2):string>
+struct<left(null, - 2):string>
 -- !query output
 NULL
 
@@ -131,7 +131,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null)
 -- !query schema
-struct<right(abcd, 2):string,right(abcd, 5):string,right(abcd, 2):string,right(abcd, NULL):string>
+struct<right("abcd", 2):string,right("abcd", 5):string,right("abcd", '2'):string,right("abcd", null):string>
 -- !query output
 cd	abcd	cd	NULL
 
@@ -139,7 +139,7 @@ cd	abcd	cd	NULL
 -- !query
 select right(null, -2)
 -- !query schema
-struct<right(NULL, -2):string>
+struct<right(null, - 2):string>
 -- !query output
 NULL
 
@@ -172,7 +172,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT split('aa1cc2ee3', '[1-9]+')
 -- !query schema
-struct<split(aa1cc2ee3, [1-9]+, -1):array<string>>
+struct<split('aa1cc2ee3', '[1-9]+'):array<string>>
 -- !query output
 ["aa","cc","ee",""]
 
@@ -180,7 +180,7 @@ struct<split(aa1cc2ee3, [1-9]+, -1):array<string>>
 -- !query
 SELECT split('aa1cc2ee3', '[1-9]+', 2)
 -- !query schema
-struct<split(aa1cc2ee3, [1-9]+, 2):array<string>>
+struct<split('aa1cc2ee3', '[1-9]+', 2):array<string>>
 -- !query output
 ["aa","cc2ee3"]
 
@@ -188,7 +188,7 @@ struct<split(aa1cc2ee3, [1-9]+, 2):array<string>>
 -- !query
 SELECT split('hello', '')
 -- !query schema
-struct<split(hello, , -1):array<string>>
+struct<split('hello', ''):array<string>>
 -- !query output
 ["h","e","l","l","o"]
 
@@ -196,7 +196,7 @@ struct<split(hello, , -1):array<string>>
 -- !query
 SELECT split('', '')
 -- !query schema
-struct<split(, , -1):array<string>>
+struct<split('', ''):array<string>>
 -- !query output
 [""]
 
@@ -204,7 +204,7 @@ struct<split(, , -1):array<string>>
 -- !query
 SELECT split('abc', null)
 -- !query schema
-struct<split(abc, NULL, -1):array<string>>
+struct<split('abc', null):array<string>>
 -- !query output
 NULL
 
@@ -212,7 +212,7 @@ NULL
 -- !query
 SELECT split(null, 'b')
 -- !query schema
-struct<split(NULL, b, -1):array<string>>
+struct<split(null, 'b'):array<string>>
 -- !query output
 NULL
 
@@ -220,7 +220,7 @@ NULL
 -- !query
 SELECT split_part('11.12.13', '.', 2)
 -- !query schema
-struct<split_part(11.12.13, ., 2):string>
+struct<split_part('11.12.13', '.', 2):string>
 -- !query output
 12
 
@@ -228,7 +228,7 @@ struct<split_part(11.12.13, ., 2):string>
 -- !query
 SELECT split_part('11.12.13', '.', -1)
 -- !query schema
-struct<split_part(11.12.13, ., -1):string>
+struct<split_part('11.12.13', '.', - 1):string>
 -- !query output
 13
 
@@ -236,7 +236,7 @@ struct<split_part(11.12.13, ., -1):string>
 -- !query
 SELECT split_part('11.12.13', '.', -3)
 -- !query schema
-struct<split_part(11.12.13, ., -3):string>
+struct<split_part('11.12.13', '.', - 3):string>
 -- !query output
 11
 
@@ -244,7 +244,7 @@ struct<split_part(11.12.13, ., -3):string>
 -- !query
 SELECT split_part('11.12.13', '', 1)
 -- !query schema
-struct<split_part(11.12.13, , 1):string>
+struct<split_part('11.12.13', '', 1):string>
 -- !query output
 11.12.13
 
@@ -252,7 +252,7 @@ struct<split_part(11.12.13, , 1):string>
 -- !query
 SELECT split_part('11ab12ab13', 'ab', 1)
 -- !query schema
-struct<split_part(11ab12ab13, ab, 1):string>
+struct<split_part('11ab12ab13', 'ab', 1):string>
 -- !query output
 11
 
@@ -271,7 +271,7 @@ org.apache.spark.SparkRuntimeException
 -- !query
 SELECT split_part('11.12.13', '.', 4)
 -- !query schema
-struct<split_part(11.12.13, ., 4):string>
+struct<split_part('11.12.13', '.', 4):string>
 -- !query output
 
 
@@ -279,7 +279,7 @@ struct<split_part(11.12.13, ., 4):string>
 -- !query
 SELECT split_part('11.12.13', '.', 5)
 -- !query schema
-struct<split_part(11.12.13, ., 5):string>
+struct<split_part('11.12.13', '.', 5):string>
 -- !query output
 
 
@@ -287,7 +287,7 @@ struct<split_part(11.12.13, ., 5):string>
 -- !query
 SELECT split_part('11.12.13', '.', -5)
 -- !query schema
-struct<split_part(11.12.13, ., -5):string>
+struct<split_part('11.12.13', '.', - 5):string>
 -- !query output
 
 
@@ -295,7 +295,7 @@ struct<split_part(11.12.13, ., -5):string>
 -- !query
 SELECT split_part(null, '.', 1)
 -- !query schema
-struct<split_part(NULL, ., 1):string>
+struct<split_part(null, '.', 1):string>
 -- !query output
 NULL
 
@@ -311,7 +311,7 @@ struct<split_part(str, delimiter, partNum):string>
 -- !query
 SELECT substr('Spark SQL', 5)
 -- !query schema
-struct<substr(Spark SQL, 5, 2147483647):string>
+struct<substr('Spark SQL', 5):string>
 -- !query output
 k SQL
 
@@ -319,7 +319,7 @@ k SQL
 -- !query
 SELECT substr('Spark SQL', -3)
 -- !query schema
-struct<substr(Spark SQL, -3, 2147483647):string>
+struct<substr('Spark SQL', - 3):string>
 -- !query output
 SQL
 
@@ -327,7 +327,7 @@ SQL
 -- !query
 SELECT substr('Spark SQL', 5, 1)
 -- !query schema
-struct<substr(Spark SQL, 5, 1):string>
+struct<substr('Spark SQL', 5, 1):string>
 -- !query output
 k
 
@@ -335,7 +335,7 @@ k
 -- !query
 SELECT substr('Spark SQL' from 5)
 -- !query schema
-struct<substring(Spark SQL, 5, 2147483647):string>
+struct<substr('Spark SQL' from 5):string>
 -- !query output
 k SQL
 
@@ -343,7 +343,7 @@ k SQL
 -- !query
 SELECT substr('Spark SQL' from -3)
 -- !query schema
-struct<substring(Spark SQL, -3, 2147483647):string>
+struct<substr('Spark SQL' from - 3):string>
 -- !query output
 SQL
 
@@ -351,7 +351,7 @@ SQL
 -- !query
 SELECT substr('Spark SQL' from 5 for 1)
 -- !query schema
-struct<substring(Spark SQL, 5, 1):string>
+struct<substr('Spark SQL' from 5 for 1):string>
 -- !query output
 k
 
@@ -359,7 +359,7 @@ k
 -- !query
 SELECT substring('Spark SQL', 5)
 -- !query schema
-struct<substring(Spark SQL, 5, 2147483647):string>
+struct<substring('Spark SQL', 5):string>
 -- !query output
 k SQL
 
@@ -367,7 +367,7 @@ k SQL
 -- !query
 SELECT substring('Spark SQL', -3)
 -- !query schema
-struct<substring(Spark SQL, -3, 2147483647):string>
+struct<substring('Spark SQL', - 3):string>
 -- !query output
 SQL
 
@@ -375,7 +375,7 @@ SQL
 -- !query
 SELECT substring('Spark SQL', 5, 1)
 -- !query schema
-struct<substring(Spark SQL, 5, 1):string>
+struct<substring('Spark SQL', 5, 1):string>
 -- !query output
 k
 
@@ -383,7 +383,7 @@ k
 -- !query
 SELECT substring('Spark SQL' from 5)
 -- !query schema
-struct<substring(Spark SQL, 5, 2147483647):string>
+struct<substring('Spark SQL' from 5):string>
 -- !query output
 k SQL
 
@@ -391,7 +391,7 @@ k SQL
 -- !query
 SELECT substring('Spark SQL' from -3)
 -- !query schema
-struct<substring(Spark SQL, -3, 2147483647):string>
+struct<substring('Spark SQL' from - 3):string>
 -- !query output
 SQL
 
@@ -399,7 +399,7 @@ SQL
 -- !query
 SELECT substring('Spark SQL' from 5 for 1)
 -- !query schema
-struct<substring(Spark SQL, 5, 1):string>
+struct<substring('Spark SQL' from 5 for 1):string>
 -- !query output
 k
 
@@ -407,7 +407,7 @@ k
 -- !query
 SELECT trim(" xyz "), ltrim(" xyz "), rtrim(" xyz ")
 -- !query schema
-struct<trim( xyz ):string,ltrim( xyz ):string,rtrim( xyz ):string>
+struct<trim(" xyz "):string,ltrim(" xyz "):string,rtrim(" xyz "):string>
 -- !query output
 xyz	xyz 	 xyz
 
@@ -415,7 +415,7 @@ xyz	xyz 	 xyz
 -- !query
 SELECT trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx')
 -- !query schema
-struct<TRIM(BOTH xyz FROM yxTomxx):string,TRIM(BOTH xyz FROM yxTomxx):string>
+struct<trim(BOTH 'xyz' FROM 'yxTomxx'):string,trim('xyz' FROM 'yxTomxx'):string>
 -- !query output
 Tom	Tom
 
@@ -423,7 +423,7 @@ Tom	Tom
 -- !query
 SELECT trim(BOTH 'x' FROM 'xxxbarxxx'), trim('x' FROM 'xxxbarxxx')
 -- !query schema
-struct<TRIM(BOTH x FROM xxxbarxxx):string,TRIM(BOTH x FROM xxxbarxxx):string>
+struct<trim(BOTH 'x' FROM 'xxxbarxxx'):string,trim('x' FROM 'xxxbarxxx'):string>
 -- !query output
 bar	bar
 
@@ -431,7 +431,7 @@ bar	bar
 -- !query
 SELECT trim(LEADING 'xyz' FROM 'zzzytest')
 -- !query schema
-struct<TRIM(LEADING xyz FROM zzzytest):string>
+struct<trim(LEADING 'xyz' FROM 'zzzytest'):string>
 -- !query output
 test
 
@@ -439,7 +439,7 @@ test
 -- !query
 SELECT trim(LEADING 'xyz' FROM 'zzzytestxyz')
 -- !query schema
-struct<TRIM(LEADING xyz FROM zzzytestxyz):string>
+struct<trim(LEADING 'xyz' FROM 'zzzytestxyz'):string>
 -- !query output
 testxyz
 
@@ -447,7 +447,7 @@ testxyz
 -- !query
 SELECT trim(LEADING 'xy' FROM 'xyxXxyLAST WORD')
 -- !query schema
-struct<TRIM(LEADING xy FROM xyxXxyLAST WORD):string>
+struct<trim(LEADING 'xy' FROM 'xyxXxyLAST WORD'):string>
 -- !query output
 XxyLAST WORD
 
@@ -455,7 +455,7 @@ XxyLAST WORD
 -- !query
 SELECT trim(TRAILING 'xyz' FROM 'testxxzx')
 -- !query schema
-struct<TRIM(TRAILING xyz FROM testxxzx):string>
+struct<trim(TRAILING 'xyz' FROM 'testxxzx'):string>
 -- !query output
 test
 
@@ -463,7 +463,7 @@ test
 -- !query
 SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx')
 -- !query schema
-struct<TRIM(TRAILING xyz FROM xyztestxxzx):string>
+struct<trim(TRAILING 'xyz' FROM 'xyztestxxzx'):string>
 -- !query output
 xyztest
 
@@ -471,7 +471,7 @@ xyztest
 -- !query
 SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy')
 -- !query schema
-struct<TRIM(TRAILING xy FROM TURNERyxXxy):string>
+struct<trim(TRAILING 'xy' FROM 'TURNERyxXxy'):string>
 -- !query output
 TURNERyxX
 
@@ -479,7 +479,7 @@ TURNERyxX
 -- !query
 SELECT btrim('xyxtrimyyx', 'xy')
 -- !query schema
-struct<btrim(xyxtrimyyx, xy):string>
+struct<btrim('xyxtrimyyx', 'xy'):string>
 -- !query output
 trim
 
@@ -487,7 +487,7 @@ trim
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query schema
-struct<btrim(encode( xyz , utf-8)):string>
+struct<btrim(encode(" xyz ", 'utf-8')):string>
 -- !query output
 xyz
 
@@ -495,7 +495,7 @@ xyz
 -- !query
 SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'))
 -- !query schema
-struct<btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8)):string>
+struct<btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8')):string>
 -- !query output
 Tom
 
@@ -503,7 +503,7 @@ Tom
 -- !query
 SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'))
 -- !query schema
-struct<btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8)):string>
+struct<btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8')):string>
 -- !query output
 bar
 
@@ -561,7 +561,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT hex(lpad(unhex(''), 5))
 -- !query schema
-struct<hex(lpad(unhex(), 5, X'00')):string>
+struct<hex(lpad(unhex(''), 5)):string>
 -- !query output
 0000000000
 
@@ -569,7 +569,7 @@ struct<hex(lpad(unhex(), 5, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex('aabb'), 5))
 -- !query schema
-struct<hex(lpad(unhex(aabb), 5, X'00')):string>
+struct<hex(lpad(unhex('aabb'), 5)):string>
 -- !query output
 000000AABB
 
@@ -577,7 +577,7 @@ struct<hex(lpad(unhex(aabb), 5, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 2))
 -- !query schema
-struct<hex(lpad(unhex(aabbcc), 2, X'00')):string>
+struct<hex(lpad(unhex('aabbcc'), 2)):string>
 -- !query output
 AABB
 
@@ -585,7 +585,7 @@ AABB
 -- !query
 SELECT hex(lpad(unhex('123'), 2))
 -- !query schema
-struct<hex(lpad(unhex(123), 2, X'00')):string>
+struct<hex(lpad(unhex('123'), 2)):string>
 -- !query output
 0123
 
@@ -593,7 +593,7 @@ struct<hex(lpad(unhex(123), 2, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex('12345'), 2))
 -- !query schema
-struct<hex(lpad(unhex(12345), 2, X'00')):string>
+struct<hex(lpad(unhex('12345'), 2)):string>
 -- !query output
 0123
 
@@ -601,7 +601,7 @@ struct<hex(lpad(unhex(12345), 2, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f')))
 -- !query schema
-struct<hex(lpad(unhex(), 5, unhex(1f))):string>
+struct<hex(lpad(unhex(''), 5, unhex('1f'))):string>
 -- !query output
 1F1F1F1F1F
 
@@ -609,7 +609,7 @@ struct<hex(lpad(unhex(), 5, unhex(1f))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 5, unhex(1f))):string>
+struct<hex(lpad(unhex('aa'), 5, unhex('1f'))):string>
 -- !query output
 1F1F1F1FAA
 
@@ -617,7 +617,7 @@ struct<hex(lpad(unhex(aa), 5, unhex(1f))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 6, unhex(1f))):string>
+struct<hex(lpad(unhex('aa'), 6, unhex('1f'))):string>
 -- !query output
 1F1F1F1F1FAA
 
@@ -625,7 +625,7 @@ struct<hex(lpad(unhex(aa), 6, unhex(1f))):string>
 -- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(lpad(unhex(), 5, unhex(1f2e))):string>
+struct<hex(lpad(unhex(''), 5, unhex('1f2e'))):string>
 -- !query output
 1F2E1F2E1F
 
@@ -633,7 +633,7 @@ struct<hex(lpad(unhex(), 5, unhex(1f2e))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 5, unhex(1f2e))):string>
+struct<hex(lpad(unhex('aa'), 5, unhex('1f2e'))):string>
 -- !query output
 1F2E1F2EAA
 
@@ -641,7 +641,7 @@ struct<hex(lpad(unhex(aa), 5, unhex(1f2e))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f2e')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 6, unhex(1f2e))):string>
+struct<hex(lpad(unhex('aa'), 6, unhex('1f2e'))):string>
 -- !query output
 1F2E1F2E1FAA
 
@@ -649,7 +649,7 @@ struct<hex(lpad(unhex(aa), 6, unhex(1f2e))):string>
 -- !query
 SELECT hex(lpad(unhex(''), 6, unhex('')))
 -- !query schema
-struct<hex(lpad(unhex(), 6, unhex())):string>
+struct<hex(lpad(unhex(''), 6, unhex(''))):string>
 -- !query output
 
 
@@ -657,7 +657,7 @@ struct<hex(lpad(unhex(), 6, unhex())):string>
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 6, unhex('')))
 -- !query schema
-struct<hex(lpad(unhex(aabbcc), 6, unhex())):string>
+struct<hex(lpad(unhex('aabbcc'), 6, unhex(''))):string>
 -- !query output
 AABBCC
 
@@ -665,7 +665,7 @@ AABBCC
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 2, unhex('ff')))
 -- !query schema
-struct<hex(lpad(unhex(aabbcc), 2, unhex(ff))):string>
+struct<hex(lpad(unhex('aabbcc'), 2, unhex('ff'))):string>
 -- !query output
 AABB
 
@@ -673,7 +673,7 @@ AABB
 -- !query
 SELECT hex(rpad(unhex(''), 5))
 -- !query schema
-struct<hex(rpad(unhex(), 5, X'00')):string>
+struct<hex(rpad(unhex(''), 5)):string>
 -- !query output
 0000000000
 
@@ -681,7 +681,7 @@ struct<hex(rpad(unhex(), 5, X'00')):string>
 -- !query
 SELECT hex(rpad(unhex('aabb'), 5))
 -- !query schema
-struct<hex(rpad(unhex(aabb), 5, X'00')):string>
+struct<hex(rpad(unhex('aabb'), 5)):string>
 -- !query output
 AABB000000
 
@@ -689,7 +689,7 @@ AABB000000
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 2))
 -- !query schema
-struct<hex(rpad(unhex(aabbcc), 2, X'00')):string>
+struct<hex(rpad(unhex('aabbcc'), 2)):string>
 -- !query output
 AABB
 
@@ -697,7 +697,7 @@ AABB
 -- !query
 SELECT hex(rpad(unhex('123'), 2))
 -- !query schema
-struct<hex(rpad(unhex(123), 2, X'00')):string>
+struct<hex(rpad(unhex('123'), 2)):string>
 -- !query output
 0123
 
@@ -705,7 +705,7 @@ struct<hex(rpad(unhex(123), 2, X'00')):string>
 -- !query
 SELECT hex(rpad(unhex('12345'), 2))
 -- !query schema
-struct<hex(rpad(unhex(12345), 2, X'00')):string>
+struct<hex(rpad(unhex('12345'), 2)):string>
 -- !query output
 0123
 
@@ -713,7 +713,7 @@ struct<hex(rpad(unhex(12345), 2, X'00')):string>
 -- !query
 SELECT hex(rpad(unhex(''), 5, unhex('1f')))
 -- !query schema
-struct<hex(rpad(unhex(), 5, unhex(1f))):string>
+struct<hex(rpad(unhex(''), 5, unhex('1f'))):string>
 -- !query output
 1F1F1F1F1F
 
@@ -721,7 +721,7 @@ struct<hex(rpad(unhex(), 5, unhex(1f))):string>
 -- !query
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 5, unhex(1f))):string>
+struct<hex(rpad(unhex('aa'), 5, unhex('1f'))):string>
 -- !query output
 AA1F1F1F1F
 
@@ -729,7 +729,7 @@ AA1F1F1F1F
 -- !query
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 6, unhex(1f))):string>
+struct<hex(rpad(unhex('aa'), 6, unhex('1f'))):string>
 -- !query output
 AA1F1F1F1F1F
 
@@ -737,7 +737,7 @@ AA1F1F1F1F1F
 -- !query
 SELECT hex(rpad(unhex(''), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(rpad(unhex(), 5, unhex(1f2e))):string>
+struct<hex(rpad(unhex(''), 5, unhex('1f2e'))):string>
 -- !query output
 1F2E1F2E1F
 
@@ -745,7 +745,7 @@ struct<hex(rpad(unhex(), 5, unhex(1f2e))):string>
 -- !query
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 5, unhex(1f2e))):string>
+struct<hex(rpad(unhex('aa'), 5, unhex('1f2e'))):string>
 -- !query output
 AA1F2E1F2E
 
@@ -753,7 +753,7 @@ AA1F2E1F2E
 -- !query
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f2e')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 6, unhex(1f2e))):string>
+struct<hex(rpad(unhex('aa'), 6, unhex('1f2e'))):string>
 -- !query output
 AA1F2E1F2E1F
 
@@ -761,7 +761,7 @@ AA1F2E1F2E1F
 -- !query
 SELECT hex(rpad(unhex(''), 6, unhex('')))
 -- !query schema
-struct<hex(rpad(unhex(), 6, unhex())):string>
+struct<hex(rpad(unhex(''), 6, unhex(''))):string>
 -- !query output
 
 
@@ -769,7 +769,7 @@ struct<hex(rpad(unhex(), 6, unhex())):string>
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 6, unhex('')))
 -- !query schema
-struct<hex(rpad(unhex(aabbcc), 6, unhex())):string>
+struct<hex(rpad(unhex('aabbcc'), 6, unhex(''))):string>
 -- !query output
 AABBCC
 
@@ -777,7 +777,7 @@ AABBCC
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 2, unhex('ff')))
 -- !query schema
-struct<hex(rpad(unhex(aabbcc), 2, unhex(ff))):string>
+struct<hex(rpad(unhex('aabbcc'), 2, unhex('ff'))):string>
 -- !query output
 AABB
 
@@ -785,7 +785,7 @@ AABB
 -- !query
 SELECT lpad('abc', 5, x'57')
 -- !query schema
-struct<lpad(abc, 5, X'57'):string>
+struct<lpad('abc', 5, x '57'):string>
 -- !query output
 WWabc
 
@@ -793,7 +793,7 @@ WWabc
 -- !query
 SELECT lpad(x'57', 5, 'abc')
 -- !query schema
-struct<lpad(X'57', 5, abc):string>
+struct<lpad(x '57', 5, 'abc'):string>
 -- !query output
 abcaW
 
@@ -801,7 +801,7 @@ abcaW
 -- !query
 SELECT rpad('abc', 5, x'57')
 -- !query schema
-struct<rpad(abc, 5, X'57'):string>
+struct<rpad('abc', 5, x '57'):string>
 -- !query output
 abcWW
 
@@ -809,7 +809,7 @@ abcWW
 -- !query
 SELECT rpad(x'57', 5, 'abc')
 -- !query schema
-struct<rpad(X'57', 5, abc):string>
+struct<rpad(x '57', 5, 'abc'):string>
 -- !query output
 Wabca
 
@@ -863,7 +863,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select decode(encode('abc', 'utf-8'), 'utf-8')
 -- !query schema
-struct<decode(encode(abc, utf-8), utf-8):string>
+struct<decode(encode('abc', 'utf-8'), 'utf-8'):string>
 -- !query output
 abc
 
@@ -871,7 +871,7 @@ abc
 -- !query
 select decode(1, 1, 'Southlake')
 -- !query schema
-struct<decode(1, 1, Southlake):string>
+struct<decode(1, 1, 'Southlake'):string>
 -- !query output
 Southlake
 
@@ -879,7 +879,7 @@ Southlake
 -- !query
 select decode(2, 1, 'Southlake')
 -- !query schema
-struct<decode(2, 1, Southlake):string>
+struct<decode(2, 1, 'Southlake'):string>
 -- !query output
 NULL
 
@@ -887,7 +887,7 @@ NULL
 -- !query
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic')
 -- !query schema
-struct<decode(2, 1, Southlake, 2, San Francisco, 3, New Jersey, 4, Seattle, Non domestic):string>
+struct<decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic'):string>
 -- !query output
 San Francisco
 
@@ -895,7 +895,7 @@ San Francisco
 -- !query
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic')
 -- !query schema
-struct<decode(6, 1, Southlake, 2, San Francisco, 3, New Jersey, 4, Seattle, Non domestic):string>
+struct<decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic'):string>
 -- !query output
 Non domestic
 
@@ -903,7 +903,7 @@ Non domestic
 -- !query
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle')
 -- !query schema
-struct<decode(6, 1, Southlake, 2, San Francisco, 3, New Jersey, 4, Seattle):string>
+struct<decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle'):string>
 -- !query output
 NULL
 
@@ -911,7 +911,7 @@ NULL
 -- !query
 select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks')
 -- !query schema
-struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks):string>
+struct<decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks'):string>
 -- !query output
 SQL
 
@@ -919,7 +919,7 @@ SQL
 -- !query
 select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.')
 -- !query schema
-struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks, NULL, .):string>
+struct<decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.'):string>
 -- !query output
 SQL
 
@@ -927,7 +927,7 @@ SQL
 -- !query
 SELECT CONTAINS(null, 'Spark')
 -- !query schema
-struct<contains(NULL, Spark):boolean>
+struct<CONTAINS(null, 'Spark'):boolean>
 -- !query output
 NULL
 
@@ -935,7 +935,7 @@ NULL
 -- !query
 SELECT CONTAINS('Spark SQL', null)
 -- !query schema
-struct<contains(Spark SQL, NULL):boolean>
+struct<CONTAINS('Spark SQL', null):boolean>
 -- !query output
 NULL
 
@@ -943,7 +943,7 @@ NULL
 -- !query
 SELECT CONTAINS(null, null)
 -- !query schema
-struct<contains(NULL, NULL):boolean>
+struct<CONTAINS(null, null):boolean>
 -- !query output
 NULL
 
@@ -951,7 +951,7 @@ NULL
 -- !query
 SELECT CONTAINS('Spark SQL', 'Spark')
 -- !query schema
-struct<contains(Spark SQL, Spark):boolean>
+struct<CONTAINS('Spark SQL', 'Spark'):boolean>
 -- !query output
 true
 
@@ -959,7 +959,7 @@ true
 -- !query
 SELECT CONTAINS('Spark SQL', 'SQL')
 -- !query schema
-struct<contains(Spark SQL, SQL):boolean>
+struct<CONTAINS('Spark SQL', 'SQL'):boolean>
 -- !query output
 true
 
@@ -967,7 +967,7 @@ true
 -- !query
 SELECT CONTAINS('Spark SQL', 'SPARK')
 -- !query schema
-struct<contains(Spark SQL, SPARK):boolean>
+struct<CONTAINS('Spark SQL', 'SPARK'):boolean>
 -- !query output
 false
 
@@ -975,7 +975,7 @@ false
 -- !query
 SELECT startswith('Spark SQL', 'ark')
 -- !query schema
-struct<startswith(Spark SQL, ark):boolean>
+struct<startswith('Spark SQL', 'ark'):boolean>
 -- !query output
 false
 
@@ -983,7 +983,7 @@ false
 -- !query
 SELECT startswith('Spark SQL', 'Spa')
 -- !query schema
-struct<startswith(Spark SQL, Spa):boolean>
+struct<startswith('Spark SQL', 'Spa'):boolean>
 -- !query output
 true
 
@@ -991,7 +991,7 @@ true
 -- !query
 SELECT startswith(null, 'Spark')
 -- !query schema
-struct<startswith(NULL, Spark):boolean>
+struct<startswith(null, 'Spark'):boolean>
 -- !query output
 NULL
 
@@ -999,7 +999,7 @@ NULL
 -- !query
 SELECT startswith('Spark', null)
 -- !query schema
-struct<startswith(Spark, NULL):boolean>
+struct<startswith('Spark', null):boolean>
 -- !query output
 NULL
 
@@ -1007,7 +1007,7 @@ NULL
 -- !query
 SELECT startswith(null, null)
 -- !query schema
-struct<startswith(NULL, NULL):boolean>
+struct<startswith(null, null):boolean>
 -- !query output
 NULL
 
@@ -1015,7 +1015,7 @@ NULL
 -- !query
 SELECT endswith('Spark SQL', 'QL')
 -- !query schema
-struct<endswith(Spark SQL, QL):boolean>
+struct<endswith('Spark SQL', 'QL'):boolean>
 -- !query output
 true
 
@@ -1023,7 +1023,7 @@ true
 -- !query
 SELECT endswith('Spark SQL', 'Spa')
 -- !query schema
-struct<endswith(Spark SQL, Spa):boolean>
+struct<endswith('Spark SQL', 'Spa'):boolean>
 -- !query output
 false
 
@@ -1031,7 +1031,7 @@ false
 -- !query
 SELECT endswith(null, 'Spark')
 -- !query schema
-struct<endswith(NULL, Spark):boolean>
+struct<endswith(null, 'Spark'):boolean>
 -- !query output
 NULL
 
@@ -1039,7 +1039,7 @@ NULL
 -- !query
 SELECT endswith('Spark', null)
 -- !query schema
-struct<endswith(Spark, NULL):boolean>
+struct<endswith('Spark', null):boolean>
 -- !query output
 NULL
 
@@ -1047,7 +1047,7 @@ NULL
 -- !query
 SELECT endswith(null, null)
 -- !query schema
-struct<endswith(NULL, NULL):boolean>
+struct<endswith(null, null):boolean>
 -- !query output
 NULL
 
@@ -1055,7 +1055,7 @@ NULL
 -- !query
 SELECT contains(x'537061726b2053514c', x'537061726b')
 -- !query schema
-struct<contains(X'537061726B2053514C', X'537061726B'):boolean>
+struct<contains(x '537061726b2053514c', x '537061726b'):boolean>
 -- !query output
 true
 
@@ -1063,7 +1063,7 @@ true
 -- !query
 SELECT contains(x'', x'')
 -- !query schema
-struct<contains(X'', X''):boolean>
+struct<contains(x '', x ''):boolean>
 -- !query output
 true
 
@@ -1071,7 +1071,7 @@ true
 -- !query
 SELECT contains(x'537061726b2053514c', null)
 -- !query schema
-struct<contains(X'537061726B2053514C', NULL):boolean>
+struct<contains(x '537061726b2053514c', null):boolean>
 -- !query output
 NULL
 
@@ -1079,7 +1079,7 @@ NULL
 -- !query
 SELECT contains(12, '1')
 -- !query schema
-struct<contains(12, 1):boolean>
+struct<contains(12, '1'):boolean>
 -- !query output
 true
 
@@ -1087,7 +1087,7 @@ true
 -- !query
 SELECT contains(true, 'ru')
 -- !query schema
-struct<contains(true, ru):boolean>
+struct<contains(true, 'ru'):boolean>
 -- !query output
 true
 
@@ -1095,7 +1095,7 @@ true
 -- !query
 SELECT contains(x'12', 12)
 -- !query schema
-struct<contains(X'12', 12):boolean>
+struct<contains(x '12', 12):boolean>
 -- !query output
 false
 
@@ -1111,7 +1111,7 @@ false
 -- !query
 SELECT startswith(x'537061726b2053514c', x'537061726b')
 -- !query schema
-struct<startswith(X'537061726B2053514C', X'537061726B'):boolean>
+struct<startswith(x '537061726b2053514c', x '537061726b'):boolean>
 -- !query output
 true
 
@@ -1119,7 +1119,7 @@ true
 -- !query
 SELECT startswith(x'537061726b2053514c', x'')
 -- !query schema
-struct<startswith(X'537061726B2053514C', X''):boolean>
+struct<startswith(x '537061726b2053514c', x ''):boolean>
 -- !query output
 true
 
@@ -1127,7 +1127,7 @@ true
 -- !query
 SELECT startswith(x'', x'')
 -- !query schema
-struct<startswith(X'', X''):boolean>
+struct<startswith(x '', x ''):boolean>
 -- !query output
 true
 
@@ -1135,7 +1135,7 @@ true
 -- !query
 SELECT startswith(x'537061726b2053514c', null)
 -- !query schema
-struct<startswith(X'537061726B2053514C', NULL):boolean>
+struct<startswith(x '537061726b2053514c', null):boolean>
 -- !query output
 NULL
 
@@ -1143,7 +1143,7 @@ NULL
 -- !query
 SELECT endswith(x'537061726b2053514c', x'53516c')
 -- !query schema
-struct<endswith(X'537061726B2053514C', X'53516C'):boolean>
+struct<endswith(x '537061726b2053514c', x '53516c'):boolean>
 -- !query output
 false
 
@@ -1151,7 +1151,7 @@ false
 -- !query
 SELECT endsWith(x'537061726b2053514c', x'537061726b')
 -- !query schema
-struct<endswith(X'537061726B2053514C', X'537061726B'):boolean>
+struct<endsWith(x '537061726b2053514c', x '537061726b'):boolean>
 -- !query output
 false
 
@@ -1159,7 +1159,7 @@ false
 -- !query
 SELECT endsWith(x'537061726b2053514c', x'')
 -- !query schema
-struct<endswith(X'537061726B2053514C', X''):boolean>
+struct<endsWith(x '537061726b2053514c', x ''):boolean>
 -- !query output
 true
 
@@ -1167,7 +1167,7 @@ true
 -- !query
 SELECT endsWith(x'', x'')
 -- !query schema
-struct<endswith(X'', X''):boolean>
+struct<endsWith(x '', x ''):boolean>
 -- !query output
 true
 
@@ -1175,7 +1175,7 @@ true
 -- !query
 SELECT endsWith(x'537061726b2053514c', null)
 -- !query schema
-struct<endswith(X'537061726B2053514C', NULL):boolean>
+struct<endsWith(x '537061726b2053514c', null):boolean>
 -- !query output
 NULL
 
@@ -1183,7 +1183,7 @@ NULL
 -- !query
 select to_number('454', '000')
 -- !query schema
-struct<to_number(454, 000):decimal(3,0)>
+struct<to_number('454', '000'):decimal(3,0)>
 -- !query output
 454
 
@@ -1191,7 +1191,7 @@ struct<to_number(454, 000):decimal(3,0)>
 -- !query
 select to_number('454.2', '000.0')
 -- !query schema
-struct<to_number(454.2, 000.0):decimal(4,1)>
+struct<to_number('454.2', '000.0'):decimal(4,1)>
 -- !query output
 454.2
 
@@ -1199,7 +1199,7 @@ struct<to_number(454.2, 000.0):decimal(4,1)>
 -- !query
 select to_number('12,454', '00,000')
 -- !query schema
-struct<to_number(12,454, 00,000):decimal(5,0)>
+struct<to_number('12,454', '00,000'):decimal(5,0)>
 -- !query output
 12454
 
@@ -1207,7 +1207,7 @@ struct<to_number(12,454, 00,000):decimal(5,0)>
 -- !query
 select to_number('$78.12', '$00.00')
 -- !query schema
-struct<to_number($78.12, $00.00):decimal(4,2)>
+struct<to_number('$78.12', '$00.00'):decimal(4,2)>
 -- !query output
 78.12
 
@@ -1215,7 +1215,7 @@ struct<to_number($78.12, $00.00):decimal(4,2)>
 -- !query
 select to_number('+454', 'S000')
 -- !query schema
-struct<to_number(+454, S000):decimal(3,0)>
+struct<to_number('+454', 'S000'):decimal(3,0)>
 -- !query output
 454
 
@@ -1223,7 +1223,7 @@ struct<to_number(+454, S000):decimal(3,0)>
 -- !query
 select to_number('-454', 'S000')
 -- !query schema
-struct<to_number(-454, S000):decimal(3,0)>
+struct<to_number('-454', 'S000'):decimal(3,0)>
 -- !query output
 -454
 
@@ -1231,7 +1231,7 @@ struct<to_number(-454, S000):decimal(3,0)>
 -- !query
 select to_number('12,454.8-', '00,000.9MI')
 -- !query schema
-struct<to_number(12,454.8-, 00,000.9MI):decimal(6,1)>
+struct<to_number('12,454.8-', '00,000.9MI'):decimal(6,1)>
 -- !query output
 -12454.8
 
@@ -1239,7 +1239,7 @@ struct<to_number(12,454.8-, 00,000.9MI):decimal(6,1)>
 -- !query
 select to_number('00,454.8-', '00,000.9MI')
 -- !query schema
-struct<to_number(00,454.8-, 00,000.9MI):decimal(6,1)>
+struct<to_number('00,454.8-', '00,000.9MI'):decimal(6,1)>
 -- !query output
 -454.8
 
@@ -1247,7 +1247,7 @@ struct<to_number(00,454.8-, 00,000.9MI):decimal(6,1)>
 -- !query
 select to_number('<00,454.8>', '00,000.9PR')
 -- !query schema
-struct<to_number(<00,454.8>, 00,000.9PR):decimal(6,1)>
+struct<to_number('<00,454.8>', '00,000.9PR'):decimal(6,1)>
 -- !query output
 -454.8
 
@@ -1255,7 +1255,7 @@ struct<to_number(<00,454.8>, 00,000.9PR):decimal(6,1)>
 -- !query
 select to_binary('', 'base64')
 -- !query schema
-struct<to_binary(, base64):binary>
+struct<to_binary('', 'base64'):binary>
 -- !query output
 
 
@@ -1263,7 +1263,7 @@ struct<to_binary(, base64):binary>
 -- !query
 select to_binary('  ', 'base64')
 -- !query schema
-struct<to_binary(  , base64):binary>
+struct<to_binary('  ', 'base64'):binary>
 -- !query output
 
 
@@ -1271,7 +1271,7 @@ struct<to_binary(  , base64):binary>
 -- !query
 select to_binary(' ab cd ', 'base64')
 -- !query schema
-struct<to_binary( ab cd , base64):binary>
+struct<to_binary(' ab cd ', 'base64'):binary>
 -- !query output
 i�
 
@@ -1279,7 +1279,7 @@ i�
 -- !query
 select to_binary(' ab c=', 'base64')
 -- !query schema
-struct<to_binary( ab c=, base64):binary>
+struct<to_binary(' ab c=', 'base64'):binary>
 -- !query output
 i�
 
@@ -1306,7 +1306,7 @@ select to_binary(
   concat(' b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0',
          'd2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl'), 'base64')
 -- !query schema
-struct<to_binary(concat( b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0, d2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl), base64):binary>
+struct<to_binary(concat(' b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0', 'd2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl'), 'base64'):binary>
 -- !query output
 one two three four five six seven eight nine ten eleven twelve thirteen fourteen fivteen sixteen seventeen eightee
 
@@ -1417,7 +1417,7 @@ org.apache.spark.SparkIllegalArgumentException
 select to_binary(
   '∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)', 'utf-8')
 -- !query schema
-struct<to_binary(∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β), utf-8):binary>
+struct<to_binary('∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)', 'utf-8'):binary>
 -- !query output
 ∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)
 
@@ -1425,7 +1425,7 @@ struct<to_binary(∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: �
 -- !query
 select to_binary('大千世界', 'utf8')
 -- !query schema
-struct<to_binary(大千世界, utf8):binary>
+struct<to_binary('大千世界', 'utf8'):binary>
 -- !query output
 大千世界
 
@@ -1433,7 +1433,7 @@ struct<to_binary(大千世界, utf8):binary>
 -- !query
 select to_binary('', 'utf-8')
 -- !query schema
-struct<to_binary(, utf-8):binary>
+struct<to_binary('', 'utf-8'):binary>
 -- !query output
 
 
@@ -1441,7 +1441,7 @@ struct<to_binary(, utf-8):binary>
 -- !query
 select to_binary('  ', 'utf8')
 -- !query schema
-struct<to_binary(  , utf8):binary>
+struct<to_binary('  ', 'utf8'):binary>
 -- !query output
 
 
@@ -1449,7 +1449,7 @@ struct<to_binary(  , utf8):binary>
 -- !query
 select to_binary('737472696E67')
 -- !query schema
-struct<to_binary(737472696E67):binary>
+struct<to_binary('737472696E67'):binary>
 -- !query output
 string
 
@@ -1457,7 +1457,7 @@ string
 -- !query
 select to_binary('737472696E67', 'hex')
 -- !query schema
-struct<to_binary(737472696E67, hex):binary>
+struct<to_binary('737472696E67', 'hex'):binary>
 -- !query output
 string
 
@@ -1465,7 +1465,7 @@ string
 -- !query
 select to_binary('')
 -- !query schema
-struct<to_binary():binary>
+struct<to_binary(''):binary>
 -- !query output
 
 
@@ -1473,7 +1473,7 @@ struct<to_binary():binary>
 -- !query
 select to_binary('1', 'hex')
 -- !query schema
-struct<to_binary(1, hex):binary>
+struct<to_binary('1', 'hex'):binary>
 -- !query output
 
 
@@ -1481,7 +1481,7 @@ struct<to_binary(1, hex):binary>
 -- !query
 select to_binary('FF')
 -- !query schema
-struct<to_binary(FF):binary>
+struct<to_binary('FF'):binary>
 -- !query output
 �
 
@@ -1489,7 +1489,7 @@ struct<to_binary(FF):binary>
 -- !query
 select to_binary('123', 'hex')
 -- !query schema
-struct<to_binary(123, hex):binary>
+struct<to_binary('123', 'hex'):binary>
 -- !query output
 #
 
@@ -1497,7 +1497,7 @@ struct<to_binary(123, hex):binary>
 -- !query
 select to_binary('12345', 'hex')
 -- !query schema
-struct<to_binary(12345, hex):binary>
+struct<to_binary('12345', 'hex'):binary>
 -- !query output
 #E
 
@@ -1539,7 +1539,7 @@ org.apache.spark.SparkIllegalArgumentException
 -- !query
 select to_binary('abc', concat('utf', '-8'))
 -- !query schema
-struct<to_binary(abc, concat(utf, -8)):binary>
+struct<to_binary('abc', concat('utf', '-8')):binary>
 -- !query output
 abc
 
@@ -1581,7 +1581,7 @@ org.apache.spark.SparkIllegalArgumentException
 -- !query
 select to_binary('abc', 'Hex')
 -- !query schema
-struct<to_binary(abc, Hex):binary>
+struct<to_binary('abc', 'Hex'):binary>
 -- !query output
 
 �
@@ -1590,7 +1590,7 @@ struct<to_binary(abc, Hex):binary>
 -- !query
 select to_binary('abc', null)
 -- !query schema
-struct<to_binary(abc, NULL):binary>
+struct<to_binary('abc', null):binary>
 -- !query output
 NULL
 
@@ -1598,7 +1598,7 @@ NULL
 -- !query
 select to_binary(null, 'utf-8')
 -- !query schema
-struct<to_binary(NULL, utf-8):binary>
+struct<to_binary(null, 'utf-8'):binary>
 -- !query output
 NULL
 
@@ -1606,7 +1606,7 @@ NULL
 -- !query
 select to_binary(null, null)
 -- !query schema
-struct<to_binary(NULL, NULL):binary>
+struct<to_binary(null, null):binary>
 -- !query output
 NULL
 
@@ -1614,7 +1614,7 @@ NULL
 -- !query
 select to_binary(null, cast(null as string))
 -- !query schema
-struct<to_binary(NULL, CAST(NULL AS STRING)):binary>
+struct<to_binary(null, cast(null as string)):binary>
 -- !query output
 NULL
 

@@ -83,7 +83,7 @@ WHERE    t1c IN (SELECT   (SELECT min(t3c) FROM t3)
                  HAVING   count(*) > 1)
 GROUP BY t1a
 -- !query schema
-struct<t1a:string,count(1):bigint>
+struct<t1a:string,count(*):bigint>
 -- !query output
 val1a	2
 
@@ -99,7 +99,7 @@ SELECT null,
 FROM   t1
 WHERE  t1a = 'val1c'
 -- !query schema
-struct<min_t3d:bigint,NULL:timestamp>
+struct<min_t3d:bigint,null:timestamp>
 -- !query output
 10	NULL
 NULL	2017-05-04 01:01:00
@@ -224,7 +224,7 @@ val1e	1	1	1	[19]	[19]	0000000100000000000000010000000100000004000000005D8D6AB900
 -- !query
 SELECT t1c, (SELECT t1c) FROM t1
 -- !query schema
-struct<t1c:int,scalarsubquery(t1c):int>
+struct<t1c:int,(SELECT t1c):int>
 -- !query output
 12	12
 12	12
@@ -243,7 +243,7 @@ NULL	NULL
 -- !query
 SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1
 -- !query schema
-struct<t1c:int,scalarsubquery(t1c, t1c):int>
+struct<t1c:int,(SELECT t1c WHERE t1c = 8):int>
 -- !query output
 12	NULL
 12	NULL
@@ -262,7 +262,7 @@ NULL	NULL
 -- !query
 SELECT t1c, t1d, (SELECT c + d FROM (SELECT t1c AS c, t1d AS d)) FROM t1
 -- !query schema
-struct<t1c:int,t1d:bigint,scalarsubquery(t1c, t1d):bigint>
+struct<t1c:int,t1d:bigint,(SELECT c + d FROM(SELECT t1c AS c, t1d AS d)):bigint>
 -- !query output
 12	10	22
 12	21	33
@@ -281,7 +281,7 @@ NULL	25	NULL
 -- !query
 SELECT t1c, (SELECT SUM(c) FROM (SELECT t1c AS c)) FROM t1
 -- !query schema
-struct<t1c:int,scalarsubquery(t1c):bigint>
+struct<t1c:int,(SELECT SUM(c)FROM(SELECT t1c AS c)):bigint>
 -- !query output
 12	12
 12	12
@@ -300,7 +300,7 @@ NULL	NULL
 -- !query
 SELECT t1a, (SELECT SUM(t2b) FROM t2 JOIN (SELECT t1a AS a) ON t2a = a) FROM t1
 -- !query schema
-struct<t1a:string,scalarsubquery(t1a):bigint>
+struct<t1a:string,(SELECT SUM(t2b)FROM t2 JOIN(SELECT t1a AS a)ON t2a = a):bigint>
 -- !query output
 val1a	NULL
 val1a	NULL
@@ -335,7 +335,7 @@ struct<>
 -- !query
 SELECT c1, (WITH t AS (SELECT 1 AS a) SELECT a + c1 FROM t) FROM t1
 -- !query schema
-struct<c1:int,scalarsubquery(c1):int>
+struct<c1:int,(WITH t AS(SELECT 1 AS a)SELECT a + c1 FROM t):int>
 -- !query output
 0	1
 1	2
@@ -344,7 +344,7 @@ struct<c1:int,scalarsubquery(c1):int>
 -- !query
 SELECT c1, (WITH t AS (SELECT * FROM t2 WHERE c1 = t1.c1) SELECT SUM(c2) FROM t) FROM t1
 -- !query schema
-struct<c1:int,scalarsubquery(c1):bigint>
+struct<c1:int,(WITH t AS(SELECT * FROM t2 WHERE c1 = t1 . c1)SELECT SUM(c2)FROM t):bigint>
 -- !query output
 0	5
 1	NULL
@@ -357,7 +357,7 @@ SELECT c1, (
     SELECT SUM(c2) FROM t4
 ) FROM t1
 -- !query schema
-struct<c1:int,scalarsubquery(c1):bigint>
+struct<c1:int,(WITH t3 AS(SELECT c1 + 1 AS c1, c2 + 1 AS c2 FROM t2), t4 AS(SELECT * FROM t3 WHERE t1 . c1 = c1)SELECT SUM(c2)FROM t4):bigint>
 -- !query output
 0	NULL
 1	7
@@ -370,7 +370,7 @@ SELECT c1, (
     WHERE c1 = t1.c1
 ) FROM t1
 -- !query schema
-struct<c1:int,scalarsubquery(c1):bigint>
+struct<c1:int,(WITH t AS(SELECT * FROM t2)SELECT SUM(c2)FROM(SELECT c1, c2 FROM t UNION SELECT c2, c1 FROM t)r(c1, c2)WHERE c1 = t1 . c1):bigint>
 -- !query output
 0	5
 1	NULL
@@ -392,7 +392,7 @@ struct<c1:int,c2:int>
 WITH t AS (SELECT 1 AS a)
 SELECT c1, (SELECT a FROM t WHERE a = c1) FROM t1
 -- !query schema
-struct<c1:int,scalarsubquery(c1):int>
+struct<c1:int,(SELECT a FROM t WHERE a = c1):int>
 -- !query output
 0	NULL
 1	1
@@ -411,7 +411,7 @@ SELECT c1, (
     ) WHERE c1 = v1.c1
 ) FROM v1
 -- !query schema
-struct<c1:int,scalarsubquery(c1):bigint>
+struct<c1:int,(WITH v3 AS(SELECT c1, c2, rand(0)c5 FROM t2)SELECT COUNT(*)FROM(SELECT * FROM v2 WHERE c1 > 0 UNION SELECT * FROM v2 WHERE c2 > 0 UNION SELECT * FROM v3 WHERE c2 > 0)WHERE c1 = v1 . c1):bigint>
 -- !query output
 0	3
 1	1
@@ -493,7 +493,7 @@ A	C1
 -- !query
 SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 > t2.c1) FROM t1
 -- !query schema
-struct<scalarsubquery(c1):int>
+struct<(SELECT min(c2)FROM t2 WHERE t1 . c1 > t2 . c1):int>
 -- !query output
 2
 NULL
@@ -502,7 +502,7 @@ NULL
 -- !query
 SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 >= t2.c1 AND t1.c2 < t2.c2) FROM t1
 -- !query schema
-struct<scalarsubquery(c1, c2):int>
+struct<(SELECT min(c2)FROM t2 WHERE t1 . c1 >= t2 . c1 AND t1 . c2 < t2 . c2):int>
 -- !query output
 2
 3
@@ -511,7 +511,7 @@ struct<scalarsubquery(c1, c2):int>
 -- !query
 SELECT (SELECT count(*) FROM t2 WHERE t1.c1 > t2.c1) FROM t1
 -- !query schema
-struct<scalarsubquery(c1):bigint>
+struct<(SELECT count(*)FROM t2 WHERE t1 . c1 > t2 . c1):bigint>
 -- !query output
 0
 2
@@ -524,7 +524,7 @@ SELECT c, (
     WHERE t1.c = substring(t2.c, 1, 1)
 ) FROM (VALUES ('a'), ('b')) t1(c)
 -- !query schema
-struct<c:string,scalarsubquery(c):bigint>
+struct<c:string,(SELECT count(*)FROM(VALUES('ab'),('abc'),('bc'))t2(c)WHERE t1 . c = substring(t2 . c, 1, 1)):bigint>
 -- !query output
 a	2
 b	1
@@ -537,6 +537,6 @@ SELECT c, (
     WHERE a + b = c
 ) FROM (VALUES (6)) t2(c)
 -- !query schema
-struct<c:int,scalarsubquery(c):bigint>
+struct<c:int,(SELECT count(*)FROM(VALUES(0, 6),(1, 5),(2, 4),(3, 3))t1(a, b)WHERE a + b = c):bigint>
 -- !query output
 6	4

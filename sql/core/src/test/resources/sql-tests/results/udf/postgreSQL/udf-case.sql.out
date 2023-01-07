@@ -173,7 +173,7 @@ struct<None:string,NULL on no matches:int>
 -- !query
 SELECT CASE WHEN udf(1=0) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN udf((1 = 0)) THEN (1 / 0) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:double>
+struct<CASE WHEN udf(1 = 0)THEN 1 / 0 WHEN 1 = 1 THEN 1 ELSE 2 / 0 END:double>
 -- !query output
 1.0
 
@@ -181,7 +181,7 @@ struct<CASE WHEN udf((1 = 0)) THEN (1 / 0) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:
 -- !query
 SELECT CASE 1 WHEN 0 THEN 1/udf(0) WHEN 1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN (1 = 0) THEN (1 / udf(0)) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:double>
+struct<CASE 1 WHEN 0 THEN 1 / udf(0)WHEN 1 THEN 1 ELSE 2 / 0 END:double>
 -- !query output
 1.0
 
@@ -189,7 +189,7 @@ struct<CASE WHEN (1 = 0) THEN (1 / udf(0)) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:
 -- !query
 SELECT CASE 'a' WHEN 'a' THEN udf(1) ELSE udf(2) END
 -- !query schema
-struct<CASE WHEN (a = a) THEN udf(1) ELSE udf(2) END:int>
+struct<CASE 'a' WHEN 'a' THEN udf(1)ELSE udf(2)END:int>
 -- !query output
 1
 
@@ -280,7 +280,7 @@ struct<i:int,f:double>
 SELECT udf(COALESCE(a.f, b.i, b.j))
   FROM CASE_TBL a, CASE2_TBL b
 -- !query schema
-struct<udf(coalesce(f, i, j)):double>
+struct<udf(COALESCE(a . f, b . i, b . j)):double>
 -- !query output
 -30.3
 -30.3

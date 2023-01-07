@@ -901,7 +901,7 @@ NULL	NULL	NULL	NULL
 -- !query
 select concat_ws('|', c7, c8), concat_ws('|', c7, v), concat_ws('|', c7, s), concat_ws('|', v, s) from char_tbl4
 -- !query schema
-struct<concat_ws(|, c7, c8):string,concat_ws(|, c7, v):string,concat_ws(|, c7, s):string,concat_ws(|, v, s):string>
+struct<concat_ws('|', c7, c8):string,concat_ws('|', c7, v):string,concat_ws('|', c7, s):string,concat_ws('|', v, s):string>
 -- !query output
 			
 	S		S
@@ -933,7 +933,7 @@ NetEaseNetEase 	NetEaseSpark-	NetEaseNetEase	Spark-NetEase
 -- !query
 select like(c7, 'Ne     _'), like(c8, 'Ne     _') from char_tbl4
 -- !query schema
-struct<c7 LIKE Ne     _:boolean,c8 LIKE Ne     _:boolean>
+struct<like(c7, 'Ne     _'):boolean,like(c8, 'Ne     _'):boolean>
 -- !query output
 NULL	NULL
 NULL	NULL
@@ -949,7 +949,7 @@ false	true
 -- !query
 select like(v, 'Spark_') from char_tbl4
 -- !query schema
-struct<v LIKE Spark_:boolean>
+struct<like(v, 'Spark_'):boolean>
 -- !query output
 NULL
 false
@@ -965,7 +965,7 @@ true
 -- !query
 select c7 = c8, upper(c7) = upper(c8), lower(c7) = lower(c8) from char_tbl4 where s = 'NetEase'
 -- !query schema
-struct<(c7 = c8):boolean,(upper(c7) = upper(c8)):boolean,(lower(c7) = lower(c8)):boolean>
+struct<c7 = c8:boolean,upper(c7)= upper(c8):boolean,lower(c7)= lower(c8):boolean>
 -- !query output
 true	false	false
 
@@ -973,7 +973,7 @@ true	false	false
 -- !query
 select c7 = s, upper(c7) = upper(s), lower(c7) = lower(s) from char_tbl4 where s = 'NetEase'
 -- !query schema
-struct<(c7 = s):boolean,(upper(c7) = upper(s)):boolean,(lower(c7) = lower(s)):boolean>
+struct<c7 = s:boolean,upper(c7)= upper(s):boolean,lower(c7)= lower(s):boolean>
 -- !query output
 true	true	true
 
@@ -981,7 +981,7 @@ true	true	true
 -- !query
 select c7 = 'NetEase', upper(c7) = upper('NetEase'), lower(c7) = lower('NetEase') from char_tbl4 where s = 'NetEase'
 -- !query schema
-struct<(c7 = NetEase):boolean,(upper(c7) = upper(NetEase)):boolean,(lower(c7) = lower(NetEase)):boolean>
+struct<c7 = 'NetEase':boolean,upper(c7)= upper('NetEase'):boolean,lower(c7)= lower('NetEase'):boolean>
 -- !query output
 true	true	true
 
@@ -989,7 +989,7 @@ true	true	true
 -- !query
 select printf('Hey, %s%s%s%s', c7, c8, v, s) from char_tbl4
 -- !query schema
-struct<printf(Hey, %s%s%s%s, c7, c8, v, s):string>
+struct<printf('Hey, %s%s%s%s', c7, c8, v, s):string>
 -- !query output
 Hey, N      N       N N
 Hey, Ne     Ne      SpNe
@@ -1021,7 +1021,7 @@ NetEaseNetEase	NetEase NetEase 	Spark-Spark-	NetEaseNetEase
 -- !query
 select replace(c7, 'Net', 'Apache'), replace(c8, 'Net', 'Apache'), replace(v, 'Spark', 'Kyuubi'), replace(s, 'Net', 'Apache') from char_tbl4
 -- !query schema
-struct<replace(c7, Net, Apache):string,replace(c8, Net, Apache):string,replace(v, Spark, Kyuubi):string,replace(s, Net, Apache):string>
+struct<replace(c7, 'Net', 'Apache'):string,replace(c8, 'Net', 'Apache'):string,replace(v, 'Spark', 'Kyuubi'):string,replace(s, 'Net', 'Apache'):string>
 -- !query output
 Apache    	Apache     	Spa  	Apache  
 ApacheE   	ApacheE    	Spar	ApacheE
@@ -1037,7 +1037,7 @@ Ne     	Ne      	Sp	Ne
 -- !query
 select rpad(c7, 10), rpad(c8, 5), rpad(v, 5), rpad(s, 5)  from char_tbl4
 -- !query schema
-struct<rpad(c7, 10,  ):string,rpad(c8, 5,  ):string,rpad(v, 5,  ):string,rpad(s, 5,  ):string>
+struct<rpad(c7, 10):string,rpad(c8, 5):string,rpad(v, 5):string,rpad(s, 5):string>
 -- !query output
 N         	N    	N    	N    
 NULL	NULL	NULL	NULL
@@ -1069,7 +1069,7 @@ NetEase	NetEase	Spark-	NetEase
 -- !query
 select split(c7, 'e'), split(c8, 'e'), split(v, 'a'), split(s, 'e') from char_tbl4
 -- !query schema
-struct<split(c7, e, -1):array<string>,split(c8, e, -1):array<string>,split(v, a, -1):array<string>,split(s, e, -1):array<string>>
+struct<split(c7, 'e'):array<string>,split(c8, 'e'):array<string>,split(v, 'a'):array<string>,split(s, 'e'):array<string>>
 -- !query output
 NULL	NULL	NULL	NULL
 NULL	NULL	["S"]	NULL
@@ -1085,7 +1085,7 @@ NULL	NULL	["S"]	NULL
 -- !query
 select substring(c7, 2), substring(c8, 2), substring(v, 3), substring(s, 2) from char_tbl4
 -- !query schema
-struct<substring(c7, 2, 2147483647):string,substring(c8, 2, 2147483647):string,substring(v, 3, 2147483647):string,substring(s, 2, 2147483647):string>
+struct<substring(c7, 2):string,substring(c8, 2):string,substring(v, 3):string,substring(s, 2):string>
 -- !query output
       	       		
 NULL	NULL		NULL
@@ -1189,7 +1189,7 @@ struct<>
 -- !query
 select ascii('§'), ascii('÷'), ascii('×10')
 -- !query schema
-struct<ascii(§):int,ascii(÷):int,ascii(×10):int>
+struct<ascii('§'):int,ascii('÷'):int,ascii('×10'):int>
 -- !query output
 167	247	215
 

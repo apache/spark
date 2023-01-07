@@ -2,7 +2,7 @@
 -- !query
 select null, Null, nUll
 -- !query schema
-struct<NULL:void,NULL:void,NULL:void>
+struct<null:void,Null:void,nUll:void>
 -- !query output
 NULL	NULL	NULL
 
@@ -10,7 +10,7 @@ NULL	NULL	NULL
 -- !query
 select true, tRue, false, fALse
 -- !query schema
-struct<true:boolean,true:boolean,false:boolean,false:boolean>
+struct<true:boolean,tRue:boolean,false:boolean,fALse:boolean>
 -- !query output
 true	true	false	false
 
@@ -18,7 +18,7 @@ true	true	false	false
 -- !query
 select 1Y
 -- !query schema
-struct<1:tinyint>
+struct<1Y:tinyint>
 -- !query output
 1
 
@@ -26,7 +26,7 @@ struct<1:tinyint>
 -- !query
 select 127Y, -128Y
 -- !query schema
-struct<127:tinyint,-128:tinyint>
+struct<127Y:tinyint,- 128Y:tinyint>
 -- !query output
 127	-128
 
@@ -58,7 +58,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select 1S
 -- !query schema
-struct<1:smallint>
+struct<1S:smallint>
 -- !query output
 1
 
@@ -66,7 +66,7 @@ struct<1:smallint>
 -- !query
 select 32767S, -32768S
 -- !query schema
-struct<32767:smallint,-32768:smallint>
+struct<32767S:smallint,- 32768S:smallint>
 -- !query output
 32767	-32768
 
@@ -98,7 +98,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select 1L, 2147483648L
 -- !query schema
-struct<1:bigint,2147483648:bigint>
+struct<1L:bigint,2147483648L:bigint>
 -- !query output
 1	2147483648
 
@@ -106,7 +106,7 @@ struct<1:bigint,2147483648:bigint>
 -- !query
 select 9223372036854775807L, -9223372036854775808L
 -- !query schema
-struct<9223372036854775807:bigint,-9223372036854775808:bigint>
+struct<9223372036854775807L:bigint,- 9223372036854775808L:bigint>
 -- !query output
 9223372036854775807	-9223372036854775808
 
@@ -138,7 +138,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select 1, -1
 -- !query schema
-struct<1:int,-1:int>
+struct<1:int,- 1:int>
 -- !query output
 1	-1
 
@@ -146,7 +146,7 @@ struct<1:int,-1:int>
 -- !query
 select 2147483647, -2147483648
 -- !query schema
-struct<2147483647:int,-2147483648:int>
+struct<2147483647:int,- 2147483648:int>
 -- !query output
 2147483647	-2147483648
 
@@ -154,7 +154,7 @@ struct<2147483647:int,-2147483648:int>
 -- !query
 select 9223372036854775807, -9223372036854775808
 -- !query schema
-struct<9223372036854775807:bigint,-9223372036854775808:bigint>
+struct<9223372036854775807:bigint,- 9223372036854775808:bigint>
 -- !query output
 9223372036854775807	-9223372036854775808
 
@@ -162,7 +162,7 @@ struct<9223372036854775807:bigint,-9223372036854775808:bigint>
 -- !query
 select 9223372036854775808, -9223372036854775809
 -- !query schema
-struct<9223372036854775808:decimal(19,0),-9223372036854775809:decimal(19,0)>
+struct<9223372036854775808:decimal(19,0),- 9223372036854775809:decimal(19,0)>
 -- !query output
 9223372036854775808	-9223372036854775809
 
@@ -200,7 +200,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select 1F, 1.2F, .10f, 0.10f
 -- !query schema
-struct<1.0:float,1.2:float,0.1:float,0.1:float>
+struct<1F:float,1.2F:float,.10f:float,0.10f:float>
 -- !query output
 1.0	1.2	0.1	0.1
 
@@ -208,7 +208,7 @@ struct<1.0:float,1.2:float,0.1:float,0.1:float>
 -- !query
 select -1F, -1.2F, -.10F, -0.10F
 -- !query schema
-struct<-1.0:float,-1.2:float,-0.1:float,-0.1:float>
+struct<- 1F:float,- 1.2F:float,- .10F:float,- 0.10F:float>
 -- !query output
 -1.0	-1.2	-0.1	-0.1
 
@@ -240,7 +240,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1
 -- !query schema
-struct<1.0:double,1.2:double,1.0E10:double,150000.0:double,0.1:double,0.1:double,10000.0:double,90.0:double,90.0:double,90.0:double,90.0:double>
+struct<1D:double,1.2D:double,1e10:double,1.5e5:double,.10D:double,0.10D:double,.1e5:double,.9e+2:double,0.9e+2:double,900e-1:double,9.e+1:double>
 -- !query output
 1.0	1.2	1.0E10	150000.0	0.1	0.1	10000.0	90.0	90.0	90.0	90.0
 
@@ -248,7 +248,7 @@ struct<1.0:double,1.2:double,1.0E10:double,150000.0:double,0.1:double,0.1:double
 -- !query
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5
 -- !query schema
-struct<-1.0:double,-1.2:double,-1.0E10:double,-150000.0:double,-0.1:double,-0.1:double,-10000.0:double>
+struct<- 1D:double,- 1.2D:double,- 1e10:double,- 1.5e5:double,- .10D:double,- 0.10D:double,- .1e5:double>
 -- !query output
 -1.0	-1.2	-1.0E10	-150000.0	-0.1	-0.1	-10000.0
 
@@ -296,7 +296,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select 0.3, -0.8, .5, -.18, 0.1111, .1111
 -- !query schema
-struct<0.3:decimal(1,1),-0.8:decimal(1,1),0.5:decimal(1,1),-0.18:decimal(2,2),0.1111:decimal(4,4),0.1111:decimal(4,4)>
+struct<0.3:decimal(1,1),- 0.8:decimal(1,1),.5:decimal(1,1),- .18:decimal(2,2),0.1111:decimal(4,4),.1111:decimal(4,4)>
 -- !query output
 0.3	-0.8	0.5	-0.18	0.1111	0.1111
 
@@ -312,7 +312,7 @@ struct<F:decimal(1,1),D:decimal(1,1),BD:decimal(1,1)>
 -- !query
 select 123456789012345678901234567890123456789e10d, 123456789012345678901234567890123456789.1e10d
 -- !query schema
-struct<1.2345678901234568E48:double,1.2345678901234568E48:double>
+struct<123456789012345678901234567890123456789e10d:double,123456789012345678901234567890123456789.1e10d:double>
 -- !query output
 1.2345678901234568E48	1.2345678901234568E48
 
@@ -320,7 +320,7 @@ struct<1.2345678901234568E48:double,1.2345678901234568E48:double>
 -- !query
 select "Hello Peter!", 'hello lee!'
 -- !query schema
-struct<Hello Peter!:string,hello lee!:string>
+struct<"Hello Peter!":string,'hello lee!':string>
 -- !query output
 Hello Peter!	hello lee!
 
@@ -328,7 +328,7 @@ Hello Peter!	hello lee!
 -- !query
 select 'hello' 'world', 'hello' " " 'lee'
 -- !query schema
-struct<helloworld:string,hello lee:string>
+struct<'hello' 'world':string,'hello' " " 'lee':string>
 -- !query output
 helloworld	hello lee
 
@@ -336,7 +336,7 @@ helloworld	hello lee
 -- !query
 select "hello 'peter'"
 -- !query schema
-struct<hello 'peter':string>
+struct<"hello 'peter'":string>
 -- !query output
 hello 'peter'
 
@@ -344,7 +344,7 @@ hello 'peter'
 -- !query
 select 'pattern%', 'no-pattern\%', 'pattern\\%', 'pattern\\\%'
 -- !query schema
-struct<pattern%:string,no-pattern\%:string,pattern\%:string,pattern\\%:string>
+struct<'pattern%':string,'no-pattern\%':string,'pattern\\%':string,'pattern\\\%':string>
 -- !query output
 pattern%	no-pattern\%	pattern\%	pattern\\%
 
@@ -352,8 +352,7 @@ pattern%	no-pattern\%	pattern\%	pattern\\%
 -- !query
 select '\'', '"', '\n', '\r', '\t', 'Z'
 -- !query schema
-struct<':string,":string,
-:string,:string,	:string,Z:string>
+struct<'\'':string,'"':string,'\n':string,'\r':string,'\t':string,'Z':string>
 -- !query output
 '	"	
 				Z
@@ -362,7 +361,7 @@ struct<':string,":string,
 -- !query
 select '\110\145\154\154\157\041'
 -- !query schema
-struct<Hello!:string>
+struct<'\110\145\154\154\157\041':string>
 -- !query output
 Hello!
 
@@ -370,7 +369,7 @@ Hello!
 -- !query
 select '\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029'
 -- !query schema
-struct<World :):string>
+struct<'\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029':string>
 -- !query output
 World :)
 
@@ -378,7 +377,7 @@ World :)
 -- !query
 select dAte '2016-03-12'
 -- !query schema
-struct<DATE '2016-03-12':date>
+struct<dAte '2016-03-12':date>
 -- !query output
 2016-03-12
 
@@ -409,7 +408,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select tImEstAmp '2016-03-11 20:54:00.000'
 -- !query schema
-struct<TIMESTAMP '2016-03-11 20:54:00':timestamp>
+struct<tImEstAmp '2016-03-11 20:54:00.000':timestamp>
 -- !query output
 2016-03-11 20:54:00
 
@@ -462,7 +461,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select 90912830918230182310293801923652346786BD, 123.0E-28BD, 123.08BD
 -- !query schema
-struct<90912830918230182310293801923652346786:decimal(38,0),1.230E-26:decimal(29,29),123.08:decimal(5,2)>
+struct<90912830918230182310293801923652346786BD:decimal(38,0),123.0E-28BD:decimal(29,29),123.08BD:decimal(5,2)>
 -- !query output
 90912830918230182310293801923652346786	0.00000000000000000000000001230	123.08
 
@@ -491,7 +490,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select x'2379ACFe'
 -- !query schema
-struct<X'2379ACFE':binary>
+struct<x '2379ACFe':binary>
 -- !query output
 #y��
 
@@ -522,7 +521,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8
 -- !query schema
-struct<3.14:decimal(3,2),-3.14:decimal(3,2),3.14E8:double,3.14E-8:double,-3.14E8:double,-3.14E-8:double,3.14E8:double,3.14E8:double,3.14E-8:double>
+struct<3.14:decimal(3,2),- 3.14:decimal(3,2),3.14e8:double,3.14e-8:double,- 3.14e8:double,- 3.14e-8:double,3.14e+8:double,3.14E8:double,3.14E-8:double>
 -- !query output
 3.14	-3.14	3.14E8	3.14E-8	-3.14E8	-3.14E-8	3.14E8	3.14E8	3.14E-8
 
@@ -580,7 +579,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select +interval '1 day'
 -- !query schema
-struct<(+ INTERVAL '1' DAY):interval day>
+struct<+ interval '1 day':interval day>
 -- !query output
 1 00:00:00.000000000
 

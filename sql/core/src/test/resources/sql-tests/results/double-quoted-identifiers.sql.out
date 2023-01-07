@@ -301,7 +301,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT "hello"
 -- !query schema
-struct<hello:string>
+struct<"hello":string>
 -- !query output
 hello
 
@@ -325,7 +325,7 @@ struct<>
 -- !query
 SELECT INTERVAL "1" YEAR
 -- !query schema
-struct<INTERVAL '1' YEAR:interval year>
+struct<INTERVAL "1" YEAR:interval year>
 -- !query output
 1-0
 
@@ -333,7 +333,7 @@ struct<INTERVAL '1' YEAR:interval year>
 -- !query
 SELECT 'hello'
 -- !query schema
-struct<hello:string>
+struct<'hello':string>
 -- !query output
 hello
 

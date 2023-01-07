@@ -12,7 +12,7 @@ struct<>
 -- !query
 SELECT udf(a + b), b, udf(SUM(a - b)) FROM testData GROUP BY udf(a + b), b WITH CUBE
 -- !query schema
-struct<udf((a + b)):int,b:int,udf(sum((a - b))):bigint>
+struct<udf(a + b):int,b:int,udf(SUM(a - b)):bigint>
 -- !query output
 2	1	0
 2	NULL	0
@@ -32,7 +32,7 @@ NULL	NULL	3
 -- !query
 SELECT udf(a), udf(b), SUM(b) FROM testData GROUP BY udf(a), b WITH CUBE
 -- !query schema
-struct<udf(a):int,udf(b):int,sum(b):bigint>
+struct<udf(a):int,udf(b):int,SUM(b):bigint>
 -- !query output
 1	1	1
 1	2	2
@@ -51,7 +51,7 @@ NULL	NULL	9
 -- !query
 SELECT udf(a + b), b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 -- !query schema
-struct<udf((a + b)):int,b:int,sum((a - b)):bigint>
+struct<udf(a + b):int,b:int,SUM(a - b):bigint>
 -- !query output
 2	1	0
 2	NULL	0
@@ -69,7 +69,7 @@ NULL	NULL	3
 -- !query
 SELECT udf(a), b, udf(SUM(b)) FROM testData GROUP BY udf(a), b WITH ROLLUP
 -- !query schema
-struct<udf(a):int,b:int,udf(sum(b)):bigint>
+struct<udf(a):int,b:int,udf(SUM(b)):bigint>
 -- !query output
 1	1	1
 1	2	2
@@ -96,7 +96,7 @@ struct<>
 -- !query
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year) ORDER BY udf(course), year
 -- !query schema
-struct<course:string,year:int,sum(earnings):bigint>
+struct<course:string,year:int,SUM(earnings):bigint>
 -- !query output
 NULL	NULL	113000
 Java	NULL	50000
@@ -110,7 +110,7 @@ dotNET	2013	48000
 -- !query
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year) ORDER BY course, udf(year)
 -- !query schema
-struct<course:string,year:int,sum(earnings):bigint>
+struct<course:string,year:int,SUM(earnings):bigint>
 -- !query output
 NULL	NULL	113000
 NULL	2012	35000
@@ -126,7 +126,7 @@ dotNET	2013	48000
 -- !query
 SELECT course, udf(year), SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year)
 -- !query schema
-struct<course:string,udf(year):int,sum(earnings):bigint>
+struct<course:string,udf(year):int,SUM(earnings):bigint>
 -- !query output
 Java	NULL	50000
 NULL	2012	35000
@@ -137,7 +137,7 @@ dotNET	NULL	63000
 -- !query
 SELECT course, year, udf(SUM(earnings)) FROM courseSales GROUP BY course, year GROUPING SETS(course)
 -- !query schema
-struct<course:string,year:int,udf(sum(earnings)):bigint>
+struct<course:string,year:int,udf(SUM(earnings)):bigint>
 -- !query output
 Java	NULL	50000
 dotNET	NULL	63000
@@ -146,7 +146,7 @@ dotNET	NULL	63000
 -- !query
 SELECT udf(course), year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(year)
 -- !query schema
-struct<udf(course):string,year:int,sum(earnings):bigint>
+struct<udf(course):string,year:int,SUM(earnings):bigint>
 -- !query output
 NULL	2012	35000
 NULL	2013	78000
@@ -172,7 +172,7 @@ dotNET	63000
 SELECT course, SUM(earnings) AS sum, GROUPING_ID(course, earnings) FROM courseSales
 GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER BY udf(course), sum
 -- !query schema
-struct<course:string,sum:bigint,grouping_id(course, earnings):bigint>
+struct<course:string,sum:bigint,GROUPING_ID(course, earnings):bigint>
 -- !query output
 NULL	113000	3
 Java	20000	0
@@ -188,7 +188,7 @@ dotNET	63000	1
 SELECT udf(course), udf(year), GROUPING(course), GROUPING(year), GROUPING_ID(course, year) FROM courseSales
 GROUP BY CUBE(course, year)
 -- !query schema
-struct<udf(course):string,udf(year):int,grouping(course):tinyint,grouping(year):tinyint,grouping_id(course, year):bigint>
+struct<udf(course):string,udf(year):int,GROUPING(course):tinyint,GROUPING(year):tinyint,GROUPING_ID(course, year):bigint>
 -- !query output
 Java	2012	0	0	0
 Java	2013	0	0	0
@@ -302,7 +302,7 @@ dotNET	NULL
 SELECT course, year, GROUPING(course), GROUPING(year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query schema
-struct<course:string,year:int,grouping(course):tinyint,grouping(year):tinyint>
+struct<course:string,year:int,GROUPING(course):tinyint,GROUPING(year):tinyint>
 -- !query output
 Java	2012	0	0
 Java	2013	0	0
@@ -319,7 +319,7 @@ NULL	NULL	1	1
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query schema
-struct<course:string,year:int,grouping_id(course, year):bigint>
+struct<course:string,year:int,GROUPING_ID(course, year):bigint>
 -- !query output
 Java	2012	0
 Java	2013	0
@@ -373,7 +373,7 @@ NULL	NULL
 -- !query
 SELECT udf(a + b) AS k1, udf(b) AS k2, SUM(a - b) FROM testData GROUP BY CUBE(k1, k2)
 -- !query schema
-struct<k1:int,k2:int,sum((a - b)):bigint>
+struct<k1:int,k2:int,SUM(a - b):bigint>
 -- !query output
 2	1	0
 2	NULL	0
@@ -393,7 +393,7 @@ NULL	NULL	3
 -- !query
 SELECT udf(udf(a + b)) AS k, b, SUM(a - b) FROM testData GROUP BY ROLLUP(k, b)
 -- !query schema
-struct<k:int,b:int,sum((a - b)):bigint>
+struct<k:int,b:int,SUM(a - b):bigint>
 -- !query output
 2	1	0
 2	NULL	0
@@ -411,7 +411,7 @@ NULL	NULL	3
 -- !query
 SELECT udf(a + b), udf(udf(b)) AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
 -- !query schema
-struct<udf((a + b)):int,k:int,sum((a - b)):bigint>
+struct<udf(a + b):int,k:int,SUM(a - b):bigint>
 -- !query output
 NULL	1	3
 NULL	2	0

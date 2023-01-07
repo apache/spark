@@ -289,7 +289,7 @@ struct<five:string,f1:smallint,x:double>
 -- !query
 SELECT string(shiftleft(smallint(-1), 15))
 -- !query schema
-struct<shiftleft(-1, 15):string>
+struct<string(shiftleft(smallint(- 1), 15)):string>
 -- !query output
 -32768
 
@@ -297,7 +297,7 @@ struct<shiftleft(-1, 15):string>
 -- !query
 SELECT string(smallint(shiftleft(smallint(-1), 15))+1)
 -- !query schema
-struct<(shiftleft(-1, 15) + 1):string>
+struct<string(smallint(shiftleft(smallint(- 1), 15))+ 1):string>
 -- !query output
 -32767
 
@@ -305,7 +305,7 @@ struct<(shiftleft(-1, 15) + 1):string>
 -- !query
 SELECT smallint(-32768) % smallint(-1)
 -- !query schema
-struct<(-32768 % -1):smallint>
+struct<smallint(- 32768)% smallint(- 1):smallint>
 -- !query output
 0
 

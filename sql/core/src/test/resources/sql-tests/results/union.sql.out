@@ -106,7 +106,7 @@ SELECT map(1, 2), 'str'
 UNION ALL
 SELECT map(1, 2, 3, NULL), 1
 -- !query schema
-struct<map(1, 2):map<int,int>,str:string>
+struct<map(1, 2):map<int,int>,'str':string>
 -- !query output
 {1:2,3:null}	1
 {1:2}	str
@@ -117,7 +117,7 @@ SELECT array(1, 2), 'str'
 UNION ALL
 SELECT array(1, 2, 3, NULL), 1
 -- !query schema
-struct<array(1, 2):array<int>,str:string>
+struct<array(1, 2):array<int>,'str':string>
 -- !query output
 [1,2,3,null]	1
 [1,2]	str
@@ -151,7 +151,7 @@ SELECT SUM(t.v) FROM (
   SELECT v + v AS v FROM t3
 ) t
 -- !query schema
-struct<sum(v):decimal(21,0)>
+struct<SUM(t . v):decimal(21,0)>
 -- !query output
 3
 

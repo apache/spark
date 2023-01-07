@@ -10,7 +10,7 @@ struct<>
 -- !query
 SELECT cast(1 as binary) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) = 1):boolean>
+struct<cast(1 as binary)= '1':boolean>
 -- !query output
 false
 
@@ -18,7 +18,7 @@ false
 -- !query
 SELECT cast(1 as binary) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) > 2):boolean>
+struct<cast(1 as binary)> '2':boolean>
 -- !query output
 false
 
@@ -26,7 +26,7 @@ false
 -- !query
 SELECT cast(1 as binary) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) >= 2):boolean>
+struct<cast(1 as binary)>= '2':boolean>
 -- !query output
 false
 
@@ -34,7 +34,7 @@ false
 -- !query
 SELECT cast(1 as binary) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) < 2):boolean>
+struct<cast(1 as binary)< '2':boolean>
 -- !query output
 true
 
@@ -42,7 +42,7 @@ true
 -- !query
 SELECT cast(1 as binary) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) <= 2):boolean>
+struct<cast(1 as binary)<= '2':boolean>
 -- !query output
 true
 
@@ -50,7 +50,7 @@ true
 -- !query
 SELECT cast(1 as binary) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS BINARY) = 2)):boolean>
+struct<cast(1 as binary)<> '2':boolean>
 -- !query output
 true
 
@@ -58,7 +58,7 @@ true
 -- !query
 SELECT cast(1 as binary) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as binary)= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -66,7 +66,7 @@ NULL
 -- !query
 SELECT cast(1 as binary) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as binary)> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -74,7 +74,7 @@ NULL
 -- !query
 SELECT cast(1 as binary) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as binary)>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -82,7 +82,7 @@ NULL
 -- !query
 SELECT cast(1 as binary) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as binary)< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -90,7 +90,7 @@ NULL
 -- !query
 SELECT cast(1 as binary) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as binary)<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -98,7 +98,7 @@ NULL
 -- !query
 SELECT cast(1 as binary) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS BINARY) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as binary)<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -106,7 +106,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as binary) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS BINARY)):boolean>
+struct<'1' = cast(1 as binary):boolean>
 -- !query output
 false
 
@@ -114,7 +114,7 @@ false
 -- !query
 SELECT '2' > cast(1 as binary) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS BINARY)):boolean>
+struct<'2' > cast(1 as binary):boolean>
 -- !query output
 true
 
@@ -122,7 +122,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as binary) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS BINARY)):boolean>
+struct<'2' >= cast(1 as binary):boolean>
 -- !query output
 true
 
@@ -130,7 +130,7 @@ true
 -- !query
 SELECT '2' < cast(1 as binary) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS BINARY)):boolean>
+struct<'2' < cast(1 as binary):boolean>
 -- !query output
 false
 
@@ -138,7 +138,7 @@ false
 -- !query
 SELECT '2' <= cast(1 as binary) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS BINARY)):boolean>
+struct<'2' <= cast(1 as binary):boolean>
 -- !query output
 false
 
@@ -146,7 +146,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as binary) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS BINARY))):boolean>
+struct<'2' <> cast(1 as binary):boolean>
 -- !query output
 true
 
@@ -154,7 +154,7 @@ true
 -- !query
 SELECT cast(null as string) = cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS BINARY)):boolean>
+struct<cast(null as string)= cast(1 as binary):boolean>
 -- !query output
 NULL
 
@@ -162,7 +162,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS BINARY)):boolean>
+struct<cast(null as string)> cast(1 as binary):boolean>
 -- !query output
 NULL
 
@@ -170,7 +170,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS BINARY)):boolean>
+struct<cast(null as string)>= cast(1 as binary):boolean>
 -- !query output
 NULL
 
@@ -178,7 +178,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS BINARY)):boolean>
+struct<cast(null as string)< cast(1 as binary):boolean>
 -- !query output
 NULL
 
@@ -186,7 +186,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS BINARY)):boolean>
+struct<cast(null as string)<= cast(1 as binary):boolean>
 -- !query output
 NULL
 
@@ -194,7 +194,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as binary) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS BINARY))):boolean>
+struct<cast(null as string)<> cast(1 as binary):boolean>
 -- !query output
 NULL
 
@@ -202,7 +202,7 @@ NULL
 -- !query
 SELECT cast(1 as tinyint) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) = 1):boolean>
+struct<cast(1 as tinyint)= '1':boolean>
 -- !query output
 true
 
@@ -210,7 +210,7 @@ true
 -- !query
 SELECT cast(1 as tinyint) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) > 2):boolean>
+struct<cast(1 as tinyint)> '2':boolean>
 -- !query output
 false
 
@@ -218,7 +218,7 @@ false
 -- !query
 SELECT cast(1 as tinyint) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) >= 2):boolean>
+struct<cast(1 as tinyint)>= '2':boolean>
 -- !query output
 false
 
@@ -226,7 +226,7 @@ false
 -- !query
 SELECT cast(1 as tinyint) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) < 2):boolean>
+struct<cast(1 as tinyint)< '2':boolean>
 -- !query output
 true
 
@@ -234,7 +234,7 @@ true
 -- !query
 SELECT cast(1 as tinyint) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) <= 2):boolean>
+struct<cast(1 as tinyint)<= '2':boolean>
 -- !query output
 true
 
@@ -242,7 +242,7 @@ true
 -- !query
 SELECT cast(1 as tinyint) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS TINYINT) = 2)):boolean>
+struct<cast(1 as tinyint)<> '2':boolean>
 -- !query output
 true
 
@@ -250,7 +250,7 @@ true
 -- !query
 SELECT cast(1 as tinyint) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as tinyint)= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -258,7 +258,7 @@ NULL
 -- !query
 SELECT cast(1 as tinyint) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as tinyint)> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -266,7 +266,7 @@ NULL
 -- !query
 SELECT cast(1 as tinyint) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as tinyint)>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -274,7 +274,7 @@ NULL
 -- !query
 SELECT cast(1 as tinyint) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as tinyint)< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -282,7 +282,7 @@ NULL
 -- !query
 SELECT cast(1 as tinyint) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as tinyint)<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -290,7 +290,7 @@ NULL
 -- !query
 SELECT cast(1 as tinyint) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS TINYINT) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as tinyint)<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -298,7 +298,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as tinyint) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS TINYINT)):boolean>
+struct<'1' = cast(1 as tinyint):boolean>
 -- !query output
 true
 
@@ -306,7 +306,7 @@ true
 -- !query
 SELECT '2' > cast(1 as tinyint) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS TINYINT)):boolean>
+struct<'2' > cast(1 as tinyint):boolean>
 -- !query output
 true
 
@@ -314,7 +314,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as tinyint) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS TINYINT)):boolean>
+struct<'2' >= cast(1 as tinyint):boolean>
 -- !query output
 true
 
@@ -322,7 +322,7 @@ true
 -- !query
 SELECT '2' < cast(1 as tinyint) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS TINYINT)):boolean>
+struct<'2' < cast(1 as tinyint):boolean>
 -- !query output
 false
 
@@ -330,7 +330,7 @@ false
 -- !query
 SELECT '2' <= cast(1 as tinyint) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS TINYINT)):boolean>
+struct<'2' <= cast(1 as tinyint):boolean>
 -- !query output
 false
 
@@ -338,7 +338,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as tinyint) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS TINYINT))):boolean>
+struct<'2' <> cast(1 as tinyint):boolean>
 -- !query output
 true
 
@@ -346,7 +346,7 @@ true
 -- !query
 SELECT cast(null as string) = cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS TINYINT)):boolean>
+struct<cast(null as string)= cast(1 as tinyint):boolean>
 -- !query output
 NULL
 
@@ -354,7 +354,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS TINYINT)):boolean>
+struct<cast(null as string)> cast(1 as tinyint):boolean>
 -- !query output
 NULL
 
@@ -362,7 +362,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS TINYINT)):boolean>
+struct<cast(null as string)>= cast(1 as tinyint):boolean>
 -- !query output
 NULL
 
@@ -370,7 +370,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS TINYINT)):boolean>
+struct<cast(null as string)< cast(1 as tinyint):boolean>
 -- !query output
 NULL
 
@@ -378,7 +378,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS TINYINT)):boolean>
+struct<cast(null as string)<= cast(1 as tinyint):boolean>
 -- !query output
 NULL
 
@@ -386,7 +386,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as tinyint) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS TINYINT))):boolean>
+struct<cast(null as string)<> cast(1 as tinyint):boolean>
 -- !query output
 NULL
 
@@ -394,7 +394,7 @@ NULL
 -- !query
 SELECT cast(1 as smallint) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) = 1):boolean>
+struct<cast(1 as smallint)= '1':boolean>
 -- !query output
 true
 
@@ -402,7 +402,7 @@ true
 -- !query
 SELECT cast(1 as smallint) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) > 2):boolean>
+struct<cast(1 as smallint)> '2':boolean>
 -- !query output
 false
 
@@ -410,7 +410,7 @@ false
 -- !query
 SELECT cast(1 as smallint) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) >= 2):boolean>
+struct<cast(1 as smallint)>= '2':boolean>
 -- !query output
 false
 
@@ -418,7 +418,7 @@ false
 -- !query
 SELECT cast(1 as smallint) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) < 2):boolean>
+struct<cast(1 as smallint)< '2':boolean>
 -- !query output
 true
 
@@ -426,7 +426,7 @@ true
 -- !query
 SELECT cast(1 as smallint) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) <= 2):boolean>
+struct<cast(1 as smallint)<= '2':boolean>
 -- !query output
 true
 
@@ -434,7 +434,7 @@ true
 -- !query
 SELECT cast(1 as smallint) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS SMALLINT) = 2)):boolean>
+struct<cast(1 as smallint)<> '2':boolean>
 -- !query output
 true
 
@@ -442,7 +442,7 @@ true
 -- !query
 SELECT cast(1 as smallint) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as smallint)= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -450,7 +450,7 @@ NULL
 -- !query
 SELECT cast(1 as smallint) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as smallint)> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -458,7 +458,7 @@ NULL
 -- !query
 SELECT cast(1 as smallint) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as smallint)>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -466,7 +466,7 @@ NULL
 -- !query
 SELECT cast(1 as smallint) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as smallint)< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -474,7 +474,7 @@ NULL
 -- !query
 SELECT cast(1 as smallint) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as smallint)<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -482,7 +482,7 @@ NULL
 -- !query
 SELECT cast(1 as smallint) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS SMALLINT) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as smallint)<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -490,7 +490,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as smallint) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS SMALLINT)):boolean>
+struct<'1' = cast(1 as smallint):boolean>
 -- !query output
 true
 
@@ -498,7 +498,7 @@ true
 -- !query
 SELECT '2' > cast(1 as smallint) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS SMALLINT)):boolean>
+struct<'2' > cast(1 as smallint):boolean>
 -- !query output
 true
 
@@ -506,7 +506,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as smallint) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS SMALLINT)):boolean>
+struct<'2' >= cast(1 as smallint):boolean>
 -- !query output
 true
 
@@ -514,7 +514,7 @@ true
 -- !query
 SELECT '2' < cast(1 as smallint) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS SMALLINT)):boolean>
+struct<'2' < cast(1 as smallint):boolean>
 -- !query output
 false
 
@@ -522,7 +522,7 @@ false
 -- !query
 SELECT '2' <= cast(1 as smallint) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS SMALLINT)):boolean>
+struct<'2' <= cast(1 as smallint):boolean>
 -- !query output
 false
 
@@ -530,7 +530,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as smallint) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS SMALLINT))):boolean>
+struct<'2' <> cast(1 as smallint):boolean>
 -- !query output
 true
 
@@ -538,7 +538,7 @@ true
 -- !query
 SELECT cast(null as string) = cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS SMALLINT)):boolean>
+struct<cast(null as string)= cast(1 as smallint):boolean>
 -- !query output
 NULL
 
@@ -546,7 +546,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS SMALLINT)):boolean>
+struct<cast(null as string)> cast(1 as smallint):boolean>
 -- !query output
 NULL
 
@@ -554,7 +554,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS SMALLINT)):boolean>
+struct<cast(null as string)>= cast(1 as smallint):boolean>
 -- !query output
 NULL
 
@@ -562,7 +562,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS SMALLINT)):boolean>
+struct<cast(null as string)< cast(1 as smallint):boolean>
 -- !query output
 NULL
 
@@ -570,7 +570,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS SMALLINT)):boolean>
+struct<cast(null as string)<= cast(1 as smallint):boolean>
 -- !query output
 NULL
 
@@ -578,7 +578,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as smallint) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS SMALLINT))):boolean>
+struct<cast(null as string)<> cast(1 as smallint):boolean>
 -- !query output
 NULL
 
@@ -586,7 +586,7 @@ NULL
 -- !query
 SELECT cast(1 as int) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS INT) = 1):boolean>
+struct<cast(1 as int)= '1':boolean>
 -- !query output
 true
 
@@ -594,7 +594,7 @@ true
 -- !query
 SELECT cast(1 as int) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS INT) > 2):boolean>
+struct<cast(1 as int)> '2':boolean>
 -- !query output
 false
 
@@ -602,7 +602,7 @@ false
 -- !query
 SELECT cast(1 as int) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS INT) >= 2):boolean>
+struct<cast(1 as int)>= '2':boolean>
 -- !query output
 false
 
@@ -610,7 +610,7 @@ false
 -- !query
 SELECT cast(1 as int) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS INT) < 2):boolean>
+struct<cast(1 as int)< '2':boolean>
 -- !query output
 true
 
@@ -618,7 +618,7 @@ true
 -- !query
 SELECT cast(1 as int) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS INT) <= 2):boolean>
+struct<cast(1 as int)<= '2':boolean>
 -- !query output
 true
 
@@ -626,7 +626,7 @@ true
 -- !query
 SELECT cast(1 as int) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS INT) = 2)):boolean>
+struct<cast(1 as int)<> '2':boolean>
 -- !query output
 true
 
@@ -634,7 +634,7 @@ true
 -- !query
 SELECT cast(1 as int) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as int)= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -642,7 +642,7 @@ NULL
 -- !query
 SELECT cast(1 as int) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as int)> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -650,7 +650,7 @@ NULL
 -- !query
 SELECT cast(1 as int) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as int)>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -658,7 +658,7 @@ NULL
 -- !query
 SELECT cast(1 as int) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as int)< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -666,7 +666,7 @@ NULL
 -- !query
 SELECT cast(1 as int) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as int)<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -674,7 +674,7 @@ NULL
 -- !query
 SELECT cast(1 as int) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS INT) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as int)<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -682,7 +682,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as int) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS INT)):boolean>
+struct<'1' = cast(1 as int):boolean>
 -- !query output
 true
 
@@ -690,7 +690,7 @@ true
 -- !query
 SELECT '2' > cast(1 as int) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS INT)):boolean>
+struct<'2' > cast(1 as int):boolean>
 -- !query output
 true
 
@@ -698,7 +698,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as int) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS INT)):boolean>
+struct<'2' >= cast(1 as int):boolean>
 -- !query output
 true
 
@@ -706,7 +706,7 @@ true
 -- !query
 SELECT '2' < cast(1 as int) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS INT)):boolean>
+struct<'2' < cast(1 as int):boolean>
 -- !query output
 false
 
@@ -714,7 +714,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as int) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS INT))):boolean>
+struct<'2' <> cast(1 as int):boolean>
 -- !query output
 true
 
@@ -722,7 +722,7 @@ true
 -- !query
 SELECT '2' <= cast(1 as int) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS INT)):boolean>
+struct<'2' <= cast(1 as int):boolean>
 -- !query output
 false
 
@@ -730,7 +730,7 @@ false
 -- !query
 SELECT cast(null as string) = cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS INT)):boolean>
+struct<cast(null as string)= cast(1 as int):boolean>
 -- !query output
 NULL
 
@@ -738,7 +738,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS INT)):boolean>
+struct<cast(null as string)> cast(1 as int):boolean>
 -- !query output
 NULL
 
@@ -746,7 +746,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS INT)):boolean>
+struct<cast(null as string)>= cast(1 as int):boolean>
 -- !query output
 NULL
 
@@ -754,7 +754,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS INT)):boolean>
+struct<cast(null as string)< cast(1 as int):boolean>
 -- !query output
 NULL
 
@@ -762,7 +762,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as int) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS INT))):boolean>
+struct<cast(null as string)<> cast(1 as int):boolean>
 -- !query output
 NULL
 
@@ -770,7 +770,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS INT)):boolean>
+struct<cast(null as string)<= cast(1 as int):boolean>
 -- !query output
 NULL
 
@@ -778,7 +778,7 @@ NULL
 -- !query
 SELECT cast(1 as bigint) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) = 1):boolean>
+struct<cast(1 as bigint)= '1':boolean>
 -- !query output
 true
 
@@ -786,7 +786,7 @@ true
 -- !query
 SELECT cast(1 as bigint) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) > 2):boolean>
+struct<cast(1 as bigint)> '2':boolean>
 -- !query output
 false
 
@@ -794,7 +794,7 @@ false
 -- !query
 SELECT cast(1 as bigint) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) >= 2):boolean>
+struct<cast(1 as bigint)>= '2':boolean>
 -- !query output
 false
 
@@ -802,7 +802,7 @@ false
 -- !query
 SELECT cast(1 as bigint) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) < 2):boolean>
+struct<cast(1 as bigint)< '2':boolean>
 -- !query output
 true
 
@@ -810,7 +810,7 @@ true
 -- !query
 SELECT cast(1 as bigint) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) <= 2):boolean>
+struct<cast(1 as bigint)<= '2':boolean>
 -- !query output
 true
 
@@ -818,7 +818,7 @@ true
 -- !query
 SELECT cast(1 as bigint) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS BIGINT) = 2)):boolean>
+struct<cast(1 as bigint)<> '2':boolean>
 -- !query output
 true
 
@@ -826,7 +826,7 @@ true
 -- !query
 SELECT cast(1 as bigint) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as bigint)= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -834,7 +834,7 @@ NULL
 -- !query
 SELECT cast(1 as bigint) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as bigint)> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -842,7 +842,7 @@ NULL
 -- !query
 SELECT cast(1 as bigint) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as bigint)>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -850,7 +850,7 @@ NULL
 -- !query
 SELECT cast(1 as bigint) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as bigint)< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -858,7 +858,7 @@ NULL
 -- !query
 SELECT cast(1 as bigint) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as bigint)<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -866,7 +866,7 @@ NULL
 -- !query
 SELECT cast(1 as bigint) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS BIGINT) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as bigint)<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -874,7 +874,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as bigint) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS BIGINT)):boolean>
+struct<'1' = cast(1 as bigint):boolean>
 -- !query output
 true
 
@@ -882,7 +882,7 @@ true
 -- !query
 SELECT '2' > cast(1 as bigint) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS BIGINT)):boolean>
+struct<'2' > cast(1 as bigint):boolean>
 -- !query output
 true
 
@@ -890,7 +890,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as bigint) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS BIGINT)):boolean>
+struct<'2' >= cast(1 as bigint):boolean>
 -- !query output
 true
 
@@ -898,7 +898,7 @@ true
 -- !query
 SELECT '2' < cast(1 as bigint) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS BIGINT)):boolean>
+struct<'2' < cast(1 as bigint):boolean>
 -- !query output
 false
 
@@ -906,7 +906,7 @@ false
 -- !query
 SELECT '2' <= cast(1 as bigint) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS BIGINT)):boolean>
+struct<'2' <= cast(1 as bigint):boolean>
 -- !query output
 false
 
@@ -914,7 +914,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as bigint) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS BIGINT))):boolean>
+struct<'2' <> cast(1 as bigint):boolean>
 -- !query output
 true
 
@@ -922,7 +922,7 @@ true
 -- !query
 SELECT cast(null as string) = cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS BIGINT)):boolean>
+struct<cast(null as string)= cast(1 as bigint):boolean>
 -- !query output
 NULL
 
@@ -930,7 +930,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS BIGINT)):boolean>
+struct<cast(null as string)> cast(1 as bigint):boolean>
 -- !query output
 NULL
 
@@ -938,7 +938,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS BIGINT)):boolean>
+struct<cast(null as string)>= cast(1 as bigint):boolean>
 -- !query output
 NULL
 
@@ -946,7 +946,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS BIGINT)):boolean>
+struct<cast(null as string)< cast(1 as bigint):boolean>
 -- !query output
 NULL
 
@@ -954,7 +954,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS BIGINT)):boolean>
+struct<cast(null as string)<= cast(1 as bigint):boolean>
 -- !query output
 NULL
 
@@ -962,7 +962,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as bigint) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS BIGINT))):boolean>
+struct<cast(null as string)<> cast(1 as bigint):boolean>
 -- !query output
 NULL
 
@@ -970,7 +970,7 @@ NULL
 -- !query
 SELECT cast(1 as decimal(10, 0)) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) = 1):boolean>
+struct<cast(1 as decimal(10, 0))= '1':boolean>
 -- !query output
 true
 
@@ -978,7 +978,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) > 2):boolean>
+struct<cast(1 as decimal(10, 0))> '2':boolean>
 -- !query output
 false
 
@@ -986,7 +986,7 @@ false
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) >= 2):boolean>
+struct<cast(1 as decimal(10, 0))>= '2':boolean>
 -- !query output
 false
 
@@ -994,7 +994,7 @@ false
 -- !query
 SELECT cast(1 as decimal(10, 0)) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) < 2):boolean>
+struct<cast(1 as decimal(10, 0))< '2':boolean>
 -- !query output
 true
 
@@ -1002,7 +1002,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS DECIMAL(10,0)) = 2)):boolean>
+struct<cast(1 as decimal(10, 0))<> '2':boolean>
 -- !query output
 true
 
@@ -1010,7 +1010,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) <= 2):boolean>
+struct<cast(1 as decimal(10, 0))<= '2':boolean>
 -- !query output
 true
 
@@ -1018,7 +1018,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as decimal(10, 0))= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1026,7 +1026,7 @@ NULL
 -- !query
 SELECT cast(1 as decimal(10, 0)) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as decimal(10, 0))> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1034,7 +1034,7 @@ NULL
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as decimal(10, 0))>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1042,7 +1042,7 @@ NULL
 -- !query
 SELECT cast(1 as decimal(10, 0)) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as decimal(10, 0))< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1050,7 +1050,7 @@ NULL
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS DECIMAL(10,0)) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as decimal(10, 0))<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1058,7 +1058,7 @@ NULL
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as decimal(10, 0))<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1066,7 +1066,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS DECIMAL(10,0))):boolean>
+struct<'1' = cast(1 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -1074,7 +1074,7 @@ true
 -- !query
 SELECT '2' > cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS DECIMAL(10,0))):boolean>
+struct<'2' > cast(1 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -1082,7 +1082,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS DECIMAL(10,0))):boolean>
+struct<'2' >= cast(1 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -1090,7 +1090,7 @@ true
 -- !query
 SELECT '2' < cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS DECIMAL(10,0))):boolean>
+struct<'2' < cast(1 as decimal(10, 0)):boolean>
 -- !query output
 false
 
@@ -1098,7 +1098,7 @@ false
 -- !query
 SELECT '2' <= cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS DECIMAL(10,0))):boolean>
+struct<'2' <= cast(1 as decimal(10, 0)):boolean>
 -- !query output
 false
 
@@ -1106,7 +1106,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS DECIMAL(10,0)))):boolean>
+struct<'2' <> cast(1 as decimal(10, 0)):boolean>
 -- !query output
 true
 
@@ -1114,7 +1114,7 @@ true
 -- !query
 SELECT cast(null as string) = cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS DECIMAL(10,0))):boolean>
+struct<cast(null as string)= cast(1 as decimal(10, 0)):boolean>
 -- !query output
 NULL
 
@@ -1122,7 +1122,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS DECIMAL(10,0))):boolean>
+struct<cast(null as string)> cast(1 as decimal(10, 0)):boolean>
 -- !query output
 NULL
 
@@ -1130,7 +1130,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS DECIMAL(10,0))):boolean>
+struct<cast(null as string)>= cast(1 as decimal(10, 0)):boolean>
 -- !query output
 NULL
 
@@ -1138,7 +1138,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS DECIMAL(10,0))):boolean>
+struct<cast(null as string)< cast(1 as decimal(10, 0)):boolean>
 -- !query output
 NULL
 
@@ -1146,7 +1146,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS DECIMAL(10,0))):boolean>
+struct<cast(null as string)<= cast(1 as decimal(10, 0)):boolean>
 -- !query output
 NULL
 
@@ -1154,7 +1154,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS DECIMAL(10,0)))):boolean>
+struct<cast(null as string)<> cast(1 as decimal(10, 0)):boolean>
 -- !query output
 NULL
 
@@ -1162,7 +1162,7 @@ NULL
 -- !query
 SELECT cast(1 as double) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) = 1):boolean>
+struct<cast(1 as double)= '1':boolean>
 -- !query output
 true
 
@@ -1170,7 +1170,7 @@ true
 -- !query
 SELECT cast(1 as double) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) > 2):boolean>
+struct<cast(1 as double)> '2':boolean>
 -- !query output
 false
 
@@ -1178,7 +1178,7 @@ false
 -- !query
 SELECT cast(1 as double) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) >= 2):boolean>
+struct<cast(1 as double)>= '2':boolean>
 -- !query output
 false
 
@@ -1186,7 +1186,7 @@ false
 -- !query
 SELECT cast(1 as double) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) < 2):boolean>
+struct<cast(1 as double)< '2':boolean>
 -- !query output
 true
 
@@ -1194,7 +1194,7 @@ true
 -- !query
 SELECT cast(1 as double) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) <= 2):boolean>
+struct<cast(1 as double)<= '2':boolean>
 -- !query output
 true
 
@@ -1202,7 +1202,7 @@ true
 -- !query
 SELECT cast(1 as double) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS DOUBLE) = 2)):boolean>
+struct<cast(1 as double)<> '2':boolean>
 -- !query output
 true
 
@@ -1210,7 +1210,7 @@ true
 -- !query
 SELECT cast(1 as double) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as double)= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1218,7 +1218,7 @@ NULL
 -- !query
 SELECT cast(1 as double) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as double)> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1226,7 +1226,7 @@ NULL
 -- !query
 SELECT cast(1 as double) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as double)>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1234,7 +1234,7 @@ NULL
 -- !query
 SELECT cast(1 as double) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as double)< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1242,7 +1242,7 @@ NULL
 -- !query
 SELECT cast(1 as double) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as double)<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1250,7 +1250,7 @@ NULL
 -- !query
 SELECT cast(1 as double) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS DOUBLE) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as double)<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1258,7 +1258,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as double) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS DOUBLE)):boolean>
+struct<'1' = cast(1 as double):boolean>
 -- !query output
 true
 
@@ -1266,7 +1266,7 @@ true
 -- !query
 SELECT '2' > cast(1 as double) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS DOUBLE)):boolean>
+struct<'2' > cast(1 as double):boolean>
 -- !query output
 true
 
@@ -1274,7 +1274,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as double) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS DOUBLE)):boolean>
+struct<'2' >= cast(1 as double):boolean>
 -- !query output
 true
 
@@ -1282,7 +1282,7 @@ true
 -- !query
 SELECT '2' < cast(1 as double) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS DOUBLE)):boolean>
+struct<'2' < cast(1 as double):boolean>
 -- !query output
 false
 
@@ -1290,7 +1290,7 @@ false
 -- !query
 SELECT '2' <= cast(1 as double) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS DOUBLE)):boolean>
+struct<'2' <= cast(1 as double):boolean>
 -- !query output
 false
 
@@ -1298,7 +1298,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as double) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS DOUBLE))):boolean>
+struct<'2' <> cast(1 as double):boolean>
 -- !query output
 true
 
@@ -1306,7 +1306,7 @@ true
 -- !query
 SELECT cast(null as string) = cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS DOUBLE)):boolean>
+struct<cast(null as string)= cast(1 as double):boolean>
 -- !query output
 NULL
 
@@ -1314,7 +1314,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS DOUBLE)):boolean>
+struct<cast(null as string)> cast(1 as double):boolean>
 -- !query output
 NULL
 
@@ -1322,7 +1322,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS DOUBLE)):boolean>
+struct<cast(null as string)>= cast(1 as double):boolean>
 -- !query output
 NULL
 
@@ -1330,7 +1330,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS DOUBLE)):boolean>
+struct<cast(null as string)< cast(1 as double):boolean>
 -- !query output
 NULL
 
@@ -1338,7 +1338,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS DOUBLE)):boolean>
+struct<cast(null as string)<= cast(1 as double):boolean>
 -- !query output
 NULL
 
@@ -1346,7 +1346,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as double) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS DOUBLE))):boolean>
+struct<cast(null as string)<> cast(1 as double):boolean>
 -- !query output
 NULL
 
@@ -1354,7 +1354,7 @@ NULL
 -- !query
 SELECT cast(1 as float) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) = 1):boolean>
+struct<cast(1 as float)= '1':boolean>
 -- !query output
 true
 
@@ -1362,7 +1362,7 @@ true
 -- !query
 SELECT cast(1 as float) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) > 2):boolean>
+struct<cast(1 as float)> '2':boolean>
 -- !query output
 false
 
@@ -1370,7 +1370,7 @@ false
 -- !query
 SELECT cast(1 as float) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) >= 2):boolean>
+struct<cast(1 as float)>= '2':boolean>
 -- !query output
 false
 
@@ -1378,7 +1378,7 @@ false
 -- !query
 SELECT cast(1 as float) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) < 2):boolean>
+struct<cast(1 as float)< '2':boolean>
 -- !query output
 true
 
@@ -1386,7 +1386,7 @@ true
 -- !query
 SELECT cast(1 as float) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) <= 2):boolean>
+struct<cast(1 as float)<= '2':boolean>
 -- !query output
 true
 
@@ -1394,7 +1394,7 @@ true
 -- !query
 SELECT cast(1 as float) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS FLOAT) = 2)):boolean>
+struct<cast(1 as float)<> '2':boolean>
 -- !query output
 true
 
@@ -1402,7 +1402,7 @@ true
 -- !query
 SELECT cast(1 as float) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) = CAST(NULL AS STRING)):boolean>
+struct<cast(1 as float)= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1410,7 +1410,7 @@ NULL
 -- !query
 SELECT cast(1 as float) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) > CAST(NULL AS STRING)):boolean>
+struct<cast(1 as float)> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1418,7 +1418,7 @@ NULL
 -- !query
 SELECT cast(1 as float) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) >= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as float)>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1426,7 +1426,7 @@ NULL
 -- !query
 SELECT cast(1 as float) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) < CAST(NULL AS STRING)):boolean>
+struct<cast(1 as float)< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1434,7 +1434,7 @@ NULL
 -- !query
 SELECT cast(1 as float) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) <= CAST(NULL AS STRING)):boolean>
+struct<cast(1 as float)<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1442,7 +1442,7 @@ NULL
 -- !query
 SELECT cast(1 as float) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS FLOAT) = CAST(NULL AS STRING))):boolean>
+struct<cast(1 as float)<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1450,7 +1450,7 @@ NULL
 -- !query
 SELECT '1' = cast(1 as float) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS FLOAT)):boolean>
+struct<'1' = cast(1 as float):boolean>
 -- !query output
 true
 
@@ -1458,7 +1458,7 @@ true
 -- !query
 SELECT '2' > cast(1 as float) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS FLOAT)):boolean>
+struct<'2' > cast(1 as float):boolean>
 -- !query output
 true
 
@@ -1466,7 +1466,7 @@ true
 -- !query
 SELECT '2' >= cast(1 as float) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS FLOAT)):boolean>
+struct<'2' >= cast(1 as float):boolean>
 -- !query output
 true
 
@@ -1474,7 +1474,7 @@ true
 -- !query
 SELECT '2' < cast(1 as float) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS FLOAT)):boolean>
+struct<'2' < cast(1 as float):boolean>
 -- !query output
 false
 
@@ -1482,7 +1482,7 @@ false
 -- !query
 SELECT '2' <= cast(1 as float) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS FLOAT)):boolean>
+struct<'2' <= cast(1 as float):boolean>
 -- !query output
 false
 
@@ -1490,7 +1490,7 @@ false
 -- !query
 SELECT '2' <> cast(1 as float) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS FLOAT))):boolean>
+struct<'2' <> cast(1 as float):boolean>
 -- !query output
 true
 
@@ -1498,7 +1498,7 @@ true
 -- !query
 SELECT cast(null as string) = cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS FLOAT)):boolean>
+struct<cast(null as string)= cast(1 as float):boolean>
 -- !query output
 NULL
 
@@ -1506,7 +1506,7 @@ NULL
 -- !query
 SELECT cast(null as string) > cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS FLOAT)):boolean>
+struct<cast(null as string)> cast(1 as float):boolean>
 -- !query output
 NULL
 
@@ -1514,7 +1514,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS FLOAT)):boolean>
+struct<cast(null as string)>= cast(1 as float):boolean>
 -- !query output
 NULL
 
@@ -1522,7 +1522,7 @@ NULL
 -- !query
 SELECT cast(null as string) < cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS FLOAT)):boolean>
+struct<cast(null as string)< cast(1 as float):boolean>
 -- !query output
 NULL
 
@@ -1530,7 +1530,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS FLOAT)):boolean>
+struct<cast(null as string)<= cast(1 as float):boolean>
 -- !query output
 NULL
 
@@ -1538,7 +1538,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as float) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS FLOAT))):boolean>
+struct<cast(null as string)<> cast(1 as float):boolean>
 -- !query output
 NULL
 
@@ -1546,7 +1546,7 @@ NULL
 -- !query
 SELECT '1996-09-09' = date('1996-09-09') FROM t
 -- !query schema
-struct<(1996-09-09 = 1996-09-09):boolean>
+struct<'1996-09-09' = date('1996-09-09'):boolean>
 -- !query output
 true
 
@@ -1554,7 +1554,7 @@ true
 -- !query
 SELECT '1996-9-10' > date('1996-09-09') FROM t
 -- !query schema
-struct<(1996-9-10 > 1996-09-09):boolean>
+struct<'1996-9-10' > date('1996-09-09'):boolean>
 -- !query output
 true
 
@@ -1562,7 +1562,7 @@ true
 -- !query
 SELECT '1996-9-10' >= date('1996-09-09') FROM t
 -- !query schema
-struct<(1996-9-10 >= 1996-09-09):boolean>
+struct<'1996-9-10' >= date('1996-09-09'):boolean>
 -- !query output
 true
 
@@ -1570,7 +1570,7 @@ true
 -- !query
 SELECT '1996-9-10' < date('1996-09-09') FROM t
 -- !query schema
-struct<(1996-9-10 < 1996-09-09):boolean>
+struct<'1996-9-10' < date('1996-09-09'):boolean>
 -- !query output
 false
 
@@ -1578,7 +1578,7 @@ false
 -- !query
 SELECT '1996-9-10' <= date('1996-09-09') FROM t
 -- !query schema
-struct<(1996-9-10 <= 1996-09-09):boolean>
+struct<'1996-9-10' <= date('1996-09-09'):boolean>
 -- !query output
 false
 
@@ -1586,7 +1586,7 @@ false
 -- !query
 SELECT '1996-9-10' <> date('1996-09-09') FROM t
 -- !query schema
-struct<(NOT (1996-9-10 = 1996-09-09)):boolean>
+struct<'1996-9-10' <> date('1996-09-09'):boolean>
 -- !query output
 true
 
@@ -1594,7 +1594,7 @@ true
 -- !query
 SELECT cast(null as string) = date('1996-09-09') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = 1996-09-09):boolean>
+struct<cast(null as string)= date('1996-09-09'):boolean>
 -- !query output
 NULL
 
@@ -1602,7 +1602,7 @@ NULL
 -- !query
 SELECT cast(null as string)> date('1996-09-09') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > 1996-09-09):boolean>
+struct<cast(null as string)> date('1996-09-09'):boolean>
 -- !query output
 NULL
 
@@ -1610,7 +1610,7 @@ NULL
 -- !query
 SELECT cast(null as string)>= date('1996-09-09') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= 1996-09-09):boolean>
+struct<cast(null as string)>= date('1996-09-09'):boolean>
 -- !query output
 NULL
 
@@ -1618,7 +1618,7 @@ NULL
 -- !query
 SELECT cast(null as string)< date('1996-09-09') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < 1996-09-09):boolean>
+struct<cast(null as string)< date('1996-09-09'):boolean>
 -- !query output
 NULL
 
@@ -1626,7 +1626,7 @@ NULL
 -- !query
 SELECT cast(null as string)<= date('1996-09-09') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= 1996-09-09):boolean>
+struct<cast(null as string)<= date('1996-09-09'):boolean>
 -- !query output
 NULL
 
@@ -1634,7 +1634,7 @@ NULL
 -- !query
 SELECT cast(null as string)<> date('1996-09-09') FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = 1996-09-09)):boolean>
+struct<cast(null as string)<> date('1996-09-09'):boolean>
 -- !query output
 NULL
 
@@ -1642,7 +1642,7 @@ NULL
 -- !query
 SELECT date('1996-09-09') = '1996-09-09' FROM t
 -- !query schema
-struct<(1996-09-09 = 1996-09-09):boolean>
+struct<date('1996-09-09')= '1996-09-09':boolean>
 -- !query output
 true
 
@@ -1650,7 +1650,7 @@ true
 -- !query
 SELECT date('1996-9-10') > '1996-09-09' FROM t
 -- !query schema
-struct<(1996-9-10 > 1996-09-09):boolean>
+struct<date('1996-9-10')> '1996-09-09':boolean>
 -- !query output
 true
 
@@ -1658,7 +1658,7 @@ true
 -- !query
 SELECT date('1996-9-10') >= '1996-09-09' FROM t
 -- !query schema
-struct<(1996-9-10 >= 1996-09-09):boolean>
+struct<date('1996-9-10')>= '1996-09-09':boolean>
 -- !query output
 true
 
@@ -1666,7 +1666,7 @@ true
 -- !query
 SELECT date('1996-9-10') < '1996-09-09' FROM t
 -- !query schema
-struct<(1996-9-10 < 1996-09-09):boolean>
+struct<date('1996-9-10')< '1996-09-09':boolean>
 -- !query output
 false
 
@@ -1674,7 +1674,7 @@ false
 -- !query
 SELECT date('1996-9-10') <= '1996-09-09' FROM t
 -- !query schema
-struct<(1996-9-10 <= 1996-09-09):boolean>
+struct<date('1996-9-10')<= '1996-09-09':boolean>
 -- !query output
 false
 
@@ -1682,7 +1682,7 @@ false
 -- !query
 SELECT date('1996-9-10') <> '1996-09-09' FROM t
 -- !query schema
-struct<(NOT (1996-9-10 = 1996-09-09)):boolean>
+struct<date('1996-9-10')<> '1996-09-09':boolean>
 -- !query output
 true
 
@@ -1690,7 +1690,7 @@ true
 -- !query
 SELECT date('1996-09-09') = cast(null as string) FROM t
 -- !query schema
-struct<(1996-09-09 = CAST(NULL AS STRING)):boolean>
+struct<date('1996-09-09')= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1698,7 +1698,7 @@ NULL
 -- !query
 SELECT date('1996-9-10') > cast(null as string) FROM t
 -- !query schema
-struct<(1996-9-10 > CAST(NULL AS STRING)):boolean>
+struct<date('1996-9-10')> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1706,7 +1706,7 @@ NULL
 -- !query
 SELECT date('1996-9-10') >= cast(null as string) FROM t
 -- !query schema
-struct<(1996-9-10 >= CAST(NULL AS STRING)):boolean>
+struct<date('1996-9-10')>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1714,7 +1714,7 @@ NULL
 -- !query
 SELECT date('1996-9-10') < cast(null as string) FROM t
 -- !query schema
-struct<(1996-9-10 < CAST(NULL AS STRING)):boolean>
+struct<date('1996-9-10')< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1722,7 +1722,7 @@ NULL
 -- !query
 SELECT date('1996-9-10') <= cast(null as string) FROM t
 -- !query schema
-struct<(1996-9-10 <= CAST(NULL AS STRING)):boolean>
+struct<date('1996-9-10')<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1730,7 +1730,7 @@ NULL
 -- !query
 SELECT date('1996-9-10') <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (1996-9-10 = CAST(NULL AS STRING))):boolean>
+struct<date('1996-9-10')<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1738,7 +1738,7 @@ NULL
 -- !query
 SELECT '1996-09-09 12:12:12.4' = timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.4 = 1996-09-09 12:12:12.4):boolean>
+struct<'1996-09-09 12:12:12.4' = timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 true
 
@@ -1746,7 +1746,7 @@ true
 -- !query
 SELECT '1996-09-09 12:12:12.5' > timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 > 1996-09-09 12:12:12.4):boolean>
+struct<'1996-09-09 12:12:12.5' > timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 true
 
@@ -1754,7 +1754,7 @@ true
 -- !query
 SELECT '1996-09-09 12:12:12.5' >= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 >= 1996-09-09 12:12:12.4):boolean>
+struct<'1996-09-09 12:12:12.5' >= timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 true
 
@@ -1762,7 +1762,7 @@ true
 -- !query
 SELECT '1996-09-09 12:12:12.5' < timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 < 1996-09-09 12:12:12.4):boolean>
+struct<'1996-09-09 12:12:12.5' < timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 false
 
@@ -1770,7 +1770,7 @@ false
 -- !query
 SELECT '1996-09-09 12:12:12.5' <= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 <= 1996-09-09 12:12:12.4):boolean>
+struct<'1996-09-09 12:12:12.5' <= timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 false
 
@@ -1778,7 +1778,7 @@ false
 -- !query
 SELECT '1996-09-09 12:12:12.5' <> timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(NOT (1996-09-09 12:12:12.5 = 1996-09-09 12:12:12.4)):boolean>
+struct<'1996-09-09 12:12:12.5' <> timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 true
 
@@ -1786,7 +1786,7 @@ true
 -- !query
 SELECT cast(null as string) = timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = 1996-09-09 12:12:12.4):boolean>
+struct<cast(null as string)= timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 NULL
 
@@ -1794,7 +1794,7 @@ NULL
 -- !query
 SELECT cast(null as string) > timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > 1996-09-09 12:12:12.4):boolean>
+struct<cast(null as string)> timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 NULL
 
@@ -1802,7 +1802,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= 1996-09-09 12:12:12.4):boolean>
+struct<cast(null as string)>= timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 NULL
 
@@ -1810,7 +1810,7 @@ NULL
 -- !query
 SELECT cast(null as string) < timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < 1996-09-09 12:12:12.4):boolean>
+struct<cast(null as string)< timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 NULL
 
@@ -1818,7 +1818,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= 1996-09-09 12:12:12.4):boolean>
+struct<cast(null as string)<= timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 NULL
 
@@ -1826,7 +1826,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = 1996-09-09 12:12:12.4)):boolean>
+struct<cast(null as string)<> timestamp('1996-09-09 12:12:12.4'):boolean>
 -- !query output
 NULL
 
@@ -1834,7 +1834,7 @@ NULL
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.4' )= '1996-09-09 12:12:12.4' FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.4 = 1996-09-09 12:12:12.4):boolean>
+struct<timestamp('1996-09-09 12:12:12.4')= '1996-09-09 12:12:12.4':boolean>
 -- !query output
 true
 
@@ -1842,7 +1842,7 @@ true
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )> '1996-09-09 12:12:12.4' FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 > 1996-09-09 12:12:12.4):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')> '1996-09-09 12:12:12.4':boolean>
 -- !query output
 true
 
@@ -1850,7 +1850,7 @@ true
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )>= '1996-09-09 12:12:12.4' FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 >= 1996-09-09 12:12:12.4):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')>= '1996-09-09 12:12:12.4':boolean>
 -- !query output
 true
 
@@ -1858,7 +1858,7 @@ true
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )< '1996-09-09 12:12:12.4' FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 < 1996-09-09 12:12:12.4):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')< '1996-09-09 12:12:12.4':boolean>
 -- !query output
 false
 
@@ -1866,7 +1866,7 @@ false
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )<= '1996-09-09 12:12:12.4' FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 <= 1996-09-09 12:12:12.4):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')<= '1996-09-09 12:12:12.4':boolean>
 -- !query output
 false
 
@@ -1874,7 +1874,7 @@ false
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )<> '1996-09-09 12:12:12.4' FROM t
 -- !query schema
-struct<(NOT (1996-09-09 12:12:12.5 = 1996-09-09 12:12:12.4)):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')<> '1996-09-09 12:12:12.4':boolean>
 -- !query output
 true
 
@@ -1882,7 +1882,7 @@ true
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.4' )= cast(null as string) FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.4 = CAST(NULL AS STRING)):boolean>
+struct<timestamp('1996-09-09 12:12:12.4')= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1890,7 +1890,7 @@ NULL
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )> cast(null as string) FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 > CAST(NULL AS STRING)):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1898,7 +1898,7 @@ NULL
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )>= cast(null as string) FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 >= CAST(NULL AS STRING)):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')>= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1906,7 +1906,7 @@ NULL
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )< cast(null as string) FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 < CAST(NULL AS STRING)):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')< cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1914,7 +1914,7 @@ NULL
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )<= cast(null as string) FROM t
 -- !query schema
-struct<(1996-09-09 12:12:12.5 <= CAST(NULL AS STRING)):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')<= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1922,7 +1922,7 @@ NULL
 -- !query
 SELECT timestamp('1996-09-09 12:12:12.5' )<> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (1996-09-09 12:12:12.5 = CAST(NULL AS STRING))):boolean>
+struct<timestamp('1996-09-09 12:12:12.5')<> cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -1930,7 +1930,7 @@ NULL
 -- !query
 SELECT ' ' = X'0020' FROM t
 -- !query schema
-struct<(  = X'0020'):boolean>
+struct<' ' = X '0020':boolean>
 -- !query output
 false
 
@@ -1938,7 +1938,7 @@ false
 -- !query
 SELECT ' ' > X'001F' FROM t
 -- !query schema
-struct<(  > X'001F'):boolean>
+struct<' ' > X '001F':boolean>
 -- !query output
 true
 
@@ -1946,7 +1946,7 @@ true
 -- !query
 SELECT ' ' >= X'001F' FROM t
 -- !query schema
-struct<(  >= X'001F'):boolean>
+struct<' ' >= X '001F':boolean>
 -- !query output
 true
 
@@ -1954,7 +1954,7 @@ true
 -- !query
 SELECT ' ' < X'001F' FROM t
 -- !query schema
-struct<(  < X'001F'):boolean>
+struct<' ' < X '001F':boolean>
 -- !query output
 false
 
@@ -1962,7 +1962,7 @@ false
 -- !query
 SELECT ' ' <= X'001F' FROM t
 -- !query schema
-struct<(  <= X'001F'):boolean>
+struct<' ' <= X '001F':boolean>
 -- !query output
 false
 
@@ -1970,7 +1970,7 @@ false
 -- !query
 SELECT ' ' <> X'001F' FROM t
 -- !query schema
-struct<(NOT (  = X'001F')):boolean>
+struct<' ' <> X '001F':boolean>
 -- !query output
 true
 
@@ -1978,7 +1978,7 @@ true
 -- !query
 SELECT cast(null as string) = X'0020' FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = X'0020'):boolean>
+struct<cast(null as string)= X '0020':boolean>
 -- !query output
 NULL
 
@@ -1986,7 +1986,7 @@ NULL
 -- !query
 SELECT cast(null as string) > X'001F' FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > X'001F'):boolean>
+struct<cast(null as string)> X '001F':boolean>
 -- !query output
 NULL
 
@@ -1994,7 +1994,7 @@ NULL
 -- !query
 SELECT cast(null as string) >= X'001F' FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= X'001F'):boolean>
+struct<cast(null as string)>= X '001F':boolean>
 -- !query output
 NULL
 
@@ -2002,7 +2002,7 @@ NULL
 -- !query
 SELECT cast(null as string) < X'001F' FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < X'001F'):boolean>
+struct<cast(null as string)< X '001F':boolean>
 -- !query output
 NULL
 
@@ -2010,7 +2010,7 @@ NULL
 -- !query
 SELECT cast(null as string) <= X'001F' FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= X'001F'):boolean>
+struct<cast(null as string)<= X '001F':boolean>
 -- !query output
 NULL
 
@@ -2018,7 +2018,7 @@ NULL
 -- !query
 SELECT cast(null as string) <> X'001F' FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = X'001F')):boolean>
+struct<cast(null as string)<> X '001F':boolean>
 -- !query output
 NULL
 
@@ -2026,7 +2026,7 @@ NULL
 -- !query
 SELECT X'0020' = ' ' FROM t
 -- !query schema
-struct<(X'0020' =  ):boolean>
+struct<X '0020' = ' ':boolean>
 -- !query output
 false
 
@@ -2034,7 +2034,7 @@ false
 -- !query
 SELECT X'001F' > ' ' FROM t
 -- !query schema
-struct<(X'001F' >  ):boolean>
+struct<X '001F' > ' ':boolean>
 -- !query output
 false
 
@@ -2042,7 +2042,7 @@ false
 -- !query
 SELECT X'001F' >= ' ' FROM t
 -- !query schema
-struct<(X'001F' >=  ):boolean>
+struct<X '001F' >= ' ':boolean>
 -- !query output
 false
 
@@ -2050,7 +2050,7 @@ false
 -- !query
 SELECT X'001F' < ' ' FROM t
 -- !query schema
-struct<(X'001F' <  ):boolean>
+struct<X '001F' < ' ':boolean>
 -- !query output
 true
 
@@ -2058,7 +2058,7 @@ true
 -- !query
 SELECT X'001F' <= ' ' FROM t
 -- !query schema
-struct<(X'001F' <=  ):boolean>
+struct<X '001F' <= ' ':boolean>
 -- !query output
 true
 
@@ -2066,7 +2066,7 @@ true
 -- !query
 SELECT X'001F' <> ' ' FROM t
 -- !query schema
-struct<(NOT (X'001F' =  )):boolean>
+struct<X '001F' <> ' ':boolean>
 -- !query output
 true
 
@@ -2074,7 +2074,7 @@ true
 -- !query
 SELECT X'0020' = cast(null as string) FROM t
 -- !query schema
-struct<(X'0020' = CAST(NULL AS STRING)):boolean>
+struct<X '0020' = cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -2082,7 +2082,7 @@ NULL
 -- !query
 SELECT X'001F' > cast(null as string) FROM t
 -- !query schema
-struct<(X'001F' > CAST(NULL AS STRING)):boolean>
+struct<X '001F' > cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -2090,7 +2090,7 @@ NULL
 -- !query
 SELECT X'001F' >= cast(null as string) FROM t
 -- !query schema
-struct<(X'001F' >= CAST(NULL AS STRING)):boolean>
+struct<X '001F' >= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -2098,7 +2098,7 @@ NULL
 -- !query
 SELECT X'001F' < cast(null as string) FROM t
 -- !query schema
-struct<(X'001F' < CAST(NULL AS STRING)):boolean>
+struct<X '001F' < cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -2106,7 +2106,7 @@ NULL
 -- !query
 SELECT X'001F' <= cast(null as string) FROM t
 -- !query schema
-struct<(X'001F' <= CAST(NULL AS STRING)):boolean>
+struct<X '001F' <= cast(null as string):boolean>
 -- !query output
 NULL
 
@@ -2114,6 +2114,6 @@ NULL
 -- !query
 SELECT X'001F' <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (X'001F' = CAST(NULL AS STRING))):boolean>
+struct<X '001F' <> cast(null as string):boolean>
 -- !query output
 NULL

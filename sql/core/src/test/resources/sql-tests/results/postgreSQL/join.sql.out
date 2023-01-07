@@ -2359,7 +2359,7 @@ select count(*) from tenk1 a where unique1 in
   (select unique1 from tenk1 b join tenk1 c using (unique1)
    where b.unique2 = 42)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 1
 
@@ -2370,7 +2370,7 @@ select count(*) from tenk1 x where
   x.unique1 = 0 and
   x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 1
 
@@ -2381,7 +2381,7 @@ select count(*) from tenk1 x where
   x.unique1 = 0 and
   x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 1
 
@@ -2411,7 +2411,7 @@ from
   tenk1 t5
 where t4.thousand = t5.unique1 and ss.x1 = t4.tenthous and ss.x2 = t5.stringu1
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 1000
 
@@ -2464,7 +2464,7 @@ select count(*) from
   (select * from tenk1 y order by y.unique2) y
   on x.thousand = y.unique2 and x.twothousand = y.hundred and x.fivethous = y.unique2
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 10000
 
@@ -2553,7 +2553,7 @@ struct<tt1_id:int,joincol:int,tt2_id:int,joincol:int>
 select count(*) from tenk1 a, tenk1 b
   where a.hundred = b.thousand and (b.fivethous % 10) < 10
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 100000
 
@@ -2756,7 +2756,7 @@ select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join int8_tbl t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1
 -- !query schema
-struct<q2:bigint,count(q1, q2):bigint>
+struct<q2:bigint,count(t2 . q1, t2 . q2):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -2769,7 +2769,7 @@ select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1
 -- !query schema
-struct<q2:bigint,count(q1, q2):bigint>
+struct<q2:bigint,count(t2 . q1, t2 . q2):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -2784,7 +2784,7 @@ from int8_tbl t1 left join
   on (t1.q2 = t2.q1)
 group by t1.q2 order by 1
 -- !query schema
-struct<q2:bigint,count(q1, q2):bigint>
+struct<q2:bigint,count(t2 . q1, t2 . q2):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -3003,7 +3003,7 @@ select count(*) from
   left join tenk1 c on a.unique2 = b.unique1 and c.thousand = a.thousand
   join int4_tbl on b.thousand = f1
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 10
 
@@ -3054,7 +3054,7 @@ select f1, unique2, case when unique2 is null then f1 else 0 end
   from int4_tbl a left join tenk1 b on f1 = unique2
   where (case when unique2 is null then f1 else 0 end) = 0
 -- !query schema
-struct<f1:int,unique2:int,CASE WHEN (unique2 IS NULL) THEN f1 ELSE 0 END:int>
+struct<f1:int,unique2:int,case when unique2 is null then f1 else 0 end:int>
 -- !query output
 0	0	0
 
@@ -3064,7 +3064,7 @@ select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
   from tenk1 a left join tenk1 b on b.thousand = a.unique1                        left join tenk1 c on c.unique2 = coalesce(b.twothousand, a.twothousand)
   where a.unique2 < 10 and coalesce(b.twothousand, a.twothousand) = 44
 -- !query schema
-struct<unique1:int,unique1:int,unique1:int,coalesce(twothousand, twothousand):int>
+struct<unique1:int,unique1:int,unique1:int,coalesce(b . twothousand, a . twothousand):int>
 -- !query output
 
 
@@ -3514,7 +3514,7 @@ select * from
    int8_tbl b cross join int8_tbl c) ss
   on a.q2 = ss.bq1
 -- !query schema
-struct<q1:bigint,q2:bigint,bq1:bigint,cq1:bigint,least(outer(a.q1), q1, q1):bigint>
+struct<q1:bigint,q2:bigint,bq1:bigint,cq1:bigint,least(a . q1, b . q1, c . q1):bigint>
 -- !query output
 123	456	NULL	NULL	NULL
 123	4567890123456789	4567890123456789	123	123

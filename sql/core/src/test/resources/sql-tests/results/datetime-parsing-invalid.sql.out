@@ -26,7 +26,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select to_timestamp('-12', 'yy')
 -- !query schema
-struct<to_timestamp(-12, yy):timestamp>
+struct<to_timestamp('-12', 'yy'):timestamp>
 -- !query output
 NULL
 
@@ -79,7 +79,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select to_timestamp('366', 'D')
 -- !query schema
-struct<to_timestamp(366, D):timestamp>
+struct<to_timestamp('366', 'D'):timestamp>
 -- !query output
 NULL
 
@@ -132,7 +132,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select to_timestamp('30-365', 'dd-DDD')
 -- !query schema
-struct<to_timestamp(30-365, dd-DDD):timestamp>
+struct<to_timestamp('30-365', 'dd-DDD'):timestamp>
 -- !query output
 NULL
 
@@ -140,7 +140,7 @@ NULL
 -- !query
 select to_timestamp('11-365', 'MM-DDD')
 -- !query schema
-struct<to_timestamp(11-365, MM-DDD):timestamp>
+struct<to_timestamp('11-365', 'MM-DDD'):timestamp>
 -- !query output
 NULL
 
@@ -148,7 +148,7 @@ NULL
 -- !query
 select to_timestamp('2019-366', 'yyyy-DDD')
 -- !query schema
-struct<to_timestamp(2019-366, yyyy-DDD):timestamp>
+struct<to_timestamp('2019-366', 'yyyy-DDD'):timestamp>
 -- !query output
 NULL
 
@@ -156,7 +156,7 @@ NULL
 -- !query
 select to_timestamp('12-30-365', 'MM-dd-DDD')
 -- !query schema
-struct<to_timestamp(12-30-365, MM-dd-DDD):timestamp>
+struct<to_timestamp('12-30-365', 'MM-dd-DDD'):timestamp>
 -- !query output
 NULL
 
@@ -164,7 +164,7 @@ NULL
 -- !query
 select to_timestamp('2020-01-365', 'yyyy-dd-DDD')
 -- !query schema
-struct<to_timestamp(2020-01-365, yyyy-dd-DDD):timestamp>
+struct<to_timestamp('2020-01-365', 'yyyy-dd-DDD'):timestamp>
 -- !query output
 NULL
 
@@ -172,7 +172,7 @@ NULL
 -- !query
 select to_timestamp('2020-10-350', 'yyyy-MM-DDD')
 -- !query schema
-struct<to_timestamp(2020-10-350, yyyy-MM-DDD):timestamp>
+struct<to_timestamp('2020-10-350', 'yyyy-MM-DDD'):timestamp>
 -- !query output
 NULL
 
@@ -180,7 +180,7 @@ NULL
 -- !query
 select to_timestamp('2020-11-31-366', 'yyyy-MM-dd-DDD')
 -- !query schema
-struct<to_timestamp(2020-11-31-366, yyyy-MM-dd-DDD):timestamp>
+struct<to_timestamp('2020-11-31-366', 'yyyy-MM-dd-DDD'):timestamp>
 -- !query output
 NULL
 
@@ -203,7 +203,7 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<to_date(2020-01-27T20:06:11.847, yyyy-MM-dd HH:mm:ss.SSS):date>
+struct<to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS"):date>
 -- !query output
 NULL
 
@@ -211,7 +211,7 @@ NULL
 -- !query
 select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<to_date(Unparseable, yyyy-MM-dd HH:mm:ss.SSS):date>
+struct<to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS"):date>
 -- !query output
 NULL
 
@@ -219,7 +219,7 @@ NULL
 -- !query
 select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<to_timestamp(2020-01-27T20:06:11.847, yyyy-MM-dd HH:mm:ss.SSS):timestamp>
+struct<to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS"):timestamp>
 -- !query output
 NULL
 
@@ -227,7 +227,7 @@ NULL
 -- !query
 select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<to_timestamp(Unparseable, yyyy-MM-dd HH:mm:ss.SSS):timestamp>
+struct<to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS"):timestamp>
 -- !query output
 NULL
 
@@ -235,7 +235,7 @@ NULL
 -- !query
 select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<unix_timestamp(2020-01-27T20:06:11.847, yyyy-MM-dd HH:mm:ss.SSS):bigint>
+struct<unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS"):bigint>
 -- !query output
 NULL
 
@@ -243,7 +243,7 @@ NULL
 -- !query
 select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<unix_timestamp(Unparseable, yyyy-MM-dd HH:mm:ss.SSS):bigint>
+struct<unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS"):bigint>
 -- !query output
 NULL
 
@@ -251,7 +251,7 @@ NULL
 -- !query
 select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<to_unix_timestamp(2020-01-27T20:06:11.847, yyyy-MM-dd HH:mm:ss.SSS):bigint>
+struct<to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS"):bigint>
 -- !query output
 NULL
 
@@ -259,7 +259,7 @@ NULL
 -- !query
 select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
-struct<to_unix_timestamp(Unparseable, yyyy-MM-dd HH:mm:ss.SSS):bigint>
+struct<to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS"):bigint>
 -- !query output
 NULL
 
@@ -267,7 +267,7 @@ NULL
 -- !query
 select cast("Unparseable" as timestamp)
 -- !query schema
-struct<CAST(Unparseable AS TIMESTAMP):timestamp>
+struct<cast("Unparseable" as timestamp):timestamp>
 -- !query output
 NULL
 
@@ -275,6 +275,6 @@ NULL
 -- !query
 select cast("Unparseable" as date)
 -- !query schema
-struct<CAST(Unparseable AS DATE):date>
+struct<cast("Unparseable" as date):date>
 -- !query output
 NULL

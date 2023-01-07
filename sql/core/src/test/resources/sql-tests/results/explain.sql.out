@@ -47,22 +47,22 @@ EXPLAIN EXTENDED
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'Project [unresolvedalias('sum(distinct 'val), None)]
+'Project [unresolvedalias('sum(distinct 'val), Some(org.apache.spark.sql.catalyst.parser.AstBuilder$$Lambda$3529/1377066394@4f6a1654))]
 +- 'UnresolvedRelation [explain_temp1], [], false
 
 == Analyzed Logical Plan ==
-sum(DISTINCT val): bigint
-Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
+sum(distinct val): bigint
+Aggregate [sum(distinct val#x) AS sum(distinct val)#xL]
 +- SubqueryAlias spark_catalog.default.explain_temp1
    +- Relation spark_catalog.default.explain_temp1[key#x,val#x] parquet
 
 == Optimized Logical Plan ==
-Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
+Aggregate [sum(distinct val#x) AS sum(distinct val)#xL]
 +- Project [val#x]
    +- Relation spark_catalog.default.explain_temp1[key#x,val#x] parquet
 
 == Physical Plan ==
-*HashAggregate(keys=[], functions=[sum(distinct val#x)], output=[sum(DISTINCT val)#xL])
+*HashAggregate(keys=[], functions=[sum(distinct val#x)], output=[sum(distinct val)#xL])
 +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
    +- *HashAggregate(keys=[], functions=[partial_sum(distinct val#x)], output=[sum#xL])
       +- *HashAggregate(keys=[val#x], functions=[], output=[val#x])
@@ -653,7 +653,7 @@ ReadSchema: struct<>
 Input: []
 
 (3) Project [codegen id : 1]
-Output [1]: [(Subquery scalar-subquery#x, [id=#x] + ReusedSubquery Subquery scalar-subquery#x, [id=#x]) AS (scalarsubquery() + scalarsubquery())#x]
+Output [1]: [(Subquery scalar-subquery#x, [id=#x] + ReusedSubquery Subquery scalar-subquery#x, [id=#x]) AS (SELECT Avg(key)FROM explain_temp1)+(SELECT Avg(key)FROM explain_temp1)#x]
 Input: []
 
 ===== Subqueries =====
@@ -691,7 +691,7 @@ Input [2]: [sum#x, count#xL]
 Keys: []
 Functions [1]: [avg(key#x)]
 Aggregate Attributes [1]: [avg(key#x)#x]
-Results [1]: [avg(key#x)#x AS avg(key)#x]
+Results [1]: [avg(key#x)#x AS Avg(key)#x]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
 
@@ -908,7 +908,7 @@ Input [3]: [count#xL, sum#xL, count#xL]
 Keys: []
 Functions [3]: [count(val#x), sum(key#x), count(key#x)]
 Aggregate Attributes [3]: [count(val#x)#xL, sum(key#x)#xL, count(key#x)#xL]
-Results [2]: [(count(val#x)#xL + sum(key#x)#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
+Results [2]: [(count(val#x)#xL + sum(key#x)#xL) AS TOTAL#xL, count(key#x)#xL AS COUNT(key)FILTER(WHERE val > 1)#xL]
 
 
 -- !query
@@ -952,7 +952,7 @@ Input [2]: [key#x, buf#x]
 Keys [1]: [key#x]
 Functions [1]: [collect_set(val#x, 0, 0)]
 Aggregate Attributes [1]: [collect_set(val#x, 0, 0)#x]
-Results [2]: [key#x, sort_array(collect_set(val#x, 0, 0)#x, true)[0] AS sort_array(collect_set(val), true)[0]#x]
+Results [2]: [key#x, sort_array(collect_set(val#x, 0, 0)#x, true)[0] AS sort_array(collect_set(val))[0]#x]
 
 
 -- !query
@@ -1006,7 +1006,7 @@ Input [2]: [key#x, min#x]
 Keys [1]: [key#x]
 Functions [1]: [min(val#x)]
 Aggregate Attributes [1]: [min(val#x)#x]
-Results [2]: [key#x, min(val#x)#x AS min(val)#x]
+Results [2]: [key#x, min(val#x)#x AS MIN(val)#x]
 
 
 -- !query

@@ -10,7 +10,7 @@ struct<>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS TINYINT)):double>
+struct<cast(1 as tinyint)/ cast(1 as tinyint):double>
 -- !query output
 1.0
 
@@ -18,7 +18,7 @@ struct<(CAST(1 AS TINYINT) / CAST(1 AS TINYINT)):double>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS SMALLINT)):double>
+struct<cast(1 as tinyint)/ cast(1 as smallint):double>
 -- !query output
 1.0
 
@@ -26,7 +26,7 @@ struct<(CAST(1 AS TINYINT) / CAST(1 AS SMALLINT)):double>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS INT)):double>
+struct<cast(1 as tinyint)/ cast(1 as int):double>
 -- !query output
 1.0
 
@@ -34,7 +34,7 @@ struct<(CAST(1 AS TINYINT) / CAST(1 AS INT)):double>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS BIGINT)):double>
+struct<cast(1 as tinyint)/ cast(1 as bigint):double>
 -- !query output
 1.0
 
@@ -42,7 +42,7 @@ struct<(CAST(1 AS TINYINT) / CAST(1 AS BIGINT)):double>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as tinyint)/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -50,7 +50,7 @@ struct<(CAST(1 AS TINYINT) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as tinyint)/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -58,7 +58,7 @@ struct<(CAST(1 AS TINYINT) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS DECIMAL(10,0))):decimal(14,11)>
+struct<cast(1 as tinyint)/ cast(1 as decimal(10, 0)):decimal(14,11)>
 -- !query output
 1.00000000000
 
@@ -66,7 +66,7 @@ struct<(CAST(1 AS TINYINT) / CAST(1 AS DECIMAL(10,0))):decimal(14,11)>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) / CAST(1 AS STRING)):double>
+struct<cast(1 as tinyint)/ cast(1 as string):double>
 -- !query output
 1.0
 
@@ -166,7 +166,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as smallint) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS TINYINT)):double>
+struct<cast(1 as smallint)/ cast(1 as tinyint):double>
 -- !query output
 1.0
 
@@ -174,7 +174,7 @@ struct<(CAST(1 AS SMALLINT) / CAST(1 AS TINYINT)):double>
 -- !query
 SELECT cast(1 as smallint) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS SMALLINT)):double>
+struct<cast(1 as smallint)/ cast(1 as smallint):double>
 -- !query output
 1.0
 
@@ -182,7 +182,7 @@ struct<(CAST(1 AS SMALLINT) / CAST(1 AS SMALLINT)):double>
 -- !query
 SELECT cast(1 as smallint) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS INT)):double>
+struct<cast(1 as smallint)/ cast(1 as int):double>
 -- !query output
 1.0
 
@@ -190,7 +190,7 @@ struct<(CAST(1 AS SMALLINT) / CAST(1 AS INT)):double>
 -- !query
 SELECT cast(1 as smallint) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS BIGINT)):double>
+struct<cast(1 as smallint)/ cast(1 as bigint):double>
 -- !query output
 1.0
 
@@ -198,7 +198,7 @@ struct<(CAST(1 AS SMALLINT) / CAST(1 AS BIGINT)):double>
 -- !query
 SELECT cast(1 as smallint) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as smallint)/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -206,7 +206,7 @@ struct<(CAST(1 AS SMALLINT) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as smallint) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as smallint)/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -214,7 +214,7 @@ struct<(CAST(1 AS SMALLINT) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as smallint) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS DECIMAL(10,0))):decimal(16,11)>
+struct<cast(1 as smallint)/ cast(1 as decimal(10, 0)):decimal(16,11)>
 -- !query output
 1.00000000000
 
@@ -222,7 +222,7 @@ struct<(CAST(1 AS SMALLINT) / CAST(1 AS DECIMAL(10,0))):decimal(16,11)>
 -- !query
 SELECT cast(1 as smallint) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) / CAST(1 AS STRING)):double>
+struct<cast(1 as smallint)/ cast(1 as string):double>
 -- !query output
 1.0
 
@@ -322,7 +322,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as int) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS TINYINT)):double>
+struct<cast(1 as int)/ cast(1 as tinyint):double>
 -- !query output
 1.0
 
@@ -330,7 +330,7 @@ struct<(CAST(1 AS INT) / CAST(1 AS TINYINT)):double>
 -- !query
 SELECT cast(1 as int) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS SMALLINT)):double>
+struct<cast(1 as int)/ cast(1 as smallint):double>
 -- !query output
 1.0
 
@@ -338,7 +338,7 @@ struct<(CAST(1 AS INT) / CAST(1 AS SMALLINT)):double>
 -- !query
 SELECT cast(1 as int) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS INT)):double>
+struct<cast(1 as int)/ cast(1 as int):double>
 -- !query output
 1.0
 
@@ -346,7 +346,7 @@ struct<(CAST(1 AS INT) / CAST(1 AS INT)):double>
 -- !query
 SELECT cast(1 as int) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS BIGINT)):double>
+struct<cast(1 as int)/ cast(1 as bigint):double>
 -- !query output
 1.0
 
@@ -354,7 +354,7 @@ struct<(CAST(1 AS INT) / CAST(1 AS BIGINT)):double>
 -- !query
 SELECT cast(1 as int) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as int)/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -362,7 +362,7 @@ struct<(CAST(1 AS INT) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as int) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as int)/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -370,7 +370,7 @@ struct<(CAST(1 AS INT) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as int) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
+struct<cast(1 as int)/ cast(1 as decimal(10, 0)):decimal(21,11)>
 -- !query output
 1.00000000000
 
@@ -378,7 +378,7 @@ struct<(CAST(1 AS INT) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query
 SELECT cast(1 as int) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS INT) / CAST(1 AS STRING)):double>
+struct<cast(1 as int)/ cast(1 as string):double>
 -- !query output
 1.0
 
@@ -478,7 +478,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as bigint) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS TINYINT)):double>
+struct<cast(1 as bigint)/ cast(1 as tinyint):double>
 -- !query output
 1.0
 
@@ -486,7 +486,7 @@ struct<(CAST(1 AS BIGINT) / CAST(1 AS TINYINT)):double>
 -- !query
 SELECT cast(1 as bigint) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS SMALLINT)):double>
+struct<cast(1 as bigint)/ cast(1 as smallint):double>
 -- !query output
 1.0
 
@@ -494,7 +494,7 @@ struct<(CAST(1 AS BIGINT) / CAST(1 AS SMALLINT)):double>
 -- !query
 SELECT cast(1 as bigint) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS INT)):double>
+struct<cast(1 as bigint)/ cast(1 as int):double>
 -- !query output
 1.0
 
@@ -502,7 +502,7 @@ struct<(CAST(1 AS BIGINT) / CAST(1 AS INT)):double>
 -- !query
 SELECT cast(1 as bigint) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS BIGINT)):double>
+struct<cast(1 as bigint)/ cast(1 as bigint):double>
 -- !query output
 1.0
 
@@ -510,7 +510,7 @@ struct<(CAST(1 AS BIGINT) / CAST(1 AS BIGINT)):double>
 -- !query
 SELECT cast(1 as bigint) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as bigint)/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -518,7 +518,7 @@ struct<(CAST(1 AS BIGINT) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as bigint) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as bigint)/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -526,7 +526,7 @@ struct<(CAST(1 AS BIGINT) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as bigint) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS DECIMAL(10,0))):decimal(31,11)>
+struct<cast(1 as bigint)/ cast(1 as decimal(10, 0)):decimal(31,11)>
 -- !query output
 1.00000000000
 
@@ -534,7 +534,7 @@ struct<(CAST(1 AS BIGINT) / CAST(1 AS DECIMAL(10,0))):decimal(31,11)>
 -- !query
 SELECT cast(1 as bigint) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) / CAST(1 AS STRING)):double>
+struct<cast(1 as bigint)/ cast(1 as string):double>
 -- !query output
 1.0
 
@@ -634,7 +634,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as float) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS TINYINT)):double>
+struct<cast(1 as float)/ cast(1 as tinyint):double>
 -- !query output
 1.0
 
@@ -642,7 +642,7 @@ struct<(CAST(1 AS FLOAT) / CAST(1 AS TINYINT)):double>
 -- !query
 SELECT cast(1 as float) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS SMALLINT)):double>
+struct<cast(1 as float)/ cast(1 as smallint):double>
 -- !query output
 1.0
 
@@ -650,7 +650,7 @@ struct<(CAST(1 AS FLOAT) / CAST(1 AS SMALLINT)):double>
 -- !query
 SELECT cast(1 as float) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS INT)):double>
+struct<cast(1 as float)/ cast(1 as int):double>
 -- !query output
 1.0
 
@@ -658,7 +658,7 @@ struct<(CAST(1 AS FLOAT) / CAST(1 AS INT)):double>
 -- !query
 SELECT cast(1 as float) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS BIGINT)):double>
+struct<cast(1 as float)/ cast(1 as bigint):double>
 -- !query output
 1.0
 
@@ -666,7 +666,7 @@ struct<(CAST(1 AS FLOAT) / CAST(1 AS BIGINT)):double>
 -- !query
 SELECT cast(1 as float) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as float)/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -674,7 +674,7 @@ struct<(CAST(1 AS FLOAT) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as float) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as float)/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -682,7 +682,7 @@ struct<(CAST(1 AS FLOAT) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as float) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS DECIMAL(10,0))):double>
+struct<cast(1 as float)/ cast(1 as decimal(10, 0)):double>
 -- !query output
 1.0
 
@@ -690,7 +690,7 @@ struct<(CAST(1 AS FLOAT) / CAST(1 AS DECIMAL(10,0))):double>
 -- !query
 SELECT cast(1 as float) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) / CAST(1 AS STRING)):double>
+struct<cast(1 as float)/ cast(1 as string):double>
 -- !query output
 1.0
 
@@ -790,7 +790,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as double) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS TINYINT)):double>
+struct<cast(1 as double)/ cast(1 as tinyint):double>
 -- !query output
 1.0
 
@@ -798,7 +798,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS TINYINT)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS SMALLINT)):double>
+struct<cast(1 as double)/ cast(1 as smallint):double>
 -- !query output
 1.0
 
@@ -806,7 +806,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS SMALLINT)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS INT)):double>
+struct<cast(1 as double)/ cast(1 as int):double>
 -- !query output
 1.0
 
@@ -814,7 +814,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS INT)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS BIGINT)):double>
+struct<cast(1 as double)/ cast(1 as bigint):double>
 -- !query output
 1.0
 
@@ -822,7 +822,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS BIGINT)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as double)/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -830,7 +830,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as double)/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -838,7 +838,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS DECIMAL(10,0))):double>
+struct<cast(1 as double)/ cast(1 as decimal(10, 0)):double>
 -- !query output
 1.0
 
@@ -846,7 +846,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS DECIMAL(10,0))):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(1 AS STRING)):double>
+struct<cast(1 as double)/ cast(1 as string):double>
 -- !query output
 1.0
 
@@ -946,7 +946,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS TINYINT)):decimal(16,6)>
+struct<cast(1 as decimal(10, 0))/ cast(1 as tinyint):decimal(16,6)>
 -- !query output
 1.000000
 
@@ -954,7 +954,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS TINYINT)):decimal(16,6)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS SMALLINT)):decimal(16,6)>
+struct<cast(1 as decimal(10, 0))/ cast(1 as smallint):decimal(16,6)>
 -- !query output
 1.000000
 
@@ -962,7 +962,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS SMALLINT)):decimal(16,6)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS INT)):decimal(21,11)>
+struct<cast(1 as decimal(10, 0))/ cast(1 as int):decimal(21,11)>
 -- !query output
 1.00000000000
 
@@ -970,7 +970,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS INT)):decimal(21,11)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS BIGINT)):decimal(31,21)>
+struct<cast(1 as decimal(10, 0))/ cast(1 as bigint):decimal(31,21)>
 -- !query output
 1.000000000000000000000
 
@@ -978,7 +978,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS BIGINT)):decimal(31,21)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as decimal(10, 0))/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -986,7 +986,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as decimal(10, 0))/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -994,7 +994,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
+struct<cast(1 as decimal(10, 0))/ cast(1 as decimal(10, 0)):decimal(21,11)>
 -- !query output
 1.00000000000
 
@@ -1002,7 +1002,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS STRING)):double>
+struct<cast(1 as decimal(10, 0))/ cast(1 as string):double>
 -- !query output
 1.0
 
@@ -1102,7 +1102,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as string) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS TINYINT)):double>
+struct<cast(1 as string)/ cast(1 as tinyint):double>
 -- !query output
 1.0
 
@@ -1110,7 +1110,7 @@ struct<(CAST(1 AS STRING) / CAST(1 AS TINYINT)):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS SMALLINT)):double>
+struct<cast(1 as string)/ cast(1 as smallint):double>
 -- !query output
 1.0
 
@@ -1118,7 +1118,7 @@ struct<(CAST(1 AS STRING) / CAST(1 AS SMALLINT)):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS INT)):double>
+struct<cast(1 as string)/ cast(1 as int):double>
 -- !query output
 1.0
 
@@ -1126,7 +1126,7 @@ struct<(CAST(1 AS STRING) / CAST(1 AS INT)):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS BIGINT)):double>
+struct<cast(1 as string)/ cast(1 as bigint):double>
 -- !query output
 1.0
 
@@ -1134,7 +1134,7 @@ struct<(CAST(1 AS STRING) / CAST(1 AS BIGINT)):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS FLOAT)):double>
+struct<cast(1 as string)/ cast(1 as float):double>
 -- !query output
 1.0
 
@@ -1142,7 +1142,7 @@ struct<(CAST(1 AS STRING) / CAST(1 AS FLOAT)):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS DOUBLE)):double>
+struct<cast(1 as string)/ cast(1 as double):double>
 -- !query output
 1.0
 
@@ -1150,7 +1150,7 @@ struct<(CAST(1 AS STRING) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS DECIMAL(10,0))):double>
+struct<cast(1 as string)/ cast(1 as decimal(10, 0)):double>
 -- !query output
 1.0
 
@@ -1158,7 +1158,7 @@ struct<(CAST(1 AS STRING) / CAST(1 AS DECIMAL(10,0))):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS STRING)):double>
+struct<cast(1 as string)/ cast(1 as string):double>
 -- !query output
 1.0
 

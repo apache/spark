@@ -2,7 +2,7 @@
 -- !query
 select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<element_at(map(1, a, 2, b), 5):string>
+struct<element_at(map(1, 'a', 2, 'b'), 5):string>
 -- !query output
 NULL
 
@@ -10,7 +10,7 @@ NULL
 -- !query
 select map(1, 'a', 2, 'b')[5]
 -- !query schema
-struct<map(1, a, 2, b)[5]:string>
+struct<map(1, 'a', 2, 'b')[5]:string>
 -- !query output
 NULL
 
@@ -18,7 +18,7 @@ NULL
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<map_contains_key(map(1, a, 2, b), 5):boolean>
+struct<map_contains_key(map(1, 'a', 2, 'b'), 5):boolean>
 -- !query output
 false
 
@@ -26,7 +26,7 @@ false
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 1)
 -- !query schema
-struct<map_contains_key(map(1, a, 2, b), 1):boolean>
+struct<map_contains_key(map(1, 'a', 2, 'b'), 1):boolean>
 -- !query output
 true
 
@@ -34,7 +34,7 @@ true
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 5.0)
 -- !query schema
-struct<map_contains_key(map(1, a, 2, b), 5.0):boolean>
+struct<map_contains_key(map(1, 'a', 2, 'b'), 5.0):boolean>
 -- !query output
 false
 
@@ -42,7 +42,7 @@ false
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 1.0)
 -- !query schema
-struct<map_contains_key(map(1, a, 2, b), 1.0):boolean>
+struct<map_contains_key(map(1, 'a', 2, 'b'), 1.0):boolean>
 -- !query output
 true
 
@@ -50,7 +50,7 @@ true
 -- !query
 select map_contains_key(map(1.0, 'a', 2, 'b'), 5)
 -- !query schema
-struct<map_contains_key(map(1.0, a, 2, b), 5):boolean>
+struct<map_contains_key(map(1.0, 'a', 2, 'b'), 5):boolean>
 -- !query output
 false
 
@@ -58,7 +58,7 @@ false
 -- !query
 select map_contains_key(map(1.0, 'a', 2, 'b'), 1)
 -- !query schema
-struct<map_contains_key(map(1.0, a, 2, b), 1):boolean>
+struct<map_contains_key(map(1.0, 'a', 2, 'b'), 1):boolean>
 -- !query output
 true
 

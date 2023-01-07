@@ -28,7 +28,7 @@ struct<regr_count(y, x):bigint>
 -- !query
 SELECT k, count(*), regr_count(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<k:int,count(1):bigint,regr_count(y, x):bigint>
+struct<k:int,count(*):bigint,regr_count(y, x):bigint>
 -- !query output
 1	1	0
 2	4	3
@@ -37,7 +37,7 @@ struct<k:int,count(1):bigint,regr_count(y, x):bigint>
 -- !query
 SELECT k, count(*) FILTER (WHERE x IS NOT NULL), regr_count(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<k:int,count(1) FILTER (WHERE (x IS NOT NULL)):bigint,regr_count(y, x):bigint>
+struct<k:int,count(*)FILTER(WHERE x IS NOT NULL):bigint,regr_count(y, x):bigint>
 -- !query output
 1	0	0
 2	3	3
@@ -71,7 +71,7 @@ struct<k:int,corr(y, x):double,regr_r2(y, x):double>
 -- !query
 SELECT k, corr(y, x) FILTER (WHERE x IS NOT NULL), regr_r2(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<k:int,corr(y, x) FILTER (WHERE (x IS NOT NULL)):double,regr_r2(y, x):double>
+struct<k:int,corr(y, x)FILTER(WHERE x IS NOT NULL):double,regr_r2(y, x):double>
 -- !query output
 1	NULL	NULL
 2	0.9988445981121533	0.997690531177829
@@ -105,7 +105,7 @@ struct<k:int,avg(x):double,avg(y):double,regr_avgx(y, x):double,regr_avgy(y, x):
 -- !query
 SELECT k, avg(x) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), avg(y) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<k:int,avg(x) FILTER (WHERE ((x IS NOT NULL) AND (y IS NOT NULL))):double,avg(y) FILTER (WHERE ((x IS NOT NULL) AND (y IS NOT NULL))):double,regr_avgx(y, x):double,regr_avgy(y, x):double>
+struct<k:int,avg(x)FILTER(WHERE x IS NOT NULL AND y IS NOT NULL):double,avg(y)FILTER(WHERE x IS NOT NULL AND y IS NOT NULL):double,regr_avgx(y, x):double,regr_avgy(y, x):double>
 -- !query output
 1	NULL	NULL	NULL	NULL
 2	22.666666666666668	20.0	22.666666666666668	20.0

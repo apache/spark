@@ -269,13 +269,13 @@ object ParserUtils {
           case term: TerminalNodeImpl =>
             val s = term.getText
             s match {
-              case "(" | "," | ")" if sb.length > 0 && sb.charAt(sb.length - 1) == ' ' =>
-                sb.setLength(sb.length - 1)
+              case "(" | "[" | "," | "]" | ")"
+                if sb.length > 0 && sb.charAt(sb.length - 1) == ' ' => sb.setLength(sb.length - 1)
               case _ =>
             }
             sb.append(s)
             s match {
-              case "(" | ")" =>
+              case "(" | "[" | "]" | ")" =>
               case _ => sb.append(" ")
             }
           case child => toExprAlias0(child, sb)
@@ -291,6 +291,6 @@ object ParserUtils {
   def toExprAlias(pt: ParseTree): String = {
     val builder = new StringBuilder
     toExprAlias0(pt, builder)
-    builder.toString()
+    builder.stripSuffix(" ")
   }
 }

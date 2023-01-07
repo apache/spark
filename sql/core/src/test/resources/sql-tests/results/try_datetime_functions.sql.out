@@ -2,7 +2,7 @@
 -- !query
 select try_to_timestamp(null), try_to_timestamp('2016-12-31 00:12:00'), try_to_timestamp('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<try_to_timestamp(NULL):timestamp,try_to_timestamp(2016-12-31 00:12:00):timestamp,try_to_timestamp(2016-12-31, yyyy-MM-dd):timestamp>
+struct<try_to_timestamp(null):timestamp,try_to_timestamp('2016-12-31 00:12:00'):timestamp,try_to_timestamp('2016-12-31', 'yyyy-MM-dd'):timestamp>
 -- !query output
 NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
 
@@ -18,7 +18,7 @@ struct<try_to_timestamp(1):timestamp>
 -- !query
 select try_to_timestamp('2016-12-31 abc')
 -- !query schema
-struct<try_to_timestamp(2016-12-31 abc):timestamp>
+struct<try_to_timestamp('2016-12-31 abc'):timestamp>
 -- !query output
 NULL
 
@@ -26,7 +26,7 @@ NULL
 -- !query
 select try_to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<try_to_timestamp(2019-10-06 10:11:12., yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
+struct<try_to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
 -- !query output
 NULL
 
@@ -34,7 +34,7 @@ NULL
 -- !query
 select try_to_timestamp("02-29", "MM-dd")
 -- !query schema
-struct<try_to_timestamp(02-29, MM-dd):timestamp>
+struct<try_to_timestamp("02-29", "MM-dd"):timestamp>
 -- !query output
 NULL
 

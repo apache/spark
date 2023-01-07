@@ -2,7 +2,7 @@
 -- !query
 SELECT array_join(array(true, false), ', ')
 -- !query schema
-struct<array_join(array(true, false), , ):string>
+struct<array_join(array(true, false), ', '):string>
 -- !query output
 true, false
 
@@ -10,7 +10,7 @@ true, false
 -- !query
 SELECT array_join(array(2Y, 1Y), ', ')
 -- !query schema
-struct<array_join(array(2, 1), , ):string>
+struct<array_join(array(2Y, 1Y), ', '):string>
 -- !query output
 2, 1
 
@@ -18,7 +18,7 @@ struct<array_join(array(2, 1), , ):string>
 -- !query
 SELECT array_join(array(2S, 1S), ', ')
 -- !query schema
-struct<array_join(array(2, 1), , ):string>
+struct<array_join(array(2S, 1S), ', '):string>
 -- !query output
 2, 1
 
@@ -26,7 +26,7 @@ struct<array_join(array(2, 1), , ):string>
 -- !query
 SELECT array_join(array(2, 1), ', ')
 -- !query schema
-struct<array_join(array(2, 1), , ):string>
+struct<array_join(array(2, 1), ', '):string>
 -- !query output
 2, 1
 
@@ -34,7 +34,7 @@ struct<array_join(array(2, 1), , ):string>
 -- !query
 SELECT array_join(array(2L, 1L), ', ')
 -- !query schema
-struct<array_join(array(2, 1), , ):string>
+struct<array_join(array(2L, 1L), ', '):string>
 -- !query output
 2, 1
 
@@ -42,7 +42,7 @@ struct<array_join(array(2, 1), , ):string>
 -- !query
 SELECT array_join(array(9223372036854775809, 9223372036854775808), ', ')
 -- !query schema
-struct<array_join(array(9223372036854775809, 9223372036854775808), , ):string>
+struct<array_join(array(9223372036854775809, 9223372036854775808), ', '):string>
 -- !query output
 9223372036854775809, 9223372036854775808
 
@@ -50,7 +50,7 @@ struct<array_join(array(9223372036854775809, 9223372036854775808), , ):string>
 -- !query
 SELECT array_join(array(2.0D, 1.0D), ', ')
 -- !query schema
-struct<array_join(array(2.0, 1.0), , ):string>
+struct<array_join(array(2.0D, 1.0D), ', '):string>
 -- !query output
 2.0, 1.0
 
@@ -58,7 +58,7 @@ struct<array_join(array(2.0, 1.0), , ):string>
 -- !query
 SELECT array_join(array(float(2.0), float(1.0)), ', ')
 -- !query schema
-struct<array_join(array(2.0, 1.0), , ):string>
+struct<array_join(array(float(2.0), float(1.0)), ', '):string>
 -- !query output
 2.0, 1.0
 
@@ -66,7 +66,7 @@ struct<array_join(array(2.0, 1.0), , ):string>
 -- !query
 SELECT array_join(array(date '2016-03-14', date '2016-03-13'), ', ')
 -- !query schema
-struct<array_join(array(DATE '2016-03-14', DATE '2016-03-13'), , ):string>
+struct<array_join(array(date '2016-03-14', date '2016-03-13'), ', '):string>
 -- !query output
 2016-03-14, 2016-03-13
 
@@ -74,7 +74,7 @@ struct<array_join(array(DATE '2016-03-14', DATE '2016-03-13'), , ):string>
 -- !query
 SELECT array_join(array(timestamp '2016-11-15 20:54:00.000', timestamp '2016-11-12 20:54:00.000'), ', ')
 -- !query schema
-struct<array_join(array(TIMESTAMP '2016-11-15 20:54:00', TIMESTAMP '2016-11-12 20:54:00'), , ):string>
+struct<array_join(array(timestamp '2016-11-15 20:54:00.000', timestamp '2016-11-12 20:54:00.000'), ', '):string>
 -- !query output
 2016-11-15 20:54:00, 2016-11-12 20:54:00
 
@@ -82,6 +82,6 @@ struct<array_join(array(TIMESTAMP '2016-11-15 20:54:00', TIMESTAMP '2016-11-12 2
 -- !query
 SELECT array_join(array('a', 'b'), ', ')
 -- !query schema
-struct<array_join(array(a, b), , ):string>
+struct<array_join(array('a', 'b'), ', '):string>
 -- !query output
 a, b

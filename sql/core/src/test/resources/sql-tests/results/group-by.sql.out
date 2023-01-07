@@ -30,7 +30,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT COUNT(a), COUNT(b) FROM testData
 -- !query schema
-struct<count(a):bigint,count(b):bigint>
+struct<COUNT(a):bigint,COUNT(b):bigint>
 -- !query output
 7	7
 
@@ -38,7 +38,7 @@ struct<count(a):bigint,count(b):bigint>
 -- !query
 SELECT a, COUNT(b) FROM testData GROUP BY a
 -- !query schema
-struct<a:int,count(b):bigint>
+struct<a:int,COUNT(b):bigint>
 -- !query output
 1	2
 2	2
@@ -65,7 +65,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT COUNT(a), COUNT(b) FROM testData GROUP BY a
 -- !query schema
-struct<count(a):bigint,count(b):bigint>
+struct<COUNT(a):bigint,COUNT(b):bigint>
 -- !query output
 0	1
 2	2
@@ -76,7 +76,7 @@ struct<count(a):bigint,count(b):bigint>
 -- !query
 SELECT 'foo', COUNT(a) FROM testData GROUP BY 1
 -- !query schema
-struct<foo:string,count(a):bigint>
+struct<'foo':string,COUNT(a):bigint>
 -- !query output
 foo	7
 
@@ -84,7 +84,7 @@ foo	7
 -- !query
 SELECT 'foo' FROM testData WHERE a = 0 GROUP BY 1
 -- !query schema
-struct<foo:string>
+struct<'foo':string>
 -- !query output
 
 
@@ -92,7 +92,7 @@ struct<foo:string>
 -- !query
 SELECT 'foo', APPROX_COUNT_DISTINCT(a) FROM testData WHERE a = 0 GROUP BY 1
 -- !query schema
-struct<foo:string,approx_count_distinct(a):bigint>
+struct<'foo':string,APPROX_COUNT_DISTINCT(a):bigint>
 -- !query output
 
 
@@ -100,7 +100,7 @@ struct<foo:string,approx_count_distinct(a):bigint>
 -- !query
 SELECT 'foo', MAX(STRUCT(a)) FROM testData WHERE a = 0 GROUP BY 1
 -- !query schema
-struct<foo:string,max(struct(a)):struct<a:int>>
+struct<'foo':string,MAX(STRUCT(a)):struct<a:int>>
 -- !query output
 
 
@@ -108,7 +108,7 @@ struct<foo:string,max(struct(a)):struct<a:int>>
 -- !query
 SELECT a + b, COUNT(b) FROM testData GROUP BY a + b
 -- !query schema
-struct<(a + b):int,count(b):bigint>
+struct<a + b:int,COUNT(b):bigint>
 -- !query output
 2	1
 3	2
@@ -136,7 +136,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT a + 1 + 1, COUNT(b) FROM testData GROUP BY a + 1
 -- !query schema
-struct<((a + 1) + 1):int,count(b):bigint>
+struct<a + 1 + 1:int,COUNT(b):bigint>
 -- !query output
 3	2
 4	2
@@ -148,7 +148,7 @@ NULL	1
 SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a)
 FROM testData
 -- !query schema
-struct<skewness(a):double,kurtosis(a):double,min(a):int,max(a):int,avg(a):double,variance(a):double,stddev(a):double,sum(a):bigint,count(a):bigint>
+struct<SKEWNESS(a):double,KURTOSIS(a):double,MIN(a):int,MAX(a):int,AVG(a):double,VARIANCE(a):double,STDDEV(a):double,SUM(a):bigint,COUNT(a):bigint>
 -- !query output
 -0.2723801058145729	-1.5069204152249134	1	3	2.142857142857143	0.8095238095238094	0.8997354108424372	15	7
 
@@ -156,7 +156,7 @@ struct<skewness(a):double,kurtosis(a):double,min(a):int,max(a):int,avg(a):double
 -- !query
 SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a
 -- !query schema
-struct<count(DISTINCT b):bigint,count(DISTINCT b, c):bigint>
+struct<COUNT(DISTINCT b):bigint,COUNT(DISTINCT b, c):bigint>
 -- !query output
 1	1
 
@@ -164,7 +164,7 @@ struct<count(DISTINCT b):bigint,count(DISTINCT b, c):bigint>
 -- !query
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 -- !query schema
-struct<k:int,count(b):bigint>
+struct<k:int,COUNT(b):bigint>
 -- !query output
 1	2
 2	2
@@ -175,7 +175,7 @@ NULL	1
 -- !query
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k HAVING k > 1
 -- !query schema
-struct<k:int,count(b):bigint>
+struct<k:int,COUNT(b):bigint>
 -- !query output
 2	2
 3	2
@@ -284,7 +284,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT a, COUNT(1) FROM testData WHERE false GROUP BY a
 -- !query schema
-struct<a:int,count(1):bigint>
+struct<a:int,COUNT(1):bigint>
 -- !query output
 
 
@@ -292,7 +292,7 @@ struct<a:int,count(1):bigint>
 -- !query
 SELECT COUNT(1) FROM testData WHERE false
 -- !query schema
-struct<count(1):bigint>
+struct<COUNT(1):bigint>
 -- !query output
 0
 
@@ -323,7 +323,7 @@ struct<1:int>
 SELECT corr(DISTINCT x, y), corr(DISTINCT y, x), count(*)
   FROM (VALUES (1, 1), (2, 2), (2, 2)) t(x, y)
 -- !query schema
-struct<corr(DISTINCT x, y):double,corr(DISTINCT y, x):double,count(1):bigint>
+struct<corr(DISTINCT x, y):double,corr(DISTINCT y, x):double,count(*):bigint>
 -- !query output
 1.0	1.0	3
 
@@ -683,7 +683,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,every(v)OVER(PARTITION BY k ORDER BY v):boolean>
 -- !query output
 1	false	false
 1	true	false
@@ -700,7 +700,7 @@ struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST 
 -- !query
 SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<k:int,v:boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,some(v)OVER(PARTITION BY k ORDER BY v):boolean>
 -- !query output
 1	false	false
 1	true	true
@@ -717,7 +717,7 @@ struct<k:int,v:boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST R
 -- !query
 SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<k:int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,any(v)OVER(PARTITION BY k ORDER BY v):boolean>
 -- !query output
 1	false	false
 1	true	true
@@ -734,7 +734,7 @@ struct<k:int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RA
 -- !query
 SELECT k, v, bool_and(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,bool_and(v)OVER(PARTITION BY k ORDER BY v):boolean>
 -- !query output
 1	false	false
 1	true	false
@@ -751,7 +751,7 @@ struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIR
 -- !query
 SELECT k, v, bool_or(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<k:int,v:boolean,bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,bool_or(v)OVER(PARTITION BY k ORDER BY v):boolean>
 -- !query output
 1	false	false
 1	true	true
@@ -768,7 +768,7 @@ struct<k:int,v:boolean,bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRS
 -- !query
 SELECT count(*) FROM test_agg HAVING count(*) > 1L
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 10
 
@@ -860,7 +860,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT AVG(DISTINCT decimal_col), SUM(DISTINCT decimal_col) FROM VALUES (CAST(1 AS DECIMAL(9, 0))) t(decimal_col)
 -- !query schema
-struct<avg(DISTINCT decimal_col):decimal(13,4),sum(DISTINCT decimal_col):decimal(19,0)>
+struct<AVG(DISTINCT decimal_col):decimal(13,4),SUM(DISTINCT decimal_col):decimal(19,0)>
 -- !query output
 1.0000	1
 
@@ -870,7 +870,7 @@ SELECT not(a IS NULL), count(*) AS c
 FROM testData
 GROUP BY a IS NULL
 -- !query schema
-struct<(NOT (a IS NULL)):boolean,c:bigint>
+struct<not(a IS NULL):boolean,c:bigint>
 -- !query output
 false	2
 true	7
@@ -881,7 +881,7 @@ SELECT if(not(a IS NULL), rand(0), 1), count(*) AS c
 FROM testData
 GROUP BY a IS NULL
 -- !query schema
-struct<(IF((NOT (a IS NULL)), rand(0), 1)):double,c:bigint>
+struct<if(not(a IS NULL), rand(0), 1):double,c:bigint>
 -- !query output
 0.7604953758285915	7
 1.0	2
@@ -1042,7 +1042,7 @@ SELECT
 FROM VALUES
   (1), (2), (1) AS tab(col)
 -- !query schema
-struct<collect_list(col):array<int>,collect_list(col):array<int>>
+struct<collect_list(col):array<int>,array_agg(col):array<int>>
 -- !query output
 [1,2,1]	[1,2,1]
 
@@ -1056,7 +1056,7 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a
 -- !query schema
-struct<a:int,collect_list(b):array<int>,collect_list(b):array<int>>
+struct<a:int,collect_list(b):array<int>,array_agg(b):array<int>>
 -- !query output
 1	[4,4]	[4,4]
 2	[3,4]	[3,4]

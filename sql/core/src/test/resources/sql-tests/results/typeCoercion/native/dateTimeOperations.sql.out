@@ -185,7 +185,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast('2017-12-11' as string) + interval 2 day
 -- !query schema
-struct<CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY:string>
+struct<cast('2017-12-11' as string)+ interval 2 day:string>
 -- !query output
 2017-12-13 00:00:00
 
@@ -193,7 +193,7 @@ struct<CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY:string>
 -- !query
 select cast('2017-12-11 09:30:00' as string) + interval 2 day
 -- !query schema
-struct<CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2' DAY:string>
+struct<cast('2017-12-11 09:30:00' as string)+ interval 2 day:string>
 -- !query output
 2017-12-13 09:30:00
 
@@ -251,7 +251,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast('2017-12-11 09:30:00.0' as timestamp) + interval 2 day
 -- !query schema
-struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2' DAY:timestamp>
+struct<cast('2017-12-11 09:30:00.0' as timestamp)+ interval 2 day:timestamp>
 -- !query output
 2017-12-13 09:30:00
 
@@ -259,7 +259,7 @@ struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2' DAY:timestamp>
 -- !query
 select cast('2017-12-11 09:30:00' as date) + interval 2 day
 -- !query schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), extractansiintervaldays(INTERVAL '2' DAY)):date>
+struct<cast('2017-12-11 09:30:00' as date)+ interval 2 day:date>
 -- !query output
 2017-12-13
 
@@ -442,7 +442,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval 2 day + cast('2017-12-11' as string)
 -- !query schema
-struct<CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY:string>
+struct<interval 2 day + cast('2017-12-11' as string):string>
 -- !query output
 2017-12-13 00:00:00
 
@@ -450,7 +450,7 @@ struct<CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY:string>
 -- !query
 select interval 2 day + cast('2017-12-11 09:30:00' as string)
 -- !query schema
-struct<CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2' DAY:string>
+struct<interval 2 day + cast('2017-12-11 09:30:00' as string):string>
 -- !query output
 2017-12-13 09:30:00
 
@@ -508,7 +508,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval 2 day + cast('2017-12-11 09:30:00.0' as timestamp)
 -- !query schema
-struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2' DAY:timestamp>
+struct<interval 2 day + cast('2017-12-11 09:30:00.0' as timestamp):timestamp>
 -- !query output
 2017-12-13 09:30:00
 
@@ -516,7 +516,7 @@ struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2' DAY:timestamp>
 -- !query
 select interval 2 day + cast('2017-12-11 09:30:00' as date)
 -- !query schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), extractansiintervaldays(INTERVAL '2' DAY)):date>
+struct<interval 2 day + cast('2017-12-11 09:30:00' as date):date>
 -- !query output
 2017-12-13
 
@@ -699,7 +699,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast('2017-12-11' as string) - interval 2 day
 -- !query schema
-struct<CAST(2017-12-11 AS STRING) - INTERVAL '2' DAY:string>
+struct<cast('2017-12-11' as string)- interval 2 day:string>
 -- !query output
 2017-12-09 00:00:00
 
@@ -707,7 +707,7 @@ struct<CAST(2017-12-11 AS STRING) - INTERVAL '2' DAY:string>
 -- !query
 select cast('2017-12-11 09:30:00' as string) - interval 2 day
 -- !query schema
-struct<CAST(2017-12-11 09:30:00 AS STRING) - INTERVAL '2' DAY:string>
+struct<cast('2017-12-11 09:30:00' as string)- interval 2 day:string>
 -- !query output
 2017-12-09 09:30:00
 
@@ -765,7 +765,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast('2017-12-11 09:30:00.0' as timestamp) - interval 2 day
 -- !query schema
-struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - INTERVAL '2' DAY:timestamp>
+struct<cast('2017-12-11 09:30:00.0' as timestamp)- interval 2 day:timestamp>
 -- !query output
 2017-12-09 09:30:00
 
@@ -773,6 +773,6 @@ struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - INTERVAL '2' DAY:timestamp>
 -- !query
 select cast('2017-12-11 09:30:00' as date) - interval 2 day
 -- !query schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), (- extractansiintervaldays(INTERVAL '2' DAY))):date>
+struct<cast('2017-12-11 09:30:00' as date)- interval 2 day:date>
 -- !query output
 2017-12-09

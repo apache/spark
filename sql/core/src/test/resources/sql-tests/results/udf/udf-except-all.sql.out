@@ -302,7 +302,7 @@ FROM   (SELECT udf(tab3.k),
                JOIN tab4 
                  ON tab3.k = udf(tab4.k))
 -- !query schema
-struct<k:int,udf(v):int>
+struct<k:int,udf(tab4 . v):int>
 -- !query output
 
 
@@ -322,7 +322,7 @@ FROM   (SELECT udf(tab4.v) AS k,
                JOIN tab4 
                  ON udf(tab3.k) = udf(tab4.k))
 -- !query schema
-struct<udf(udf(k)):int,udf(v):int>
+struct<udf(udf(tab3 . k)):int,udf(tab4 . v):int>
 -- !query output
 1	2
 1	2

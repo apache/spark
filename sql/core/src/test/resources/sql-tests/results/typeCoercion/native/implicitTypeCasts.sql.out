@@ -10,7 +10,7 @@ struct<>
 -- !query
 SELECT 1 + '2' FROM t
 -- !query schema
-struct<(1 + 2):double>
+struct<1 + '2':double>
 -- !query output
 3.0
 
@@ -18,7 +18,7 @@ struct<(1 + 2):double>
 -- !query
 SELECT 1 - '2' FROM t
 -- !query schema
-struct<(1 - 2):double>
+struct<1 - '2':double>
 -- !query output
 -1.0
 
@@ -26,7 +26,7 @@ struct<(1 - 2):double>
 -- !query
 SELECT 1 * '2' FROM t
 -- !query schema
-struct<(1 * 2):double>
+struct<1 * '2':double>
 -- !query output
 2.0
 
@@ -34,7 +34,7 @@ struct<(1 * 2):double>
 -- !query
 SELECT 4 / '2' FROM t
 -- !query schema
-struct<(4 / 2):double>
+struct<4 / '2':double>
 -- !query output
 2.0
 
@@ -42,7 +42,7 @@ struct<(4 / 2):double>
 -- !query
 SELECT 1.1 + '2' FROM t
 -- !query schema
-struct<(1.1 + 2):double>
+struct<1.1 + '2':double>
 -- !query output
 3.1
 
@@ -50,7 +50,7 @@ struct<(1.1 + 2):double>
 -- !query
 SELECT 1.1 - '2' FROM t
 -- !query schema
-struct<(1.1 - 2):double>
+struct<1.1 - '2':double>
 -- !query output
 -0.8999999999999999
 
@@ -58,7 +58,7 @@ struct<(1.1 - 2):double>
 -- !query
 SELECT 1.1 * '2' FROM t
 -- !query schema
-struct<(1.1 * 2):double>
+struct<1.1 * '2':double>
 -- !query output
 2.2
 
@@ -66,7 +66,7 @@ struct<(1.1 * 2):double>
 -- !query
 SELECT 4.4 / '2' FROM t
 -- !query schema
-struct<(4.4 / 2):double>
+struct<4.4 / '2':double>
 -- !query output
 2.2
 
@@ -74,7 +74,7 @@ struct<(4.4 / 2):double>
 -- !query
 SELECT 1.1 + '2.2' FROM t
 -- !query schema
-struct<(1.1 + 2.2):double>
+struct<1.1 + '2.2':double>
 -- !query output
 3.3000000000000003
 
@@ -82,7 +82,7 @@ struct<(1.1 + 2.2):double>
 -- !query
 SELECT 1.1 - '2.2' FROM t
 -- !query schema
-struct<(1.1 - 2.2):double>
+struct<1.1 - '2.2':double>
 -- !query output
 -1.1
 
@@ -90,7 +90,7 @@ struct<(1.1 - 2.2):double>
 -- !query
 SELECT 1.1 * '2.2' FROM t
 -- !query schema
-struct<(1.1 * 2.2):double>
+struct<1.1 * '2.2':double>
 -- !query output
 2.4200000000000004
 
@@ -98,7 +98,7 @@ struct<(1.1 * 2.2):double>
 -- !query
 SELECT 4.4 / '2.2' FROM t
 -- !query schema
-struct<(4.4 / 2.2):double>
+struct<4.4 / '2.2':double>
 -- !query output
 2.0
 
@@ -106,7 +106,7 @@ struct<(4.4 / 2.2):double>
 -- !query
 SELECT '$' || cast(1 as smallint) || '$' FROM t
 -- !query schema
-struct<concat(concat($, CAST(1 AS SMALLINT)), $):string>
+struct<'$' || cast(1 as smallint)|| '$':string>
 -- !query output
 $1$
 
@@ -114,7 +114,7 @@ $1$
 -- !query
 SELECT '$' || 1 || '$' FROM t
 -- !query schema
-struct<concat(concat($, 1), $):string>
+struct<'$' || 1 || '$':string>
 -- !query output
 $1$
 
@@ -122,7 +122,7 @@ $1$
 -- !query
 SELECT '$' || cast(1 as bigint) || '$' FROM t
 -- !query schema
-struct<concat(concat($, CAST(1 AS BIGINT)), $):string>
+struct<'$' || cast(1 as bigint)|| '$':string>
 -- !query output
 $1$
 
@@ -130,7 +130,7 @@ $1$
 -- !query
 SELECT '$' || cast(1.1 as float) || '$' FROM t
 -- !query schema
-struct<concat(concat($, CAST(1.1 AS FLOAT)), $):string>
+struct<'$' || cast(1.1 as float)|| '$':string>
 -- !query output
 $1.1$
 
@@ -138,7 +138,7 @@ $1.1$
 -- !query
 SELECT '$' || cast(1.1 as double) || '$' FROM t
 -- !query schema
-struct<concat(concat($, CAST(1.1 AS DOUBLE)), $):string>
+struct<'$' || cast(1.1 as double)|| '$':string>
 -- !query output
 $1.1$
 
@@ -146,7 +146,7 @@ $1.1$
 -- !query
 SELECT '$' || 1.1 || '$' FROM t
 -- !query schema
-struct<concat(concat($, 1.1), $):string>
+struct<'$' || 1.1 || '$':string>
 -- !query output
 $1.1$
 
@@ -154,7 +154,7 @@ $1.1$
 -- !query
 SELECT '$' || cast(1.1 as decimal(8,3)) || '$' FROM t
 -- !query schema
-struct<concat(concat($, CAST(1.1 AS DECIMAL(8,3))), $):string>
+struct<'$' || cast(1.1 as decimal(8, 3))|| '$':string>
 -- !query output
 $1.100$
 
@@ -162,7 +162,7 @@ $1.100$
 -- !query
 SELECT '$' || 'abcd' || '$' FROM t
 -- !query schema
-struct<concat(concat($, abcd), $):string>
+struct<'$' || 'abcd' || '$':string>
 -- !query output
 $abcd$
 
@@ -170,7 +170,7 @@ $abcd$
 -- !query
 SELECT '$' || date('1996-09-09') || '$' FROM t
 -- !query schema
-struct<concat(concat($, 1996-09-09), $):string>
+struct<'$' || date('1996-09-09')|| '$':string>
 -- !query output
 $1996-09-09$
 
@@ -178,7 +178,7 @@ $1996-09-09$
 -- !query
 SELECT '$' || timestamp('1996-09-09 10:11:12.4' )|| '$' FROM t
 -- !query schema
-struct<concat(concat($, 1996-09-09 10:11:12.4), $):string>
+struct<'$' || timestamp('1996-09-09 10:11:12.4')|| '$':string>
 -- !query output
 $1996-09-09 10:11:12.4$
 
@@ -186,7 +186,7 @@ $1996-09-09 10:11:12.4$
 -- !query
 SELECT length(cast(1 as smallint)) FROM t
 -- !query schema
-struct<length(CAST(1 AS SMALLINT)):int>
+struct<length(cast(1 as smallint)):int>
 -- !query output
 1
 
@@ -194,7 +194,7 @@ struct<length(CAST(1 AS SMALLINT)):int>
 -- !query
 SELECT length(cast(1 as int)) FROM t
 -- !query schema
-struct<length(CAST(1 AS INT)):int>
+struct<length(cast(1 as int)):int>
 -- !query output
 1
 
@@ -202,7 +202,7 @@ struct<length(CAST(1 AS INT)):int>
 -- !query
 SELECT length(cast(1 as bigint)) FROM t
 -- !query schema
-struct<length(CAST(1 AS BIGINT)):int>
+struct<length(cast(1 as bigint)):int>
 -- !query output
 1
 
@@ -210,7 +210,7 @@ struct<length(CAST(1 AS BIGINT)):int>
 -- !query
 SELECT length(cast(1.1 as float)) FROM t
 -- !query schema
-struct<length(CAST(1.1 AS FLOAT)):int>
+struct<length(cast(1.1 as float)):int>
 -- !query output
 3
 
@@ -218,7 +218,7 @@ struct<length(CAST(1.1 AS FLOAT)):int>
 -- !query
 SELECT length(cast(1.1 as double)) FROM t
 -- !query schema
-struct<length(CAST(1.1 AS DOUBLE)):int>
+struct<length(cast(1.1 as double)):int>
 -- !query output
 3
 
@@ -234,7 +234,7 @@ struct<length(1.1):int>
 -- !query
 SELECT length(cast(1.1 as decimal(8,3))) FROM t
 -- !query schema
-struct<length(CAST(1.1 AS DECIMAL(8,3))):int>
+struct<length(cast(1.1 as decimal(8, 3))):int>
 -- !query output
 5
 
@@ -242,7 +242,7 @@ struct<length(CAST(1.1 AS DECIMAL(8,3))):int>
 -- !query
 SELECT length('four') FROM t
 -- !query schema
-struct<length(four):int>
+struct<length('four'):int>
 -- !query output
 4
 
@@ -250,7 +250,7 @@ struct<length(four):int>
 -- !query
 SELECT length(date('1996-09-10')) FROM t
 -- !query schema
-struct<length(1996-09-10):int>
+struct<length(date('1996-09-10')):int>
 -- !query output
 10
 
@@ -258,7 +258,7 @@ struct<length(1996-09-10):int>
 -- !query
 SELECT length(timestamp('1996-09-10 10:11:12.4')) FROM t
 -- !query schema
-struct<length(1996-09-10 10:11:12.4):int>
+struct<length(timestamp('1996-09-10 10:11:12.4')):int>
 -- !query output
 21
 
@@ -266,7 +266,7 @@ struct<length(1996-09-10 10:11:12.4):int>
 -- !query
 SELECT year( '1996-01-10') FROM t
 -- !query schema
-struct<year(1996-01-10):int>
+struct<year('1996-01-10'):int>
 -- !query output
 1996
 
@@ -274,7 +274,7 @@ struct<year(1996-01-10):int>
 -- !query
 SELECT month( '1996-01-10') FROM t
 -- !query schema
-struct<month(1996-01-10):int>
+struct<month('1996-01-10'):int>
 -- !query output
 1
 
@@ -282,7 +282,7 @@ struct<month(1996-01-10):int>
 -- !query
 SELECT day( '1996-01-10') FROM t
 -- !query schema
-struct<day(1996-01-10):int>
+struct<day('1996-01-10'):int>
 -- !query output
 10
 
@@ -290,7 +290,7 @@ struct<day(1996-01-10):int>
 -- !query
 SELECT hour( '10:11:12') FROM t
 -- !query schema
-struct<hour(10:11:12):int>
+struct<hour('10:11:12'):int>
 -- !query output
 10
 
@@ -298,7 +298,7 @@ struct<hour(10:11:12):int>
 -- !query
 SELECT minute( '10:11:12') FROM t
 -- !query schema
-struct<minute(10:11:12):int>
+struct<minute('10:11:12'):int>
 -- !query output
 11
 
@@ -306,7 +306,7 @@ struct<minute(10:11:12):int>
 -- !query
 SELECT second( '10:11:12') FROM t
 -- !query schema
-struct<second(10:11:12):int>
+struct<second('10:11:12'):int>
 -- !query output
 12
 
@@ -314,7 +314,7 @@ struct<second(10:11:12):int>
 -- !query
 select 1 like '%' FROM t
 -- !query schema
-struct<1 LIKE %:boolean>
+struct<1 like '%':boolean>
 -- !query output
 true
 
@@ -322,7 +322,7 @@ true
 -- !query
 select date('1996-09-10') like '19%' FROM t
 -- !query schema
-struct<1996-09-10 LIKE 19%:boolean>
+struct<date('1996-09-10')like '19%':boolean>
 -- !query output
 true
 
@@ -330,7 +330,7 @@ true
 -- !query
 select '1' like 1 FROM t
 -- !query schema
-struct<1 LIKE 1:boolean>
+struct<'1' like 1:boolean>
 -- !query output
 true
 
@@ -338,7 +338,7 @@ true
 -- !query
 select '1 ' like 1 FROM t
 -- !query schema
-struct<1  LIKE 1:boolean>
+struct<'1 ' like 1:boolean>
 -- !query output
 false
 
@@ -346,6 +346,6 @@ false
 -- !query
 select '1996-09-10' like date('1996-09-10') FROM t
 -- !query schema
-struct<1996-09-10 LIKE 1996-09-10:boolean>
+struct<'1996-09-10' like date('1996-09-10'):boolean>
 -- !query output
 true

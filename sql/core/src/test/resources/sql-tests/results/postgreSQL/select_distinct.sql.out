@@ -99,7 +99,7 @@ struct<two:int,string4:string,ten:int>
 SELECT count(*) FROM
   (SELECT DISTINCT two, four, two FROM tenk1) ss
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 4
 

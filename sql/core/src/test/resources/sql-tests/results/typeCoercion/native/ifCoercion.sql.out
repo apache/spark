@@ -10,7 +10,7 @@ struct<>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS TINYINT))):tinyint>
+struct<IF(true, cast(1 as tinyint), cast(2 as tinyint)):tinyint>
 -- !query output
 1
 
@@ -18,7 +18,7 @@ struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS TINYINT))):tinyint>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS SMALLINT))):smallint>
+struct<IF(true, cast(1 as tinyint), cast(2 as smallint)):smallint>
 -- !query output
 1
 
@@ -26,7 +26,7 @@ struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS SMALLINT))):smallint>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS INT))):int>
+struct<IF(true, cast(1 as tinyint), cast(2 as int)):int>
 -- !query output
 1
 
@@ -34,7 +34,7 @@ struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS INT))):int>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS BIGINT))):bigint>
+struct<IF(true, cast(1 as tinyint), cast(2 as bigint)):bigint>
 -- !query output
 1
 
@@ -42,7 +42,7 @@ struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS BIGINT))):bigint>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS FLOAT))):float>
+struct<IF(true, cast(1 as tinyint), cast(2 as float)):float>
 -- !query output
 1.0
 
@@ -50,7 +50,7 @@ struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS FLOAT))):float>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS DOUBLE))):double>
+struct<IF(true, cast(1 as tinyint), cast(2 as double)):double>
 -- !query output
 1.0
 
@@ -58,7 +58,7 @@ struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS DOUBLE))):double>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS DECIMAL(10,0)))):decimal(10,0)>
+struct<IF(true, cast(1 as tinyint), cast(2 as decimal(10, 0))):decimal(10,0)>
 -- !query output
 1
 
@@ -66,7 +66,7 @@ struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS DECIMAL(10,0)))):decimal(10,0)>
 -- !query
 SELECT IF(true, cast(1 as tinyint), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS TINYINT), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as tinyint), cast(2 as string)):string>
 -- !query output
 1
 
@@ -166,7 +166,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS TINYINT))):smallint>
+struct<IF(true, cast(1 as smallint), cast(2 as tinyint)):smallint>
 -- !query output
 1
 
@@ -174,7 +174,7 @@ struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS TINYINT))):smallint>
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS SMALLINT))):smallint>
+struct<IF(true, cast(1 as smallint), cast(2 as smallint)):smallint>
 -- !query output
 1
 
@@ -182,7 +182,7 @@ struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS SMALLINT))):smallint>
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS INT))):int>
+struct<IF(true, cast(1 as smallint), cast(2 as int)):int>
 -- !query output
 1
 
@@ -190,7 +190,7 @@ struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS INT))):int>
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BIGINT))):bigint>
+struct<IF(true, cast(1 as smallint), cast(2 as bigint)):bigint>
 -- !query output
 1
 
@@ -198,7 +198,7 @@ struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BIGINT))):bigint>
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS FLOAT))):float>
+struct<IF(true, cast(1 as smallint), cast(2 as float)):float>
 -- !query output
 1.0
 
@@ -206,7 +206,7 @@ struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS FLOAT))):float>
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS DOUBLE))):double>
+struct<IF(true, cast(1 as smallint), cast(2 as double)):double>
 -- !query output
 1.0
 
@@ -214,7 +214,7 @@ struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS DOUBLE))):double>
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS DECIMAL(10,0)))):decimal(10,0)>
+struct<IF(true, cast(1 as smallint), cast(2 as decimal(10, 0))):decimal(10,0)>
 -- !query output
 1
 
@@ -222,7 +222,7 @@ struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS DECIMAL(10,0)))):decimal(10,0)>
 -- !query
 SELECT IF(true, cast(1 as smallint), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS SMALLINT), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as smallint), cast(2 as string)):string>
 -- !query output
 1
 
@@ -322,7 +322,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS TINYINT))):int>
+struct<IF(true, cast(1 as int), cast(2 as tinyint)):int>
 -- !query output
 1
 
@@ -330,7 +330,7 @@ struct<(IF(true, CAST(1 AS INT), CAST(2 AS TINYINT))):int>
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS SMALLINT))):int>
+struct<IF(true, cast(1 as int), cast(2 as smallint)):int>
 -- !query output
 1
 
@@ -338,7 +338,7 @@ struct<(IF(true, CAST(1 AS INT), CAST(2 AS SMALLINT))):int>
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS INT))):int>
+struct<IF(true, cast(1 as int), cast(2 as int)):int>
 -- !query output
 1
 
@@ -346,7 +346,7 @@ struct<(IF(true, CAST(1 AS INT), CAST(2 AS INT))):int>
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS BIGINT))):bigint>
+struct<IF(true, cast(1 as int), cast(2 as bigint)):bigint>
 -- !query output
 1
 
@@ -354,7 +354,7 @@ struct<(IF(true, CAST(1 AS INT), CAST(2 AS BIGINT))):bigint>
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS FLOAT))):float>
+struct<IF(true, cast(1 as int), cast(2 as float)):float>
 -- !query output
 1.0
 
@@ -362,7 +362,7 @@ struct<(IF(true, CAST(1 AS INT), CAST(2 AS FLOAT))):float>
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS DOUBLE))):double>
+struct<IF(true, cast(1 as int), cast(2 as double)):double>
 -- !query output
 1.0
 
@@ -370,7 +370,7 @@ struct<(IF(true, CAST(1 AS INT), CAST(2 AS DOUBLE))):double>
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS DECIMAL(10,0)))):decimal(10,0)>
+struct<IF(true, cast(1 as int), cast(2 as decimal(10, 0))):decimal(10,0)>
 -- !query output
 1
 
@@ -378,7 +378,7 @@ struct<(IF(true, CAST(1 AS INT), CAST(2 AS DECIMAL(10,0)))):decimal(10,0)>
 -- !query
 SELECT IF(true, cast(1 as int), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS INT), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as int), cast(2 as string)):string>
 -- !query output
 1
 
@@ -478,7 +478,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS TINYINT))):bigint>
+struct<IF(true, cast(1 as bigint), cast(2 as tinyint)):bigint>
 -- !query output
 1
 
@@ -486,7 +486,7 @@ struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS TINYINT))):bigint>
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS SMALLINT))):bigint>
+struct<IF(true, cast(1 as bigint), cast(2 as smallint)):bigint>
 -- !query output
 1
 
@@ -494,7 +494,7 @@ struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS SMALLINT))):bigint>
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS INT))):bigint>
+struct<IF(true, cast(1 as bigint), cast(2 as int)):bigint>
 -- !query output
 1
 
@@ -502,7 +502,7 @@ struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS INT))):bigint>
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS BIGINT))):bigint>
+struct<IF(true, cast(1 as bigint), cast(2 as bigint)):bigint>
 -- !query output
 1
 
@@ -510,7 +510,7 @@ struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS BIGINT))):bigint>
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS FLOAT))):float>
+struct<IF(true, cast(1 as bigint), cast(2 as float)):float>
 -- !query output
 1.0
 
@@ -518,7 +518,7 @@ struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS FLOAT))):float>
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS DOUBLE))):double>
+struct<IF(true, cast(1 as bigint), cast(2 as double)):double>
 -- !query output
 1.0
 
@@ -526,7 +526,7 @@ struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS DOUBLE))):double>
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS DECIMAL(10,0)))):decimal(20,0)>
+struct<IF(true, cast(1 as bigint), cast(2 as decimal(10, 0))):decimal(20,0)>
 -- !query output
 1
 
@@ -534,7 +534,7 @@ struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS DECIMAL(10,0)))):decimal(20,0)>
 -- !query
 SELECT IF(true, cast(1 as bigint), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BIGINT), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as bigint), cast(2 as string)):string>
 -- !query output
 1
 
@@ -634,7 +634,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS TINYINT))):float>
+struct<IF(true, cast(1 as float), cast(2 as tinyint)):float>
 -- !query output
 1.0
 
@@ -642,7 +642,7 @@ struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS TINYINT))):float>
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS SMALLINT))):float>
+struct<IF(true, cast(1 as float), cast(2 as smallint)):float>
 -- !query output
 1.0
 
@@ -650,7 +650,7 @@ struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS SMALLINT))):float>
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS INT))):float>
+struct<IF(true, cast(1 as float), cast(2 as int)):float>
 -- !query output
 1.0
 
@@ -658,7 +658,7 @@ struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS INT))):float>
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS BIGINT))):float>
+struct<IF(true, cast(1 as float), cast(2 as bigint)):float>
 -- !query output
 1.0
 
@@ -666,7 +666,7 @@ struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS BIGINT))):float>
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS FLOAT))):float>
+struct<IF(true, cast(1 as float), cast(2 as float)):float>
 -- !query output
 1.0
 
@@ -674,7 +674,7 @@ struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS FLOAT))):float>
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS DOUBLE))):double>
+struct<IF(true, cast(1 as float), cast(2 as double)):double>
 -- !query output
 1.0
 
@@ -682,7 +682,7 @@ struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS DOUBLE))):double>
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS DECIMAL(10,0)))):double>
+struct<IF(true, cast(1 as float), cast(2 as decimal(10, 0))):double>
 -- !query output
 1.0
 
@@ -690,7 +690,7 @@ struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS DECIMAL(10,0)))):double>
 -- !query
 SELECT IF(true, cast(1 as float), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS FLOAT), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as float), cast(2 as string)):string>
 -- !query output
 1.0
 
@@ -790,7 +790,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS TINYINT))):double>
+struct<IF(true, cast(1 as double), cast(2 as tinyint)):double>
 -- !query output
 1.0
 
@@ -798,7 +798,7 @@ struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS TINYINT))):double>
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS SMALLINT))):double>
+struct<IF(true, cast(1 as double), cast(2 as smallint)):double>
 -- !query output
 1.0
 
@@ -806,7 +806,7 @@ struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS SMALLINT))):double>
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS INT))):double>
+struct<IF(true, cast(1 as double), cast(2 as int)):double>
 -- !query output
 1.0
 
@@ -814,7 +814,7 @@ struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS INT))):double>
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BIGINT))):double>
+struct<IF(true, cast(1 as double), cast(2 as bigint)):double>
 -- !query output
 1.0
 
@@ -822,7 +822,7 @@ struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BIGINT))):double>
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS FLOAT))):double>
+struct<IF(true, cast(1 as double), cast(2 as float)):double>
 -- !query output
 1.0
 
@@ -830,7 +830,7 @@ struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS FLOAT))):double>
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS DOUBLE))):double>
+struct<IF(true, cast(1 as double), cast(2 as double)):double>
 -- !query output
 1.0
 
@@ -838,7 +838,7 @@ struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS DOUBLE))):double>
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS DECIMAL(10,0)))):double>
+struct<IF(true, cast(1 as double), cast(2 as decimal(10, 0))):double>
 -- !query output
 1.0
 
@@ -846,7 +846,7 @@ struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS DECIMAL(10,0)))):double>
 -- !query
 SELECT IF(true, cast(1 as double), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DOUBLE), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as double), cast(2 as string)):string>
 -- !query output
 1.0
 
@@ -946,7 +946,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS TINYINT))):decimal(10,0)>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as tinyint)):decimal(10,0)>
 -- !query output
 1
 
@@ -954,7 +954,7 @@ struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS TINYINT))):decimal(10,0)>
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS SMALLINT))):decimal(10,0)>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as smallint)):decimal(10,0)>
 -- !query output
 1
 
@@ -962,7 +962,7 @@ struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS SMALLINT))):decimal(10,0)>
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS INT))):decimal(10,0)>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as int)):decimal(10,0)>
 -- !query output
 1
 
@@ -970,7 +970,7 @@ struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS INT))):decimal(10,0)>
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BIGINT))):decimal(20,0)>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as bigint)):decimal(20,0)>
 -- !query output
 1
 
@@ -978,7 +978,7 @@ struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BIGINT))):decimal(20,0)>
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS FLOAT))):double>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as float)):double>
 -- !query output
 1.0
 
@@ -986,7 +986,7 @@ struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS FLOAT))):double>
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS DOUBLE))):double>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as double)):double>
 -- !query output
 1.0
 
@@ -994,7 +994,7 @@ struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS DOUBLE))):double>
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS DECIMAL(10,0)))):decimal(10,0)>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as decimal(10, 0))):decimal(10,0)>
 -- !query output
 1
 
@@ -1002,7 +1002,7 @@ struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS DECIMAL(10,0)))):decimal(10
 -- !query
 SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as decimal(10, 0)), cast(2 as string)):string>
 -- !query output
 1
 
@@ -1102,7 +1102,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as tinyint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS TINYINT))):string>
+struct<IF(true, cast(1 as string), cast(2 as tinyint)):string>
 -- !query output
 1
 
@@ -1110,7 +1110,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2 AS TINYINT))):string>
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as smallint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS SMALLINT))):string>
+struct<IF(true, cast(1 as string), cast(2 as smallint)):string>
 -- !query output
 1
 
@@ -1118,7 +1118,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2 AS SMALLINT))):string>
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as int)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS INT))):string>
+struct<IF(true, cast(1 as string), cast(2 as int)):string>
 -- !query output
 1
 
@@ -1126,7 +1126,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2 AS INT))):string>
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as bigint)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS BIGINT))):string>
+struct<IF(true, cast(1 as string), cast(2 as bigint)):string>
 -- !query output
 1
 
@@ -1134,7 +1134,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2 AS BIGINT))):string>
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as float)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS FLOAT))):string>
+struct<IF(true, cast(1 as string), cast(2 as float)):string>
 -- !query output
 1
 
@@ -1142,7 +1142,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2 AS FLOAT))):string>
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as double)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS DOUBLE))):string>
+struct<IF(true, cast(1 as string), cast(2 as double)):string>
 -- !query output
 1
 
@@ -1150,7 +1150,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2 AS DOUBLE))):string>
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as decimal(10, 0))) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS DECIMAL(10,0)))):string>
+struct<IF(true, cast(1 as string), cast(2 as decimal(10, 0))):string>
 -- !query output
 1
 
@@ -1158,7 +1158,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2 AS DECIMAL(10,0)))):string>
 -- !query
 SELECT IF(true, cast(1 as string), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2 AS STRING))):string>
+struct<IF(true, cast(1 as string), cast(2 as string)):string>
 -- !query output
 1
 
@@ -1212,7 +1212,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as string), cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))):string>
+struct<IF(true, cast(1 as string), cast('2017-12-11 09:30:00.0' as timestamp)):string>
 -- !query output
 1
 
@@ -1220,7 +1220,7 @@ struct<(IF(true, CAST(1 AS STRING), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))):s
 -- !query
 SELECT IF(true, cast(1 as string), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS STRING), CAST(2017-12-11 09:30:00 AS DATE))):string>
+struct<IF(true, cast(1 as string), cast('2017-12-11 09:30:00' as date)):string>
 -- !query output
 1
 
@@ -1412,7 +1412,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast('1' as binary), cast('2' as binary)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BINARY), CAST(2 AS BINARY))):binary>
+struct<IF(true, cast('1' as binary), cast('2' as binary)):binary>
 -- !query output
 1
 
@@ -1696,7 +1696,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast(1 as boolean), cast(2 as boolean)) FROM t
 -- !query schema
-struct<(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BOOLEAN))):boolean>
+struct<IF(true, cast(1 as boolean), cast(2 as boolean)):boolean>
 -- !query output
 true
 
@@ -1911,7 +1911,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS STRING))):string>
+struct<IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as string)):string>
 -- !query output
 2017-12-12 09:30:00
 
@@ -1965,7 +1965,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 -- !query schema
-struct<(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))):timestamp>
+struct<IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast('2017-12-11 09:30:00.0' as timestamp)):timestamp>
 -- !query output
 2017-12-12 09:30:00
 
@@ -1973,7 +1973,7 @@ struct<(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2017-12-11 09:30
 -- !query
 SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query schema
-struct<(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2017-12-11 09:30:00 AS DATE))):timestamp>
+struct<IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast('2017-12-11 09:30:00' as date)):timestamp>
 -- !query output
 2017-12-12 09:30:00
 
@@ -2142,7 +2142,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as string)) FROM t
 -- !query schema
-struct<(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS STRING))):string>
+struct<IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as string)):string>
 -- !query output
 2017-12-12
 
@@ -2196,7 +2196,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 -- !query schema
-struct<(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))):timestamp>
+struct<IF(true, cast('2017-12-12 09:30:00' as date), cast('2017-12-11 09:30:00.0' as timestamp)):timestamp>
 -- !query output
 2017-12-12 00:00:00
 
@@ -2204,6 +2204,6 @@ struct<(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2017-12-11 09:30:00.0 A
 -- !query
 SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query schema
-struct<(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2017-12-11 09:30:00 AS DATE))):date>
+struct<IF(true, cast('2017-12-12 09:30:00' as date), cast('2017-12-11 09:30:00' as date)):date>
 -- !query output
 2017-12-12

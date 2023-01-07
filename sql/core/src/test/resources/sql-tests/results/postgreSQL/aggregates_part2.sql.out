@@ -79,7 +79,7 @@ struct<b1:int,bit_and(b2):int>
 -- !query
 SELECT b1, b2, bit_and(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test
 -- !query schema
-struct<b1:int,b2:int,bit_and(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<b1:int,b2:int,bit_and(b2)OVER(PARTITION BY b1 ORDER BY b2):int>
 -- !query output
 1	1	1
 3	3	3
@@ -89,7 +89,7 @@ struct<b1:int,b2:int,bit_and(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIR
 -- !query
 SELECT b1, b2, bit_or(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test
 -- !query schema
-struct<b1:int,b2:int,bit_or(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<b1:int,b2:int,bit_or(b2)OVER(PARTITION BY b1 ORDER BY b2):int>
 -- !query output
 1	1	1
 3	3	3

@@ -2,7 +2,7 @@
 -- !query
 select from_csv('1', 'create INT')
 -- !query schema
-struct<from_csv(1):struct<create:int>>
+struct<from_csv('1', 'create INT'):struct<create:int>>
 -- !query output
 {"create":1}
 
@@ -10,7 +10,7 @@ struct<from_csv(1):struct<create:int>>
 -- !query
 select from_csv('1', 'cube INT')
 -- !query schema
-struct<from_csv(1):struct<cube:int>>
+struct<from_csv('1', 'cube INT'):struct<cube:int>>
 -- !query output
 {"cube":1}
 
@@ -18,7 +18,7 @@ struct<from_csv(1):struct<cube:int>>
 -- !query
 select from_json('{"create":1}', 'create INT')
 -- !query schema
-struct<from_json({"create":1}):struct<create:int>>
+struct<from_json('{"create":1}', 'create INT'):struct<create:int>>
 -- !query output
 {"create":1}
 
@@ -26,6 +26,6 @@ struct<from_json({"create":1}):struct<create:int>>
 -- !query
 select from_json('{"cube":1}', 'cube INT')
 -- !query schema
-struct<from_json({"cube":1}):struct<cube:int>>
+struct<from_json('{"cube":1}', 'cube INT'):struct<cube:int>>
 -- !query output
 {"cube":1}

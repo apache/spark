@@ -82,7 +82,7 @@ NULL
 -- !query
 SELECT try_sum(col / 0) FROM VALUES (5), (10), (15) AS tab(col)
 -- !query schema
-struct<try_sum((col / 0)):double>
+struct<try_sum(col / 0):double>
 -- !query output
 NULL
 
@@ -90,7 +90,7 @@ NULL
 -- !query
 SELECT try_sum(col / 0) FROM VALUES (5.0), (10.0), (15.0) AS tab(col)
 -- !query schema
-struct<try_sum((col / 0)):decimal(18,6)>
+struct<try_sum(col / 0):decimal(18,6)>
 -- !query output
 NULL
 
@@ -98,7 +98,7 @@ NULL
 -- !query
 SELECT try_sum(col / 0) FROM VALUES (NULL), (10), (15) AS tab(col)
 -- !query schema
-struct<try_sum((col / 0)):double>
+struct<try_sum(col / 0):double>
 -- !query output
 NULL
 
@@ -106,7 +106,7 @@ NULL
 -- !query
 SELECT try_sum(col + 1L) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
 -- !query schema
-struct<try_sum((col + 1)):bigint>
+struct<try_sum(col + 1L):bigint>
 -- !query output
 -9223372036854775806
 
@@ -232,7 +232,7 @@ NULL
 -- !query
 SELECT try_avg(col / 0) FROM VALUES (5), (10), (15) AS tab(col)
 -- !query schema
-struct<try_avg((col / 0)):double>
+struct<try_avg(col / 0):double>
 -- !query output
 NULL
 
@@ -240,7 +240,7 @@ NULL
 -- !query
 SELECT try_avg(col / 0) FROM VALUES (5.0), (10.0), (15.0) AS tab(col)
 -- !query schema
-struct<try_avg((col / 0)):decimal(12,10)>
+struct<try_avg(col / 0):decimal(12,10)>
 -- !query output
 NULL
 
@@ -248,7 +248,7 @@ NULL
 -- !query
 SELECT try_avg(col / 0) FROM VALUES (NULL), (10), (15) AS tab(col)
 -- !query schema
-struct<try_avg((col / 0)):double>
+struct<try_avg(col / 0):double>
 -- !query output
 NULL
 
@@ -256,7 +256,7 @@ NULL
 -- !query
 SELECT try_avg(col + 1L) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
 -- !query schema
-struct<try_avg((col + 1)):double>
+struct<try_avg(col + 1L):double>
 -- !query output
 -4.6116860184273879E18
 

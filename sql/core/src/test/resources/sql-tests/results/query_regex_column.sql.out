@@ -344,7 +344,7 @@ struct<b:int>
 -- !query
 SELECT SUM(`a`) FROM testdata3
 -- !query schema
-struct<sum(a):bigint>
+struct<SUM(a):bigint>
 -- !query output
 6
 
@@ -352,7 +352,7 @@ struct<sum(a):bigint>
 -- !query
 SELECT SUM(`(a)`) FROM testdata3
 -- !query schema
-struct<sum(a):bigint>
+struct<SUM((a)):bigint>
 -- !query output
 6
 
@@ -360,7 +360,7 @@ struct<sum(a):bigint>
 -- !query
 SELECT SUM(`(a)?+.+`) FROM testdata3
 -- !query schema
-struct<sum(b):bigint>
+struct<SUM((a)?+.+):bigint>
 -- !query output
 10
 
@@ -368,7 +368,7 @@ struct<sum(b):bigint>
 -- !query
 SELECT SUM(a) FROM testdata3 GROUP BY `a`
 -- !query schema
-struct<sum(a):bigint>
+struct<SUM(a):bigint>
 -- !query output
 0
 1

@@ -2,7 +2,7 @@
 -- !query
 select x'00' < x'0f'
 -- !query schema
-struct<(X'00' < X'0F'):boolean>
+struct<x '00' < x '0f':boolean>
 -- !query output
 true
 
@@ -10,7 +10,7 @@ true
 -- !query
 select x'00' < x'ff'
 -- !query schema
-struct<(X'00' < X'FF'):boolean>
+struct<x '00' < x 'ff':boolean>
 -- !query output
 true
 
@@ -18,7 +18,7 @@ true
 -- !query
 select '1 ' = 1Y
 -- !query schema
-struct<(1  = 1):boolean>
+struct<'1 ' = 1Y:boolean>
 -- !query output
 true
 
@@ -26,7 +26,7 @@ true
 -- !query
 select '\t1 ' = 1Y
 -- !query schema
-struct<(	1  = 1):boolean>
+struct<'\t1 ' = 1Y:boolean>
 -- !query output
 true
 
@@ -34,7 +34,7 @@ true
 -- !query
 select '1 ' = 1S
 -- !query schema
-struct<(1  = 1):boolean>
+struct<'1 ' = 1S:boolean>
 -- !query output
 true
 
@@ -42,7 +42,7 @@ true
 -- !query
 select '1 ' = 1
 -- !query schema
-struct<(1  = 1):boolean>
+struct<'1 ' = 1:boolean>
 -- !query output
 true
 
@@ -50,7 +50,7 @@ true
 -- !query
 select ' 1' = 1L
 -- !query schema
-struct<( 1 = 1):boolean>
+struct<' 1' = 1L:boolean>
 -- !query output
 true
 
@@ -58,7 +58,7 @@ true
 -- !query
 select ' 1' = cast(1.0 as float)
 -- !query schema
-struct<( 1 = CAST(1.0 AS FLOAT)):boolean>
+struct<' 1' = cast(1.0 as float):boolean>
 -- !query output
 true
 
@@ -66,7 +66,7 @@ true
 -- !query
 select ' 1.0 ' = 1.0D
 -- !query schema
-struct<( 1.0  = 1.0):boolean>
+struct<' 1.0 ' = 1.0D:boolean>
 -- !query output
 true
 
@@ -74,6 +74,6 @@ true
 -- !query
 select ' 1.0 ' = 1.0BD
 -- !query schema
-struct<( 1.0  = 1.0):boolean>
+struct<' 1.0 ' = 1.0BD:boolean>
 -- !query output
 true

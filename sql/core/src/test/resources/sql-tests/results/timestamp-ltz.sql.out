@@ -2,7 +2,7 @@
 -- !query
 select timestamp_ltz'2016-12-31 00:12:00', timestamp_ltz'2016-12-31'
 -- !query schema
-struct<TIMESTAMP '2016-12-31 00:12:00':timestamp,TIMESTAMP '2016-12-31 00:00:00':timestamp>
+struct<timestamp_ltz '2016-12-31 00:12:00':timestamp,timestamp_ltz '2016-12-31':timestamp>
 -- !query output
 2016-12-31 00:12:00	2016-12-31 00:00:00
 
@@ -10,7 +10,7 @@ struct<TIMESTAMP '2016-12-31 00:12:00':timestamp,TIMESTAMP '2016-12-31 00:00:00'
 -- !query
 select to_timestamp_ltz(null), to_timestamp_ltz('2016-12-31 00:12:00'), to_timestamp_ltz('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<to_timestamp_ltz(NULL):timestamp,to_timestamp_ltz(2016-12-31 00:12:00):timestamp,to_timestamp_ltz(2016-12-31, yyyy-MM-dd):timestamp>
+struct<to_timestamp_ltz(null):timestamp,to_timestamp_ltz('2016-12-31 00:12:00'):timestamp,to_timestamp_ltz('2016-12-31', 'yyyy-MM-dd'):timestamp>
 -- !query output
 NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
 
@@ -18,7 +18,7 @@ NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
 -- !query
 select to_timestamp_ltz(to_date(null)), to_timestamp_ltz(to_date('2016-12-31'))
 -- !query schema
-struct<to_timestamp_ltz(to_date(NULL)):timestamp,to_timestamp_ltz(to_date(2016-12-31)):timestamp>
+struct<to_timestamp_ltz(to_date(null)):timestamp,to_timestamp_ltz(to_date('2016-12-31')):timestamp>
 -- !query output
 NULL	2016-12-31 00:00:00
 
@@ -26,7 +26,7 @@ NULL	2016-12-31 00:00:00
 -- !query
 select to_timestamp_ltz(to_timestamp_ntz(null)), to_timestamp_ltz(to_timestamp_ntz('2016-12-31 00:12:00'))
 -- !query schema
-struct<to_timestamp_ltz(to_timestamp_ntz(NULL)):timestamp,to_timestamp_ltz(to_timestamp_ntz(2016-12-31 00:12:00)):timestamp>
+struct<to_timestamp_ltz(to_timestamp_ntz(null)):timestamp,to_timestamp_ltz(to_timestamp_ntz('2016-12-31 00:12:00')):timestamp>
 -- !query output
 NULL	2016-12-31 00:12:00
 
@@ -34,7 +34,7 @@ NULL	2016-12-31 00:12:00
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678)
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678):timestamp>
+struct<make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678):timestamp>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -42,7 +42,7 @@ struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678):timestamp>
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET')
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
+struct<make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET'):timestamp>
 -- !query output
 2021-07-10 21:30:45.678
 
@@ -50,7 +50,7 @@ struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 60.007):timestamp>
+struct<make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007):timestamp>
 -- !query output
 NULL
 
@@ -58,6 +58,6 @@ NULL
 -- !query
 SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
 -- !query schema
-struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP '2022-03-23 00:00:00'):timestamp_ntz>
+struct<convert_timezone('Europe/Brussels', timestamp_ltz '2022-03-23 00:00:00 America/Los_Angeles'):timestamp_ntz>
 -- !query output
 2022-03-23 08:00:00

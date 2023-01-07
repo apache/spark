@@ -305,7 +305,7 @@ struct<1:int>
 -- !query
 select foo.* from (select null) as foo
 -- !query schema
-struct<NULL:void>
+struct<null:void>
 -- !query output
 NULL
 
@@ -313,7 +313,7 @@ NULL
 -- !query
 select foo.* from (select 'xyzzy',1,null) as foo
 -- !query schema
-struct<xyzzy:string,1:int,NULL:void>
+struct<'xyzzy':string,1:int,null:void>
 -- !query output
 xyzzy	1	NULL
 

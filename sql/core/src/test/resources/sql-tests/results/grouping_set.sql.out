@@ -63,7 +63,7 @@ FROM   (VALUES ('x', 'a', 10), ('y', 'b', 20) ) AS t (c1, c2, c3)
 GROUP  BY GROUPING SETS ( ( c1 ), ( c2 ) )
 HAVING GROUPING__ID > 1
 -- !query schema
-struct<c1:string,c2:string,sum(c3):bigint,grouping__id:bigint>
+struct<c1:string,c2:string,Sum(c3):bigint,grouping__id:bigint>
 -- !query output
 NULL	a	10	2
 NULL	b	20	2
@@ -94,7 +94,7 @@ struct<c1:int>
 -- !query
 SELECT a + b, b, sum(c) FROM (VALUES (1,1,1),(2,2,2)) AS t(a,b,c) GROUP BY GROUPING SETS ( (a + b), (b))
 -- !query schema
-struct<(a + b):int,b:int,sum(c):bigint>
+struct<a + b:int,b:int,sum(c):bigint>
 -- !query output
 2	NULL	1
 4	NULL	2
@@ -105,7 +105,7 @@ NULL	2	2
 -- !query
 SELECT a + b, b, sum(c) FROM (VALUES (1,1,1),(2,2,2)) AS t(a,b,c) GROUP BY GROUPING SETS ( (a + b), (b + a), (b))
 -- !query schema
-struct<(a + b):int,b:int,sum(c):bigint>
+struct<a + b:int,b:int,sum(c):bigint>
 -- !query output
 2	NULL	1
 2	NULL	1

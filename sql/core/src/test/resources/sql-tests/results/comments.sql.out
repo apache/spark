@@ -16,7 +16,7 @@ SELECT '/', 'ommented out content' AS second;
 */
 SELECT '/', 'selected content' AS second
 -- !query schema
-struct</:string,second:string>
+struct<'/':string,second:string>
 -- !query output
 /	selected content
 
@@ -27,7 +27,7 @@ struct</:string,second:string>
  */
 SELECT '*', 'selected content' AS third
 -- !query schema
-struct<*:string,third:string>
+struct<'*':string,third:string>
 -- !query output
 *	selected content
 

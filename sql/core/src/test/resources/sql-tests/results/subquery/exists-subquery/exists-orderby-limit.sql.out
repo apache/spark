@@ -129,7 +129,7 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id) a
                    GROUP  BY dept_id 
                    ORDER  BY dept_id)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 3
 

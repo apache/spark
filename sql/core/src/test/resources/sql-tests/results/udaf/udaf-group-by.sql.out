@@ -76,7 +76,7 @@ struct<udaf(a):int,udaf(b):int>
 -- !query
 SELECT 'foo', udaf(a) FROM testData GROUP BY 1
 -- !query schema
-struct<foo:string,udaf(a):int>
+struct<'foo':string,udaf(a):int>
 -- !query output
 foo	7
 
@@ -84,7 +84,7 @@ foo	7
 -- !query
 SELECT 'foo', udaf(a) FROM testData WHERE a = 0 GROUP BY 1
 -- !query schema
-struct<foo:string,udaf(a):int>
+struct<'foo':string,udaf(a):int>
 -- !query output
 
 
@@ -92,7 +92,7 @@ struct<foo:string,udaf(a):int>
 -- !query
 SELECT 'foo', udaf(STRUCT(a)) FROM testData WHERE a = 0 GROUP BY 1
 -- !query schema
-struct<foo:string,udaf(struct(a, a)):int>
+struct<'foo':string,udaf(STRUCT(a)):int>
 -- !query output
 
 
@@ -100,7 +100,7 @@ struct<foo:string,udaf(struct(a, a)):int>
 -- !query
 SELECT a + b, udaf(b) FROM testData GROUP BY a + b
 -- !query schema
-struct<(a + b):int,udaf(b):int>
+struct<a + b:int,udaf(b):int>
 -- !query output
 2	1
 3	2
@@ -128,7 +128,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT a + 1 + 1, udaf(b) FROM testData GROUP BY a + 1
 -- !query schema
-struct<((a + 1) + 1):int,udaf(b):int>
+struct<a + 1 + 1:int,udaf(b):int>
 -- !query output
 3	2
 4	2

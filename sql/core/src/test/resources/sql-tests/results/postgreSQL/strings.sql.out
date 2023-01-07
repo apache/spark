@@ -24,7 +24,7 @@ first line - next line - third line
 -- !query
 SELECT binary('\\xDeAdBeEf')
 -- !query schema
-struct<\xDeAdBeEf:binary>
+struct<binary('\\xDeAdBeEf'):binary>
 -- !query output
 \xDeAdBeEf
 
@@ -32,7 +32,7 @@ struct<\xDeAdBeEf:binary>
 -- !query
 SELECT binary('\\x De Ad Be Ef ')
 -- !query schema
-struct<\x De Ad Be Ef :binary>
+struct<binary('\\x De Ad Be Ef '):binary>
 -- !query output
 \x De Ad Be Ef
 
@@ -40,7 +40,7 @@ struct<\x De Ad Be Ef :binary>
 -- !query
 SELECT binary('\\xDe00BeEf')
 -- !query schema
-struct<\xDe00BeEf:binary>
+struct<binary('\\xDe00BeEf'):binary>
 -- !query output
 \xDe00BeEf
 
@@ -48,7 +48,7 @@ struct<\xDe00BeEf:binary>
 -- !query
 SELECT binary('DeAdBeEf')
 -- !query schema
-struct<DeAdBeEf:binary>
+struct<binary('DeAdBeEf'):binary>
 -- !query output
 DeAdBeEf
 
@@ -56,7 +56,7 @@ DeAdBeEf
 -- !query
 SELECT binary('De\\000dBeEf')
 -- !query schema
-struct<De\000dBeEf:binary>
+struct<binary('De\\000dBeEf'):binary>
 -- !query output
 De\000dBeEf
 
@@ -64,7 +64,7 @@ De\000dBeEf
 -- !query
 SELECT binary('De\\123dBeEf')
 -- !query schema
-struct<De\123dBeEf:binary>
+struct<binary('De\\123dBeEf'):binary>
 -- !query output
 De\123dBeEf
 
@@ -672,7 +672,7 @@ struct<>
 -- !query
 SELECT substr(f1, 99995) from toasttest
 -- !query schema
-struct<substr(f1, 99995, 2147483647):string>
+struct<substr(f1, 99995):string>
 -- !query output
 567890
 567890
@@ -870,7 +870,7 @@ true
 -- !query
 SELECT initcap('hi THOMAS')
 -- !query schema
-struct<initcap(hi THOMAS):string>
+struct<initcap('hi THOMAS'):string>
 -- !query output
 Hi Thomas
 
@@ -878,7 +878,7 @@ Hi Thomas
 -- !query
 SELECT lpad('hi', 5, 'xy')
 -- !query schema
-struct<lpad(hi, 5, xy):string>
+struct<lpad('hi', 5, 'xy'):string>
 -- !query output
 xyxhi
 
@@ -886,7 +886,7 @@ xyxhi
 -- !query
 SELECT lpad('hi', 5)
 -- !query schema
-struct<lpad(hi, 5,  ):string>
+struct<lpad('hi', 5):string>
 -- !query output
    hi
 
@@ -894,7 +894,7 @@ struct<lpad(hi, 5,  ):string>
 -- !query
 SELECT lpad('hi', -5, 'xy')
 -- !query schema
-struct<lpad(hi, -5, xy):string>
+struct<lpad('hi', - 5, 'xy'):string>
 -- !query output
 
 
@@ -902,7 +902,7 @@ struct<lpad(hi, -5, xy):string>
 -- !query
 SELECT lpad('hello', 2)
 -- !query schema
-struct<lpad(hello, 2,  ):string>
+struct<lpad('hello', 2):string>
 -- !query output
 he
 
@@ -910,7 +910,7 @@ he
 -- !query
 SELECT lpad('hi', 5, '')
 -- !query schema
-struct<lpad(hi, 5, ):string>
+struct<lpad('hi', 5, ''):string>
 -- !query output
 hi
 
@@ -918,7 +918,7 @@ hi
 -- !query
 SELECT rpad('hi', 5, 'xy')
 -- !query schema
-struct<rpad(hi, 5, xy):string>
+struct<rpad('hi', 5, 'xy'):string>
 -- !query output
 hixyx
 
@@ -926,7 +926,7 @@ hixyx
 -- !query
 SELECT rpad('hi', 5)
 -- !query schema
-struct<rpad(hi, 5,  ):string>
+struct<rpad('hi', 5):string>
 -- !query output
 hi
 
@@ -934,7 +934,7 @@ hi
 -- !query
 SELECT rpad('hi', -5, 'xy')
 -- !query schema
-struct<rpad(hi, -5, xy):string>
+struct<rpad('hi', - 5, 'xy'):string>
 -- !query output
 
 
@@ -942,7 +942,7 @@ struct<rpad(hi, -5, xy):string>
 -- !query
 SELECT rpad('hello', 2)
 -- !query schema
-struct<rpad(hello, 2,  ):string>
+struct<rpad('hello', 2):string>
 -- !query output
 he
 
@@ -950,7 +950,7 @@ he
 -- !query
 SELECT rpad('hi', 5, '')
 -- !query schema
-struct<rpad(hi, 5, ):string>
+struct<rpad('hi', 5, ''):string>
 -- !query output
 hi
 
@@ -958,7 +958,7 @@ hi
 -- !query
 SELECT translate('', '14', 'ax')
 -- !query schema
-struct<translate(, 14, ax):string>
+struct<translate('', '14', 'ax'):string>
 -- !query output
 
 
@@ -966,7 +966,7 @@ struct<translate(, 14, ax):string>
 -- !query
 SELECT translate('12345', '14', 'ax')
 -- !query schema
-struct<translate(12345, 14, ax):string>
+struct<translate('12345', '14', 'ax'):string>
 -- !query output
 a23x5
 
@@ -974,7 +974,7 @@ a23x5
 -- !query
 SELECT ascii('x')
 -- !query schema
-struct<ascii(x):int>
+struct<ascii('x'):int>
 -- !query output
 120
 
@@ -982,7 +982,7 @@ struct<ascii(x):int>
 -- !query
 SELECT ascii('')
 -- !query schema
-struct<ascii():int>
+struct<ascii(''):int>
 -- !query output
 0
 
@@ -1006,7 +1006,7 @@ struct<chr(0):string>
 -- !query
 SELECT repeat('Pg', 4)
 -- !query schema
-struct<repeat(Pg, 4):string>
+struct<repeat('Pg', 4):string>
 -- !query output
 PgPgPgPg
 
@@ -1014,7 +1014,7 @@ PgPgPgPg
 -- !query
 SELECT repeat('Pg', -4)
 -- !query schema
-struct<repeat(Pg, -4):string>
+struct<repeat('Pg', - 4):string>
 -- !query output
 
 
@@ -1022,7 +1022,7 @@ struct<repeat(Pg, -4):string>
 -- !query
 SELECT trim(binary('\\000') from binary('\\000Tom\\000'))
 -- !query schema
-struct<TRIM(BOTH \000 FROM \000Tom\000):string>
+struct<trim(binary('\\000')from binary('\\000Tom\\000')):string>
 -- !query output
 Tom
 
@@ -1030,7 +1030,7 @@ Tom
 -- !query
 SELECT btrim(binary('\\000trim\\000'), binary('\\000'))
 -- !query schema
-struct<btrim(\000trim\000, \000):string>
+struct<btrim(binary('\\000trim\\000'), binary('\\000')):string>
 -- !query output
 trim
 
@@ -1038,7 +1038,7 @@ trim
 -- !query
 SELECT btrim(binary(''), binary('\\000'))
 -- !query schema
-struct<btrim(, \000):string>
+struct<btrim(binary(''), binary('\\000')):string>
 -- !query output
 
 
@@ -1046,7 +1046,7 @@ struct<btrim(, \000):string>
 -- !query
 SELECT btrim(binary('\\000trim\\000'), binary(''))
 -- !query schema
-struct<btrim(\000trim\000, ):string>
+struct<btrim(binary('\\000trim\\000'), binary('')):string>
 -- !query output
 \000trim\000
 

@@ -2,7 +2,7 @@
 -- !query
 select 1 = 1
 -- !query schema
-struct<(1 = 1):boolean>
+struct<1 = 1:boolean>
 -- !query output
 true
 
@@ -10,7 +10,7 @@ true
 -- !query
 select 1 = '1'
 -- !query schema
-struct<(1 = 1):boolean>
+struct<1 = '1':boolean>
 -- !query output
 true
 
@@ -18,7 +18,7 @@ true
 -- !query
 select 1.0 = '1'
 -- !query schema
-struct<(1.0 = 1):boolean>
+struct<1.0 = '1':boolean>
 -- !query output
 true
 
@@ -26,7 +26,7 @@ true
 -- !query
 select 1.5 = '1.51'
 -- !query schema
-struct<(1.5 = 1.51):boolean>
+struct<1.5 = '1.51':boolean>
 -- !query output
 false
 
@@ -34,7 +34,7 @@ false
 -- !query
 select 1 > '1'
 -- !query schema
-struct<(1 > 1):boolean>
+struct<1 > '1':boolean>
 -- !query output
 false
 
@@ -42,7 +42,7 @@ false
 -- !query
 select 2 > '1.0'
 -- !query schema
-struct<(2 > 1.0):boolean>
+struct<2 > '1.0':boolean>
 -- !query output
 true
 
@@ -50,7 +50,7 @@ true
 -- !query
 select 2 > '2.0'
 -- !query schema
-struct<(2 > 2.0):boolean>
+struct<2 > '2.0':boolean>
 -- !query output
 false
 
@@ -58,7 +58,7 @@ false
 -- !query
 select 2 > '2.2'
 -- !query schema
-struct<(2 > 2.2):boolean>
+struct<2 > '2.2':boolean>
 -- !query output
 false
 
@@ -66,7 +66,7 @@ false
 -- !query
 select '1.5' > 0.5
 -- !query schema
-struct<(1.5 > 0.5):boolean>
+struct<'1.5' > 0.5:boolean>
 -- !query output
 true
 
@@ -74,7 +74,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') > to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) > to_date(2009-07-30 04:17:52)):boolean>
+struct<to_date('2009-07-30 04:17:52')> to_date('2009-07-30 04:17:52'):boolean>
 -- !query output
 false
 
@@ -82,7 +82,7 @@ false
 -- !query
 select to_date('2009-07-30 04:17:52') > '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) > 2009-07-30 04:17:52):boolean>
+struct<to_date('2009-07-30 04:17:52')> '2009-07-30 04:17:52':boolean>
 -- !query output
 false
 
@@ -90,7 +90,7 @@ false
 -- !query
 select 1 >= '1'
 -- !query schema
-struct<(1 >= 1):boolean>
+struct<1 >= '1':boolean>
 -- !query output
 true
 
@@ -98,7 +98,7 @@ true
 -- !query
 select 2 >= '1.0'
 -- !query schema
-struct<(2 >= 1.0):boolean>
+struct<2 >= '1.0':boolean>
 -- !query output
 true
 
@@ -106,7 +106,7 @@ true
 -- !query
 select 2 >= '2.0'
 -- !query schema
-struct<(2 >= 2.0):boolean>
+struct<2 >= '2.0':boolean>
 -- !query output
 true
 
@@ -114,7 +114,7 @@ true
 -- !query
 select 2.0 >= '2.2'
 -- !query schema
-struct<(2.0 >= 2.2):boolean>
+struct<2.0 >= '2.2':boolean>
 -- !query output
 false
 
@@ -122,7 +122,7 @@ false
 -- !query
 select '1.5' >= 0.5
 -- !query schema
-struct<(1.5 >= 0.5):boolean>
+struct<'1.5' >= 0.5:boolean>
 -- !query output
 true
 
@@ -130,7 +130,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') >= to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) >= to_date(2009-07-30 04:17:52)):boolean>
+struct<to_date('2009-07-30 04:17:52')>= to_date('2009-07-30 04:17:52'):boolean>
 -- !query output
 true
 
@@ -138,7 +138,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') >= '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) >= 2009-07-30 04:17:52):boolean>
+struct<to_date('2009-07-30 04:17:52')>= '2009-07-30 04:17:52':boolean>
 -- !query output
 true
 
@@ -146,7 +146,7 @@ true
 -- !query
 select 1 < '1'
 -- !query schema
-struct<(1 < 1):boolean>
+struct<1 < '1':boolean>
 -- !query output
 false
 
@@ -154,7 +154,7 @@ false
 -- !query
 select 2 < '1.0'
 -- !query schema
-struct<(2 < 1.0):boolean>
+struct<2 < '1.0':boolean>
 -- !query output
 false
 
@@ -162,7 +162,7 @@ false
 -- !query
 select 2 < '2.0'
 -- !query schema
-struct<(2 < 2.0):boolean>
+struct<2 < '2.0':boolean>
 -- !query output
 false
 
@@ -170,7 +170,7 @@ false
 -- !query
 select 2.0 < '2.2'
 -- !query schema
-struct<(2.0 < 2.2):boolean>
+struct<2.0 < '2.2':boolean>
 -- !query output
 true
 
@@ -178,7 +178,7 @@ true
 -- !query
 select 0.5 < '1.5'
 -- !query schema
-struct<(0.5 < 1.5):boolean>
+struct<0.5 < '1.5':boolean>
 -- !query output
 true
 
@@ -186,7 +186,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') < to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) < to_date(2009-07-30 04:17:52)):boolean>
+struct<to_date('2009-07-30 04:17:52')< to_date('2009-07-30 04:17:52'):boolean>
 -- !query output
 false
 
@@ -194,7 +194,7 @@ false
 -- !query
 select to_date('2009-07-30 04:17:52') < '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) < 2009-07-30 04:17:52):boolean>
+struct<to_date('2009-07-30 04:17:52')< '2009-07-30 04:17:52':boolean>
 -- !query output
 false
 
@@ -202,7 +202,7 @@ false
 -- !query
 select 1 <= '1'
 -- !query schema
-struct<(1 <= 1):boolean>
+struct<1 <= '1':boolean>
 -- !query output
 true
 
@@ -210,7 +210,7 @@ true
 -- !query
 select 2 <= '1.0'
 -- !query schema
-struct<(2 <= 1.0):boolean>
+struct<2 <= '1.0':boolean>
 -- !query output
 false
 
@@ -218,7 +218,7 @@ false
 -- !query
 select 2 <= '2.0'
 -- !query schema
-struct<(2 <= 2.0):boolean>
+struct<2 <= '2.0':boolean>
 -- !query output
 true
 
@@ -226,7 +226,7 @@ true
 -- !query
 select 2.0 <= '2.2'
 -- !query schema
-struct<(2.0 <= 2.2):boolean>
+struct<2.0 <= '2.2':boolean>
 -- !query output
 true
 
@@ -234,7 +234,7 @@ true
 -- !query
 select 0.5 <= '1.5'
 -- !query schema
-struct<(0.5 <= 1.5):boolean>
+struct<0.5 <= '1.5':boolean>
 -- !query output
 true
 
@@ -242,7 +242,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') <= to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) <= to_date(2009-07-30 04:17:52)):boolean>
+struct<to_date('2009-07-30 04:17:52')<= to_date('2009-07-30 04:17:52'):boolean>
 -- !query output
 true
 
@@ -250,7 +250,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') <= '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date(2009-07-30 04:17:52) <= 2009-07-30 04:17:52):boolean>
+struct<to_date('2009-07-30 04:17:52')<= '2009-07-30 04:17:52':boolean>
 -- !query output
 true
 
@@ -258,7 +258,7 @@ true
 -- !query
 select to_date('2017-03-01') = to_timestamp('2017-03-01 00:00:00')
 -- !query schema
-struct<(to_date(2017-03-01) = to_timestamp(2017-03-01 00:00:00)):boolean>
+struct<to_date('2017-03-01')= to_timestamp('2017-03-01 00:00:00'):boolean>
 -- !query output
 true
 
@@ -266,7 +266,7 @@ true
 -- !query
 select to_timestamp('2017-03-01 00:00:01') > to_date('2017-03-01')
 -- !query schema
-struct<(to_timestamp(2017-03-01 00:00:01) > to_date(2017-03-01)):boolean>
+struct<to_timestamp('2017-03-01 00:00:01')> to_date('2017-03-01'):boolean>
 -- !query output
 true
 
@@ -274,7 +274,7 @@ true
 -- !query
 select to_timestamp('2017-03-01 00:00:01') >= to_date('2017-03-01')
 -- !query schema
-struct<(to_timestamp(2017-03-01 00:00:01) >= to_date(2017-03-01)):boolean>
+struct<to_timestamp('2017-03-01 00:00:01')>= to_date('2017-03-01'):boolean>
 -- !query output
 true
 
@@ -282,7 +282,7 @@ true
 -- !query
 select to_date('2017-03-01') < to_timestamp('2017-03-01 00:00:01')
 -- !query schema
-struct<(to_date(2017-03-01) < to_timestamp(2017-03-01 00:00:01)):boolean>
+struct<to_date('2017-03-01')< to_timestamp('2017-03-01 00:00:01'):boolean>
 -- !query output
 true
 
@@ -290,7 +290,7 @@ true
 -- !query
 select to_date('2017-03-01') <= to_timestamp('2017-03-01 00:00:01')
 -- !query schema
-struct<(to_date(2017-03-01) <= to_timestamp(2017-03-01 00:00:01)):boolean>
+struct<to_date('2017-03-01')<= to_timestamp('2017-03-01 00:00:01'):boolean>
 -- !query output
 true
 
@@ -298,7 +298,7 @@ true
 -- !query
 select 1 in (1, 2, 3)
 -- !query schema
-struct<(1 IN (1, 2, 3)):boolean>
+struct<1 in(1, 2, 3):boolean>
 -- !query output
 true
 
@@ -306,7 +306,7 @@ true
 -- !query
 select 1 in (1, 2, 3, null)
 -- !query schema
-struct<(1 IN (1, 2, 3, NULL)):boolean>
+struct<1 in(1, 2, 3, null):boolean>
 -- !query output
 true
 
@@ -314,7 +314,7 @@ true
 -- !query
 select 1 in (1.0, 2.0, 3.0)
 -- !query schema
-struct<(1 IN (1.0, 2.0, 3.0)):boolean>
+struct<1 in(1.0, 2.0, 3.0):boolean>
 -- !query output
 true
 
@@ -322,7 +322,7 @@ true
 -- !query
 select 1 in (1.0, 2.0, 3.0, null)
 -- !query schema
-struct<(1 IN (1.0, 2.0, 3.0, NULL)):boolean>
+struct<1 in(1.0, 2.0, 3.0, null):boolean>
 -- !query output
 true
 
@@ -330,7 +330,7 @@ true
 -- !query
 select 1 in ('2', '3', '4')
 -- !query schema
-struct<(1 IN (2, 3, 4)):boolean>
+struct<1 in('2', '3', '4'):boolean>
 -- !query output
 false
 
@@ -338,7 +338,7 @@ false
 -- !query
 select 1 in ('2', '3', '4', null)
 -- !query schema
-struct<(1 IN (2, 3, 4, NULL)):boolean>
+struct<1 in('2', '3', '4', null):boolean>
 -- !query output
 NULL
 
@@ -346,7 +346,7 @@ NULL
 -- !query
 select null in (1, 2, 3)
 -- !query schema
-struct<(NULL IN (1, 2, 3)):boolean>
+struct<null in(1, 2, 3):boolean>
 -- !query output
 NULL
 
@@ -354,7 +354,7 @@ NULL
 -- !query
 select null in (1, 2, null)
 -- !query schema
-struct<(NULL IN (1, 2, NULL)):boolean>
+struct<null in(1, 2, null):boolean>
 -- !query output
 NULL
 
@@ -362,7 +362,7 @@ NULL
 -- !query
 select 1 not in (1, 2, 3)
 -- !query schema
-struct<(NOT (1 IN (1, 2, 3))):boolean>
+struct<1 not in(1, 2, 3):boolean>
 -- !query output
 false
 
@@ -370,7 +370,7 @@ false
 -- !query
 select 1 not in (1, 2, 3, null)
 -- !query schema
-struct<(NOT (1 IN (1, 2, 3, NULL))):boolean>
+struct<1 not in(1, 2, 3, null):boolean>
 -- !query output
 false
 
@@ -378,7 +378,7 @@ false
 -- !query
 select 1 not in (1.0, 2.0, 3.0)
 -- !query schema
-struct<(NOT (1 IN (1.0, 2.0, 3.0))):boolean>
+struct<1 not in(1.0, 2.0, 3.0):boolean>
 -- !query output
 false
 
@@ -386,7 +386,7 @@ false
 -- !query
 select 1 not in (1.0, 2.0, 3.0, null)
 -- !query schema
-struct<(NOT (1 IN (1.0, 2.0, 3.0, NULL))):boolean>
+struct<1 not in(1.0, 2.0, 3.0, null):boolean>
 -- !query output
 false
 
@@ -394,7 +394,7 @@ false
 -- !query
 select 1 not in ('2', '3', '4')
 -- !query schema
-struct<(NOT (1 IN (2, 3, 4))):boolean>
+struct<1 not in('2', '3', '4'):boolean>
 -- !query output
 true
 
@@ -402,7 +402,7 @@ true
 -- !query
 select 1 not in ('2', '3', '4', null)
 -- !query schema
-struct<(NOT (1 IN (2, 3, 4, NULL))):boolean>
+struct<1 not in('2', '3', '4', null):boolean>
 -- !query output
 NULL
 
@@ -410,7 +410,7 @@ NULL
 -- !query
 select null not in (1, 2, 3)
 -- !query schema
-struct<(NOT (NULL IN (1, 2, 3))):boolean>
+struct<null not in(1, 2, 3):boolean>
 -- !query output
 NULL
 
@@ -418,6 +418,6 @@ NULL
 -- !query
 select null not in (1, 2, null)
 -- !query schema
-struct<(NOT (NULL IN (1, 2, NULL))):boolean>
+struct<null not in(1, 2, null):boolean>
 -- !query output
 NULL

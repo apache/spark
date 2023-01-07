@@ -2,7 +2,7 @@
 -- !query
 select typeof(null)
 -- !query schema
-struct<typeof(NULL):string>
+struct<typeof(null):string>
 -- !query output
 void
 
@@ -18,7 +18,7 @@ boolean
 -- !query
 select typeof(1Y), typeof(1S), typeof(1), typeof(1L)
 -- !query schema
-struct<typeof(1):string,typeof(1):string,typeof(1):string,typeof(1):string>
+struct<typeof(1Y):string,typeof(1S):string,typeof(1):string,typeof(1L):string>
 -- !query output
 tinyint	smallint	int	bigint
 
@@ -26,7 +26,7 @@ tinyint	smallint	int	bigint
 -- !query
 select typeof(cast(1.0 as float)), typeof(1.0D), typeof(1.2)
 -- !query schema
-struct<typeof(CAST(1.0 AS FLOAT)):string,typeof(1.0):string,typeof(1.2):string>
+struct<typeof(cast(1.0 as float)):string,typeof(1.0D):string,typeof(1.2):string>
 -- !query output
 float	double	decimal(2,1)
 
@@ -34,7 +34,7 @@ float	double	decimal(2,1)
 -- !query
 select typeof(date '1986-05-23'),  typeof(timestamp '1986-05-23'), typeof(interval '23 days')
 -- !query schema
-struct<typeof(DATE '1986-05-23'):string,typeof(TIMESTAMP '1986-05-23 00:00:00'):string,typeof(INTERVAL '23' DAY):string>
+struct<typeof(date '1986-05-23'):string,typeof(timestamp '1986-05-23'):string,typeof(interval '23 days'):string>
 -- !query output
 date	timestamp	interval day
 
@@ -42,7 +42,7 @@ date	timestamp	interval day
 -- !query
 select typeof(x'ABCD'), typeof('SPARK')
 -- !query schema
-struct<typeof(X'ABCD'):string,typeof(SPARK):string>
+struct<typeof(x 'ABCD'):string,typeof('SPARK'):string>
 -- !query output
 binary	string
 
@@ -50,7 +50,7 @@ binary	string
 -- !query
 select typeof(array(1, 2)), typeof(map(1, 2)), typeof(named_struct('a', 1, 'b', 'spark'))
 -- !query schema
-struct<typeof(array(1, 2)):string,typeof(map(1, 2)):string,typeof(named_struct(a, 1, b, spark)):string>
+struct<typeof(array(1, 2)):string,typeof(map(1, 2)):string,typeof(named_struct('a', 1, 'b', 'spark')):string>
 -- !query output
 array<int>	map<int,int>	struct<a:int,b:string>
 
@@ -58,7 +58,7 @@ array<int>	map<int,int>	struct<a:int,b:string>
 -- !query
 SELECT assert_true(true), assert_true(boolean(1))
 -- !query schema
-struct<assert_true(true, 'true' is not true!):void,assert_true(1, 'cast(1 as boolean)' is not true!):void>
+struct<assert_true(true):void,assert_true(boolean(1)):void>
 -- !query output
 NULL	NULL
 

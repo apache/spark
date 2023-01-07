@@ -106,7 +106,7 @@ GROUP  BY t1b
 ORDER  BY t1b DESC NULLS FIRST
 LIMIT  1
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	NULL
 
@@ -139,7 +139,7 @@ GROUP  BY t1b
 ORDER BY t1b NULLS last
 LIMIT  1
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	6
 
@@ -189,7 +189,7 @@ ORDER  BY t1b DESC NULLS FIRST
 LIMIT  1
 OFFSET 1
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	10
 
@@ -229,7 +229,7 @@ ORDER BY t1b NULLS last
 LIMIT  1
 OFFSET 1
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 2	8
 
@@ -275,7 +275,7 @@ GROUP  BY t1b
 ORDER  BY t1b DESC NULLS FIRST
 OFFSET 1
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 1	10
 2	8
@@ -309,7 +309,7 @@ GROUP  BY t1b
 ORDER BY t1b NULLS last
 OFFSET 1
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<Count(DISTINCT(t1a)):bigint,t1b:smallint>
 -- !query output
 2	10
 1	16

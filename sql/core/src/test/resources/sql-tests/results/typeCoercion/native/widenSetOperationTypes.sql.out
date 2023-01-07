@@ -10,7 +10,7 @@ struct<>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):tinyint>
+struct<cast(1 as tinyint):tinyint>
 -- !query output
 1
 2
@@ -19,7 +19,7 @@ struct<CAST(1 AS TINYINT):tinyint>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):smallint>
+struct<cast(1 as tinyint):smallint>
 -- !query output
 1
 2
@@ -28,7 +28,7 @@ struct<CAST(1 AS TINYINT):smallint>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):int>
+struct<cast(1 as tinyint):int>
 -- !query output
 1
 2
@@ -37,7 +37,7 @@ struct<CAST(1 AS TINYINT):int>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):bigint>
+struct<cast(1 as tinyint):bigint>
 -- !query output
 1
 2
@@ -46,7 +46,7 @@ struct<CAST(1 AS TINYINT):bigint>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):float>
+struct<cast(1 as tinyint):float>
 -- !query output
 1.0
 2.0
@@ -55,7 +55,7 @@ struct<CAST(1 AS TINYINT):float>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):double>
+struct<cast(1 as tinyint):double>
 -- !query output
 1.0
 2.0
@@ -64,7 +64,7 @@ struct<CAST(1 AS TINYINT):double>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):decimal(10,0)>
+struct<cast(1 as tinyint):decimal(10,0)>
 -- !query output
 1
 2
@@ -73,7 +73,7 @@ struct<CAST(1 AS TINYINT):decimal(10,0)>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):string>
+struct<cast(1 as tinyint):string>
 -- !query output
 1
 2
@@ -186,7 +186,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):smallint>
+struct<cast(1 as smallint):smallint>
 -- !query output
 1
 2
@@ -195,7 +195,7 @@ struct<CAST(1 AS SMALLINT):smallint>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):smallint>
+struct<cast(1 as smallint):smallint>
 -- !query output
 1
 2
@@ -204,7 +204,7 @@ struct<CAST(1 AS SMALLINT):smallint>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):int>
+struct<cast(1 as smallint):int>
 -- !query output
 1
 2
@@ -213,7 +213,7 @@ struct<CAST(1 AS SMALLINT):int>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):bigint>
+struct<cast(1 as smallint):bigint>
 -- !query output
 1
 2
@@ -222,7 +222,7 @@ struct<CAST(1 AS SMALLINT):bigint>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):float>
+struct<cast(1 as smallint):float>
 -- !query output
 1.0
 2.0
@@ -231,7 +231,7 @@ struct<CAST(1 AS SMALLINT):float>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):double>
+struct<cast(1 as smallint):double>
 -- !query output
 1.0
 2.0
@@ -240,7 +240,7 @@ struct<CAST(1 AS SMALLINT):double>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):decimal(10,0)>
+struct<cast(1 as smallint):decimal(10,0)>
 -- !query output
 1
 2
@@ -249,7 +249,7 @@ struct<CAST(1 AS SMALLINT):decimal(10,0)>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):string>
+struct<cast(1 as smallint):string>
 -- !query output
 1
 2
@@ -362,7 +362,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS INT):int>
+struct<cast(1 as int):int>
 -- !query output
 1
 2
@@ -371,7 +371,7 @@ struct<CAST(1 AS INT):int>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS INT):int>
+struct<cast(1 as int):int>
 -- !query output
 1
 2
@@ -380,7 +380,7 @@ struct<CAST(1 AS INT):int>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS INT):int>
+struct<cast(1 as int):int>
 -- !query output
 1
 2
@@ -389,7 +389,7 @@ struct<CAST(1 AS INT):int>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS INT):bigint>
+struct<cast(1 as int):bigint>
 -- !query output
 1
 2
@@ -398,7 +398,7 @@ struct<CAST(1 AS INT):bigint>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS INT):float>
+struct<cast(1 as int):float>
 -- !query output
 1.0
 2.0
@@ -407,7 +407,7 @@ struct<CAST(1 AS INT):float>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS INT):double>
+struct<cast(1 as int):double>
 -- !query output
 1.0
 2.0
@@ -416,7 +416,7 @@ struct<CAST(1 AS INT):double>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS INT):decimal(10,0)>
+struct<cast(1 as int):decimal(10,0)>
 -- !query output
 1
 2
@@ -425,7 +425,7 @@ struct<CAST(1 AS INT):decimal(10,0)>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS INT):string>
+struct<cast(1 as int):string>
 -- !query output
 1
 2
@@ -538,7 +538,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):bigint>
+struct<cast(1 as bigint):bigint>
 -- !query output
 1
 2
@@ -547,7 +547,7 @@ struct<CAST(1 AS BIGINT):bigint>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):bigint>
+struct<cast(1 as bigint):bigint>
 -- !query output
 1
 2
@@ -556,7 +556,7 @@ struct<CAST(1 AS BIGINT):bigint>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):bigint>
+struct<cast(1 as bigint):bigint>
 -- !query output
 1
 2
@@ -565,7 +565,7 @@ struct<CAST(1 AS BIGINT):bigint>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):bigint>
+struct<cast(1 as bigint):bigint>
 -- !query output
 1
 2
@@ -574,7 +574,7 @@ struct<CAST(1 AS BIGINT):bigint>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):float>
+struct<cast(1 as bigint):float>
 -- !query output
 1.0
 2.0
@@ -583,7 +583,7 @@ struct<CAST(1 AS BIGINT):float>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):double>
+struct<cast(1 as bigint):double>
 -- !query output
 1.0
 2.0
@@ -592,7 +592,7 @@ struct<CAST(1 AS BIGINT):double>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):decimal(20,0)>
+struct<cast(1 as bigint):decimal(20,0)>
 -- !query output
 1
 2
@@ -601,7 +601,7 @@ struct<CAST(1 AS BIGINT):decimal(20,0)>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):string>
+struct<cast(1 as bigint):string>
 -- !query output
 1
 2
@@ -714,7 +714,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<cast(1 as float):float>
 -- !query output
 1.0
 2.0
@@ -723,7 +723,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<cast(1 as float):float>
 -- !query output
 1.0
 2.0
@@ -732,7 +732,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<cast(1 as float):float>
 -- !query output
 1.0
 2.0
@@ -741,7 +741,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<cast(1 as float):float>
 -- !query output
 1.0
 2.0
@@ -750,7 +750,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<cast(1 as float):float>
 -- !query output
 1.0
 2.0
@@ -759,7 +759,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):double>
+struct<cast(1 as float):double>
 -- !query output
 1.0
 2.0
@@ -768,7 +768,7 @@ struct<CAST(1 AS FLOAT):double>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):double>
+struct<cast(1 as float):double>
 -- !query output
 1.0
 2.0
@@ -777,7 +777,7 @@ struct<CAST(1 AS FLOAT):double>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):string>
+struct<cast(1 as float):string>
 -- !query output
 1.0
 2
@@ -890,7 +890,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):double>
+struct<cast(1 as double):double>
 -- !query output
 1.0
 2.0
@@ -899,7 +899,7 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):double>
+struct<cast(1 as double):double>
 -- !query output
 1.0
 2.0
@@ -908,7 +908,7 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):double>
+struct<cast(1 as double):double>
 -- !query output
 1.0
 2.0
@@ -917,7 +917,7 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):double>
+struct<cast(1 as double):double>
 -- !query output
 1.0
 2.0
@@ -926,7 +926,7 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):double>
+struct<cast(1 as double):double>
 -- !query output
 1.0
 2.0
@@ -935,7 +935,7 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):double>
+struct<cast(1 as double):double>
 -- !query output
 1.0
 2.0
@@ -944,7 +944,7 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):double>
+struct<cast(1 as double):double>
 -- !query output
 1.0
 2.0
@@ -953,7 +953,7 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):string>
+struct<cast(1 as double):string>
 -- !query output
 1.0
 2
@@ -1066,7 +1066,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
+struct<cast(1 as decimal(10, 0)):decimal(10,0)>
 -- !query output
 1
 2
@@ -1075,7 +1075,7 @@ struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
+struct<cast(1 as decimal(10, 0)):decimal(10,0)>
 -- !query output
 1
 2
@@ -1084,7 +1084,7 @@ struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
+struct<cast(1 as decimal(10, 0)):decimal(10,0)>
 -- !query output
 1
 2
@@ -1093,7 +1093,7 @@ struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):decimal(20,0)>
+struct<cast(1 as decimal(10, 0)):decimal(20,0)>
 -- !query output
 1
 2
@@ -1102,7 +1102,7 @@ struct<CAST(1 AS DECIMAL(10,0)):decimal(20,0)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):double>
+struct<cast(1 as decimal(10, 0)):double>
 -- !query output
 1.0
 2.0
@@ -1111,7 +1111,7 @@ struct<CAST(1 AS DECIMAL(10,0)):double>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):double>
+struct<cast(1 as decimal(10, 0)):double>
 -- !query output
 1.0
 2.0
@@ -1120,7 +1120,7 @@ struct<CAST(1 AS DECIMAL(10,0)):double>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
+struct<cast(1 as decimal(10, 0)):decimal(10,0)>
 -- !query output
 1
 2
@@ -1129,7 +1129,7 @@ struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):string>
+struct<cast(1 as decimal(10, 0)):string>
 -- !query output
 1
 2
@@ -1242,7 +1242,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2
@@ -1251,7 +1251,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2
@@ -1260,7 +1260,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2
@@ -1269,7 +1269,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2
@@ -1278,7 +1278,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2.0
@@ -1287,7 +1287,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2.0
@@ -1296,7 +1296,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2
@@ -1305,7 +1305,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2
@@ -1366,7 +1366,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2017-12-11 09:30:00
@@ -1375,7 +1375,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<cast(1 as string):string>
 -- !query output
 1
 2017-12-11
@@ -1592,7 +1592,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('1' as binary) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
-struct<CAST(1 AS BINARY):binary>
+struct<cast('1' as binary):binary>
 -- !query output
 1
 2
@@ -1913,7 +1913,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
-struct<CAST(1 AS BOOLEAN):boolean>
+struct<cast(1 as boolean):boolean>
 -- !query output
 true
 
@@ -2155,7 +2155,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00.0 AS TIMESTAMP):string>
+struct<cast('2017-12-12 09:30:00.0' as timestamp):string>
 -- !query output
 2
 2017-12-12 09:30:00
@@ -2216,7 +2216,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00.0 AS TIMESTAMP):timestamp>
+struct<cast('2017-12-12 09:30:00.0' as timestamp):timestamp>
 -- !query output
 2017-12-11 09:30:00
 2017-12-12 09:30:00
@@ -2225,7 +2225,7 @@ struct<CAST(2017-12-12 09:30:00.0 AS TIMESTAMP):timestamp>
 -- !query
 SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00.0 AS TIMESTAMP):timestamp>
+struct<cast('2017-12-12 09:30:00.0' as timestamp):timestamp>
 -- !query output
 2017-12-11 00:00:00
 2017-12-12 09:30:00
@@ -2416,7 +2416,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00 AS DATE):string>
+struct<cast('2017-12-12 09:30:00' as date):string>
 -- !query output
 2
 2017-12-12
@@ -2477,7 +2477,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00 AS DATE):timestamp>
+struct<cast('2017-12-12 09:30:00' as date):timestamp>
 -- !query output
 2017-12-11 09:30:00
 2017-12-12 00:00:00
@@ -2486,7 +2486,7 @@ struct<CAST(2017-12-12 09:30:00 AS DATE):timestamp>
 -- !query
 SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00 AS DATE):date>
+struct<cast('2017-12-12 09:30:00' as date):date>
 -- !query output
 2017-12-11
 2017-12-12

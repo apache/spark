@@ -983,7 +983,7 @@ struct<>
 -- !query
 SELECT istrue AND isnul AND istrue FROM booltbl4
 -- !query schema
-struct<((istrue AND isnul) AND istrue):boolean>
+struct<istrue AND isnul AND istrue:boolean>
 -- !query output
 NULL
 
@@ -991,7 +991,7 @@ NULL
 -- !query
 SELECT istrue AND istrue AND isnul FROM booltbl4
 -- !query schema
-struct<((istrue AND istrue) AND isnul):boolean>
+struct<istrue AND istrue AND isnul:boolean>
 -- !query output
 NULL
 
@@ -999,7 +999,7 @@ NULL
 -- !query
 SELECT isnul AND istrue AND istrue FROM booltbl4
 -- !query schema
-struct<((isnul AND istrue) AND istrue):boolean>
+struct<isnul AND istrue AND istrue:boolean>
 -- !query output
 NULL
 
@@ -1007,7 +1007,7 @@ NULL
 -- !query
 SELECT isfalse AND isnul AND istrue FROM booltbl4
 -- !query schema
-struct<((isfalse AND isnul) AND istrue):boolean>
+struct<isfalse AND isnul AND istrue:boolean>
 -- !query output
 false
 
@@ -1015,7 +1015,7 @@ false
 -- !query
 SELECT istrue AND isfalse AND isnul FROM booltbl4
 -- !query schema
-struct<((istrue AND isfalse) AND isnul):boolean>
+struct<istrue AND isfalse AND isnul:boolean>
 -- !query output
 false
 
@@ -1023,7 +1023,7 @@ false
 -- !query
 SELECT isnul AND istrue AND isfalse FROM booltbl4
 -- !query schema
-struct<((isnul AND istrue) AND isfalse):boolean>
+struct<isnul AND istrue AND isfalse:boolean>
 -- !query output
 false
 
@@ -1031,7 +1031,7 @@ false
 -- !query
 SELECT isfalse OR isnul OR isfalse FROM booltbl4
 -- !query schema
-struct<((isfalse OR isnul) OR isfalse):boolean>
+struct<isfalse OR isnul OR isfalse:boolean>
 -- !query output
 NULL
 
@@ -1039,7 +1039,7 @@ NULL
 -- !query
 SELECT isfalse OR isfalse OR isnul FROM booltbl4
 -- !query schema
-struct<((isfalse OR isfalse) OR isnul):boolean>
+struct<isfalse OR isfalse OR isnul:boolean>
 -- !query output
 NULL
 
@@ -1047,7 +1047,7 @@ NULL
 -- !query
 SELECT isnul OR isfalse OR isfalse FROM booltbl4
 -- !query schema
-struct<((isnul OR isfalse) OR isfalse):boolean>
+struct<isnul OR isfalse OR isfalse:boolean>
 -- !query output
 NULL
 
@@ -1055,7 +1055,7 @@ NULL
 -- !query
 SELECT isfalse OR isnul OR istrue FROM booltbl4
 -- !query schema
-struct<((isfalse OR isnul) OR istrue):boolean>
+struct<isfalse OR isnul OR istrue:boolean>
 -- !query output
 true
 
@@ -1063,7 +1063,7 @@ true
 -- !query
 SELECT istrue OR isfalse OR isnul FROM booltbl4
 -- !query schema
-struct<((istrue OR isfalse) OR isnul):boolean>
+struct<istrue OR isfalse OR isnul:boolean>
 -- !query output
 true
 
@@ -1071,7 +1071,7 @@ true
 -- !query
 SELECT isnul OR istrue OR isfalse FROM booltbl4
 -- !query schema
-struct<((isnul OR istrue) OR isfalse):boolean>
+struct<isnul OR istrue OR isfalse:boolean>
 -- !query output
 true
 

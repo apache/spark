@@ -93,7 +93,7 @@ WHERE  EXISTS (SELECT max(dept.dept_id) a
                WHERE  dept.dept_id = emp.dept_id 
                GROUP  BY dept.dept_id)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 6
 
@@ -129,7 +129,7 @@ WHERE  NOT EXISTS (SELECT state
                    WHERE  dept.dept_id = emp.dept_id) 
 GROUP  BY dept_id
 -- !query schema
-struct<dept_id:int,avg(salary):double,sum(salary):double>
+struct<dept_id:int,Avg(salary):double,Sum(salary):double>
 -- !query output
 100	400.0	800.0
 NULL	400.0	400.0
@@ -158,7 +158,7 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id) a
                    WHERE  dept.dept_id = emp.dept_id 
                    GROUP  BY dept.dept_id)
 -- !query schema
-struct<count(1):bigint>
+struct<count(*):bigint>
 -- !query output
 3
 

@@ -37,7 +37,7 @@ NULL
 -- !query
 SELECT try_element_at(array(1, 2, 3), -1)
 -- !query schema
-struct<try_element_at(array(1, 2, 3), -1):int>
+struct<try_element_at(array(1, 2, 3), - 1):int>
 -- !query output
 3
 
@@ -45,7 +45,7 @@ struct<try_element_at(array(1, 2, 3), -1):int>
 -- !query
 SELECT try_element_at(array(1, 2, 3), -4)
 -- !query schema
-struct<try_element_at(array(1, 2, 3), -4):int>
+struct<try_element_at(array(1, 2, 3), - 4):int>
 -- !query output
 NULL
 
@@ -53,7 +53,7 @@ NULL
 -- !query
 SELECT try_element_at(map('a','b'), 'a')
 -- !query schema
-struct<try_element_at(map(a, b), a):string>
+struct<try_element_at(map('a', 'b'), 'a'):string>
 -- !query output
 b
 
@@ -61,6 +61,6 @@ b
 -- !query
 SELECT try_element_at(map('a','b'), 'abc')
 -- !query schema
-struct<try_element_at(map(a, b), abc):string>
+struct<try_element_at(map('a', 'b'), 'abc'):string>
 -- !query output
 NULL
