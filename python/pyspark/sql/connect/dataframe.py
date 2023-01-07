@@ -40,7 +40,7 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue, SparkContext, SparkConf
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import DataType, StructType, Row
+from pyspark.sql.types import StructType, Row
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
@@ -1210,7 +1210,7 @@ class DataFrame:
 
     inputFiles.__doc__ = PySparkDataFrame.inputFiles.__doc__
 
-    def to(self, schema: DataType) -> "DataFrame":
+    def to(self, schema: StructType) -> "DataFrame":
         assert schema is not None
         return DataFrame.withPlan(
             plan.ToSchema(child=self._plan, schema=schema),
