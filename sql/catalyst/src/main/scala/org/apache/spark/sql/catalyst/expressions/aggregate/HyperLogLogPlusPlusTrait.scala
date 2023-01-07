@@ -18,35 +18,35 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Literal}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StructType}
 
-abstract class HyperLogLogPlusPlusBase(
-    child: Expression,
-    relativeSD: Double = 0.05,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate with UnaryLike[Expression] {
+// scalastyle:off
+/**
+ * This trait implements the core HLL++ functionality, such that extending classes
+ * need only implement constructors, copy constructors, and override the methods
+ * from {@link ImperativeAggregate} or {@link Expression} based on their individual needs.
+ */
+// scalastyle:on
+trait HyperLogLogPlusPlusTrait extends ImperativeAggregate with UnaryLike[Expression] {
 
-  def this(child: Expression) = {
-    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
-  }
+  def child: Expression
 
-  def this(child: Expression, relativeSD: Expression) = {
-    this(
-      child = child,
-      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD),
-      mutableAggBufferOffset = 0,
-      inputAggBufferOffset = 0)
-  }
+  def relativeSD: Double
+
+  val hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
+
+  override def prettyName: String = "approx_count_distinct"
+
+  override def dataType: DataType = LongType
 
   override def nullable: Boolean = false
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override def defaultResult: Option[Literal] = Option(Literal.create(0L, dataType))
 
-  val hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
+  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /** Allocate enough words to store all registers. */
   override val aggBufferAttributes: Seq[AttributeReference] = {
@@ -85,5 +85,12 @@ abstract class HyperLogLogPlusPlusBase(
   override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
     hllppHelper.merge(buffer1 = buffer1, buffer2 = buffer2,
       offset1 = mutableAggBufferOffset, offset2 = inputAggBufferOffset)
+  }
+
+  /**
+   * Compute the HyperLogLog estimate.
+   */
+  override def eval(buffer: InternalRow): Any = {
+    hllppHelper.query(buffer, mutableAggBufferOffset)
   }
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -58,23 +57,14 @@ case class HyperLogLogPlusPlus(
     child: Expression,
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends HyperLogLogPlusPlusBase(child, relativeSD, mutableAggBufferOffset, inputAggBufferOffset) {
+    inputAggBufferOffset: Int = 0) extends HyperLogLogPlusPlusTrait {
 
-  override def prettyName: String = "approx_count_distinct"
-
-  override def dataType: DataType = LongType
-
-  override def defaultResult: Option[Literal] = Option(Literal.create(0L, dataType))
-
-  /**
-   * Compute the HyperLogLog estimate.
-   */
-  override def eval(buffer: InternalRow): Any = {
-    hllppHelper.query(buffer, mutableAggBufferOffset)
+  def this(child: Expression, relativeSD: Expression) = {
+    this(
+      child = child,
+      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD)
+    )
   }
-
-  // copy() methods are equivalent between implementations of HyperLogLogPlusPlusBase
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

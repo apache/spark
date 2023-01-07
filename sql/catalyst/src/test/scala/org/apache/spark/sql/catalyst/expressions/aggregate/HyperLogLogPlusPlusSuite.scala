@@ -20,13 +20,11 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.lang.{Double => JDouble}
 import java.nio.ByteBuffer
 import java.util.Random
-
 import scala.collection.mutable
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, EmptyRow, HyperLogLogPlusPlusEvalSketch, Literal, SpecificInternalRow}
-import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType}
+import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, IntegerType}
 
 
 class HyperLogLogPlusPlusSuite extends SparkFunSuite {
@@ -41,7 +39,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
   }
 
   /** Create a HLL++ instance and an input and output buffer. */
-  def createHLLEstimator(rsd: Double, dt: DataType = IntegerType):
+  def createSketchEstimator(rsd: Double, dt: DataType = IntegerType):
   (HyperLogLogPlusPlusSketch, InternalRow, InternalRow) = {
     val input = new SpecificInternalRow(Seq(dt))
     val hll = new HyperLogLogPlusPlusSketch(new BoundReference(0, dt, true), rsd)
@@ -49,7 +47,16 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     (hll, input, buffer)
   }
 
-  def createBuffer(hll: HyperLogLogPlusPlusBase): InternalRow = {
+  /** Create a HLL++ instance and an input and output buffer. */
+  def createAggSketchEstimator(rsd: Double, dt: DataType = BinaryType):
+  (HyperLogLogPlusPlusAggSketch, InternalRow, InternalRow) = {
+    val input = new SpecificInternalRow(Seq(dt))
+    val hll = new HyperLogLogPlusPlusAggSketch(new BoundReference(0, dt, true), rsd)
+    val buffer = createBuffer(hll)
+    (hll, input, buffer)
+  }
+
+  def createBuffer(hll: HyperLogLogPlusPlusTrait): InternalRow = {
     val buffer = new SpecificInternalRow(hll.aggBufferAttributes.map(_.dataType))
     hll.initialize(buffer)
     buffer
@@ -187,18 +194,44 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     evaluateEstimate(hll, buffer, 1);
   }
 
-  test("SPARK-XXXXX: Test re-aggregation") {
-    val (hll, input, buffer) = createHLLEstimator(0.05, DoubleType)
+  test("SPARK-XXXXX: Test sketch evaluation") {
+    val (hll, input, buffer) = createSketchEstimator(0.05, DoubleType)
     List(1, 1, 2, 2, 3).foreach(i => {
       input.setDouble(0, i)
       hll.update(buffer, input)
     })
     val sketch = hll.eval(buffer).asInstanceOf[Array[Byte]]
     val bb = ByteBuffer.wrap(sketch)
-    assert(bb.getDouble(0) == 0.05)
+    assert(bb.getInt() == 1)
+    assert(bb.getDouble() == 0.05)
 
-    // unclear if this is correctly reproducing round trip spark behavior
+    // unclear if this is correctly reproducing round trip spark behavior via EmptyRow input
     val approxDistinctCount = HyperLogLogPlusPlusEvalSketch(Literal(sketch)).eval(EmptyRow)
     assert(approxDistinctCount == 3)
+  }
+
+  test("SPARK-XXXXX: Test sketch re-aggregation and evaluation") {
+    val (hll1, input1, buffer1) = createSketchEstimator(0.05, DoubleType)
+    List(1, 1, 2, 2, 3).foreach(i => {
+      input1.setDouble(0, i)
+      hll1.update(buffer1, input1)
+    })
+    val sketch1 = hll1.eval(buffer1).asInstanceOf[Array[Byte]]
+
+    val (hll2, input2, buffer2) = createSketchEstimator(0.05, DoubleType)
+    List(3, 3, 4, 4, 5).foreach(i => {
+      input2.setDouble(0, i)
+      hll2.update(buffer2, input2)
+    })
+    val sketch2 = hll2.eval(buffer2).asInstanceOf[Array[Byte]]
+
+    val (agghll, agginput, aggbuffer) = createAggSketchEstimator(0.05, BinaryType)
+    List(sketch1, sketch2).foreach(i => {
+      agginput.update(0, i)
+      agghll.update(aggbuffer, agginput)
+    })
+
+    val approxDistinctCount = agghll.eval(aggbuffer)
+    assert(approxDistinctCount == 5)
   }
 }

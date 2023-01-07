@@ -18,16 +18,17 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.nio.ByteBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.types.{BinaryType, DataType}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
+import org.apache.spark.sql.types.{BinaryType, DataType, LongType}
 
 
 // scalastyle:off
 /**
  * HyperLogLog++ (HLL++) is a state of the art cardinality estimation algorithm. This class
- * implements the dense version of the HLL++ algorithm as an Aggregate Function.
+ * implements the dense version of the HLL++ algorithm as an Aggregate Function, and outputs
+ * the underlying HLL sketch for downstream re-aggregation and evaluation.
  *
  * This implementation has been based on the following papers:
  * HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm
@@ -41,13 +42,13 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
  * Estimation Algorithm
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
- * @param child a sketch generated to estimate the cardinality of.
+ * @param child to estimate the cardinality of.
  * @param relativeSD the maximum relative standard deviation allowed.
  */
 // scalastyle:on
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, relativeSD]) - Returns the re-aggregateable HyperLogLog++ sketch.
+    _FUNC_(expr[, relativeSD]) - Returns the re-aggregateable HyperLogLog++ sketch as a binary column.
       `relativeSD` defines the maximum relative standard deviation allowed.""",
   examples = """
     Examples:
@@ -60,32 +61,29 @@ case class HyperLogLogPlusPlusSketch(
     child: Expression,
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends HyperLogLogPlusPlusBase(child, relativeSD, mutableAggBufferOffset, inputAggBufferOffset) {
+    inputAggBufferOffset: Int = 0) extends HyperLogLogPlusPlusTrait {
+
+  import HyperLogLogPlusPlusSketch._
+
+  def this(child: Expression, relativeSD: Expression) = {
+    this(
+      child = child,
+      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD)
+    )
+  }
 
   override def prettyName: String = "approx_count_distinct_sketch"
 
   override def dataType: DataType = BinaryType
 
-  override def defaultResult: Option[Literal] = Option(Literal.create(0L, dataType))
+  override def nullable: Boolean = true
 
   /**
    * Generate the HyperLogLog sketch.
    */
   override def eval(buffer: InternalRow): Any = {
-    // there's various formats proposed in this design, which we could attempt to mimic:
-    // https://github.com/airlift/airlift/blob/master/stats/docs/hll.md
-    // for now let's just store what's necessary to re-recreate this HLLPP instance
-    val byteBuffer = ByteBuffer.allocate(8 + (hllppHelper.numWords * 8))
-    byteBuffer.putDouble(relativeSD)
-    Seq.tabulate(hllppHelper.numWords) { i =>
-      byteBuffer.putLong(buffer.getLong(mutableAggBufferOffset + i))
-    }
-
-    byteBuffer.array()
+    generateSketch(relativeSD, hllppHelper.numWords, buffer, mutableAggBufferOffset)
   }
-
-  // copy() methods are equivalent between implementations of HyperLogLogPlusPlusBase
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -96,4 +94,51 @@ case class HyperLogLogPlusPlusSketch(
   override protected def withNewChildInternal(newChild: Expression): HyperLogLogPlusPlusSketch =
     copy(child = newChild)
 
+}
+
+object HyperLogLogPlusPlusSketch {
+  def generateSketch(relativeSD: Double,
+                     numWords: Integer,
+                     buffer: InternalRow,
+                     mutableAggBufferOffset: Integer): Array[Byte] = {
+    // Trino/Presto utilize the Airlift implementation of HLL; Airlift's
+    // supported HLL storage formats are available in this doc:
+    // https://github.com/airlift/airlift/blob/master/stats/docs/hll.md
+    //
+    // For the Spark implementation, we'll store the HLL sketch in a format that
+    // is specific to the fields accessible to us via the HyperLogLogPlusPlusTrait,
+    // and use the first int to store a format value of 1 such that we can revisit
+    // and add support for interoperable formats in the future
+    val byteBuffer = ByteBuffer.allocate(Integer.BYTES + java.lang.Double.BYTES + (numWords * java.lang.Double.BYTES))
+    byteBuffer.putInt(1)
+    byteBuffer.putDouble(relativeSD)
+    Seq.tabulate(numWords) { i =>
+      byteBuffer.putLong(buffer.getLong(mutableAggBufferOffset + i))
+    }
+
+    byteBuffer.array()
+  }
+
+  def generateHyperLogLogPlusPlusHelper(sketch: Array[Byte]):
+    (HyperLogLogPlusPlusHelper, InternalRow) = {
+
+    val byteBuffer = ByteBuffer.wrap(sketch)
+    byteBuffer.getInt() match {
+      case 1 =>
+        val hllppHelper = new HyperLogLogPlusPlusHelper(byteBuffer.getDouble())
+        val internalRow = new SpecificInternalRow(Array.fill[DataType](hllppHelper.numWords) {
+          LongType
+        })
+
+        (0 until hllppHelper.numWords).foreach(i => {
+          internalRow.setLong(i, byteBuffer.getLong(Integer.BYTES + java.lang.Double.BYTES +
+            (i * java.lang.Double.BYTES)))
+        })
+
+        (hllppHelper, internalRow)
+      case _ => throw new UnsupportedOperationException()
+    }
+
+
+  }
 }
