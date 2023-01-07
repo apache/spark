@@ -35,7 +35,6 @@ trait AlterTableReplaceColumnsSuiteBase extends QueryTest with DDLCommandTestUti
   test("SPARK-37304: Replace columns by ANSI intervals") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (ym INTERVAL MONTH, dt INTERVAL HOUR, data STRING) $defaultUsing")
-      // TODO(SPARK-37303): Uncomment the command below after REPLACE COLUMNS is fixed
       // sql(s"INSERT INTO $t SELECT INTERVAL '1' MONTH, INTERVAL '2' HOUR, 'abc'")
       sql(
         s"""
@@ -49,6 +48,23 @@ trait AlterTableReplaceColumnsSuiteBase extends QueryTest with DDLCommandTestUti
         sql(s"SELECT new_ym, new_dt, new_data FROM $t"),
         Seq(
           Row(Period.ofYears(3), Duration.ofMinutes(4), 5)))
+    }
+  }
+
+  test("SPARK-37303: Replace columns in v2 table") {
+    withNamespaceAndTable("ns", "tb1") { t =>
+      sql(s"CREATE TABLE $t (i INT, data STRING) $defaultUsing")
+      // sql(s"INSERT INTO $t SELECT 0, 'abc'")
+      sql(
+        s"""
+           |ALTER TABLE $t REPLACE COLUMNS (
+           | new_i STRING,
+           | new_data LONG)""".stripMargin)
+      sql(s"INSERT INTO $t SELECT 'def', 1000")
+
+      checkAnswer(
+        sql(s"SELECT new_i, new_data FROM $t"),
+        Seq(Row("def", 1000)))
     }
   }
 }
