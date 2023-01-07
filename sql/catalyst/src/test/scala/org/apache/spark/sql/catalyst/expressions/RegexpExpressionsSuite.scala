@@ -520,7 +520,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s = $"s".string.at(0)
     val p = $"p".string.at(1)
     val r = $"r".int.at(2)
-    val prefix = "[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in"
+    val prefix = "[INVALID_PARAMETER_VALUE.PATTERN] The value of parameter(s) `regexp` in"
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
