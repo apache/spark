@@ -209,7 +209,7 @@ class CatalogTestsMixin:
             self.assertEqual(functions, functionsDefault)
 
             with self.function("func1", "some_db.func2"):
-                if hasattr(spark, "udf"):
+                if hasattr(spark, "udf") and hasattr(spark.udf, "register"):
                     spark.udf.register("temp_func", lambda x: str(x))
                 spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'").collect()
                 spark.sql(
