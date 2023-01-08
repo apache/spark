@@ -279,14 +279,27 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("abc"  rlike _, "^bc", false)
     checkLiteralRow("abc"  rlike _, "^ab", true)
     checkLiteralRow("abc"  rlike _, "^bc", false)
-
-    intercept[java.util.regex.PatternSyntaxException] {
-      evaluateWithoutCodegen("abbbbc" rlike "**")
-    }
-    intercept[java.util.regex.PatternSyntaxException] {
-      val regex = $"a".string.at(0)
-      evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
-    }
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        evaluateWithoutCodegen("abbbbc" rlike "**")
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("rlike"),
+        "value" -> "'**'")
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        val regex = $"a".string.at(0)
+        evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("rlike"),
+        "value" -> "'**'")
+    )
   }
 
   test("RegexReplace") {
