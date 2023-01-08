@@ -77,7 +77,7 @@ class PythonUDFArrowTests(BaseUDFTests, ReusedSQLTestCase):
         self.assertEquals(row[0], "[1 2 3]")
         self.assertEquals(row[1], "{'a': 'b'}")
 
-    def test_useArrow(self):
+    def test_use_arrow(self):
         # useArrow=True
         row_true = (
             self.spark.range(1)
@@ -117,6 +117,16 @@ class PythonUDFArrowTests(BaseUDFTests, ReusedSQLTestCase):
             .first()
         )
         self.assertEquals(row_false[0], "[1, 2, 3]")
+
+    def test_type_coercion(self):
+        actual_res = True
+        row_arrow = self.spark.range(1).select(udf(lambda _: actual_res, "string")("id")).first()
+        row_non_arrow = (
+            self.spark.range(1)
+            .select(udf(lambda _: actual_res, "string", useArrow=False)("id"))
+            .first()
+        )
+        self.assertEquals(repr(row_arrow[0]), repr(row_non_arrow[0]))
 
 
 if __name__ == "__main__":

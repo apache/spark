@@ -811,7 +811,7 @@ class UDFTests(BaseUDFTests, ReusedSQLTestCase):
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
 
-def test_useArrow(self):
+def test_use_arrow(self):
     # useArrow=True
     row_true = (
         self.spark.range(1)
