@@ -766,12 +766,14 @@ class SetOperation(LogicalPlan):
         set_op: str,
         is_all: bool = True,
         by_name: bool = False,
+        allow_missing_columns: bool = False,
     ) -> None:
         super().__init__(child)
         self.other = other
         self.by_name = by_name
         self.is_all = is_all
         self.set_op = set_op
+        self.allow_missing_columns = allow_missing_columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -796,6 +798,7 @@ class SetOperation(LogicalPlan):
 
         rel.set_op.is_all = self.is_all
         rel.set_op.by_name = self.by_name
+        rel.set_op.allow_missing_columns = self.allow_missing_columns
         return rel
 
     def print(self, indent: int = 0) -> str:

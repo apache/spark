@@ -1123,7 +1123,7 @@ class SparkConnectPlanner(session: SparkSession) {
         val combinedUnion = CombineUnions(
           Union(
             Seq(transformRelation(u.getLeftInput), transformRelation(u.getRightInput)),
-            byName = u.getByName))
+            byName = u.getByName, allowMissingCol = u.getAllowMissingColumns))
         if (u.getIsAll) {
           combinedUnion
         } else {

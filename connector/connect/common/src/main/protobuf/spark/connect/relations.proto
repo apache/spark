@@ -211,6 +211,11 @@ message SetOperation {
   // Only UNION supports this option.
   optional bool by_name = 5;
 
+  // (Optional) If to perform the Set operation and allow missing columns.
+  //
+  // Only UNION supports this option.
+  optional bool allow_missing_columns = 6;
+
   enum SetOpType {
     SET_OP_TYPE_UNSPECIFIED = 0;
     SET_OP_TYPE_INTERSECT = 1;
