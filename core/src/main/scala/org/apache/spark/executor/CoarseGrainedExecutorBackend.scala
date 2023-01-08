@@ -75,12 +75,6 @@ private[spark] class CoarseGrainedExecutorBackend(
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
-  /**
-   * Map each taskId to the information about cpus allocated to it.
-   * Exposed for testing only.
-   */
-  private[executor] val taskCpus = new mutable.HashMap[Long, Int]
-
   private var decommissioned = false
 
   override def onStart(): Unit = {
@@ -191,7 +185,6 @@ private[spark] class CoarseGrainedExecutorBackend(
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         taskResources(taskDesc.taskId) = taskDesc.resources
-        taskCpus(taskDesc.taskId) = taskDesc.cpus
         executor.launchTask(this, taskDesc)
       }
 
@@ -269,11 +262,10 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
     val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
-    val cpus = taskCpus.getOrElse(taskId, 0)
+    val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
     val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
       taskResources.remove(taskId)
-      taskCpus.remove(taskId)
     }
     driver match {
       case Some(driverRef) => driverRef.send(msg)

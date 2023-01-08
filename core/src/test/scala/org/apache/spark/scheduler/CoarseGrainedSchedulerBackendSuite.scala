@@ -412,7 +412,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val conf = new SparkConf()
       .set(EXECUTOR_CORES, execCores)
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
-      .set(EXECUTOR_INSTANCES, 0) // avoid errors about duplicate executor registrations
+      .set(EXECUTOR_INSTANCES, 0)
       .setMaster(
         "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
       .setAppName("test")
@@ -427,7 +427,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     when(mockEndpointRef.send(LaunchTask)).thenAnswer((_: InvocationOnMock) => {})
 
     var executorAddedCount: Int = 0
-    val infos = scala.collection.mutable.ArrayBuffer[ExecutorInfo]()
+    val infos = mutable.ArrayBuffer[ExecutorInfo]()
     val listener = new SparkListener() {
       override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
         // Lets check that the exec allocation times "make sense"
@@ -470,7 +470,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
 
     // To avoid allocating any resources immediately after releasing the resource from the task to
-    // make sure that `availableAddrs` below won't change
+    // make sure that executor's available cpus below won't change
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.send(
       StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus))

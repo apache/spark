@@ -740,7 +740,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   // this function is for testing only
-  def getExecutorAvailableCpus(
+  private[spark] def getExecutorAvailableCpus(
       executorId: String): Option[Int] = synchronized {
     executorDataMap.get(executorId).map(_.freeCores)
   }
