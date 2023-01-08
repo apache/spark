@@ -313,13 +313,12 @@ private[spark] class DiskBlockManager(
       }
       try {
         dirToCreate.mkdirs()
-        Files.setPosixFilePermissions(dirToCreate.toPath,
-          PosixFilePermissions.fromString("rwxrwx---"))
+        Files.setPosixFilePermissions(
+          dirToCreate.toPath, PosixFilePermissions.fromString("rwxrwx---"))
         if (dirToCreate.exists()) {
           created = dirToCreate
         }
-        logDebug(
-          s"Created directory at ${dirToCreate.getAbsolutePath} with permission 770")
+        logDebug(s"Created directory at ${dirToCreate.getAbsolutePath} with permission 770")
       } catch {
         case e: SecurityException =>
           logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +
