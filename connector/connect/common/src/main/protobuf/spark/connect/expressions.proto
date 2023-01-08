@@ -209,11 +209,15 @@ message Expression {
     // (Required) Indicate if this function should be applied on distinct values.
     bool is_distinct = 3;
 
+    // (Required) Indicates the function should skip null values in the determination of which
+    // row to use.
+    bool ignore_nulls = 4;
+
     // (Required) Indicate if this is a user defined function.
     //
     // When it is not a user defined function, Connect will use the function name directly.
     // When it is a user defined function, Connect will parse the function name first.
-    bool is_user_defined_function = 4;
+    bool is_user_defined_function = 5;
   }
 
   // Expression as string.

@@ -637,6 +637,7 @@ class Expression(google.protobuf.message.Message):
         FUNCTION_NAME_FIELD_NUMBER: builtins.int
         ARGUMENTS_FIELD_NUMBER: builtins.int
         IS_DISTINCT_FIELD_NUMBER: builtins.int
+        IGNORE_NULLS_FIELD_NUMBER: builtins.int
         IS_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
         function_name: builtins.str
         """(Required) name (or unparsed name for user defined function) for the unresolved function."""
@@ -649,6 +650,10 @@ class Expression(google.protobuf.message.Message):
             """(Optional) Function arguments. Empty arguments are allowed."""
         is_distinct: builtins.bool
         """(Required) Indicate if this function should be applied on distinct values."""
+        ignore_nulls: builtins.bool
+        """(Required) Indicates the function should skip null values in the determination of which
+        row to use.
+        """
         is_user_defined_function: builtins.bool
         """(Required) Indicate if this is a user defined function.
 
@@ -661,6 +666,7 @@ class Expression(google.protobuf.message.Message):
             function_name: builtins.str = ...,
             arguments: collections.abc.Iterable[global___Expression] | None = ...,
             is_distinct: builtins.bool = ...,
+            ignore_nulls: builtins.bool = ...,
             is_user_defined_function: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
@@ -670,6 +676,8 @@ class Expression(google.protobuf.message.Message):
                 b"arguments",
                 "function_name",
                 b"function_name",
+                "ignore_nulls",
+                b"ignore_nulls",
                 "is_distinct",
                 b"is_distinct",
                 "is_user_defined_function",

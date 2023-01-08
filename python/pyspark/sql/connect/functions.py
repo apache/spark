@@ -1036,11 +1036,9 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
 lead.__doc__ = pysparkfuncs.lead.__doc__
 
 
-def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = None) -> Column:
-    if ignoreNulls is None:
-        return _invoke_function("nth_value", _to_col(col), lit(offset))
-    else:
-        return _invoke_function("nth_value", _to_col(col), lit(offset), lit(ignoreNulls))
+def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False) -> Column:
+    _exprs = [_to_col(col)._expr, lit(offset)._expr]
+    return Column(UnresolvedFunction("nth_value", _exprs, ignore_nulls=ignoreNulls))
 
 
 nth_value.__doc__ = pysparkfuncs.nth_value.__doc__

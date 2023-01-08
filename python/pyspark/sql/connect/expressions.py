@@ -393,6 +393,7 @@ class UnresolvedFunction(Expression):
         name: str,
         args: Sequence["Expression"],
         is_distinct: bool = False,
+        ignore_nulls: bool = False,
     ) -> None:
         super().__init__()
 
@@ -405,19 +406,26 @@ class UnresolvedFunction(Expression):
         assert isinstance(is_distinct, bool)
         self._is_distinct = is_distinct
 
+        assert isinstance(ignore_nulls, bool)
+        self._ignore_nulls = ignore_nulls
+
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.function_name = self._name
         if len(self._args) > 0:
             fun.unresolved_function.arguments.extend([arg.to_plan(session) for arg in self._args])
         fun.unresolved_function.is_distinct = self._is_distinct
+        fun.unresolved_function.ignore_nulls = self._ignore_nulls
         return fun
 
     def __repr__(self) -> str:
+        ignore_nulls_str = ""
+        if self._ignore_nulls:
+            ignore_nulls_str = " IGNORE NULLS"
         if self._is_distinct:
-            return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
+            return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])}){ignore_nulls_str}"
         else:
-            return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+            return f"{self._name}({', '.join([str(arg) for arg in self._args])}){ignore_nulls_str}"
 
 
 class WithField(Expression):

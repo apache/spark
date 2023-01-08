@@ -769,16 +769,22 @@ class SparkConnectPlanner(session: SparkSession) {
    */
   private def transformUnresolvedFunction(
       fun: proto.Expression.UnresolvedFunction): Expression = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
     if (fun.getIsUserDefinedFunction) {
       UnresolvedFunction(
-        session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
+        session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName).asMultipart,
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        isDistinct = fun.getIsDistinct)
+        fun.getIsDistinct,
+        None,
+        fun.getIgnoreNulls)
     } else {
       UnresolvedFunction(
-        FunctionIdentifier(fun.getFunctionName),
+        FunctionIdentifier(fun.getFunctionName).asMultipart,
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        isDistinct = fun.getIsDistinct)
+        fun.getIsDistinct,
+        None,
+        fun.getIgnoreNulls)
     }
   }
 
