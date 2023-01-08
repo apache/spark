@@ -347,7 +347,7 @@ SELECT SUM(t.v) FROM (
   SELECT v + v AS v FROM tab3
 ) t
 -- !query schema
-struct<SUM(t . v):decimal(21,0)>
+struct<SUM(t.v):decimal(21,0)>
 -- !query output
 2
 

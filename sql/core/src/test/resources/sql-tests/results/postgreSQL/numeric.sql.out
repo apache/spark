@@ -3810,7 +3810,7 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 40)
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 40)
 -- !query schema
-struct<id1:int,id2:int,result:decimal(38,10),round(t2 . expected, 40):decimal(38,10)>
+struct<id1:int,id2:int,result:decimal(38,10),round(t2.expected, 40):decimal(38,10)>
 -- !query output
 
 

@@ -214,7 +214,7 @@ struct<sum(v):bigint,count(*):bigint>
 select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
  group by grouping sets ((t1.a,t2.b),())
 -- !query schema
-struct<a:int,b:int,sum(t1 . v):bigint,count(*):bigint>
+struct<a:int,b:int,sum(t1.v):bigint,count(*):bigint>
 -- !query output
 
 
@@ -224,7 +224,7 @@ select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1, gstest2 t2
  group by grouping sets ((t1.a, t2.b), ())
 -- !query schema
-struct<a:int,b:int,grouping(t1 . a):tinyint,grouping(t2 . b):tinyint,sum(t1 . v):bigint,max(t2 . a):int>
+struct<a:int,b:int,grouping(t1.a):tinyint,grouping(t2.b):tinyint,sum(t1.v):bigint,max(t2.a):int>
 -- !query output
 1	1	0	0	420	1
 1	2	0	0	120	2
@@ -242,7 +242,7 @@ select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1 join gstest2 t2 on (t1.a=t2.a)
  group by grouping sets ((t1.a, t2.b), ())
 -- !query schema
-struct<a:int,b:int,grouping(t1 . a):tinyint,grouping(t2 . b):tinyint,sum(t1 . v):bigint,max(t2 . a):int>
+struct<a:int,b:int,grouping(t1.a):tinyint,grouping(t2.b):tinyint,sum(t1.v):bigint,max(t2.a):int>
 -- !query output
 1	1	0	0	420	1
 1	2	0	0	60	1
@@ -255,7 +255,7 @@ select a, b, grouping(a), grouping(b), sum(t1.v), max(t2.c)
   from gstest1 t1 join gstest2 t2 using (a,b)
  group by grouping sets ((a, b), ())
 -- !query schema
-struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(t1 . v):bigint,max(t2 . c):int>
+struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(t1.v):bigint,max(t2.c):int>
 -- !query output
 1	1	0	0	147	2
 1	2	0	0	25	2

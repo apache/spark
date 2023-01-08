@@ -291,7 +291,7 @@ struct<i:int,f:double>
 SELECT COALESCE(a.f, b.i, b.j)
   FROM CASE_TBL a, CASE2_TBL b
 -- !query schema
-struct<COALESCE(a . f, b . i, b . j):double>
+struct<COALESCE(a.f, b.i, b.j):double>
 -- !query output
 -30.3
 -30.3

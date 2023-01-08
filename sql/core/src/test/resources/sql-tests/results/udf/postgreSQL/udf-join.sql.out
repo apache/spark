@@ -781,7 +781,7 @@ struct<xxx:string,ii:int,tt:string,udf(udf(kk)):int>
 SELECT udf('') AS `xxx`, udf(udf(j1_tbl.i)), udf(j), udf(t), udf(a.i), udf(a.k), udf(b.i),  udf(b.k)
   FROM J1_TBL CROSS JOIN J2_TBL a CROSS JOIN J2_TBL b
 -- !query schema
-struct<xxx:string,udf(udf(j1_tbl . i)):int,udf(j):int,udf(t):string,udf(a . i):int,udf(a . k):int,udf(b . i):int,udf(b . k):int>
+struct<xxx:string,udf(udf(j1_tbl.i)):int,udf(j):int,udf(t):string,udf(a.i):int,udf(a.k):int,udf(b.i):int,udf(b.k):int>
 -- !query output
 	0	NULL	zero	0	NULL	0	NULL
 	0	NULL	zero	0	NULL	1	-1
@@ -1767,7 +1767,7 @@ struct<xxx:string,udf(udf(a)):int,udf(udf(b)):int,c:string,d:int>
 SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(udf(J1_TBL.j)), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
   FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) = J2_TBL.i)
 -- !query schema
-struct<xxx:string,udf(J1_TBL . i):int,udf(udf(J1_TBL . j)):int,udf(J1_TBL . t):string,udf(J2_TBL . i):int,udf(J2_TBL . k):int>
+struct<xxx:string,udf(J1_TBL.i):int,udf(udf(J1_TBL.j)):int,udf(J1_TBL.t):string,udf(J2_TBL.i):int,udf(J2_TBL.k):int>
 -- !query output
 	0	NULL	zero	0	NULL
 	1	4	one	1	-1
@@ -1782,7 +1782,7 @@ struct<xxx:string,udf(J1_TBL . i):int,udf(udf(J1_TBL . j)):int,udf(J1_TBL . t):s
 SELECT udf('') AS `xxx`, udf(udf(J1_TBL.i)), udf(udf(J1_TBL.j)), udf(udf(J1_TBL.t)), J2_TBL.i, J2_TBL.k
   FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = udf(J2_TBL.k))
 -- !query schema
-struct<xxx:string,udf(udf(J1_TBL . i)):int,udf(udf(J1_TBL . j)):int,udf(udf(J1_TBL . t)):string,i:int,k:int>
+struct<xxx:string,udf(udf(J1_TBL.i)):int,udf(udf(J1_TBL.j)):int,udf(udf(J1_TBL.t)):string,i:int,k:int>
 -- !query output
 	0	NULL	zero	NULL	0
 	2	3	two	2	2
@@ -1793,7 +1793,7 @@ struct<xxx:string,udf(udf(J1_TBL . i)):int,udf(udf(J1_TBL . j)):int,udf(udf(J1_T
 SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
   FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) <= udf(udf(J2_TBL.k)))
 -- !query schema
-struct<xxx:string,udf(J1_TBL . i):int,udf(J1_TBL . j):int,udf(J1_TBL . t):string,udf(J2_TBL . i):int,udf(J2_TBL . k):int>
+struct<xxx:string,udf(J1_TBL.i):int,udf(J1_TBL.j):int,udf(J1_TBL.t):string,udf(J2_TBL.i):int,udf(J2_TBL.k):int>
 -- !query output
 	0	NULL	zero	2	2
 	0	NULL	zero	2	4
@@ -2075,7 +2075,7 @@ FULL JOIN
 (SELECT * FROM t3) s3
 USING (name)
 -- !query schema
-struct<udf(name):string,udf(udf(s2 . n)):int,udf(s3 . n):int>
+struct<udf(name):string,udf(udf(s2.n)):int,udf(s3.n):int>
 -- !query output
 bb	12	13
 cc	22	23
@@ -2423,7 +2423,7 @@ select udf(a.f1), udf(b.f1), udf(t.thousand), udf(t.tenthous) from
   (select udf(sum(udf(f1))) as f1 from int4_tbl i4b) b
 where b.f1 = udf(t.thousand) and udf(a.f1) = udf(b.f1) and udf((udf(a.f1)+udf(b.f1)+999)) = udf(udf(t.tenthous))
 -- !query schema
-struct<udf(a . f1):bigint,udf(b . f1):bigint,udf(t . thousand):int,udf(t . tenthous):int>
+struct<udf(a.f1):bigint,udf(b.f1):bigint,udf(t.thousand):int,udf(t.tenthous):int>
 -- !query output
 
 
@@ -2750,7 +2750,7 @@ from tenk1 a left join tenk1 b on a.unique2 = udf(b.tenthous)
 where udf(a.unique1) = 42 and
       ((udf(b.unique2) is null and udf(a.ten) = 2) or udf(udf(b.hundred)) = udf(udf(3)))
 -- !query schema
-struct<udf(a . unique2):int,udf(a . ten):int,udf(b . tenthous):int,udf(b . unique2):int,udf(b . hundred):int>
+struct<udf(a.unique2):int,udf(a.ten):int,udf(b.tenthous):int,udf(b.unique2):int,udf(b.hundred):int>
 -- !query output
 
 
@@ -2784,7 +2784,7 @@ select udf(t1.q2), udf(count(t2.q1, t2.q2))
 from int8_tbl t1 left join int8_tbl t2 on (udf(udf(t1.q2)) = t2.q1)
 group by udf(t1.q2) order by 1
 -- !query schema
-struct<udf(t1 . q2):bigint,udf(count(t2 . q1, t2 . q2)):bigint>
+struct<udf(t1.q2):bigint,udf(count(t2.q1, t2.q2)):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -2797,7 +2797,7 @@ select udf(udf(t1.q2)), udf(count(t2.q1, t2.q2))
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(udf(t1.q2)) = udf(t2.q1))
 group by udf(udf(t1.q2)) order by 1
 -- !query schema
-struct<udf(udf(t1 . q2)):bigint,udf(count(t2 . q1, t2 . q2)):bigint>
+struct<udf(udf(t1.q2)):bigint,udf(count(t2.q1, t2.q2)):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -2812,7 +2812,7 @@ from int8_tbl t1 left join
   on (udf(t1.q2) = udf(t2.q1))
 group by t1.q2 order by 1
 -- !query schema
-struct<q2:bigint,udf(udf(count(t2 . q1, t2 . q2))):bigint>
+struct<q2:bigint,udf(udf(count(t2.q1, t2.q2))):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -2861,7 +2861,7 @@ from c left join
   on (udf(udf(c.a)) = udf(ss.code))
 order by c.name
 -- !query schema
-struct<udf(c . name):string,udf(ss . code):string,udf(ss . b_cnt):bigint,udf(ss . const):int>
+struct<udf(c.name):string,udf(ss.code):string,udf(ss.b_cnt):bigint,udf(ss.const):int>
 -- !query output
 A	p	2	-1
 B	q	0	-1
@@ -2971,7 +2971,7 @@ from nt3 as nt3
     on udf(ss2.id) = nt3.nt2_id
 where udf(nt3.id) = 1 and udf(ss2.b3)
 -- !query schema
-struct<udf(nt3 . id):int>
+struct<udf(nt3.id):int>
 -- !query output
 1
 
@@ -3044,7 +3044,7 @@ select udf(b.unique1) from
   right join int4_tbl i2 on udf(udf(i2.f1)) = udf(b.tenthous)
   order by udf(1)
 -- !query schema
-struct<udf(b . unique1):int>
+struct<udf(b.unique1):int>
 -- !query output
 NULL
 NULL
@@ -3092,7 +3092,7 @@ select udf(a.unique1), udf(b.unique1), udf(c.unique1), udf(coalesce(b.twothousan
   from tenk1 a left join tenk1 b on udf(b.thousand) = a.unique1                       left join tenk1 c on udf(c.unique2) = udf(coalesce(b.twothousand, a.twothousand))
   where a.unique2 < udf(10) and udf(udf(coalesce(b.twothousand, a.twothousand))) = udf(44)
 -- !query schema
-struct<udf(a . unique1):int,udf(b . unique1):int,udf(c . unique1):int,udf(coalesce(b . twothousand, a . twothousand)):int>
+struct<udf(a.unique1):int,udf(b.unique1):int,udf(c.unique1):int,udf(coalesce(b.twothousand, a.twothousand)):int>
 -- !query output
 
 
@@ -3130,7 +3130,7 @@ select udf(a.q2), udf(b.q1)
   from int8_tbl a left join int8_tbl b on udf(a.q2) = coalesce(b.q1, 1)
   where udf(udf(coalesce(b.q1, 1)) > 0)
 -- !query schema
-struct<udf(a . q2):bigint,udf(b . q1):bigint>
+struct<udf(a.q2):bigint,udf(b.q1):bigint>
 -- !query output
 -4567890123456789	NULL
 123	123
@@ -3542,7 +3542,7 @@ select * from
    int8_tbl b cross join int8_tbl c) ss
   on a.q2 = ss.bq1
 -- !query schema
-struct<q1:bigint,q2:bigint,bq1:bigint,cq1:bigint,least(a . q1, b . q1, c . q1):bigint>
+struct<q1:bigint,q2:bigint,bq1:bigint,cq1:bigint,least(a.q1, b.q1, c.q1):bigint>
 -- !query output
 123	456	NULL	NULL	NULL
 123	4567890123456789	4567890123456789	123	123

@@ -225,7 +225,7 @@ FROM   (SELECT udf(tab1.k),
                JOIN tab2 
                  ON udf(tab1.k) = udf(udf(tab2.k)))
 -- !query schema
-struct<udf(tab1 . k):int,udf(tab2 . v):int>
+struct<udf(tab1.k):int,udf(tab2.v):int>
 -- !query output
 1	2
 1	2
@@ -253,7 +253,7 @@ FROM   (SELECT udf(tab2.v) AS k,
                JOIN tab2 
                  ON tab1.k = udf(tab2.k))
 -- !query schema
-struct<udf(tab1 . k):int,udf(tab2 . v):int>
+struct<udf(tab1.k):int,udf(tab2.v):int>
 -- !query output
 
 

@@ -527,7 +527,7 @@ struct<>
 -- !query
 SELECT '' AS bad, f.f1 * '1e200' from UPDATED_FLOAT8_TBL f
 -- !query schema
-struct<bad:string,f . f1 * '1e200':double>
+struct<bad:string,f.f1 * '1e200':double>
 -- !query output
 	-1.0042999999999999E203
 	-1.2345678901234

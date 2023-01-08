@@ -264,7 +264,7 @@ FROM   (SELECT cte1.t1a,
                              ON cte1.t1a = cte2.t1a) s
 GROUP  BY s.t1b
 -- !query schema
-struct<Count(DISTINCT(s . t1a)):bigint,t1b:smallint>
+struct<Count(DISTINCT(s.t1a)):bigint,t1b:smallint>
 -- !query output
 2	8
 

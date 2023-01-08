@@ -154,7 +154,7 @@ struct<udf(count(*)):bigint>
 SELECT udf(test_missing_target.b), udf(count(*))
   FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b)
 -- !query schema
-struct<udf(test_missing_target . b):int,udf(count(*)):bigint>
+struct<udf(test_missing_target.b):int,udf(count(*)):bigint>
 -- !query output
 1	1
 2	2
@@ -317,7 +317,7 @@ SELECT udf(x.b), udf(count(*)) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(x.b) ORDER BY udf(x.b)
 -- !query schema
-struct<udf(x . b):int,udf(count(*)):bigint>
+struct<udf(x.b):int,udf(count(*)):bigint>
 -- !query output
 1	1
 2	2
@@ -400,7 +400,7 @@ struct<udf(count(b)):bigint>
 SELECT udf(lower(test_missing_target.c)), udf(count(udf(c)))
   FROM test_missing_target GROUP BY udf(lower(c)) ORDER BY udf(lower(c))
 -- !query schema
-struct<udf(lower(test_missing_target . c)):string,udf(count(udf(c))):bigint>
+struct<udf(lower(test_missing_target.c)):string,udf(count(udf(c))):bigint>
 -- !query output
 abab	2
 bbbb	3
@@ -467,7 +467,7 @@ test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(x.b/2) ORDER BY udf(x.b/2)
 -- !query schema
-struct<udf(x . b / 2):double,udf(count(udf(x . b))):bigint>
+struct<udf(x.b / 2):double,udf(count(udf(x.b))):bigint>
 -- !query output
 0.5	1
 1.0	2

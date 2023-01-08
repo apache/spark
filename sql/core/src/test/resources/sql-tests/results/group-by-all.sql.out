@@ -240,7 +240,7 @@ USA	7	3
 -- !query
 select (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
 -- !query schema
-struct<(select count(*)from data d1 where d1 . country = d2 . country):bigint,count(id):bigint>
+struct<(select count(*)from data d1 where d1.country = d2.country):bigint,count(id):bigint>
 -- !query output
 1	2
 2	2

@@ -57,7 +57,7 @@ struct<c1:int,c2:int,c1:int>
 -- !query
 SELECT * FROM t1, LATERAL (SELECT t1.c1 + t2.c1 FROM t2)
 -- !query schema
-struct<c1:int,c2:int,t1 . c1 + t2 . c1:int>
+struct<c1:int,c2:int,t1.c1 + t2.c1:int>
 -- !query output
 0	1	0
 0	1	0
@@ -292,7 +292,7 @@ struct<c1:int,c2:int,m:int>
 -- !query
 SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2)
 -- !query schema
-struct<c1:int,c2:int,c1:int,c2:int,t1 . c2 + t2 . c2:int>
+struct<c1:int,c2:int,c1:int,c2:int,t1.c2 + t2.c2:int>
 -- !query output
 0	1	0	2	3
 0	1	0	3	4
@@ -766,7 +766,7 @@ SELECT * FROM t1, LATERAL (
   JOIN (SELECT COUNT(*) cnt FROM t2 WHERE t1.c1 = t2.c1) r
 )
 -- !query schema
-struct<c1:int,c2:int,l . cnt + r . cnt:bigint>
+struct<c1:int,c2:int,l.cnt + r.cnt:bigint>
 -- !query output
 0	1	4
 1	2	0

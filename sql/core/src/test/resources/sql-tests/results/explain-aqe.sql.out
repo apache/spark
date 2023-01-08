@@ -47,7 +47,7 @@ EXPLAIN EXTENDED
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'Project [unresolvedalias('sum(distinct 'val), Some(org.apache.spark.sql.catalyst.parser.AstBuilder$$Lambda$3529/1377066394@13a85af6))]
+'Project [unresolvedalias('sum(distinct 'val), Some(org.apache.spark.sql.catalyst.parser.AstBuilder$$Lambda$3532/942724450@781d340d))]
 +- 'UnresolvedRelation [explain_temp1], [], false
 
 == Analyzed Logical Plan ==

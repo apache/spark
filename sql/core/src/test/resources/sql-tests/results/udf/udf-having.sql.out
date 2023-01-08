@@ -32,7 +32,7 @@ struct<udf(count(udf(k))):bigint>
 -- !query
 SELECT udf(MIN(t.v)) FROM (SELECT * FROM hav WHERE v > 0) t HAVING(udf(COUNT(udf(1))) > 0)
 -- !query schema
-struct<udf(MIN(t . v)):int>
+struct<udf(MIN(t.v)):int>
 -- !query output
 1
 

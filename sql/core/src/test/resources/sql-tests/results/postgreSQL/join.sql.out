@@ -2756,7 +2756,7 @@ select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join int8_tbl t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1
 -- !query schema
-struct<q2:bigint,count(t2 . q1, t2 . q2):bigint>
+struct<q2:bigint,count(t2.q1, t2.q2):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -2769,7 +2769,7 @@ select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1
 -- !query schema
-struct<q2:bigint,count(t2 . q1, t2 . q2):bigint>
+struct<q2:bigint,count(t2.q1, t2.q2):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -2784,7 +2784,7 @@ from int8_tbl t1 left join
   on (t1.q2 = t2.q1)
 group by t1.q2 order by 1
 -- !query schema
-struct<q2:bigint,count(t2 . q1, t2 . q2):bigint>
+struct<q2:bigint,count(t2.q1, t2.q2):bigint>
 -- !query output
 -4567890123456789	0
 123	2
@@ -3064,7 +3064,7 @@ select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
   from tenk1 a left join tenk1 b on b.thousand = a.unique1                        left join tenk1 c on c.unique2 = coalesce(b.twothousand, a.twothousand)
   where a.unique2 < 10 and coalesce(b.twothousand, a.twothousand) = 44
 -- !query schema
-struct<unique1:int,unique1:int,unique1:int,coalesce(b . twothousand, a . twothousand):int>
+struct<unique1:int,unique1:int,unique1:int,coalesce(b.twothousand, a.twothousand):int>
 -- !query output
 
 
@@ -3514,7 +3514,7 @@ select * from
    int8_tbl b cross join int8_tbl c) ss
   on a.q2 = ss.bq1
 -- !query schema
-struct<q1:bigint,q2:bigint,bq1:bigint,cq1:bigint,least(a . q1, b . q1, c . q1):bigint>
+struct<q1:bigint,q2:bigint,bq1:bigint,cq1:bigint,least(a.q1, b.q1, c.q1):bigint>
 -- !query output
 123	456	NULL	NULL	NULL
 123	4567890123456789	4567890123456789	123	123

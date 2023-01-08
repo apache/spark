@@ -789,7 +789,7 @@ SELECT emp.dept_id,
 FROM emp
 GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,avg(salary):double,avg(salary)FILTER(WHERE emp . dept_id =(SELECT dept_id FROM dept LIMIT 1)):double>
+struct<dept_id:int,avg(salary):double,avg(salary)FILTER(WHERE emp.dept_id =(SELECT dept_id FROM dept LIMIT 1)):double>
 -- !query output
 10	133.33333333333334	133.33333333333334
 100	400.0	NULL
@@ -808,7 +808,7 @@ SELECT emp.dept_id,
 FROM emp
 GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,avg(salary):double,avg(salary)FILTER(WHERE EXISTS(SELECT state FROM dept WHERE dept . dept_id = emp . dept_id)):double>
+struct<dept_id:int,avg(salary):double,avg(salary)FILTER(WHERE EXISTS(SELECT state FROM dept WHERE dept.dept_id = emp.dept_id)):double>
 -- !query output
 10	133.33333333333334	133.33333333333334
 100	400.0	NULL
@@ -827,7 +827,7 @@ SELECT emp.dept_id,
 FROM emp 
 GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,Sum(salary):double,Sum(salary)FILTER(WHERE NOT EXISTS(SELECT state FROM dept WHERE dept . dept_id = emp . dept_id)):double>
+struct<dept_id:int,Sum(salary):double,Sum(salary)FILTER(WHERE NOT EXISTS(SELECT state FROM dept WHERE dept.dept_id = emp.dept_id)):double>
 -- !query output
 10	400.0	NULL
 100	800.0	800.0
@@ -845,7 +845,7 @@ SELECT emp.dept_id,
 FROM emp 
 GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,avg(salary):double,avg(salary)FILTER(WHERE emp . dept_id IN(SELECT DISTINCT dept_id FROM dept)):double>
+struct<dept_id:int,avg(salary):double,avg(salary)FILTER(WHERE emp.dept_id IN(SELECT DISTINCT dept_id FROM dept)):double>
 -- !query output
 10	133.33333333333334	133.33333333333334
 100	400.0	NULL
@@ -863,7 +863,7 @@ SELECT emp.dept_id,
 FROM emp 
 GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,Sum(salary):double,Sum(salary)FILTER(WHERE emp . dept_id NOT IN(SELECT DISTINCT dept_id FROM dept)):double>
+struct<dept_id:int,Sum(salary):double,Sum(salary)FILTER(WHERE emp.dept_id NOT IN(SELECT DISTINCT dept_id FROM dept)):double>
 -- !query output
 10	400.0	NULL
 100	800.0	800.0

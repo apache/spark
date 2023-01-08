@@ -37,7 +37,7 @@ struct<count(DISTINCT 1):bigint,count(DISTINCT null):bigint,count(DISTINCT a):bi
 -- !query
 SELECT count(a, b), count(b, a), count(testData.*, testData.*) FROM testData
 -- !query schema
-struct<count(a, b):bigint,count(b, a):bigint,count(testData . *, testData . *):bigint>
+struct<count(a, b):bigint,count(b, a):bigint,count(testData.*, testData.*):bigint>
 -- !query output
 4	4	4
 
@@ -47,7 +47,7 @@ SELECT
   count(DISTINCT a, b), count(DISTINCT b, a), count(DISTINCT *), count(DISTINCT testData.*, testData.*)
 FROM testData
 -- !query schema
-struct<count(DISTINCT a, b):bigint,count(DISTINCT b, a):bigint,count(DISTINCT *):bigint,count(DISTINCT testData . *, testData . *):bigint>
+struct<count(DISTINCT a, b):bigint,count(DISTINCT b, a):bigint,count(DISTINCT *):bigint,count(DISTINCT testData.*, testData.*):bigint>
 -- !query output
 3	3	3	3
 
@@ -178,7 +178,7 @@ spark.sql.legacy.allowStarWithSingleTableIdentifierInCount	true
 -- !query
 SELECT count(testData.*) FROM testData
 -- !query schema
-struct<count(testData . *):bigint>
+struct<count(testData.*):bigint>
 -- !query output
 4
 

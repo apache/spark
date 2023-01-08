@@ -397,7 +397,7 @@ struct<count(b):bigint>
 SELECT lower(test_missing_target.c), count(c)
   FROM test_missing_target GROUP BY lower(c) ORDER BY lower(c)
 -- !query schema
-struct<lower(test_missing_target . c):string,count(c):bigint>
+struct<lower(test_missing_target.c):string,count(c):bigint>
 -- !query output
 abab	2
 bbbb	3
@@ -463,7 +463,7 @@ SELECT x.b/2, count(x.b) FROM test_missing_target x, test_missing_target y
 	WHERE x.a = y.a
 	GROUP BY x.b/2 ORDER BY x.b/2
 -- !query schema
-struct<x . b / 2:double,count(x . b):bigint>
+struct<x.b / 2:double,count(x.b):bigint>
 -- !query output
 0.5	1
 1.0	2
