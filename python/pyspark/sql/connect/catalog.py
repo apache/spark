@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
@@ -305,6 +305,18 @@ class Catalog:
         self._catalog_to_pandas(plan.RefreshByPath(path=path))
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
+
+    def isCached(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("isCached() is not implemented.")
+
+    def cacheTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cacheTable() is not implemented.")
+
+    def uncacheTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("uncacheTable() is not implemented.")
+
+    def registerFunction(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("registerFunction() is not implemented.")
 
 
 Catalog.__doc__ = PySparkCatalog.__doc__
