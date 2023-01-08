@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import datetime
 import unittest
 import shutil
 import tempfile
@@ -562,6 +564,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             cdf.select(CF.pmod("a", "b")).toPandas(),
             sdf.select(SF.pmod("a", "b")).toPandas(),
         )
+
+    def test_cast_with_ddl(self):
+        data = [Row(date=datetime.date(2021, 12, 27), add=2)]
+
+        cdf = self.connect.createDataFrame(data, "date date, add integer")
+        sdf = self.spark.createDataFrame(data, "date date, add integer")
+
+        self.assertEqual(cdf.schema, sdf.schema)
 
     def test_create_empty_df(self):
         for schema in [

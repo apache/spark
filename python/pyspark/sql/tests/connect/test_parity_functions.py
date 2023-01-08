@@ -53,16 +53,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     def test_basic_functions(self):
         super().test_basic_functions()
 
-    # TODO(SPARK-41899): DataFrame.createDataFrame converting int to bigint
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_date_add_function(self):
-        super().test_date_add_function()
-
-    # TODO(SPARK-41899): DataFrame.createDataFrame converting int to bigint
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_date_sub_function(self):
-        super().test_date_sub_function()
-
     # TODO(SPARK-41847): DataFrame mapfield,structlist invalid type
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_explode(self):
