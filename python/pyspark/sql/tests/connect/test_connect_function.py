@@ -1640,6 +1640,27 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 sdf.select(SF.from_json("b", schema, {"mode": "FAILFAST"})),
             )
 
+        # SPARK-41880: from_json support non-literal expression
+        c_schema = CF.schema_of_json(CF.lit("""{"a": 2}"""))
+        s_schema = SF.schema_of_json(SF.lit("""{"a": 2}"""))
+
+        self.compare_by_show(
+            cdf.select(CF.from_json(cdf.a, c_schema)),
+            sdf.select(SF.from_json(sdf.a, s_schema)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_json("a", c_schema)),
+            sdf.select(SF.from_json("a", s_schema)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_json(cdf.a, c_schema, {"mode": "FAILFAST"})),
+            sdf.select(SF.from_json(sdf.a, s_schema, {"mode": "FAILFAST"})),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_json("a", c_schema, {"mode": "FAILFAST"})),
+            sdf.select(SF.from_json("a", s_schema, {"mode": "FAILFAST"})),
+        )
+
         # test get_json_object
         self.assert_eq(
             cdf.select(
