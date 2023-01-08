@@ -16,31 +16,12 @@
 #
 
 import unittest
-import os
 
-from pyspark.sql import SparkSession
 from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(DataFrameParityTests, cls).setUpClass()
-        cls._spark = cls.spark  # Assign existing Spark session to run the server
-        # Sets the remote address. Now, we create a remote Spark Session.
-        # Note that this is only allowed in testing.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        cls.spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
-
-    @classmethod
-    def tearDownClass(cls):
-        super(DataFrameParityTests, cls).tearDownClass()
-        cls._spark.stop()
-        del os.environ["SPARK_REMOTE"]
-
+class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     # TODO(SPARK-41612): support Catalog.isCached
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_cache(self):

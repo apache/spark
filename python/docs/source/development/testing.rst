@@ -82,26 +82,14 @@ you should regenerate Python Protobuf client by running ``dev/connect-gen-protos
 Running PySpark Shell with Python Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To run Spark Connect server you locally built:
+For Apache Spark you locally built:
 
 .. code-block:: bash
 
-    bin/spark-shell \
-      --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
-      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+    bin/pyspark --remote "local[*]"
 
-To run the Spark Connect server from the Apache Spark release:
+For the Apache Spark release:
 
 .. code-block:: bash
 
-    bin/spark-shell \
-      --packages org.apache.spark:spark-connect_2.12:3.4.0 \
-      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
-
-
-To run the PySpark Shell with the client for the Spark Connect server:
-
-.. code-block:: bash
-
-    bin/pyspark --remote sc://localhost
-
+    bin/pyspark --remote "local[*]" --packages org.apache.spark:spark-connect_2.12:3.4.0
