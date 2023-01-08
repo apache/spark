@@ -260,6 +260,12 @@ object ParserUtils {
     }
   }
 
+  private def stripGap(sb: StringBuilder): Unit = {
+    if (sb.length > 0 && sb.charAt(sb.length - 1) == ' ') {
+      sb.setLength(sb.length - 1)
+    }
+  }
+
   /**
    * Adds a gap after every term node except of '(', ')', '[', ']',
    * and removes a gap before '(', ')', '[', ']', ','.
@@ -273,8 +279,7 @@ object ParserUtils {
           case term: TerminalNodeImpl =>
             val s = term.getText
             s match {
-              case "(" | "[" | "," | "." | "]" | ")"
-                if sb.length > 0 && sb.charAt(sb.length - 1) == ' ' => sb.setLength(sb.length - 1)
+              case "(" | "[" | "," | "." | "]" | ")" => stripGap(sb)
               case _ =>
             }
             sb.append(s)
@@ -293,8 +298,9 @@ object ParserUtils {
    * Gets a stable column alias for the given expression.
    */
   def toExprAlias(pt: ParseTree): String = {
-    val builder = new StringBuilder
-    toExprAlias(pt, builder)
-    builder.stripSuffix(" ")
+    val sb = new StringBuilder
+    toExprAlias(pt, sb)
+    stripGap(sb)
+    sb.toString
   }
 }
