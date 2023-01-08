@@ -350,13 +350,14 @@ class SparkSession:
             pass
 
     def stop(self) -> None:
-        # Stopping the session will only stop the current session by closing the connection,
-        # whereas the regular PySpark session closes the Spark Context itself, meaning that
-        # closing all Spark sessions. It is controversial to follow the existing
-        # the regular Spark session's behavior specifically in Spark Connect
-        # the Spark Connect server is designed for multi-tenancy - the remote client side
-        # cannot just stop the server and close other remote clients being used from other
-        # users.
+        # Stopping the session will only close the connection to the current session (and
+        # the life cycle of the session is maintained by the server),
+        # whereas the regular PySpark session immediately terminates the Spark Context
+        # itself, meaning that stopping all Spark sessions.
+        # It is controversial to follow the existing the regular Spark session's behavior
+        # specifically in Spark Connect the Spark Connect server is designed for
+        # multi-tenancy - the remote client side cannot just stop the server and stop
+        # other remote clients being used from other users.
         self.client.close()
 
         if "SPARK_LOCAL_REMOTE" in os.environ:
@@ -462,8 +463,8 @@ class SparkSession:
             if is_dev_version:
                 from pyspark.testing.utils import search_jar
 
-                # Note that, in production, spark.packages configuration should be set by users.
-                # Here we're automatically searching the jars locally built.
+                # Note that, in production, spark.jars.packages configuration should be
+                # set by users. Here we're automatically searching the jars locally built.
                 connect_jar = search_jar(
                     "connector/connect/server", "spark-connect-assembly-", "spark-connect"
                 )
