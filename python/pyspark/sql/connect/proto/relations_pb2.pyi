@@ -824,6 +824,7 @@ class SetOperation(google.protobuf.message.Message):
     SET_OP_TYPE_FIELD_NUMBER: builtins.int
     IS_ALL_FIELD_NUMBER: builtins.int
     BY_NAME_FIELD_NUMBER: builtins.int
+    ALLOW_MISSING_COLUMNS_FIELD_NUMBER: builtins.int
     @property
     def left_input(self) -> global___Relation:
         """(Required) Left input relation for a Set operation."""
@@ -843,6 +844,11 @@ class SetOperation(google.protobuf.message.Message):
 
     Only UNION supports this option.
     """
+    allow_missing_columns: builtins.bool
+    """(Optional) If to perform the Set operation and allow missing columns.
+
+    Only UNION supports this option.
+    """
     def __init__(
         self,
         *,
@@ -851,14 +857,19 @@ class SetOperation(google.protobuf.message.Message):
         set_op_type: global___SetOperation.SetOpType.ValueType = ...,
         is_all: builtins.bool | None = ...,
         by_name: builtins.bool | None = ...,
+        allow_missing_columns: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_allow_missing_columns",
+            b"_allow_missing_columns",
             "_by_name",
             b"_by_name",
             "_is_all",
             b"_is_all",
+            "allow_missing_columns",
+            b"allow_missing_columns",
             "by_name",
             b"by_name",
             "is_all",
@@ -872,10 +883,14 @@ class SetOperation(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_allow_missing_columns",
+            b"_allow_missing_columns",
             "_by_name",
             b"_by_name",
             "_is_all",
             b"_is_all",
+            "allow_missing_columns",
+            b"allow_missing_columns",
             "by_name",
             b"by_name",
             "is_all",
@@ -888,6 +903,11 @@ class SetOperation(google.protobuf.message.Message):
             b"set_op_type",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_allow_missing_columns", b"_allow_missing_columns"],
+    ) -> typing_extensions.Literal["allow_missing_columns"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_by_name", b"_by_name"]
