@@ -66,22 +66,22 @@ object SparkConnectClient {
    */
   class Builder() {
     private val userContextBuilder = proto.UserContext.newBuilder()
-    private var _host: String = "localhost"
-    private var _port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
+    private var host: String = "localhost"
+    private var port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
 
     def userId(id: String): Builder = {
       userContextBuilder.setUserId(id)
       this
     }
 
-    def host(host: String): Builder = {
-      require(host != null)
-      _host = host
+    def host(inputHost: String): Builder = {
+      require(inputHost != null)
+      host = inputHost
       this
     }
 
-    def port(port: Int): Builder = {
-      _port = port
+    def port(inputPort: Int): Builder = {
+      port = inputPort
       this
     }
 
@@ -148,13 +148,13 @@ object SparkConnectClient {
       val uri = new URI(connectionString)
       verifyURI(uri)
       parseURIParams(uri)
-      _host = uri.getHost
-      _port = uri.getPort
+      host = uri.getHost
+      port = uri.getPort
       this
     }
 
     def build(): SparkConnectClient = {
-      val channelBuilder = ManagedChannelBuilder.forAddress(_host, _port).usePlaintext()
+      val channelBuilder = ManagedChannelBuilder.forAddress(host, port).usePlaintext()
       new SparkConnectClient(userContextBuilder.build(), channelBuilder.build())
     }
   }
