@@ -1786,6 +1786,8 @@ private[spark] class DAGScheduler(
           case _ =>
             updateAccumulators(event)
         }
+        // Update rdd blocks' visibility status.
+        blockManagerMaster.updateRDDBlockVisibility(event.taskInfo.taskId)
       case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
     }

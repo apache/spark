@@ -1326,6 +1326,57 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Retrieve the given rdd block if it exists and is visible, otherwise call the provided
+   * `makeIterator` method to compute the block, persist it, and return its values.
+   *
+   * @return either a BlockResult if the block was successfully cached, or an iterator if the block
+   *         could not be cached.
+   */
+  def getOrElseUpdateRDDBlock[T](
+      taskId: Long,
+      blockId: RDDBlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+    // Attempt to read the block from local or remote storage. If it's present, then we don't need
+    // to go through the local-get-or-put path.
+    if (master.isRDDBlockVisible(blockId)) { // Read from cache only when the block is visible.
+      get[T](blockId)(classTag) match {
+        case Some(block) =>
+          return Left(block)
+        case _ =>
+        // Need to compute the block.
+      }
+      // Initially we hold no locks on this block.
+    }
+
+    doPutIterator(blockId, makeIterator, level, classTag, keepReadLock = true) match {
+      case None =>
+        // Report taskId -> blockId relationship to master.
+        master.updateRDDBlockTaskInfo(blockId, taskId)
+
+        // doPut() didn't hand work back to us, so the block already existed or was successfully
+        // stored. Therefore, we now hold a read lock on the block.
+        val blockResult = getLocalValues(blockId).getOrElse {
+          // Since we held a read lock between the doPut() and get() calls, the block should not
+          // have been evicted, so get() not returning the block indicates some internal error.
+          releaseLock(blockId)
+          throw SparkCoreErrors.failToGetBlockWithLockError(blockId)
+        }
+        // We already hold a read lock on the block from the doPut() call and getLocalValues()
+        // acquires the lock again, so we need to call releaseLock() here so that the net number
+        // of lock acquisitions is 1 (since the caller will only call release() once).
+        releaseLock(blockId)
+        Left(blockResult)
+      case Some(iter) =>
+        // The put failed, likely because the data was too large to fit in memory and could not be
+        // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
+        // that they can decide what to do with the values (e.g. process them without caching).
+        Right(iter)
+    }
+  }
+
+  /**
    * Retrieve the given block if it exists, otherwise call the provided `makeIterator` method
    * to compute the block, persist it, and return its values.
    *

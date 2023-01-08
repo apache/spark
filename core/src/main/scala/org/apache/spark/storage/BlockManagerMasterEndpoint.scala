@@ -76,6 +76,8 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
+  private val visibleRDDBlocks = new mutable.HashSet[RDDBlockId]
+  private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
 
   // Mapping from host name to shuffle (mergers) services where the current app
   // registered an executor in the past. Older hosts are removed when the
@@ -210,6 +212,27 @@ class BlockManagerMasterEndpoint(
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
+
+    case UpdateRDDBlockTaskInfo(blockId, taskId) =>
+      context.reply(updateRDDBlockTaskInfo(blockId, taskId))
+
+    case GetRDDBlockVisibility(blockId) =>
+      context.reply(visibleRDDBlocks.contains(blockId))
+
+    case UpdateRDDBlockVisibility(taskId) =>
+      context.reply(updateRDDBlockVisibility(taskId))
+  }
+
+  private def updateRDDBlockVisibility(taskId: Long): Unit = {
+    tidToRddBlockIds.get(taskId).foreach { blockIds =>
+      blockIds.foreach(visibleRDDBlocks.add)
+    }
+    tidToRddBlockIds.remove(taskId)
+  }
+
+  private def updateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long): Unit = {
+    tidToRddBlockIds.getOrElseUpdate(taskId, new mutable.HashSet[RDDBlockId])
+      .add(blockId)
   }
 
   /**
@@ -272,6 +295,7 @@ class BlockManagerMasterEndpoint(
 
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
+      visibleRDDBlocks.remove(blockId)
 
       val (bmIdsExtShuffle, bmIdsExecutor) = bms.partition(_.port == externalShuffleServicePort)
       val liveExecutorsForBlock = bmIdsExecutor.map(_.executorId).toSet
