@@ -60,7 +60,6 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
-    WithMetadata with_metadata = 28;
 
     // NA functions
     NAFill fill_na = 90;
@@ -692,22 +691,8 @@ message WithColumns {
   // Only one name part is expected from each Expression.Alias.
   //
   // An exception is thrown when duplicated names are present in the mapping.
-  repeated Expression.Alias name_expr_list = 2;
+  repeated Expression.Alias aliases = 2;
 }
-
-
-// Update an existing column with metadata.
-message WithMetadata {
-  // (Required) The input relation.
-  Relation input = 1;
-
-  // (Required) The column.
-  string column = 2;
-
-  // (Required) The JSON-formatted metadata.
-  string metadata = 3;
-}
-
 
 // Specify a hint over a relation. Hint should have a name and optional parameters.
 message Hint {
