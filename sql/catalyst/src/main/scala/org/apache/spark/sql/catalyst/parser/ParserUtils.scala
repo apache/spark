@@ -260,7 +260,11 @@ object ParserUtils {
     }
   }
 
-  private def toExprAlias0(ctx: ParseTree, sb: StringBuilder): Unit = {
+  /**
+   * Adds a gap after every term node except of '(', ')', '[', ']',
+   * and removes a gap before '(', ')', '[', ']', ','.
+   */
+  private def toExprAlias(ctx: ParseTree, sb: StringBuilder): Unit = {
     val childCount = ctx.getChildCount
     if (childCount > 0) {
       var i = 0
@@ -278,7 +282,7 @@ object ParserUtils {
               case "(" | "[" | "]" | ")" =>
               case _ => sb.append(" ")
             }
-          case child => toExprAlias0(child, sb)
+          case child => toExprAlias(child, sb)
         }
         i = i + 1
       }
@@ -290,7 +294,7 @@ object ParserUtils {
    */
   def toExprAlias(pt: ParseTree): String = {
     val builder = new StringBuilder
-    toExprAlias0(pt, builder)
+    toExprAlias(pt, builder)
     builder.stripSuffix(" ")
   }
 }
