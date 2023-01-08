@@ -2039,6 +2039,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(cg, f)()
 
+    def test_unsupported_session_functions(self):
+        # SPARK-41934: Disable unsupported functions.
+
+        with self.assertRaises(NotImplementedError):
+            RemoteSparkSession.getActiveSession()
+
+        for f in (
+            "newSession",
+            "conf",
+            "sparkContext",
+            "streams",
+            "udf",
+            "version",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(self.connect, f)()
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):
