@@ -1338,6 +1338,8 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+    var getIterator = makeIterator
+
     // Attempt to read the block from local or remote storage. If it's present, then we don't need
     // to go through the local-get-or-put path.
     if (master.isRDDBlockVisible(blockId)) { // Read from cache only when the block is visible.
@@ -1348,9 +1350,14 @@ private[spark] class BlockManager(
         // Need to compute the block.
       }
       // Initially we hold no locks on this block.
+    } else {
+      // Need to compute the block, since the block maybe already exists, force
+      // compute the block here.
+      val iterator = makeIterator()
+      getIterator = () => iterator
     }
 
-    doPutIterator(blockId, makeIterator, level, classTag, keepReadLock = true) match {
+    doPutIterator(blockId, getIterator, level, classTag, keepReadLock = true) match {
       case None =>
         // Report taskId -> blockId relationship to master.
         master.updateRDDBlockTaskInfo(blockId, taskId)
