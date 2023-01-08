@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import warnings
 from distutils.version import LooseVersion
 from threading import RLock
 from collections.abc import Sized
@@ -457,10 +458,13 @@ class SparkSession:
         if session is None or session._sc._jsc is None:
             conf = SparkConf()
             # Check if we're using unreleased version that is in development.
-            is_dev_version = "dev" in LooseVersion(__version__).version
+            # Also checks SPARK_TESTING for RC versions.
+            is_dev_mode = (
+                "dev" in LooseVersion(__version__).version or "SPARK_TESTING" in os.environ
+            )
             connect_jar = None
 
-            if is_dev_version:
+            if is_dev_mode:
                 from pyspark.testing.utils import search_jar
 
                 # Note that, in production, spark.jars.packages configuration should be
@@ -468,16 +472,29 @@ class SparkSession:
                 connect_jar = search_jar(
                     "connector/connect/server", "spark-connect-assembly-", "spark-connect"
                 )
-                if connect_jar is None:
-                    raise RuntimeError(
-                        "Spark Connect project was not compiled into a JAR. "
-                        "To use --remote without specifying jars, you need to build Spark "
-                        "with 'build/sbt package' or 'build/mvn package' first"
+                if connect_jar is not None:
+                    origin_jars = conf.get("spark.jars")
+                    if origin_jars is not None:
+                        conf.set("spark.jars", f"{origin_jars},{connect_jar}")
+                    else:
+                        conf.set("spark.jars", connect_jar)
+                else:
+                    warnings.warn(
+                        "Attempted to automatically find the Spark Connect jars because "
+                        "'SPARK_TESTING' environment variable is set, or the current PySpark "
+                        f"version is dev version ({__version__}). However, the jar was not found. "
+                        "Manually locate the jars and specify them, e.g., 'spark.jars' "
+                        "configuration."
                     )
-                conf.set("spark.jars", connect_jar)
 
             conf.set("spark.master", master)
-            conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+
+            connect_plugin = "org.apache.spark.sql.connect.SparkConnectPlugin"
+            origin_plugin = conf.get("spark.plugins")
+            if origin_plugin is not None:
+                conf.set("spark.plugins", f"{origin_plugin},{connect_plugin}")
+            else:
+                conf.set("spark.plugins", connect_plugin)
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
             origin_args = os.environ.get("PYSPARK_SUBMIT_ARGS", None)
@@ -486,14 +503,14 @@ class SparkSession:
                     # So SparkSubmit thinks no remote is set in order to
                     # start the regular PySpark session.
                     del os.environ["SPARK_REMOTE"]
-                if origin_args is not None:
-                    # PySpark shell launches Py4J server from Python.
-                    # Remove "--remote" option specified, and use plain arguments.
-                    # NOTE that this is not used in regular PySpark application
-                    # submission because JVM at this point is already running.
-                    os.environ["PYSPARK_SUBMIT_ARGS"] = '"--name" "PySparkShell" "pyspark-shell"'
 
-                if is_dev_version:
+                # PySpark shell launches Py4J server from Python.
+                # Remove "--remote" option specified, and use plain arguments.
+                # NOTE that this is not used in regular PySpark application
+                # submission because JVM at this point is already running.
+                os.environ["PYSPARK_SUBMIT_ARGS"] = '"--name" "PySparkShell" "pyspark-shell"'
+
+                if is_dev_mode and connect_jar is not None:
                     # In the case of Python application submission, JVM is already up.
                     # Therefore, we should manually manipulate the classpath in that case.
                     # Otherwise, the jars are added but the driver would not be able to
@@ -510,6 +527,8 @@ class SparkSession:
             finally:
                 if origin_args is not None:
                     os.environ["PYSPARK_SUBMIT_ARGS"] = origin_args
+                else:
+                    del os.environ["PYSPARK_SUBMIT_ARGS"]
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
