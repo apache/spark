@@ -371,4 +371,37 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-41940: Infer IsNotNull constraints for complex join expressions") {
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+
+    // Infer IsNotNull constraints for complex equal join expressions in inner join
+    val originalQuery =
+      x.join(y, Inner, Some("x.a".attr + 1 === "y.a".attr + 2)).analyze
+    val correctAnswer = x.where(IsNotNull($"a") && IsNotNull($"a".attr + 1))
+      .join(y.where(IsNotNull($"a") && IsNotNull($"a".attr + 2)), Inner,
+        Some("x.a".attr + 1 === $"y.a".attr + 2))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+
+    // Infer IsNotNull constraints for complex equal join expressions in outer join
+    val originalQuery2 =
+      x.join(y, LeftOuter, Some("x.a".attr + 1 === "y.a".attr + 2)).analyze
+    val correctAnswer2 = x.join(y.where(IsNotNull($"a") && IsNotNull($"a".attr + 2)), LeftOuter,
+      Some("x.a".attr + 1 === $"y.a".attr + 2))
+      .analyze
+    val optimized2 = Optimize.execute(originalQuery2)
+    comparePlans(optimized2, correctAnswer2)
+
+    // Infer IsNotNull constraints for complex non-equal join expressions in outer join
+    val originalQuery3 =
+      x.join(y, LeftOuter, Some("x.a".attr + 1 > "y.a".attr + 2)).analyze
+    val correctAnswer3 = x.join(y.where(IsNotNull($"a") && IsNotNull($"a".attr + 2)), LeftOuter,
+      Some("x.a".attr + 1 > $"y.a".attr + 2))
+      .analyze
+    val optimized3 = Optimize.execute(originalQuery3)
+    comparePlans(optimized3, correctAnswer3)
+  }
 }

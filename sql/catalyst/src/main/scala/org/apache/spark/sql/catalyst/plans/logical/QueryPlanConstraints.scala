@@ -100,6 +100,13 @@ trait ConstraintHelper {
     // operator's output
     val nonNullableAttributes = output.filterNot(_.nullable)
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull)
+    isNotNullConstraints ++= constraints.collect {
+      case BinaryComparison(left, _) if left.references.subsetOf(AttributeSet(output)) =>
+        IsNotNull(left)
+
+      case BinaryComparison(_, right) if right.references.subsetOf(AttributeSet(output)) =>
+        IsNotNull(right)
+    }
 
     isNotNullConstraints -- constraints
   }
