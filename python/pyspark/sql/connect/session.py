@@ -358,6 +358,33 @@ class SparkSession:
     def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
         return self._client.register_udf(function, return_type)
 
+    @classmethod
+    def getActiveSession(cls) -> Any:
+        raise NotImplementedError("getActiveSession() is not implemented.")
+
+    def newSession(self) -> Any:
+        raise NotImplementedError("newSession() is not implemented.")
+
+    @property
+    def conf(self) -> Any:
+        raise NotImplementedError("conf() is not implemented.")
+
+    @property
+    def sparkContext(self) -> Any:
+        raise NotImplementedError("sparkContext() is not implemented.")
+
+    @property
+    def streams(self) -> Any:
+        raise NotImplementedError("streams() is not implemented.")
+
+    @property
+    def udf(self) -> Any:
+        raise NotImplementedError("udf() is not implemented.")
+
+    @property
+    def version(self) -> str:
+        raise NotImplementedError("version() is not implemented.")
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 

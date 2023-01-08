@@ -813,11 +813,6 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ]
   },
-  "INVALID_PROTOBUF_MESSAGE_TYPE" : {
-    "message" : [
-      "<protobufClassName> is not a Protobuf message type"
-    ]
-  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
@@ -2320,11 +2315,6 @@
   "_LEGACY_ERROR_TEMP_1100" : {
     "message" : [
       "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1101" : {
-    "message" : [
-      "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -4139,11 +4129,6 @@
   "_LEGACY_ERROR_TEMP_2142" : {
     "message" : [
       "Attributes for type <schema> is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2143" : {
-    "message" : [
-      "Schema for type <tpe> is not supported"
     ]
   },
   "_LEGACY_ERROR_TEMP_2144" : {
