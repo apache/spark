@@ -4237,7 +4237,7 @@ test_that("assert_true, raise_error", {
   expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
 })
 
-test_that("check class column for multi-class object works", {
+test_that("SPARK-41937: check class column for multi-class object works", {
   .originalTimeZone <- Sys.getenv("TZ")
   Sys.setenv(TZ = "")
   temp_time <- as.POSIXlt("2015-03-11 12:13:04.043", tz = "")
