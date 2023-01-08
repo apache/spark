@@ -3483,13 +3483,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(df1.schema.head.name === "rand()")
     checkIfSeedExistsInExplain(df1)
     val df2 = sql("SELECT rand(1L)")
-    assert(df2.schema.head.name === "rand(1)")
+    assert(df2.schema.head.name === "rand(1L)")
     checkIfSeedExistsInExplain(df2)
     val df3 = sql("SELECT randn()")
     assert(df3.schema.head.name === "randn()")
     checkIfSeedExistsInExplain(df1)
     val df4 = sql("SELECT randn(1L)")
-    assert(df4.schema.head.name === "randn(1)")
+    assert(df4.schema.head.name === "randn(1L)")
     checkIfSeedExistsInExplain(df2)
   }
 

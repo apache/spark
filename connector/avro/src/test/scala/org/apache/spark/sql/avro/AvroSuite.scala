@@ -2226,7 +2226,7 @@ abstract class AvroSuite
                  |LOCATION '${dir}'
                  |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
           }.getMessage
-          assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+          assert(e.contains("Column name \"IF(ID = 1, 1, 0)\" contains invalid character(s)."))
         }
 
         withTempDir { dir =>
@@ -2302,7 +2302,7 @@ class AvroV1Suite extends AvroSuite {
           sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
             .format("avro").save(dir.getCanonicalPath)
         }.getMessage
-        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+        assert(e.contains("Column name \"IF(ID = 1, 1, 0)\" contains invalid character(s)."))
       }
 
       withTempDir { dir =>

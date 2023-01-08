@@ -2948,7 +2948,7 @@ class HiveDDLSuite
               spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
                 s"STORED AS $format SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
             }.getCause.getMessage
-            assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains" +
+            assert(e.contains("Column name \"if(1 = 1, 1, 0)\" contains" +
               " invalid character(s). Please use alias to rename it."))
           }
         }

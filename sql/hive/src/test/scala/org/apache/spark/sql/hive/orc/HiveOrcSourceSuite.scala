@@ -122,12 +122,12 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       var msg = intercept[AnalysisException] {
         sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
       }.getMessage
-      validateErrorMessage(msg, "INTERVAL '1' DAY", "interval day", "ORC")
+      validateErrorMessage(msg, "interval 1 days", "interval day", "ORC")
 
       msg = intercept[AnalysisException] {
         sql("select null").write.mode("overwrite").orc(orcDir)
       }.getMessage
-      validateErrorMessage(msg, "NULL", "void", "ORC")
+      validateErrorMessage(msg, "null", "void", "ORC")
 
       msg = intercept[AnalysisException] {
         spark.udf.register("testType", () => new IntervalData())
