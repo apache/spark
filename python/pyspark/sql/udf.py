@@ -407,7 +407,7 @@ class UDFRegistration:
 
             >>> strlen = spark.udf.register("stringLengthString", lambda x: len(x))
             >>> spark.sql("SELECT stringLengthString('test')").collect()
-            [Row(stringLengthString(test)='4')]
+            [Row(stringLengthString('test')='4')]
 
             >>> spark.sql("SELECT 'foo' AS text").select(strlen("text")).collect()
             [Row(stringLengthString(text)='3')]
@@ -415,12 +415,12 @@ class UDFRegistration:
             >>> from pyspark.sql.types import IntegerType
             >>> _ = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
             >>> spark.sql("SELECT stringLengthInt('test')").collect()
-            [Row(stringLengthInt(test)=4)]
+            [Row(stringLengthInt('test')=4)]
 
             >>> from pyspark.sql.types import IntegerType
             >>> _ = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
             >>> spark.sql("SELECT stringLengthInt('test')").collect()
-            [Row(stringLengthInt(test)=4)]
+            [Row(stringLengthInt('test')=4)]
 
         2. When `f` is a user-defined function (from Spark 2.3.0):
 
@@ -433,7 +433,7 @@ class UDFRegistration:
             >>> slen = udf(lambda s: len(s), IntegerType())
             >>> _ = spark.udf.register("slen", slen)
             >>> spark.sql("SELECT slen('test')").collect()
-            [Row(slen(test)=4)]
+            [Row(slen('test')=4)]
 
             >>> import random
             >>> from pyspark.sql.functions import udf

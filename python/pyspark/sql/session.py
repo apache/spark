@@ -710,11 +710,11 @@ class SparkSession(SparkConversionMixin):
 
         >>> strlen = spark.udf.register("strlen", lambda x: len(x))
         >>> spark.sql("SELECT strlen('test')").show()
-        +------------+
-        |strlen(test)|
-        +------------+
-        |           4|
-        +------------+
+        +--------------+
+        |strlen('test')|
+        +--------------+
+        |             4|
+        +--------------+
         """
         from pyspark.sql.udf import UDFRegistration
 
