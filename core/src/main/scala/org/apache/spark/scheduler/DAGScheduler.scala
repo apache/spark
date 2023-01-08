@@ -119,7 +119,7 @@ import org.apache.spark.util._
  */
 private[spark] class DAGScheduler(
     private[scheduler] val sc: SparkContext,
-    private[scheduler] val taskScheduler: TaskScheduler,
+    private[scheduler] var taskScheduler: TaskScheduler,
     listenerBus: LiveListenerBus,
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,

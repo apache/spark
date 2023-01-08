@@ -32,10 +32,12 @@ import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{Clock, ManualClock, ThreadUtils}
 
 class FakeSchedulerBackend extends SchedulerBackend {
@@ -120,6 +122,26 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         override private[scheduler] lazy val healthTrackerOpt = Some(healthTracker)
       }
     setupHelper()
+  }
+
+  def setupSchedulerWithCustomStatusUpdate(sc: SparkContext): TaskSchedulerImpl = {
+    taskScheduler =
+      new TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES)) {
+        override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
+
+          if (tid == 0 && state == TaskState.FINISHED) {
+            // Fail the first task attempt
+            this.executorLost(taskIdToExecutorId(tid), ExecutorProcessLost())
+          } else {
+            super.statusUpdate(tid, state, serializedData)
+          }
+        }
+      }
+    taskScheduler.initialize(sc.schedulerBackend)
+    taskScheduler.dagScheduler = sc.dagScheduler
+    sc.dagScheduler.taskScheduler = taskScheduler
+    sc.schedulerBackend.setTaskScheduler(taskScheduler)
+    taskScheduler
   }
 
   def setupHelper(): TaskSchedulerImpl = {
@@ -2261,6 +2283,31 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         assert(tsm.get.isZombie === hasLaunched)
       }
     }
+  }
+
+  test("SPARK-41497") {
+    // Set up a cluster with 2 executors
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2, 1, 1024]").setAppName("TaskSchedulerImplSuite")
+    sc = new SparkContext(conf)
+    // Set up a custom task scheduler. The scheduler will fail the first task attempt of the job
+    // submitted below. In particular, the failed first attempt task would success on computation
+    // (accumulator accounting, result caching) but only fail to report its success status due
+    // to the concurrent executor lost. The second task attempt would success.
+    taskScheduler = setupSchedulerWithCustomStatusUpdate(sc)
+    val myAcc = sc.longAccumulator("myAcc")
+    // Initiate a rdd with only one partition so there's only one task and specify the storage level
+    // with MEMORY_ONLY_2 so that the rdd result will be cached on both two executors.
+    val rdd = sc.parallelize(0 until 10, 1).mapPartitions { iter =>
+      myAcc.add(100)
+      iter.map(x => x + 1)
+    }.persist(StorageLevel.MEMORY_ONLY_2)
+    // This will pass since the second task attempt will succeed
+    assert(rdd.count() === 10)
+    // This will fail due to `myAcc.add(100)` won't be executed during the second task attempt's
+    // execution. Because the second task attempt will load the rdd cache directly instead of
+    // executing the task function so `myAcc.add(100)` is skipped.
+    assert(myAcc.value === 100)
   }
 
   /**
