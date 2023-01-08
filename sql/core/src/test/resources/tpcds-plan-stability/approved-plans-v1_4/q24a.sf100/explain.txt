@@ -546,6 +546,6 @@ Input [2]: [sum#44, count#45]
 Keys: []
 Functions [1]: [avg(netpaid#31)]
 Aggregate Attributes [1]: [avg(netpaid#31)#46]
-Results [1]: [(0.05 * avg(netpaid#31)#46) AS (0.05 * avg(netpaid))#47]
+Results [1]: [(0.05 * avg(netpaid#31)#46) AS 0.05 * avg(netpaid)#47]
 
 

@@ -2,7 +2,7 @@ WholeStageCodegen (14)
   Filter [paid]
     Subquery #1
       WholeStageCodegen (20)
-        HashAggregate [sum,count] [avg(netpaid),(0.05 * avg(netpaid)),sum,count]
+        HashAggregate [sum,count] [avg(netpaid),0.05 * avg(netpaid),sum,count]
           InputAdapter
             Exchange #10
               WholeStageCodegen (19)

@@ -280,7 +280,7 @@ Input [1]: [count#24]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#25]
-Results [1]: [count(1)#25 AS count(1)#26]
+Results [1]: [count(1)#25 AS count(*)#26]
 
 ===== Subqueries =====
 

@@ -90,25 +90,25 @@ Input [3]: [i_category#5, sum#8, count#9]
 Keys [1]: [i_category#5]
 Functions [1]: [avg(UnscaledValue(i_current_price#4))]
 Aggregate Attributes [1]: [avg(UnscaledValue(i_current_price#4))#10]
-Results [2]: [cast((avg(UnscaledValue(i_current_price#4))#10 / 100.0) as decimal(11,6)) AS avg(i_current_price)#11, i_category#5]
+Results [2]: [cast((avg(UnscaledValue(i_current_price#4))#10 / 100.0) as decimal(11,6)) AS avg(j . i_current_price)#11, i_category#5]
 
 (10) Filter [codegen id : 2]
-Input [2]: [avg(i_current_price)#11, i_category#5]
-Condition : isnotnull(avg(i_current_price)#11)
+Input [2]: [avg(j . i_current_price)#11, i_category#5]
+Condition : isnotnull(avg(j . i_current_price)#11)
 
 (11) BroadcastExchange
-Input [2]: [avg(i_current_price)#11, i_category#5]
+Input [2]: [avg(j . i_current_price)#11, i_category#5]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [plan_id=2]
 
 (12) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_category#3]
 Right keys [1]: [i_category#5]
 Join type: Inner
-Join condition: (cast(i_current_price#2 as decimal(14,7)) > (1.2 * avg(i_current_price)#11))
+Join condition: (cast(i_current_price#2 as decimal(14,7)) > (1.2 * avg(j . i_current_price)#11))
 
 (13) Project [codegen id : 3]
 Output [1]: [i_item_sk#1]
-Input [5]: [i_item_sk#1, i_current_price#2, i_category#3, avg(i_current_price)#11, i_category#5]
+Input [5]: [i_item_sk#1, i_current_price#2, i_category#3, avg(j . i_current_price)#11, i_category#5]
 
 (14) BroadcastExchange
 Input [1]: [i_item_sk#1]

@@ -100,25 +100,25 @@ Input [3]: [l_partkey#8, sum#12, count#13]
 Keys [1]: [l_partkey#8]
 Functions [1]: [avg(UnscaledValue(l_quantity#9))]
 Aggregate Attributes [1]: [avg(UnscaledValue(l_quantity#9))#14]
-Results [2]: [(0.2 * cast((avg(UnscaledValue(l_quantity#9))#14 / 1.0) as decimal(14,4))) AS (0.2 * avg(l_quantity))#15, l_partkey#8]
+Results [2]: [(0.2 * cast((avg(UnscaledValue(l_quantity#9))#14 / 1.0) as decimal(14,4))) AS 0.2 * avg(l_quantity)#15, l_partkey#8]
 
 (17) Filter [codegen id : 3]
-Input [2]: [(0.2 * avg(l_quantity))#15, l_partkey#8]
-Condition : isnotnull((0.2 * avg(l_quantity))#15)
+Input [2]: [0.2 * avg(l_quantity)#15, l_partkey#8]
+Condition : isnotnull(0.2 * avg(l_quantity)#15)
 
 (18) BroadcastExchange
-Input [2]: [(0.2 * avg(l_quantity))#15, l_partkey#8]
+Input [2]: [0.2 * avg(l_quantity)#15, l_partkey#8]
 Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [plan_id=3]
 
 (19) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [p_partkey#4]
 Right keys [1]: [l_partkey#8]
 Join type: Inner
-Join condition: (cast(l_quantity#2 as decimal(16,5)) < (0.2 * avg(l_quantity))#15)
+Join condition: (cast(l_quantity#2 as decimal(16,5)) < 0.2 * avg(l_quantity)#15)
 
 (20) Project [codegen id : 4]
 Output [1]: [l_extendedprice#3]
-Input [5]: [l_quantity#2, l_extendedprice#3, p_partkey#4, (0.2 * avg(l_quantity))#15, l_partkey#8]
+Input [5]: [l_quantity#2, l_extendedprice#3, p_partkey#4, 0.2 * avg(l_quantity)#15, l_partkey#8]
 
 (21) HashAggregate [codegen id : 4]
 Input [1]: [l_extendedprice#3]

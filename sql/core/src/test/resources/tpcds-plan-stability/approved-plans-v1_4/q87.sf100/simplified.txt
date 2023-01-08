@@ -1,5 +1,5 @@
 WholeStageCodegen (27)
-  HashAggregate [count] [count(1),count(1),count]
+  HashAggregate [count] [count(1),count(*),count]
     InputAdapter
       Exchange #1
         WholeStageCodegen (26)

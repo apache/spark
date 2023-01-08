@@ -106,11 +106,11 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                       Filter [d_month_seq,d_date_sk]
                                                         Subquery #3
                                                           WholeStageCodegen (2)
-                                                            HashAggregate [(d_month_seq + 1)]
+                                                            HashAggregate [d_month_seq + 1]
                                                               InputAdapter
-                                                                Exchange [(d_month_seq + 1)] #10
+                                                                Exchange [d_month_seq + 1] #10
                                                                   WholeStageCodegen (1)
-                                                                    HashAggregate [(d_month_seq + 1)]
+                                                                    HashAggregate [d_month_seq + 1]
                                                                       Project [d_month_seq]
                                                                         Filter [d_year,d_moy]
                                                                           ColumnarToRow
@@ -118,11 +118,11 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                                               Scan parquet spark_catalog.default.date_dim [d_month_seq,d_year,d_moy]
                                                         Subquery #4
                                                           WholeStageCodegen (2)
-                                                            HashAggregate [(d_month_seq + 3)]
+                                                            HashAggregate [d_month_seq + 3]
                                                               InputAdapter
-                                                                Exchange [(d_month_seq + 3)] #11
+                                                                Exchange [d_month_seq + 3] #11
                                                                   WholeStageCodegen (1)
-                                                                    HashAggregate [(d_month_seq + 3)]
+                                                                    HashAggregate [d_month_seq + 3]
                                                                       Project [d_month_seq]
                                                                         Filter [d_year,d_moy]
                                                                           ColumnarToRow

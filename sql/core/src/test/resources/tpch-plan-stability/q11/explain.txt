@@ -200,6 +200,6 @@ Input [2]: [sum#25, isEmpty#26]
 Keys: []
 Functions [1]: [sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))]
 Aggregate Attributes [1]: [sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))#27]
-Results [1]: [(sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))#27 * 0.0001000000) AS (sum((ps_supplycost * ps_availqty)) * 0.0001000000)#28]
+Results [1]: [(sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))#27 * 0.0001000000) AS sum(ps_supplycost * ps_availqty)* 0.0001000000#28]
 
 

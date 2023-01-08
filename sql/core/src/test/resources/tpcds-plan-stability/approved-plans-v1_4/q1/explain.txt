@@ -153,25 +153,25 @@ Input [3]: [ctr_store_sk#11, sum#17, count#18]
 Keys [1]: [ctr_store_sk#11]
 Functions [1]: [avg(ctr_total_return#12)]
 Aggregate Attributes [1]: [avg(ctr_total_return#12)#19]
-Results [2]: [(avg(ctr_total_return#12)#19 * 1.2) AS (avg(ctr_total_return) * 1.2)#20, ctr_store_sk#11 AS ctr_store_sk#11#21]
+Results [2]: [(avg(ctr_total_return#12)#19 * 1.2) AS avg(ctr_total_return)* 1.2#20, ctr_store_sk#11 AS ctr_store_sk#11#21]
 
 (23) Filter [codegen id : 6]
-Input [2]: [(avg(ctr_total_return) * 1.2)#20, ctr_store_sk#11#21]
-Condition : isnotnull((avg(ctr_total_return) * 1.2)#20)
+Input [2]: [avg(ctr_total_return)* 1.2#20, ctr_store_sk#11#21]
+Condition : isnotnull(avg(ctr_total_return)* 1.2#20)
 
 (24) BroadcastExchange
-Input [2]: [(avg(ctr_total_return) * 1.2)#20, ctr_store_sk#11#21]
+Input [2]: [avg(ctr_total_return)* 1.2#20, ctr_store_sk#11#21]
 Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=4]
 
 (25) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ctr_store_sk#11]
 Right keys [1]: [ctr_store_sk#11#21]
 Join type: Inner
-Join condition: (cast(ctr_total_return#12 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#20)
+Join condition: (cast(ctr_total_return#12 as decimal(24,7)) > avg(ctr_total_return)* 1.2#20)
 
 (26) Project [codegen id : 9]
 Output [2]: [ctr_customer_sk#10, ctr_store_sk#11]
-Input [5]: [ctr_customer_sk#10, ctr_store_sk#11, ctr_total_return#12, (avg(ctr_total_return) * 1.2)#20, ctr_store_sk#11#21]
+Input [5]: [ctr_customer_sk#10, ctr_store_sk#11, ctr_total_return#12, avg(ctr_total_return)* 1.2#20, ctr_store_sk#11#21]
 
 (27) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#22, s_state#23]

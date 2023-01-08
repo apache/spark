@@ -159,5 +159,5 @@ Input [1]: [count#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#14]
-Results [1]: [count(1)#14 AS count(1)#15]
+Results [1]: [count(1)#14 AS count(*)#15]
 

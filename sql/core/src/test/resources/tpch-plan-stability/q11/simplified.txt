@@ -6,7 +6,7 @@ WholeStageCodegen (5)
           Filter [value]
             Subquery #1
               WholeStageCodegen (4)
-                HashAggregate [sum,isEmpty] [sum((ps_supplycost * cast(ps_availqty as decimal(10,0)))),(sum((ps_supplycost * ps_availqty)) * 0.0001000000),sum,isEmpty]
+                HashAggregate [sum,isEmpty] [sum((ps_supplycost * cast(ps_availqty as decimal(10,0)))),sum(ps_supplycost * ps_availqty)* 0.0001000000,sum,isEmpty]
                   InputAdapter
                     Exchange #5
                       WholeStageCodegen (3)

@@ -415,26 +415,26 @@ Input [3]: [d_month_seq#46, d_year#47, d_moy#48]
 Condition : (((isnotnull(d_year#47) AND isnotnull(d_moy#48)) AND (d_year#47 = 1998)) AND (d_moy#48 = 12))
 
 (70) Project [codegen id : 1]
-Output [1]: [(d_month_seq#46 + 1) AS (d_month_seq + 1)#49]
+Output [1]: [(d_month_seq#46 + 1) AS d_month_seq + 1#49]
 Input [3]: [d_month_seq#46, d_year#47, d_moy#48]
 
 (71) HashAggregate [codegen id : 1]
-Input [1]: [(d_month_seq + 1)#49]
-Keys [1]: [(d_month_seq + 1)#49]
+Input [1]: [d_month_seq + 1#49]
+Keys [1]: [d_month_seq + 1#49]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 1)#49]
+Results [1]: [d_month_seq + 1#49]
 
 (72) Exchange
-Input [1]: [(d_month_seq + 1)#49]
-Arguments: hashpartitioning((d_month_seq + 1)#49, 5), ENSURE_REQUIREMENTS, [plan_id=11]
+Input [1]: [d_month_seq + 1#49]
+Arguments: hashpartitioning(d_month_seq + 1#49, 5), ENSURE_REQUIREMENTS, [plan_id=11]
 
 (73) HashAggregate [codegen id : 2]
-Input [1]: [(d_month_seq + 1)#49]
-Keys [1]: [(d_month_seq + 1)#49]
+Input [1]: [d_month_seq + 1#49]
+Keys [1]: [d_month_seq + 1#49]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 1)#49]
+Results [1]: [d_month_seq + 1#49]
 
 Subquery:5 Hosting operator id = 64 Hosting Expression = Subquery scalar-subquery#44, [id=#45]
 * HashAggregate (80)
@@ -461,25 +461,25 @@ Input [3]: [d_month_seq#50, d_year#51, d_moy#52]
 Condition : (((isnotnull(d_year#51) AND isnotnull(d_moy#52)) AND (d_year#51 = 1998)) AND (d_moy#52 = 12))
 
 (77) Project [codegen id : 1]
-Output [1]: [(d_month_seq#50 + 3) AS (d_month_seq + 3)#53]
+Output [1]: [(d_month_seq#50 + 3) AS d_month_seq + 3#53]
 Input [3]: [d_month_seq#50, d_year#51, d_moy#52]
 
 (78) HashAggregate [codegen id : 1]
-Input [1]: [(d_month_seq + 3)#53]
-Keys [1]: [(d_month_seq + 3)#53]
+Input [1]: [d_month_seq + 3#53]
+Keys [1]: [d_month_seq + 3#53]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 3)#53]
+Results [1]: [d_month_seq + 3#53]
 
 (79) Exchange
-Input [1]: [(d_month_seq + 3)#53]
-Arguments: hashpartitioning((d_month_seq + 3)#53, 5), ENSURE_REQUIREMENTS, [plan_id=12]
+Input [1]: [d_month_seq + 3#53]
+Arguments: hashpartitioning(d_month_seq + 3#53, 5), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (80) HashAggregate [codegen id : 2]
-Input [1]: [(d_month_seq + 3)#53]
-Keys [1]: [(d_month_seq + 3)#53]
+Input [1]: [d_month_seq + 3#53]
+Keys [1]: [d_month_seq + 3#53]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 3)#53]
+Results [1]: [d_month_seq + 3#53]
 
 

@@ -303,25 +303,25 @@ Input [3]: [ctr_state#31, sum#37, count#38]
 Keys [1]: [ctr_state#31]
 Functions [1]: [avg(ctr_total_return#32)]
 Aggregate Attributes [1]: [avg(ctr_total_return#32)#39]
-Results [2]: [(avg(ctr_total_return#32)#39 * 1.2) AS (avg(ctr_total_return) * 1.2)#40, ctr_state#31 AS ctr_state#31#41]
+Results [2]: [(avg(ctr_total_return#32)#39 * 1.2) AS avg(ctr_total_return)* 1.2#40, ctr_state#31 AS ctr_state#31#41]
 
 (53) Filter [codegen id : 19]
-Input [2]: [(avg(ctr_total_return) * 1.2)#40, ctr_state#31#41]
-Condition : isnotnull((avg(ctr_total_return) * 1.2)#40)
+Input [2]: [avg(ctr_total_return)* 1.2#40, ctr_state#31#41]
+Condition : isnotnull(avg(ctr_total_return)* 1.2#40)
 
 (54) BroadcastExchange
-Input [2]: [(avg(ctr_total_return) * 1.2)#40, ctr_state#31#41]
+Input [2]: [avg(ctr_total_return)* 1.2#40, ctr_state#31#41]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [plan_id=10]
 
 (55) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ctr_state#31]
 Right keys [1]: [ctr_state#31#41]
 Join type: Inner
-Join condition: (cast(ctr_total_return#32 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#40)
+Join condition: (cast(ctr_total_return#32 as decimal(24,7)) > avg(ctr_total_return)* 1.2#40)
 
 (56) Project [codegen id : 20]
 Output [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_total_return#32]
-Input [19]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#31, ctr_total_return#32, (avg(ctr_total_return) * 1.2)#40, ctr_state#31#41]
+Input [19]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#31, ctr_total_return#32, avg(ctr_total_return)* 1.2#40, ctr_state#31#41]
 
 (57) TakeOrderedAndProject
 Input [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_total_return#32]
