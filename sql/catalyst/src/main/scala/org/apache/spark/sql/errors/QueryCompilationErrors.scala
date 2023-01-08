@@ -74,11 +74,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
       messageParameters = Map(
-        "parameter" -> "strfmt",
-        "functionName" -> toSQLId("format_string"),
-        "expected" -> "expects %1$, %2$ and so on, but got %0$."))
+        "parameter" -> toSQLId("strfmt"),
+        "functionName" -> toSQLId("format_string")))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {

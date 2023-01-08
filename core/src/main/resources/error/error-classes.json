@@ -799,8 +799,30 @@
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [
-      "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>"
+      "The value of parameter(s) <parameter> in <functionName> is invalid:"
     ],
+    "subClass" : {
+      "AES_KEY" : {
+        "message" : [
+          "detail message: <detailMessage>"
+        ]
+      },
+      "AES_KEY_LENGTH" : {
+        "message" : [
+          "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
+        ]
+      },
+      "PATTERN" : {
+        "message" : [
+          "<value>"
+        ]
+      },
+      "ZERO_INDEX" : {
+        "message" : [
+          "expects %1$, %2$ and so on, but got %0$."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "INVALID_PROPERTY_KEY" : {
