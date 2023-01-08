@@ -523,20 +523,20 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
-      "INVALID_PARAMETER_VALUE",
-      Map("parameter" -> "regexp", "functionName" -> "`regexp_extract`", "expected" -> "'(?l)'")
+      "INVALID_PARAMETER_VALUE.PATTERN",
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_extract`", "value" -> "'(?l)'")
     )
     checkErrorInExpression[SparkRuntimeException](
       RegExpExtractAll(s, p, r),
       create_row("abc", "] [", 0),
-      "INVALID_PARAMETER_VALUE",
-      Map("parameter" -> "regexp", "functionName" -> "`regexp_extract_all`", "expected" -> "'] ['")
+      "INVALID_PARAMETER_VALUE.PATTERN",
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_extract_all`", "value" -> "'] ['")
     )
     checkErrorInExpression[SparkRuntimeException](
       RegExpInStr(s, p, r),
       create_row("abc", ", (", 0),
-      "INVALID_PARAMETER_VALUE",
-      Map("parameter" -> "regexp", "functionName" -> "`regexp_instr`", "expected" -> "', ('")
+      "INVALID_PARAMETER_VALUE.PATTERN",
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_instr`", "value" -> "', ('")
     )
   }
 

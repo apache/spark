@@ -74,11 +74,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
       messageParameters = Map(
-        "parameter" -> "strfmt",
-        "functionName" -> toSQLId("format_string"),
-        "expected" -> "expects %1$, %2$ and so on, but got %0$."))
+        "parameter" -> toSQLId("strfmt"),
+        "functionName" -> toSQLId("format_string")))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
@@ -161,6 +160,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "MISSING_STATIC_PARTITION_COLUMN",
       messageParameters = Map("columnName" -> staticName))
+  }
+
+  def staticPartitionInUserSpecifiedColumnsError(staticName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
+      messageParameters = Map("staticName" -> staticName))
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
@@ -1066,21 +1071,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "requiredType" -> requiredType))
   }
 
-  def invalidStringLiteralParameter(
-      funcName: String,
-      argName: String,
-      invalidValue: String,
-      allowedValues: Option[String] = None): Throwable = {
-    val endingMsg = allowedValues.map(" " + _).getOrElse("")
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1101",
-      messageParameters = Map(
-        "argName" -> argName,
-        "funcName" -> funcName,
-        "invalidValue" -> invalidValue,
-        "endingMsg" -> endingMsg))
-  }
-
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_EXTRACT_FIELD",
@@ -1170,7 +1160,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new CannotReplaceMissingTableException(tableIdentifier, cause)
   }
 
-  def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
+  private def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1113",
       messageParameters = Map(
@@ -1492,7 +1482,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1144",
       messageParameters = Map(
-        "targetSize" -> targetPartitionSchema.fields.size.toString,
+        "targetSize" -> targetPartitionSchema.fields.length.toString,
         "providedPartitionsSize" -> providedPartitionsSize.toString))
   }
 
@@ -3357,12 +3347,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "explanation" -> explanation
       ),
       cause = Option(cause))
-  }
-
-  def protobufMessageTypeError(protobufClassName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_PROTOBUF_MESSAGE_TYPE",
-      messageParameters = Map("protobufClassName" -> protobufClassName))
   }
 
   def protobufDescriptorDependencyError(dependencyName: String): Throwable = {

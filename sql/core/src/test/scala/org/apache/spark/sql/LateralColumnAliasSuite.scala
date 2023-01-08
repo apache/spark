@@ -547,8 +547,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
   test("Lateral alias of a complex type") {
     // test both Project and Aggregate
-    // TODO(anchovyu): re-enable aggregate tests when fixed the having issue
-    val querySuffixes = Seq(""/* , s"FROM $testTable GROUP BY dept HAVING dept = 6" */)
+    val querySuffixes = Seq("", s"FROM $testTable GROUP BY dept HAVING dept = 6")
     querySuffixes.foreach { querySuffix =>
       checkAnswer(
         sql(s"SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar, bar + 1 $querySuffix"),

@@ -665,30 +665,39 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         stop = 47))
   }
 
-  test("SPARK-41780: INVALID_PARAMETER_VALUE - invalid parameters `regexp` in regexp_replace") {
+  test("SPARK-41780: INVALID_PARAMETER_VALUE.PATTERN - " +
+    "invalid parameters `regexp` in regexp_replace & regexp_extract") {
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')").collect()
       },
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
-        "parameter" -> "regexp",
-        "functionName" -> "`regexp_replace`",
-        "expected" -> "'[a\\\\d]{0, 2}'"
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_replace"),
+        "value" -> "'[a\\\\d]{0, 2}'"
       )
     )
-  }
-
-  test("INVALID_PARAMETER_VALUE - invalid parameters `regexp` in regexp_extract") {
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect
       },
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
-        "parameter" -> "regexp",
-        "functionName" -> "`regexp_extract`",
-        "expected" -> "'[a\\\\d]{0, 2}'"
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_extract"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select rlike('', '[a\\\\d]{0, 2}')").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("rlike"),
+        "value" -> "'[a\\\\d]{0, 2}'"
       )
     )
   }

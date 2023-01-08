@@ -322,7 +322,8 @@ class SQLAppStatusListener(
     }
   }
 
-  private def toStoredNodes(nodes: Seq[SparkPlanGraphNode]): Seq[SparkPlanGraphNodeWrapper] = {
+  private def toStoredNodes(
+      nodes: collection.Seq[SparkPlanGraphNode]): collection.Seq[SparkPlanGraphNodeWrapper] = {
     nodes.map {
       case cluster: SparkPlanGraphCluster =>
         val storedCluster = new SparkPlanGraphClusterWrapper(

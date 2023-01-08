@@ -17,6 +17,7 @@
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
+import json
 import pyarrow as pa
 from inspect import signature, isclass
 
@@ -270,30 +271,34 @@ class LocalRelation(LogicalPlan):
 
     def __init__(
         self,
-        table: "pa.Table",
-        schema: Optional[Union[DataType, str]] = None,
+        table: Optional["pa.Table"],
+        schema: Optional[str] = None,
     ) -> None:
         super().__init__(None)
-        assert table is not None and isinstance(table, pa.Table)
+
+        if table is None:
+            assert schema is not None
+        else:
+            assert isinstance(table, pa.Table)
+
+        assert schema is None or isinstance(schema, str)
+
         self._table = table
 
-        if schema is not None:
-            assert isinstance(schema, (DataType, str))
         self._schema = schema
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(sink, self._table.schema) as writer:
-            for b in self._table.to_batches():
-                writer.write_batch(b)
-
         plan = proto.Relation()
-        plan.local_relation.data = sink.getvalue().to_pybytes()
+
+        if self._table is not None:
+            sink = pa.BufferOutputStream()
+            with pa.ipc.new_stream(sink, self._table.schema) as writer:
+                for b in self._table.to_batches():
+                    writer.write_batch(b)
+            plan.local_relation.data = sink.getvalue().to_pybytes()
+
         if self._schema is not None:
-            if isinstance(self._schema, DataType):
-                plan.local_relation.datatype.CopyFrom(pyspark_types_to_proto_types(self._schema))
-            elif isinstance(self._schema, str):
-                plan.local_relation.datatype_str = self._schema
+            plan.local_relation.schema = self._schema
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -373,19 +378,48 @@ class Project(LogicalPlan):
 class WithColumns(LogicalPlan):
     """Logical plan object for a withColumns operation."""
 
-    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Column]) -> None:
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        columnNames: Sequence[str],
+        columns: Sequence[Column],
+        metadata: Optional[Sequence[str]] = None,
+    ) -> None:
         super().__init__(child)
-        self._cols_map = cols_map
+
+        assert isinstance(columnNames, list)
+        assert len(columnNames) > 0
+        assert all(isinstance(c, str) for c in columnNames)
+
+        assert isinstance(columns, list)
+        assert len(columns) == len(columnNames)
+        assert all(isinstance(c, Column) for c in columns)
+
+        if metadata is not None:
+            assert isinstance(metadata, list)
+            assert len(metadata) == len(columnNames)
+            for m in metadata:
+                assert isinstance(m, str)
+                # validate json string
+                assert m == "" or json.loads(m) is not None
+
+        self._columnNames = columnNames
+        self._columns = columns
+        self._metadata = metadata
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.with_columns.input.CopyFrom(self._child.plan(session))
-        for k, v in self._cols_map.items():
-            name_expr = proto.Expression.Alias()
-            name_expr.name.append(k)
-            name_expr.expr.CopyFrom(v.to_plan(session))
-            plan.with_columns.name_expr_list.append(name_expr)
+
+        for i in range(0, len(self._columnNames)):
+            alias = proto.Expression.Alias()
+            alias.expr.CopyFrom(self._columns[i].to_plan(session))
+            alias.name.append(self._columnNames[i])
+            if self._metadata is not None:
+                alias.metadata = self._metadata[i]
+            plan.with_columns.aliases.append(alias)
+
         return plan
 
 
@@ -399,8 +433,9 @@ class Hint(LogicalPlan):
 
         self.name = name
 
+        # TODO(SPARK-41887): support list type as hint parameter
         assert isinstance(params, list) and all(
-            p is None or isinstance(p, (int, str)) for p in params
+            p is not None and isinstance(p, (int, str, float)) for p in params
         )
         self.params = params
 
@@ -491,27 +526,24 @@ class Sort(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        columns: List["ColumnOrName"],
+        columns: List[Column],
         is_global: bool,
     ) -> None:
         super().__init__(child)
+
+        assert all(isinstance(c, Column) for c in columns)
+        assert isinstance(is_global, bool)
+
         self.columns = columns
         self.is_global = is_global
 
     def _convert_col(
-        self, col: "ColumnOrName", session: "SparkConnectClient"
+        self, col: Column, session: "SparkConnectClient"
     ) -> proto.Expression.SortOrder:
-        sort: Optional[SortOrder] = None
-        if isinstance(col, Column):
-            if isinstance(col._expr, SortOrder):
-                sort = col._expr
-            else:
-                sort = SortOrder(col._expr)
+        if isinstance(col._expr, SortOrder):
+            return col._expr.to_plan(session).sort_order
         else:
-            sort = SortOrder(ColumnReference(name=col))
-        assert sort is not None
-
-        return sort.to_plan(session).sort_order
+            return SortOrder(col._expr).to_plan(session).sort_order
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -1222,7 +1254,7 @@ class CreateView(LogicalPlan):
     ) -> None:
         super().__init__(child)
         self._name = name
-        self._is_gloal = is_global
+        self._is_global = is_global
         self._replace = replace
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
@@ -1230,7 +1262,7 @@ class CreateView(LogicalPlan):
 
         plan = proto.Command()
         plan.create_dataframe_view.replace = self._replace
-        plan.create_dataframe_view.is_global = self._is_gloal
+        plan.create_dataframe_view.is_global = self._is_global
         plan.create_dataframe_view.name = self._name
         plan.create_dataframe_view.input.CopyFrom(self._child.plan(session))
         return plan
@@ -1582,7 +1614,7 @@ class RecoverPartitions(LogicalPlan):
 #         self._table_name = table_name
 #
 #     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCahed()))
+#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCached()))
 #         plan.catalog.is_cached.table_name = self._table_name
 #         return plan
 #

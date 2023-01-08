@@ -283,7 +283,6 @@ class Column:
     __gt__ = _bin_op("gt")
 
     # TODO(SPARK-41812): DataFrame.join: ambiguous column
-    # TODO(SPARK-41814): Column.eqNullSafe fails on NaN comparison
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
@@ -332,7 +331,7 @@ class Column:
     ...     df2['value'].eqNullSafe(None),
     ...     df2['value'].eqNullSafe(float('NaN')),
     ...     df2['value'].eqNullSafe(42.0)
-    ... ).show()  # doctest: +SKIP
+    ... ).show()
     +----------------+---------------+----------------+
     |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
     +----------------+---------------+----------------+
