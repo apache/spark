@@ -1497,7 +1497,7 @@ class DataFrameSuite extends QueryTest
     }
     assert(captured.toString ===
       """root
-        | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
+        | |-- 'aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh': string (nullable = false)
         |
         |""".stripMargin)
     captured.reset()
@@ -1508,7 +1508,7 @@ class DataFrameSuite extends QueryTest
     }
     assert(captured.toString ===
       """root
-        | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
+        | |-- array('aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh'): array (nullable = false)
         | |    |-- element: string (containsNull = false)
         |
         |""".stripMargin)
@@ -1521,7 +1521,7 @@ class DataFrameSuite extends QueryTest
     }
     assert(captured.toString ===
       """root
-        | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
+        | |-- map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh'): map (nullable = false)
         | |    |-- key: string
         | |    |-- value: string (valueContainsNull = false)
         |
@@ -1535,7 +1535,7 @@ class DataFrameSuite extends QueryTest
     }
     assert(captured.toString ===
       """root
-        | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
+        | |-- named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh'): struct (nullable = false)
         | |    |-- v: string (nullable = false)
         |
         |""".stripMargin)

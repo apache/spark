@@ -182,7 +182,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin)
     val condContainsMax = (condition: Expression) => {
       condition.find {
-        case e: AttributeReference if e.name.contains("max") =>
+        case e: AttributeReference if e.name.contains("MAX") =>
           true
         case _ => false
       }.isDefined
