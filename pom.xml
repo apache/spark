@@ -1129,25 +1129,25 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.14</version>
+        <version>3.2.15</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
-        <version>3.2.14.0</version>
+        <version>3.2.15.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
-        <version>3.2.14.0</version>
+        <version>3.2.15.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-4-7_${scala.binary.version}</artifactId>
-        <version>3.2.14.0</version>
+        <version>3.2.15.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
