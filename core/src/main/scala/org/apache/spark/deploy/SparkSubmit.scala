@@ -226,12 +226,13 @@ private[spark] class SparkSubmit extends Logging {
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
+    if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
     var childMainClass = ""
 
     // Set the cluster manager
     val clusterManager: Int = args.maybeMaster match {
       case Some(v) =>
-        assert(args.maybeRemote.isEmpty)
+        assert(args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect"))
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
@@ -603,10 +604,15 @@ private[spark] class SparkSubmit extends Logging {
 
       // All cluster managers
       OptionAssigner(
-        if (args.maybeRemote.isDefined) args.maybeMaster.orNull else args.master,
+        // If remote is not set, sets the master,
+        // In local remote mode, starts the default master to to start the server.
+        if (args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect")) args.master
+        else args.maybeMaster.orNull,
         ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(
-        args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
+        // In local remote mode, do not set remote.
+        if (sparkConf.contains("spark.local.connect")) null
+        else args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
