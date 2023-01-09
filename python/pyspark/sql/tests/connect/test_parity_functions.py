@@ -90,8 +90,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_np_scalar_input(self):
         super().test_np_scalar_input()
 
-    # TODO(SPARK-41904): Fix nth_value value
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_nth_value(self):
         super().test_nth_value()
 
