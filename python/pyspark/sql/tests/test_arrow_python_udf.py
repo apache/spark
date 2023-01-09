@@ -62,7 +62,6 @@ class PythonUDFArrowTests(BaseUDFTests, ReusedSQLTestCase):
             ).collect()
 
     def test_complex_input_types(self):
-        # TODO: add map type tests back when PyArrow is upgraded.
         row = (
             self.spark.range(1)
             .selectExpr("array(1, 2, 3) as array", "map('a', 'b') as map")
