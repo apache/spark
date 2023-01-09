@@ -286,7 +286,7 @@ case class InsertIntoHiveTable(
     copy(query = newChild)
 }
 
-object InsertIntoHiveTable extends V1WritesHiveUtils with Logging {
+object InsertIntoHiveTable extends V1WritesHiveUtils {
   def apply(
       table: CatalogTable,
       partition: Map[String, Option[String]],
