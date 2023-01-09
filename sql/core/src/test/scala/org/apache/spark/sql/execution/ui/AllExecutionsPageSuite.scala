@@ -27,14 +27,16 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.InMemoryStore
 
-class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
+abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
 
   override def sparkConf: SparkConf = {
     // Disable async kv store write in the UI, to make tests more stable here.
@@ -120,12 +122,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
 
-  private def createStatusStore: SQLAppStatusStore = {
-    val conf = sparkContext.conf
-    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
-    new SQLAppStatusStore(kvstore, Some(listener))
-  }
+  protected def createStatusStore: SQLAppStatusStore
 
   private def createTestDataFrame: DataFrame = {
     Seq(
@@ -175,6 +172,34 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     val properties = new Properties()
     properties.setProperty(SQLExecution.EXECUTION_ID_KEY, executionId.toString)
     properties
+  }
+}
+
+class AllExecutionsPageWithInMemoryStoreSuite extends AllExecutionsPageSuite {
+  override protected def createStatusStore: SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+}
+
+class AllExecutionsPageWithRocksDBBackendSuite extends AllExecutionsPageSuite {
+  private val storePath = Utils.createTempDir()
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+    val appStatusStore = AppStatusStore.createLiveStore(conf)
+    kvstore = appStatusStore.store.asInstanceOf[ElementTrackingStore]
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+
+  protected override def afterAll(): Unit = {
+    if (storePath.exists()) {
+      Utils.deleteRecursively(storePath)
+    }
+    super.afterAll()
   }
 }
 

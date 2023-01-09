@@ -14,11 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import StructType
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.catalog import (
@@ -307,6 +306,18 @@ class Catalog:
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
 
+    def isCached(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("isCached() is not implemented.")
+
+    def cacheTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cacheTable() is not implemented.")
+
+    def uncacheTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("uncacheTable() is not implemented.")
+
+    def registerFunction(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("registerFunction() is not implemented.")
+
 
 Catalog.__doc__ = PySparkCatalog.__doc__
 
@@ -324,15 +335,11 @@ def _test() -> None:
         import pyspark.sql.connect.catalog
 
         globs = pyspark.sql.connect.catalog.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.catalog tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.catalog tests"}
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.catalog tests")
+            .remote("local[4]")
+            .getOrCreate()
         )
-
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         # TODO(SPARK-41612): Support Catalog.isCached
         # TODO(SPARK-41600): Support Catalog.cacheTable
@@ -348,8 +355,8 @@ def _test() -> None:
             | doctest.NORMALIZE_WHITESPACE
             | doctest.IGNORE_EXCEPTION_DETAIL,
         )
-        globs["_spark"].stop()
         globs["spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

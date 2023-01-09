@@ -1019,6 +1019,17 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("SPARK-41912: Subquery does not validate CTE") {
+    val df = sql("""
+                   |    WITH
+                   |    cte1 as (SELECT 1 col1),
+                   |    cte2 as (SELECT (SELECT MAX(col1) FROM cte1))
+                   |    SELECT * FROM cte1
+                   |""".stripMargin
+    )
+    checkAnswer(df, Row(1) :: Nil)
+  }
+
   test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 1") {
     withTable("t1") {
       withTempPath { path =>

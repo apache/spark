@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import json
+
 from typing import Optional
 
 from pyspark.sql.types import (
@@ -94,6 +96,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
             struct_field.name = field.name
             struct_field.data_type.CopyFrom(pyspark_types_to_proto_types(field.dataType))
             struct_field.nullable = field.nullable
+            if field.metadata is not None and len(field.metadata) > 0:
+                struct_field.metadata = json.dumps(field.metadata)
             ret.struct.fields.append(struct_field)
     elif isinstance(data_type, MapType):
         ret.map.key_type.CopyFrom(pyspark_types_to_proto_types(data_type.keyType))
@@ -160,14 +164,17 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             schema.array.contains_null,
         )
     elif schema.HasField("struct"):
-        fields = [
-            StructField(
-                f.name,
-                proto_schema_to_pyspark_data_type(f.data_type),
-                f.nullable,
+        fields = []
+        for f in schema.struct.fields:
+            if f.HasField("metadata"):
+                metadata = json.loads(f.metadata)
+            else:
+                metadata = None
+            fields.append(
+                StructField(
+                    f.name, proto_schema_to_pyspark_data_type(f.data_type), f.nullable, metadata
+                )
             )
-            for f in schema.struct.fields
-        ]
         return StructType(fields)
     elif schema.HasField("map"):
         return MapType(
