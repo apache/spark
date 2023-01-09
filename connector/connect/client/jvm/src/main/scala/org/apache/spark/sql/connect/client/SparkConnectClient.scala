@@ -95,6 +95,9 @@ object SparkConnectClient {
       if (uri.getScheme != "sc") {
         throw new IllegalArgumentException("Scheme for connection URI must be 'sc'.")
       }
+      if (uri.getHost == null) {
+        throw new IllegalArgumentException(s"Host for connection URI must be defined.")
+      }
       // Java URI considers everything after the authority segment as "path" until the
       // ? (query)/# (fragment) components as shown in the regex
       // [scheme:][//authority][path][?query][#fragment].
@@ -108,9 +111,6 @@ object SparkConnectClient {
         throw new IllegalArgumentException(
           s"Path component for connection URI must be empty: " +
             s"${pathAndParams(0)}")
-      }
-      if (uri.getHost.isEmpty) {
-        throw new IllegalArgumentException(s"Host for connection URI must be defined.")
       }
     }
 
@@ -149,7 +149,10 @@ object SparkConnectClient {
       verifyURI(uri)
       parseURIParams(uri)
       host = uri.getHost
-      port = uri.getPort
+      val inputPort = uri.getPort
+      if (inputPort != -1) {
+        port = inputPort
+      }
       this
     }
 
