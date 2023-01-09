@@ -215,7 +215,31 @@ class SparkSession:
         _inferred_schema: Optional[StructType] = None
 
         if isinstance(data, pd.DataFrame):
-            _table = pa.Table.from_pandas(data)
+            from pandas.api.types import (  # type: ignore[attr-defined]
+                is_datetime64_dtype,
+                is_datetime64tz_dtype,
+            )
+
+            # We need double conversions for the truncation, first truncate to microseconds.
+            for col in data:
+                print("Checking", col)
+                if is_datetime64tz_dtype(data[col].dtype):
+                    data[col] = data[col].astype("datetime64[us, UTC]")
+                elif is_datetime64_dtype(data[col].dtype):
+                    data[col] = data[col].astype("datetime64[us]")
+
+            # Create a new schema and change the types to the truncated microseconds.
+            pd_schema = pa.Schema.from_pandas(data)
+            new_schema = pa.schema([])
+            for x in range(len(pd_schema.types)):
+                f = pd_schema.field(x)
+                if isinstance(f.type, pa.TimestampType) and f.type.unit == "ns":
+                    tmp = f.with_type(pa.timestamp("us", f.type.tz))
+                    new_schema = new_schema.append(tmp)
+                else:
+                    new_schema = new_schema.append(f)
+            new_schema = new_schema.with_metadata(pd_schema.metadata)
+            _table = pa.Table.from_pandas(data, schema=new_schema)
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
