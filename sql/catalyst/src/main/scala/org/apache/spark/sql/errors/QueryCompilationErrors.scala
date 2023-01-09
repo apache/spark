@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -2242,11 +2242,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1230",
-      messageParameters = Map(
-        "scale" -> scale.toString,
-        "config" -> LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key))
+    SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
+      s" Set the config ${toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)}" +
+      " to \"true\" to allow it.")
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
