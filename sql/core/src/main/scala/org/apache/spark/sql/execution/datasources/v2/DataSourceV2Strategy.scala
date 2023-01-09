@@ -31,8 +31,8 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, ResolveDefaultColumns, V2ExpressionBuilder}
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TableCatalogCapability, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -177,6 +177,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
+
+      if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
+        if (!catalog.asTableCatalog.capabilities().contains(
+          TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
+          throw QueryCompilationErrors.generatedColumnsUnsupported(ident.asMultipartIdentifier)
+        }
+      }
+
       CreateTableExec(catalog.asTableCatalog, ident, newSchema,
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
@@ -200,6 +208,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
+
+      if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
+        if (!catalog.asTableCatalog.capabilities().contains(
+          TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
+          throw QueryCompilationErrors.generatedColumnsUnsupported(ident.asMultipartIdentifier)
+        }
+      }
+
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, newSchema, parts,

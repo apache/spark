@@ -136,6 +136,8 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
+
+      // todo: block generated columns here as we do in DataSourceV2Strategy
       val newTableDesc = tableDesc.copy(schema = newSchema)
       CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 

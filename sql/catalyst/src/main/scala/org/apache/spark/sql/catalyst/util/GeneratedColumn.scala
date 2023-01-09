@@ -40,4 +40,21 @@ object GeneratedColumn {
   def hasGeneratedColumns(schema: StructType): Boolean = {
     schema.exists(isGeneratedColumn)
   }
+
+  /**
+   * Get the generation expression from a field if it exists.
+   */
+  private def getGenerationExpressionStr(field: StructField): Option[String] = {
+    if (field.metadata.contains(GENERATION_EXPRESSION_METADATA_KEY)) {
+      Some(field.metadata.getString(GENERATION_EXPRESSION_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
+  def getGeneratedColumnsFieldToExprStr(schema: StructType): Map[StructField, String] = {
+    schema.filter(isGeneratedColumn).map { field =>
+      field -> field.metadata.getString(GENERATION_EXPRESSION_METADATA_KEY)
+    }.toMap
+  }
 }

@@ -241,7 +241,7 @@ case class ResolvedNonPersistentFunc(
 /**
  * A plan containing resolved identifier with catalog determined.
  */
-case class daResolvedIdentifier(
+case class ResolvedIdentifier(
     catalog: CatalogPlugin,
     identifier: Identifier) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil

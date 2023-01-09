@@ -3400,15 +3400,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
   }
 
-  def generatedColumnsUnsupportedForDataSource(
-      nameParts: Seq[String],
-      statement: String): Throwable = {
+  def generatedColumnsUnsupported(nameParts: Seq[String]): AnalysisException = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
         "operation" ->
-          s"creating generated columns with GENERATED ALWAYS AS expressions in $statement"
+          s"creating generated columns with GENERATED ALWAYS AS expressions"
       )
     )
   }

@@ -596,31 +596,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
-
-  test("SPARK-41290: cannot CREATE TABLE with GENERATED ALWAYS AS if table provider does not " +
-    "support generated columns on creation") {
-    val supportsGeneratedColumn =
-      classOf[SupportsGeneratedColumnsOnCreationWritableDataSource].getName
-    val doesNotSupportGeneratedColumn = classOf[SimpleWritableDataSource].getName
-    val tblName = "my_tab"
-    val tableDefinition = s" $tblName(a INT, b INT GENERATED ALWAYS AS (a+1))"
-    for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
-      withTable(tblName) {
-        if (statement == "REPLACE TABLE") {
-          spark.sql(s"CREATE TABLE $tblName(a INT) USING $supportsGeneratedColumn")
-        }
-        spark.sql(s"$statement $tableDefinition USING $supportsGeneratedColumn")
-      }
-      withTable(tblName) {
-        val e = intercept[AnalysisException] {
-          spark.sql(s"$statement $tableDefinition USING $doesNotSupportGeneratedColumn")
-        }
-        assert(e.getMessage.contains("does not support creating generated columns with " +
-          s"GENERATED ALWAYS AS expressions in $statement"))
-        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
-      }
-    }
-  }
 }
 
 
@@ -1130,8 +1105,4 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
       }
     }
   }
-}
-
-class SupportsGeneratedColumnsOnCreationWritableDataSource extends SimpleWritableDataSource {
-  override def supportsGeneratedColumnsOnCreation(): Boolean = true
 }

@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, ResolveDefaultColumns => DefaultCols}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -171,12 +171,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
-
-      if (GeneratedColumn.hasGeneratedColumns(c.tableSchema) &&
-        !supportsGeneratedColumnsOnCreation(provider)) {
-        throw QueryCompilationErrors.generatedColumnsUnsupportedForDataSource(
-          Seq(ident.catalog.get, ident.database.get, ident.table), "CREATE TABLE")
-      }
       if (!isV2Provider(provider)) {
         constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
@@ -210,11 +204,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
 
-      if (GeneratedColumn.hasGeneratedColumns(c.tableSchema) &&
-        !supportsGeneratedColumnsOnCreation(provider)) {
-        throw QueryCompilationErrors.generatedColumnsUnsupportedForDataSource(
-          Seq(ident.catalog.get, ident.database.get, ident.table), "REPLACE TABLE")
-      }
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
           Seq(ident.catalog.get, ident.database.get, ident.table),
@@ -628,16 +617,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(_: FileDataSourceV2) => false
       case Some(_) => true
-      case _ => false
-    }
-  }
-
-  private def supportsGeneratedColumnsOnCreation(provider: String): Boolean = {
-    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
-    // `HiveFileFormat`, when running tests in sql/core.
-    if (DDLUtils.isHiveTable(Some(provider))) return false
-    DataSource.lookupDataSource(provider, conf).newInstance() match {
-      case t: TableProvider => t.supportsGeneratedColumnsOnCreation()
       case _ => false
     }
   }
