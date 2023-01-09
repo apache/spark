@@ -125,11 +125,21 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       shuffleRemoteBytesReadToDisk = 25L,
       shuffleLocalBytesRead = 26L,
       shuffleRecordsRead = 27L,
-      shuffleBytesWritten = 28L,
-      shuffleWriteTime = 29L,
-      shuffleRecordsWritten = 30L,
-      stageId = 31,
-      stageAttemptId = 32)
+      shuffleCorruptMergedBlockChunks = 28L,
+      shuffleMergedFetchFallbackCount = 29L,
+      shuffleMergedRemoteBlocksFetched = 30L,
+      shuffleMergedLocalBlocksFetched = 31L,
+      shuffleMergedRemoteChunksFetched = 32L,
+      shuffleMergedLocalChunksFetched = 33L,
+      shuffleMergedRemoteBytesRead = 34L,
+      shuffleMergedLocalBytesRead = 35L,
+      shuffleRemoteReqsDuration = 36L,
+      shuffleMergedRemoteReqDuration = 37L,
+      shuffleBytesWritten = 38L,
+      shuffleWriteTime = 39L,
+      shuffleRecordsWritten = 40L,
+      stageId = 41,
+      stageAttemptId = 42)
 
     val bytes = serializer.serialize(input)
     val result = serializer.deserialize(bytes, classOf[TaskDataWrapper])
@@ -169,6 +179,16 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.shuffleRemoteBytesReadToDisk == input.shuffleRemoteBytesReadToDisk)
     assert(result.shuffleLocalBytesRead == input.shuffleLocalBytesRead)
     assert(result.shuffleRecordsRead == input.shuffleRecordsRead)
+    assert(result.shuffleCorruptMergedBlockChunks == input.shuffleCorruptMergedBlockChunks)
+    assert(result.shuffleMergedFetchFallbackCount == input.shuffleMergedFetchFallbackCount)
+    assert(result.shuffleMergedRemoteBlocksFetched == input.shuffleMergedRemoteBlocksFetched)
+    assert(result.shuffleMergedLocalBlocksFetched == input.shuffleMergedLocalBlocksFetched)
+    assert(result.shuffleMergedRemoteChunksFetched == input.shuffleMergedRemoteChunksFetched)
+    assert(result.shuffleMergedLocalChunksFetched == input.shuffleMergedLocalChunksFetched)
+    assert(result.shuffleMergedRemoteBytesRead == input.shuffleMergedRemoteBytesRead)
+    assert(result.shuffleMergedLocalBytesRead == input.shuffleMergedLocalBytesRead)
+    assert(result.shuffleRemoteReqsDuration == input.shuffleRemoteReqsDuration)
+    assert(result.shuffleMergedRemoteReqDuration == input.shuffleMergedRemoteReqDuration)
     assert(result.shuffleBytesWritten == input.shuffleBytesWritten)
     assert(result.shuffleWriteTime == input.shuffleWriteTime)
     assert(result.shuffleRecordsWritten == input.shuffleRecordsWritten)
@@ -532,9 +552,19 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       shuffleRemoteBytesRead = 26.1,
       shuffleRemoteBytesReadToDisk = 27.1,
       shuffleTotalBlocksFetched = 28.1,
-      shuffleWriteBytes = 29.1,
-      shuffleWriteRecords = 30.1,
-      shuffleWriteTime = 31.1)
+      shuffleCorruptMergedBlockChunks = 29.1,
+      shuffleMergedFetchFallbackCount = 30.1,
+      shuffleMergedRemoteBlocksFetched = 31.1,
+      shuffleMergedLocalBlocksFetched = 32.1,
+      shuffleMergedRemoteChunksFetched = 33.1,
+      shuffleMergedLocalChunksFetched = 34.1,
+      shuffleMergedRemoteBytesRead = 35.1,
+      shuffleMergedLocalBytesRead = 36.1,
+      shuffleRemoteReqsDuration = 37.1,
+      shuffleMergedRemoteReqsDuration = 38.1,
+      shuffleWriteBytes = 39.1,
+      shuffleWriteRecords = 40.1,
+      shuffleWriteTime = 41.1)
     val bytes = serializer.serialize(input)
     val result = serializer.deserialize(bytes, classOf[CachedQuantile])
     assert(result.stageId == input.stageId)
@@ -566,6 +596,16 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.shuffleRemoteBytesRead == input.shuffleRemoteBytesRead)
     assert(result.shuffleRemoteBytesReadToDisk == input.shuffleRemoteBytesReadToDisk)
     assert(result.shuffleTotalBlocksFetched == input.shuffleTotalBlocksFetched)
+    assert(result.shuffleCorruptMergedBlockChunks == input.shuffleCorruptMergedBlockChunks)
+    assert(result.shuffleMergedFetchFallbackCount == input.shuffleMergedFetchFallbackCount)
+    assert(result.shuffleMergedRemoteBlocksFetched == input.shuffleMergedRemoteBlocksFetched)
+    assert(result.shuffleMergedLocalBlocksFetched == input.shuffleMergedLocalBlocksFetched)
+    assert(result.shuffleMergedRemoteChunksFetched == input.shuffleMergedRemoteChunksFetched)
+    assert(result.shuffleMergedLocalChunksFetched == input.shuffleMergedLocalChunksFetched)
+    assert(result.shuffleMergedRemoteBytesRead == input.shuffleMergedRemoteBytesRead)
+    assert(result.shuffleMergedLocalBytesRead == input.shuffleMergedLocalBytesRead)
+    assert(result.shuffleRemoteReqsDuration == input.shuffleRemoteReqsDuration)
+    assert(result.shuffleMergedRemoteReqsDuration == input.shuffleMergedRemoteReqsDuration)
     assert(result.shuffleWriteBytes == input.shuffleWriteBytes)
     assert(result.shuffleWriteRecords == input.shuffleWriteRecords)
     assert(result.shuffleWriteTime == input.shuffleWriteTime)
@@ -837,6 +877,17 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       bytesWritten = 1L,
       recordsWritten = 2L
     )
+    val shufflePushReadMetrics = new ShufflePushReadMetrics(
+      corruptMergedBlockChunks = 1L,
+      mergedFetchFallbackCount = 2L,
+      remoteMergedBlocksFetched = 3L,
+      localMergedBlocksFetched = 4L,
+      remoteMergedChunksFetched = 5L,
+      localMergedChunksFetched = 6L,
+      remoteMergedBytesRead = 7L,
+      localMergedBytesRead = 8L,
+      remoteMergedReqsDuration = 9L
+    )
     val shuffleReadMetrics = new ShuffleReadMetrics(
       remoteBlocksFetched = 1L,
       localBlocksFetched = 2L,
@@ -844,7 +895,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       remoteBytesRead = 4L,
       remoteBytesReadToDisk = 5L,
       localBytesRead = 6L,
-      recordsRead = 7L
+      recordsRead = 7L,
+      remoteReqsDuration = 8L,
+      shufflePushReadMetrics = shufflePushReadMetrics
     )
     val shuffleWriteMetrics = new ShuffleWriteMetrics(
       bytesWritten = 1L,
@@ -966,6 +1019,17 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       bytesWritten = IndexedSeq(1.001D, 2.001D),
       recordsWritten = IndexedSeq(3.001D, 4.001D)
     )
+    val shufflePushReadMetricDistributions = new ShufflePushReadMetricDistributions(
+      corruptMergedBlockChunks = IndexedSeq(1.001D, 2.001D),
+      mergedFetchFallbackCount = IndexedSeq(2.011D, 3.01D),
+      remoteMergedBlocksFetched = IndexedSeq(1.101D, 2.1D),
+      localMergedBlocksFetched = IndexedSeq(3.01D, 3.101D),
+      remoteMergedChunksFetched = IndexedSeq(1.001D, 2.001D),
+      localMergedChunksFetched = IndexedSeq(2.110D, 3.101D),
+      remoteMergedBytesRead = IndexedSeq(1.001D, 2.001D),
+      localMergedBytesRead = IndexedSeq(4.101D, 3.011D),
+      remoteMergedReqsDuration = IndexedSeq(3.001D, 4.101D)
+    )
     val shuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
       readBytes = IndexedSeq(1.001D, 2.001D),
       readRecords = IndexedSeq(3.001D, 4.001D),
@@ -974,7 +1038,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       fetchWaitTime = IndexedSeq(9.001D, 10.001D),
       remoteBytesRead = IndexedSeq(11.001D, 12.001D),
       remoteBytesReadToDisk = IndexedSeq(13.001D, 14.001D),
-      totalBlocksFetched = IndexedSeq(15.001D, 16.001D)
+      totalBlocksFetched = IndexedSeq(15.001D, 16.001D),
+      remoteReqsDuration = IndexedSeq(11.01D, 14.001D),
+      shufflePushReadMetricsDist = shufflePushReadMetricDistributions
     )
     val shuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
       writeBytes = IndexedSeq(1.001D, 2.001D),
@@ -1060,9 +1126,19 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       shuffleLocalBytesRead = 28L,
       shuffleReadBytes = 29L,
       shuffleReadRecords = 30L,
-      shuffleWriteBytes = 31L,
-      shuffleWriteTime = 32L,
-      shuffleWriteRecords = 33L,
+      shuffleCorruptMergedBlockChunks = 31L,
+      shuffleMergedFetchFallbackCount = 32L,
+      shuffleMergedRemoteBlocksFetched = 33L,
+      shuffleMergedLocalBlocksFetched = 34L,
+      shuffleMergedRemoteChunksFetched = 35L,
+      shuffleMergedLocalChunksFetched = 36L,
+      shuffleMergedRemoteBytesRead = 37L,
+      shuffleMergedLocalBytesRead = 38L,
+      shuffleRemoteReqsDuration = 39L,
+      shuffleMergedRemoteReqsDuration = 40L,
+      shuffleWriteBytes = 41L,
+      shuffleWriteTime = 42L,
+      shuffleWriteRecords = 43L,
       name = "name",
       description = Some("test description"),
       details = "test details",
@@ -1076,7 +1152,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       resourceProfileId = 34,
       peakExecutorMetrics = peakMemoryMetrics,
       taskMetricsDistributions = Some(taskMetricDistributions),
-      executorMetricsDistributions = Some(executorMetricsDistributions)
+      executorMetricsDistributions = Some(executorMetricsDistributions),
+      isShufflePushEnabled = true,
+      shuffleMergersCount = 10
     )
     val input = new StageDataWrapper(
       info = info,
@@ -1130,6 +1208,26 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.shuffleLocalBytesRead == input.info.shuffleLocalBytesRead)
     assert(result.info.shuffleReadBytes == input.info.shuffleReadBytes)
     assert(result.info.shuffleReadRecords == input.info.shuffleReadRecords)
+    assert(result.info.shuffleCorruptMergedBlockChunks ==
+      input.info.shuffleCorruptMergedBlockChunks)
+    assert(result.info.shuffleMergedFetchFallbackCount ==
+      input.info.shuffleMergedFetchFallbackCount)
+    assert(result.info.shuffleMergedRemoteBlocksFetched ==
+      input.info.shuffleMergedRemoteBlocksFetched)
+    assert(result.info.shuffleMergedLocalBlocksFetched ==
+      input.info.shuffleMergedLocalBlocksFetched)
+    assert(result.info.shuffleMergedRemoteChunksFetched ==
+      input.info.shuffleMergedRemoteChunksFetched)
+    assert(result.info.shuffleMergedLocalChunksFetched ==
+      input.info.shuffleMergedLocalChunksFetched)
+    assert(result.info.shuffleMergedRemoteBytesRead ==
+      input.info.shuffleMergedRemoteBytesRead)
+    assert(result.info.shuffleMergedLocalBytesRead ==
+      input.info.shuffleMergedLocalBytesRead)
+    assert(result.info.shuffleRemoteReqsDuration ==
+      input.info.shuffleRemoteReqsDuration)
+    assert(result.info.shuffleMergedRemoteReqsDuration ==
+      input.info.shuffleMergedRemoteReqsDuration)
     assert(result.info.shuffleWriteBytes == input.info.shuffleWriteBytes)
     assert(result.info.shuffleWriteTime == input.info.shuffleWriteTime)
     assert(result.info.shuffleWriteRecords == input.info.shuffleWriteRecords)
@@ -1175,6 +1273,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       checkAnswer(result.info.executorMetricsDistributions.get,
         input.info.executorMetricsDistributions.get)
     }
+    assert(result.info.isShufflePushEnabled == input.info.isShufflePushEnabled)
+    assert(result.info.shuffleMergersCount == input.info.shuffleMergersCount)
   }
 
   private def checkAnswer(result: TaskMetrics, expected: TaskMetrics): Unit = {
@@ -1212,6 +1312,21 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.remoteBytesReadToDisk == expected.remoteBytesReadToDisk)
     assert(result.localBytesRead == expected.localBytesRead)
     assert(result.recordsRead == expected.recordsRead)
+    assert(result.remoteReqsDuration == expected.remoteReqsDuration)
+    checkAnswer(result.shufflePushReadMetrics, expected.shufflePushReadMetrics)
+  }
+
+  private def checkAnswer(result: ShufflePushReadMetrics,
+      expected: ShufflePushReadMetrics): Unit = {
+    assert(result.corruptMergedBlockChunks == expected.corruptMergedBlockChunks)
+    assert(result.mergedFetchFallbackCount == expected.mergedFetchFallbackCount)
+    assert(result.remoteMergedBlocksFetched == expected.remoteMergedBlocksFetched)
+    assert(result.localMergedBlocksFetched == expected.localMergedBlocksFetched)
+    assert(result.remoteMergedChunksFetched == expected.remoteMergedChunksFetched)
+    assert(result.localMergedChunksFetched == expected.localMergedChunksFetched)
+    assert(result.remoteMergedBytesRead == expected.remoteMergedBytesRead)
+    assert(result.localMergedBytesRead == expected.localMergedBytesRead)
+    assert(result.remoteMergedReqsDuration == expected.remoteMergedReqsDuration)
   }
 
   private def checkAnswer(result: ShuffleWriteMetrics, expected: ShuffleWriteMetrics): Unit = {
@@ -1355,6 +1470,21 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.remoteBytesRead == expected.remoteBytesRead)
     assert(result.remoteBytesReadToDisk == expected.remoteBytesReadToDisk)
     assert(result.totalBlocksFetched == expected.totalBlocksFetched)
+    assert(result.remoteReqsDuration == expected.remoteReqsDuration)
+    checkAnswer(result.shufflePushReadMetricsDist, expected.shufflePushReadMetricsDist)
+  }
+
+  private def checkAnswer(result: ShufflePushReadMetricDistributions,
+      expected: ShufflePushReadMetricDistributions): Unit = {
+    assert(result.corruptMergedBlockChunks == expected.corruptMergedBlockChunks)
+    assert(result.mergedFetchFallbackCount == expected.mergedFetchFallbackCount)
+    assert(result.remoteMergedBlocksFetched == expected.remoteMergedBlocksFetched)
+    assert(result.localMergedBlocksFetched == expected.localMergedBlocksFetched)
+    assert(result.remoteMergedChunksFetched == expected.remoteMergedChunksFetched)
+    assert(result.localMergedChunksFetched == expected.localMergedChunksFetched)
+    assert(result.remoteMergedBytesRead == expected.remoteMergedBytesRead)
+    assert(result.localMergedBytesRead == expected.localMergedBytesRead)
+    assert(result.remoteMergedReqsDuration == expected.remoteMergedReqsDuration)
   }
 
   private def checkAnswer(result: ShuffleWriteMetricDistributions,

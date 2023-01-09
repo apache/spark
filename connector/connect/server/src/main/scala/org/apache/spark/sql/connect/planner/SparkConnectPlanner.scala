@@ -467,21 +467,25 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
-    val (names, cols) =
-      rel.getNameExprListList.asScala
-        .map(e => {
-          if (e.getNameCount() == 1) {
-            (e.getName(0), Column(transformExpression(e.getExpr)))
-          } else {
-            throw InvalidPlanInput(
-              s"""WithColumns require column name only contains one name part,
-                 |but got ${e.getNameList.toString}""".stripMargin)
-          }
-        })
-        .unzip
+    val (colNames, cols, metadata) =
+      rel.getAliasesList.asScala.toSeq.map { alias =>
+        if (alias.getNameCount != 1) {
+          throw InvalidPlanInput(s"""WithColumns require column name only contains one name part,
+             |but got ${alias.getNameList.toString}""".stripMargin)
+        }
+
+        val metadata = if (alias.hasMetadata && alias.getMetadata.nonEmpty) {
+          Metadata.fromJson(alias.getMetadata)
+        } else {
+          Metadata.empty
+        }
+
+        (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
+      }.unzip3
+
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .withColumns(names.toSeq, cols.toSeq)
+      .withColumns(colNames, cols, metadata)
       .logicalPlan
   }
 
@@ -571,47 +575,61 @@ class SparkConnectPlanner(session: SparkSession) {
     try {
       parser.parseTableSchema(sqlText)
     } catch {
-      case _: ParseException =>
+      case e: ParseException =>
         try {
           parser.parseDataType(sqlText)
         } catch {
           case _: ParseException =>
-            parser.parseDataType(s"struct<${sqlText.trim}>")
+            try {
+              parser.parseDataType(s"struct<${sqlText.trim}>")
+            } catch {
+              case _: ParseException =>
+                throw e
+            }
         }
     }
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
-    val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-      Iterator(rel.getData.toByteArray),
-      TaskContext.get())
-    if (structType == null) {
-      throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
-    }
-    val attributes = structType.toAttributes
-    val proj = UnsafeProjection.create(attributes, attributes)
-    val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
-
-    if (!rel.hasDatatype && !rel.hasDatatypeStr) {
-      return relation
+    var schema: StructType = null
+    if (rel.hasSchema) {
+      val schemaType = DataType.parseTypeWithFallback(
+        rel.getSchema,
+        parseDatatypeString,
+        fallbackParser = DataType.fromJson)
+      schema = schemaType match {
+        case s: StructType => s
+        case d => StructType(Seq(StructField("value", d)))
+      }
     }
 
-    val schemaType = if (rel.hasDatatype) {
-      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    if (rel.hasData) {
+      val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
+        Iterator(rel.getData.toByteArray),
+        TaskContext.get())
+      if (structType == null) {
+        throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
+      }
+      val attributes = structType.toAttributes
+      val proj = UnsafeProjection.create(attributes, attributes)
+      val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+
+      if (schema == null) {
+        relation
+      } else {
+        Dataset
+          .ofRows(session, logicalPlan = relation)
+          .toDF(schema.names: _*)
+          .to(schema)
+          .logicalPlan
+      }
     } else {
-      parseDatatypeString(rel.getDatatypeStr)
+      if (schema == null) {
+        throw InvalidPlanInput(
+          s"Schema for LocalRelation is required when the input data is not provided.")
+      }
+      LocalRelation(schema.toAttributes, data = Seq.empty)
     }
-
-    val schemaStruct = schemaType match {
-      case s: StructType => s
-      case d => StructType(Seq(StructField("value", d)))
-    }
-
-    Dataset
-      .ofRows(session, logicalPlan = relation)
-      .toDF(schemaStruct.names: _*)
-      .to(schemaStruct)
-      .logicalPlan
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
@@ -902,39 +920,43 @@ class SparkConnectPlanner(session: SparkSession) {
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
 
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        // JsonToStructs constructors only accept DDL-formatted schema.
+        // JsonToStructs constructor doesn't accept JSON-formatted schema.
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
 
-        val schemaStr = children(1) match {
-          case Literal(s, StringType) if s != null => s.toString
-          case other =>
-            throw InvalidPlanInput(
-              s"Schema in from_json should be literal string, but got $other")
+        var schema: DataType = null
+        children(1) match {
+          case Literal(s, StringType) if s != null =>
+            try {
+              schema = DataType.fromJson(s.toString)
+            } catch {
+              case _: Exception =>
+            }
+          case _ =>
         }
-        val schema = DataType.parseTypeWithFallback(
-          schemaStr,
-          DataType.fromJson,
-          fallbackParser = DataType.fromDDL)
 
-        val options = if (children.length == 3) {
-          // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
-          // but the options here is not resolved yet: UnresolvedFunction("map", ...)
-          children(2) match {
-            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
-              ExprUtils.convertToMapData(CreateMap(arguments))
-            case other =>
-              throw InvalidPlanInput(
-                s"Options in from_json should be created by map, but got $other")
+        if (schema != null) {
+          val options = if (children.length == 3) {
+            // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
+            // but the options here is not resolved yet: UnresolvedFunction("map", ...)
+            children(2) match {
+              case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+                ExprUtils.convertToMapData(CreateMap(arguments))
+              case other =>
+                throw InvalidPlanInput(
+                  s"Options in from_json should be created by map, but got $other")
+            }
+          } else {
+            Map.empty[String, String]
           }
-        } else {
-          Map.empty[String, String]
-        }
 
-        Some(
-          JsonToStructs(
-            schema = CharVarcharUtils.failIfHasCharVarchar(schema),
-            options = options,
-            child = children.head))
+          Some(
+            JsonToStructs(
+              schema = CharVarcharUtils.failIfHasCharVarchar(schema),
+              options = options,
+              child = children.head))
+        } else {
+          None
+        }
 
       case _ => None
     }
@@ -942,15 +964,15 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
     if (alias.getNameCount == 1) {
-      val md = if (alias.hasMetadata()) {
+      val metadata = if (alias.hasMetadata() && alias.getMetadata.nonEmpty) {
         Some(Metadata.fromJson(alias.getMetadata))
       } else {
         None
       }
-      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
+      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = metadata)
     } else {
       if (alias.hasMetadata) {
-        throw new InvalidPlanInput(
+        throw InvalidPlanInput(
           "Alias expressions with more than 1 identifier must not use optional metadata.")
       }
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)

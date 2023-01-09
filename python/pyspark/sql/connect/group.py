@@ -206,6 +206,18 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
+    def apply(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("apply() is not implemented.")
+
+    def applyInPandas(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandas() is not implemented.")
+
+    def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandasWithState() is not implemented.")
+
+    def cogroup(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cogroup() is not implemented.")
+
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
 
@@ -214,7 +226,6 @@ def _test() -> None:
     import os
     import sys
     import doctest
-    from pyspark import SparkContext, SparkConf
     from pyspark.sql import SparkSession as PySparkSession
     from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -224,21 +235,21 @@ def _test() -> None:
         import pyspark.sql.connect.group
 
         globs = pyspark.sql.connect.group.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.group tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.group tests"})
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.group tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.group,
             globs=globs,
             optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
         )
-        globs["_spark"].stop()
+
         globs["spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

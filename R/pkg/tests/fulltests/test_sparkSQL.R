@@ -4237,6 +4237,54 @@ test_that("assert_true, raise_error", {
   expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
 })
 
+test_that("SPARK-41937: check class column for multi-class object works", {
+  .originalTimeZone <- Sys.getenv("TZ")
+  Sys.setenv(TZ = "")
+  temp_time <- as.POSIXlt("2015-03-11 12:13:04.043", tz = "")
+  sdf <- createDataFrame(
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1)),
+    schema = structType("x timestamp")
+  )
+  expect_warning(collect(filter(sdf, column("x") > temp_time)), NA)
+  expect_equal(collect(filter(sdf, column("x") > temp_time)), data.frame(x = temp_time + c(1, 1)))
+  expect_warning(collect(filter(sdf, contains(column("x"), temp_time + 5))), NA)
+  expect_warning(
+    collect(
+      mutate(
+        sdf,
+        newcol = otherwise(when(column("x") > lit(temp_time), temp_time), temp_time + 1)
+      )
+    ),
+    NA
+  )
+  expect_equal(
+    collect(
+      mutate(
+        sdf,
+        newcol = otherwise(when(column("x") > lit(temp_time), temp_time), temp_time + 1)
+      )
+    ),
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1), newcol = temp_time + c(1, 0, 1, 0, 1))
+  )
+  expect_error(
+    collect(fillna(sdf, temp_time)),
+    "value should be an integer, numeric, character or named list"
+  )
+  expect_error(
+    collect(fillna(sdf, list(x = temp_time))),
+    "value should be an integer, numeric or character"
+  )
+  expect_warning(
+    collect(mutate(sdf, x2 = ifelse(column("x") > temp_time, temp_time + 5, temp_time - 5))),
+    NA
+  )
+  expect_equal(
+    collect(mutate(sdf, x2 = ifelse(column("x") > temp_time, temp_time + 5, temp_time - 5))),
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1), x2 = temp_time + c(-5, 5, -5, 5, -5))
+  )
+  Sys.setenv(TZ = .originalTimeZone)
+})
+
 compare_list <- function(list1, list2) {
   # get testthat to show the diff by first making the 2 lists equal in length
   expect_equal(length(list1), length(list2))

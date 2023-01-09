@@ -279,14 +279,27 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("abc"  rlike _, "^bc", false)
     checkLiteralRow("abc"  rlike _, "^ab", true)
     checkLiteralRow("abc"  rlike _, "^bc", false)
-
-    intercept[java.util.regex.PatternSyntaxException] {
-      evaluateWithoutCodegen("abbbbc" rlike "**")
-    }
-    intercept[java.util.regex.PatternSyntaxException] {
-      val regex = $"a".string.at(0)
-      evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
-    }
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        evaluateWithoutCodegen("abbbbc" rlike "**")
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("rlike"),
+        "value" -> "'**'")
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        val regex = $"a".string.at(0)
+        evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("rlike"),
+        "value" -> "'**'")
+    )
   }
 
   test("RegexReplace") {
@@ -520,19 +533,24 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s = $"s".string.at(0)
     val p = $"p".string.at(1)
     val r = $"r".int.at(2)
-    val prefix = "[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in"
-    checkExceptionInExpression[SparkRuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
-      s"$prefix `regexp_extract` is invalid: '(?l)'")
-    checkExceptionInExpression[SparkRuntimeException](
+      "INVALID_PARAMETER_VALUE.PATTERN",
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_extract`", "value" -> "'(?l)'")
+    )
+    checkErrorInExpression[SparkRuntimeException](
       RegExpExtractAll(s, p, r),
       create_row("abc", "] [", 0),
-      s"$prefix `regexp_extract_all` is invalid: '] ['")
-    checkExceptionInExpression[SparkRuntimeException](
+      "INVALID_PARAMETER_VALUE.PATTERN",
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_extract_all`", "value" -> "'] ['")
+    )
+    checkErrorInExpression[SparkRuntimeException](
       RegExpInStr(s, p, r),
       create_row("abc", ", (", 0),
-      s"$prefix `regexp_instr` is invalid: ', ('")
+      "INVALID_PARAMETER_VALUE.PATTERN",
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_instr`", "value" -> "', ('")
+    )
   }
 
   test("RegExpReplace: fails analysis if pos is not a constant") {
