@@ -1159,6 +1159,8 @@ class DataFrame:
                 if isinstance(v, bytes):
                     values.append(bytearray(v))
                 elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
+                    # TODO: Should be controlled by "spark.sql.timestampType"
+                    # always remove the time zone for now
                     values.append(v.replace(tzinfo=None))
                 else:
                     values.append(v)
