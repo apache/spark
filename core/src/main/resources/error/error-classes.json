@@ -1152,7 +1152,7 @@
   },
   "TASK_WRITE_FAILED" : {
     "message" : [
-      "Task failed while writing rows. <message>"
+      "Task failed while writing rows to <path>."
     ]
   },
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
