@@ -20,12 +20,9 @@ import json
 import re
 from typing import Dict
 
-from pyspark.find_spark_home import _find_spark_home
 
-
-ERROR_CLASSES_PATH = os.path.join(
-    _find_spark_home(), "python", "pyspark", "errors", "error-classes.json"
-)
+ERROR_CLASSES_JSON = "error-classes.json"
+ERROR_CLASSES_PATH = os.path.join(os.path.dirname(__file__), ERROR_CLASSES_JSON)
 
 
 class ErrorClassesJsonReader:
@@ -34,7 +31,20 @@ class ErrorClassesJsonReader:
     """
 
     def __init__(self, json_file_path: str):
-        self.error_info_map = json.load(open(json_file_path))
+        try:
+            self.error_info_map = json.load(open(json_file_path))
+        except NotADirectoryError:
+            # In this case, PySpark is installed as zip file such as `pyspark.zip`.
+            # Thus, we use ZipFile to read the error-classes.json inside of zip.
+            from zipfile import ZipFile
+
+            # e.g. `/spark-3.3.1-bin-hadoop3/python/lib/pyspark.zip`
+            zip_path = os.path.abspath(os.path.join(json_file_path, "..", "..", ".."))
+            with ZipFile(zip_path) as z:
+                # e.g. `errors/error-classes.json`
+                error_classes_relative_path = os.path.join("pyspark/errors", ERROR_CLASSES_JSON)
+                with z.open(error_classes_relative_path) as f:
+                    self.error_info_map = json.loads(f.read())
 
     def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
         """
