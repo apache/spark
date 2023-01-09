@@ -455,6 +455,9 @@ object FunctionRegistry {
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
+    expression[HyperLogLogPlusPlusSketch]("approx_count_distinct_sketch"),
+    expression[HyperLogLogPlusPlusEvalSketch]("approx_count_distinct_eval_sketch"),
+    expression[HyperLogLogPlusPlusAggSketch]("approx_count_distinct_agg_sketch"),
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),

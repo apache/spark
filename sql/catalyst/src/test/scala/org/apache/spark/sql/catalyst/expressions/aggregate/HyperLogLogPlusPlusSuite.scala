@@ -194,7 +194,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     evaluateEstimate(hll, buffer, 1);
   }
 
-  test("SPARK-XXXXX: Test sketch evaluation") {
+  test("SPARK-16484: Test sketch evaluation") {
     val (hll, input, buffer) = createSketchEstimator(0.05, DoubleType)
     List(1, 1, 2, 2, 3).foreach(i => {
       input.setDouble(0, i)
@@ -210,7 +210,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     assert(approxDistinctCount == 3)
   }
 
-  test("SPARK-XXXXX: Test sketch re-aggregation and evaluation") {
+  test("SPARK-16484: Test sketch re-aggregation and evaluation") {
     val (hll1, input1, buffer1) = createSketchEstimator(0.05, DoubleType)
     List(1, 1, 2, 2, 3).foreach(i => {
       input1.setDouble(0, i)

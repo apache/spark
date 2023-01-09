@@ -308,6 +308,104 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns the HLL++ sketch generated based on the distinct items in a group.
+   *
+   * @param rsd maximum relative standard deviation allowed (default = 0.05)
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_sketch(e: Column, rsd: Double): Column = withAggregateFunction {
+    HyperLogLogPlusPlusSketch(e.expr, rsd, 0, 0)
+  }
+
+  /**
+   * Aggregate function: returns the HLL++ sketch generated based on the distinct items in a group.
+   *
+   * @param rsd maximum relative standard deviation allowed (default = 0.05)
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_sketch(columnName: String, rsd: Double): Column = {
+    approx_count_distinct_sketch(Column(columnName), rsd)
+  }
+
+  /**
+   * Aggregate function: returns the HLL++ sketch generated based on the distinct items in a group.
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_sketch(e: Column): Column = withAggregateFunction {
+    HyperLogLogPlusPlusSketch(e.expr)
+  }
+
+  /**
+   * Aggregate function: returns the HLL++ sketch generated based on the distinct items in a group.
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_sketch(columnName: String): Column = {
+    approx_count_distinct_sketch(Column(columnName))
+  }
+
+  /**
+   * Non-aggregate function: returns the approximate number of distinct items from a sketch.
+   *
+   * @group misc_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_eval_sketch(e: Column): Column = withAggregateFunction {
+    HyperLogLogPlusPlusEvalSketch(e.expr)
+  }
+
+  /**
+   * Aggregate function: returns the approximate number of distinct items from a sketch.
+   *
+   * @param rsd maximum relative standard deviation allowed (default = 0.05)
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_agg_sketch(e: Column, rsd: Double): Column = withAggregateFunction {
+    HyperLogLogPlusPlusAggSketch(e.expr, rsd, 0, 0)
+  }
+
+  /**
+   * Aggregate function: returns the approximate number of distinct items from a sketch.
+   *
+   * @param rsd maximum relative standard deviation allowed (default = 0.05)
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_agg_sketch(columnName: String, rsd: Double): Column = {
+    approx_count_distinct_agg_sketch(Column(columnName), rsd)
+  }
+
+  /**
+   * Aggregate function: returns the approximate number of distinct items from a sketch.
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_agg_sketch(e: Column): Column = withAggregateFunction {
+    HyperLogLogPlusPlusAggSketch(e.expr)
+  }
+
+  /**
+   * Aggregate function: returns the approximate number of distinct items from a sketch.
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def approx_count_distinct_agg_sketch(columnName: String): Column = {
+    approx_count_distinct_agg_sketch(Column(columnName))
+  }
+
+  /**
    * Aggregate function: returns the average of the values in a group.
    *
    * @group agg_funcs
