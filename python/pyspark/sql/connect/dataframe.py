@@ -188,15 +188,87 @@ class DataFrame:
 
     coalesce.__doc__ = PySparkDataFrame.coalesce.__doc__
 
-    def repartition(self, numPartitions: int) -> "DataFrame":
-        if not numPartitions > 0:
-            raise ValueError("numPartitions must be positive.")
-        return DataFrame.withPlan(
-            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
-            self._session,
-        )
+    @overload
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartition(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                return DataFrame.withPlan(
+                    plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
+                    self._session,
+                )
+            else:
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, list(cols)),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, list(cols)),
+                self.sparkSession,
+            )
+        else:
+            raise TypeError("numPartitions should be an int or Column")
 
     repartition.__doc__ = PySparkDataFrame.repartition.__doc__
+
+    @overload
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartitionByRange(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        def _convert_col(col: "ColumnOrName") -> "ColumnOrName":
+            from pyspark.sql.connect.expressions import SortOrder, ColumnReference
+
+            if isinstance(col, Column):
+                if isinstance(col._expr, SortOrder):
+                    return col
+                else:
+                    return Column(SortOrder(col._expr))
+            else:
+                return Column(SortOrder(ColumnReference(name=col)))
+
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                raise ValueError("At least one partition-by expression must be specified.")
+            else:
+                sort = []
+                sort.extend([_convert_col(c) for c in cols])
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, sort),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            sort = []
+            sort.extend([_convert_col(c) for c in cols])
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, sort),
+                self.sparkSession,
+            )
+        else:
+            raise TypeError("numPartitions should be an int, string or Column")
+
+    repartitionByRange.__doc__ = PySparkDataFrame.repartitionByRange.__doc__
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
@@ -1535,6 +1607,7 @@ def _test() -> None:
         # Spark Connect does not support RDD but the tests depend on them.
         del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
         # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
         del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__

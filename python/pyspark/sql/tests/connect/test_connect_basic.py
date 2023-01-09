@@ -1541,6 +1541,58 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             df.select(df.colRegex("`tes.*\n.*mn`")).toPandas(),
         )
 
+    def test_repartition(self) -> None:
+        # SPARK-41354: test dataframe.repartition(numPartitions)
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).repartition(10).toPandas(),
+            self.spark.read.table(self.tbl_name).repartition(10).toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).coalesce(10).toPandas(),
+            self.spark.read.table(self.tbl_name).coalesce(10).toPandas(),
+        )
+
+    def test_repartition_by_expression(self) -> None:
+        # SPARK-41354: test dataframe.repartition(expressions)
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).repartition(10, "id").toPandas(),
+            self.spark.read.table(self.tbl_name).repartition(10, "id").toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).repartition("id").toPandas(),
+            self.spark.read.table(self.tbl_name).repartition("id").toPandas(),
+        )
+
+        # repartition with unsupported parameter values
+        with self.assertRaises(SparkConnectException):
+            self.connect.read.table(self.tbl_name).repartition("id+1").toPandas()
+
+    def test_repartition_by_range(self) -> None:
+        # SPARK-41354: test dataframe.repartitionByRange(expressions)
+        cdf = self.connect.read.table(self.tbl_name)
+        sdf = self.spark.read.table(self.tbl_name)
+
+        self.assert_eq(
+            cdf.repartitionByRange(10, "id").toPandas(),
+            sdf.repartitionByRange(10, "id").toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.repartitionByRange("id").toPandas(),
+            sdf.repartitionByRange("id").toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.repartitionByRange(cdf.id.desc()).toPandas(),
+            sdf.repartitionByRange(sdf.id.desc()).toPandas(),
+        )
+
+        # repartitionByRange with unsupported parameter values
+        with self.assertRaises(SparkConnectException):
+            self.connect.read.table(self.tbl_name).repartitionByRange("id+1").toPandas()
+
     def test_agg_with_two_agg_exprs(self) -> None:
         # SPARK-41230: test dataframe.agg()
         self.assert_eq(
