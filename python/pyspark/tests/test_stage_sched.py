@@ -20,6 +20,7 @@ import tempfile
 import unittest
 import time
 import shutil
+import json
 
 from pyspark import SparkConf, SparkContext
 from pyspark.resource.profile import ResourceProfileBuilder
@@ -38,22 +39,41 @@ class StageSchedulingTest(unittest.TestCase):
             self.sc = None
 
     def _test_stage_scheduling(
-            self, master, num_tasks, resource_profile,
+            self, cpus_per_worker, gpus_per_worker, num_tasks, resource_profile,
             expected_max_concurrent_tasks,
     ):
         conf = SparkConf()
-        conf.setMaster(master).set("spark.task.maxFailures", "1")
+        conf.setMaster(f"local-cluster[1,{cpus_per_worker},1024]") \
+            .set("spark.task.maxFailures", "1")
+
+        if gpus_per_worker:
+            worker_res_config_file = os.path.join(self.temp_dir, "worker_res.json")
+            worker_res = [{
+                "id": {
+                    "componentName": "spark.worker",
+                    "resourceName": "gpu",
+                },
+                "addresses": [str(i) for i in range(gpus_per_worker)],
+            }]
+            with open(worker_res_config_file, "w") as fp:
+                json.dump(worker_res, fp)
+
+            conf.set("spark.worker.resource.gpu.amount", str(gpus_per_worker))
+            conf.set("spark.worker.resourcesFile", worker_res_config_file)
+            conf.set("spark.executor.resource.gpu.amount", str(gpus_per_worker))
+
         self.sc = SparkContext(conf=conf)
-        temp_dir = self.temp_dir
+        pids_output_dir = os.path.join(self.temp_dir, "pids")
+        os.mkdir(pids_output_dir)
 
         def mapper(_):
             from pyspark.taskcontext import TaskContext
             task_id = TaskContext.get().partitionId()
-            pid_file_path = os.path.join(temp_dir, str(task_id))
+            pid_file_path = os.path.join(pids_output_dir, str(task_id))
             with open(pid_file_path, mode="w"):
                 pass
             time.sleep(0.1)
-            num_concurrent_tasks = len(os.listdir(temp_dir))
+            num_concurrent_tasks = len(os.listdir(pids_output_dir))
             time.sleep(1)
             os.remove(pid_file_path)
             return num_concurrent_tasks
@@ -64,7 +84,8 @@ class StageSchedulingTest(unittest.TestCase):
     def test_stage_scheduling_4_cpus_per_task(self):
         rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(4)).build
         self._test_stage_scheduling(
-            "local-cluster[1,4,1024]",
+            cpus_per_worker=4,
+            gpus_per_worker=0,
             num_tasks=2,
             resource_profile=rp,
             expected_max_concurrent_tasks=1,
@@ -73,10 +94,23 @@ class StageSchedulingTest(unittest.TestCase):
     def test_stage_scheduling_1_cpu_per_task(self):
         rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(1)).build
         self._test_stage_scheduling(
-            "local-cluster[1,4,1024]",
+            cpus_per_worker=4,
+            gpus_per_worker=0,
             num_tasks=4,
             resource_profile=rp,
             expected_max_concurrent_tasks=4,
+        )
+
+    def test_stage_scheduling_2_cpus_2_gpus_per_task(self):
+        rp = ResourceProfileBuilder().require(
+            TaskResourceRequests().cpus(2).resource("gpu", 2)
+        ).build
+        self._test_stage_scheduling(
+            cpus_per_worker=4,
+            gpus_per_worker=4,
+            num_tasks=4,
+            resource_profile=rp,
+            expected_max_concurrent_tasks=2,
         )
 
 
