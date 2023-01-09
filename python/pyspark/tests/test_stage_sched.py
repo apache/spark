@@ -53,7 +53,7 @@ class StageSchedulingTest(unittest.TestCase):
             with open(pid_file_path, mode="w"):
                 pass
             time.sleep(0.1)
-            num_concurrent_tasks = os.listdir(temp_dir)
+            num_concurrent_tasks = len(os.listdir(temp_dir))
             time.sleep(1)
             os.remove(pid_file_path)
             return num_concurrent_tasks
@@ -61,7 +61,7 @@ class StageSchedulingTest(unittest.TestCase):
             .withResources(resource_profile).map(mapper).collect()
         assert max(results) == expected_max_concurrent_tasks
 
-    def test_stage_scheduling(self):
+    def test_stage_scheduling_4_cpus_per_task(self):
         rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(4)).build
         self._test_stage_scheduling(
             "local-cluster[1,4,1024]",
@@ -69,6 +69,8 @@ class StageSchedulingTest(unittest.TestCase):
             resource_profile=rp,
             expected_max_concurrent_tasks=1,
         )
+
+    def test_stage_scheduling_1_cpu_per_task(self):
         rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(1)).build
         self._test_stage_scheduling(
             "local-cluster[1,4,1024]",
