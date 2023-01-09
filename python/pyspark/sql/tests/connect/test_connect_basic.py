@@ -274,12 +274,26 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(joined_plan3.toPandas(), joined_plan4.toPandas())
 
     def test_collect(self):
-        df = self.connect.read.table(self.tbl_name)
-        data = df.limit(10).collect()
+        cdf = self.connect.read.table(self.tbl_name)
+        sdf = self.spark.read.table(self.tbl_name)
+
+        data = cdf.limit(10).collect()
         self.assertEqual(len(data), 10)
         # Check Row has schema column names.
         self.assertTrue("name" in data[0])
         self.assertTrue("id" in data[0])
+
+        cdf = cdf.select(
+            CF.log("id"), CF.log("id"), CF.struct("id", "name"), CF.struct("id", "name")
+        ).limit(10)
+        sdf = sdf.select(
+            SF.log("id"), SF.log("id"), SF.struct("id", "name"), SF.struct("id", "name")
+        ).limit(10)
+
+        self.assertEqual(
+            cdf.collect(),
+            sdf.collect(),
+        )
 
     def test_collect_timestamp(self):
         from pyspark.sql import functions as SF
