@@ -65,8 +65,8 @@ class SparkConnectClientSuite
   }
 
   private def testClientConnection(
-    client: SparkConnectClient,
-    serverPort: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT): Unit = {
+      client: SparkConnectClient,
+      serverPort: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT): Unit = {
     startDummyServer(serverPort)
     val request = AnalyzePlanRequest
       .newBuilder()
@@ -89,35 +89,35 @@ class SparkConnectClientSuite
     testClientConnection(client, testPort)
   }
 
-  private case class testPackURI(
+  private case class TestPackURI(
       connectionString: String,
       isCorrect: Boolean,
       extraChecks: SparkConnectClient => Unit = _ => {})
 
-  private val URIs = Seq[testPackURI](
-    testPackURI("sc://host", isCorrect = true),
-    testPackURI("sc://localhost/", isCorrect = true, client => testClientConnection(client)),
-    testPackURI(
+  private val URIs = Seq[TestPackURI](
+    TestPackURI("sc://host", isCorrect = true),
+    TestPackURI("sc://localhost/", isCorrect = true, client => testClientConnection(client)),
+    TestPackURI(
       "sc://localhost:123/",
       isCorrect = true,
       client => testClientConnection(client, 123)),
-    testPackURI("sc://localhost/;", isCorrect = true, client => testClientConnection(client)),
-    testPackURI("sc://host:123", isCorrect = true),
-    testPackURI(
+    TestPackURI("sc://localhost/;", isCorrect = true, client => testClientConnection(client)),
+    TestPackURI("sc://host:123", isCorrect = true),
+    TestPackURI(
       "sc://host:123/;user_id=a94",
       isCorrect = true,
       client => assert(client.userId == "a94")),
-    testPackURI("scc://host:12", isCorrect = false),
-    testPackURI("http://host", isCorrect = false),
-    testPackURI("sc:/host:1234/path", isCorrect = false),
-    testPackURI("sc://host/path", isCorrect = false),
-    testPackURI("sc://host/;parm1;param2", isCorrect = false),
-    testPackURI("sc://host:123;user_id=a94", isCorrect = false),
-    testPackURI("sc:///user_id=123", isCorrect = false),
-    testPackURI("sc://host:-4", isCorrect = false),
-    testPackURI("sc://:123/", isCorrect = false))
+    TestPackURI("scc://host:12", isCorrect = false),
+    TestPackURI("http://host", isCorrect = false),
+    TestPackURI("sc:/host:1234/path", isCorrect = false),
+    TestPackURI("sc://host/path", isCorrect = false),
+    TestPackURI("sc://host/;parm1;param2", isCorrect = false),
+    TestPackURI("sc://host:123;user_id=a94", isCorrect = false),
+    TestPackURI("sc:///user_id=123", isCorrect = false),
+    TestPackURI("sc://host:-4", isCorrect = false),
+    TestPackURI("sc://:123/", isCorrect = false))
 
-  private def checkTestPack(testPack: testPackURI): Unit = {
+  private def checkTestPack(testPack: TestPackURI): Unit = {
     val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()
     testPack.extraChecks(client)
   }
