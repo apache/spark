@@ -435,8 +435,10 @@ message SparkPlanGraphClusterWrapper {
 }
 
 message SparkPlanGraphNodeWrapper {
-  SparkPlanGraphNode node = 1;
-  SparkPlanGraphClusterWrapper cluster = 2;
+  oneof wrapper {
+    SparkPlanGraphNode node = 1;
+    SparkPlanGraphClusterWrapper cluster = 2;
+  }
 }
 
 message SparkPlanGraphEdge {
