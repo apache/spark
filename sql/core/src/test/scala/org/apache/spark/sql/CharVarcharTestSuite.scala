@@ -312,12 +312,18 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   test("length check for input string values: partitioned columns") {
     // DS V2 doesn't support partitioned table.
     if (!conf.contains(SQLConf.DEFAULT_CATALOG.key)) {
+      val tableName = "t"
       testTableWrite { typeName =>
-        sql(s"CREATE TABLE t(i INT, c $typeName(5)) USING $format PARTITIONED BY (c)")
-        sql("INSERT INTO t VALUES (1, null)")
-        checkAnswer(spark.table("t"), Row(1, null))
-        val e = intercept[SparkException](sql("INSERT INTO t VALUES (1, '123456')"))
-        assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+        sql(s"CREATE TABLE $tableName(i INT, c $typeName(5)) USING $format PARTITIONED BY (c)")
+        sql(s"INSERT INTO $tableName VALUES (1, null)")
+        checkAnswer(spark.table(tableName), Row(1, null))
+        val e = intercept[SparkException](sql(s"INSERT INTO $tableName VALUES (1, '123456')"))
+        checkError(
+          exception = e.getCause.asInstanceOf[SparkException],
+          errorClass = "TASK_WRITE_FAILED",
+          parameters = Map("path" -> s".*$tableName.*"),
+          matchPVals = true
+        )
       }
     }
   }
