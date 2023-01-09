@@ -1219,18 +1219,28 @@ class DataFrame:
         table = self._session.client.to_table(query)
 
         rows: List[Row] = []
-        for row in table.to_pylist():
-            _dict: Dict[Any, Any] = {}
-            for k, v in row.items():
+        columns = [column.to_pylist() for column in table.columns]
+        i = 0
+        while i < table.num_rows:
+            values: List[Any] = []
+            j = 0
+            while j < table.num_columns:
+                v = columns[j][i]
                 if isinstance(v, bytes):
-                    _dict[k] = bytearray(v)
+                    values.append(bytearray(v))
                 elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
                     # TODO: Should be controlled by "spark.sql.timestampType"
                     # always remove the time zone for now
-                    _dict[k] = v.replace(tzinfo=None)
+                    values.append(v.replace(tzinfo=None))
+                elif isinstance(v, dict):
+                    values.append(Row(**v))
                 else:
-                    _dict[k] = v
-            rows.append(Row(**_dict))
+                    values.append(v)
+                j += 1
+            new_row = Row(*values)
+            new_row.__fields__ = table.column_names
+            rows.append(new_row)
+            i += 1
         return rows
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
