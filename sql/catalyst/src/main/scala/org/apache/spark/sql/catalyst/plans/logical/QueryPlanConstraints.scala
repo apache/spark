@@ -86,6 +86,24 @@ trait ConstraintHelper {
   })
 
   /**
+   * Collect the expressions which output may be evaluated to null with all inputs are not null.
+   */
+  def maybeNullExpressionSet(expr: Expression, output: AttributeSet): ExpressionSet = expr match {
+    case EqualNullSafe(_, _) => ExpressionSet()
+    // Do not infer IsNotNull constraint for BinaryOperator and Not expression
+    case e: BinaryOperator if e.references.subsetOf(output) => ExpressionSet()
+    case e: Not if e.references.subsetOf(output) => ExpressionSet()
+    case e: IsNull if e.references.subsetOf(output) => ExpressionSet()
+    case e: IsNotNull if e.references.subsetOf(output) => ExpressionSet()
+    case e: IsNaN if e.references.subsetOf(output) => ExpressionSet()
+    case BinaryOperator(left, right) =>
+      maybeNullExpressionSet(left, output) ++ maybeNullExpressionSet(right, output)
+    case Not(child) => maybeNullExpressionSet(child, output)
+    case e if e.references.subsetOf(AttributeSet(output)) => ExpressionSet(Seq(e))
+    case _ => ExpressionSet()
+  }
+
+  /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
    * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
    * returns a constraint of the form `isNotNull(a)`
@@ -100,13 +118,9 @@ trait ConstraintHelper {
     // operator's output
     val nonNullableAttributes = output.filterNot(_.nullable)
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull)
-    isNotNullConstraints ++= constraints.collect {
-      case BinaryComparison(left, _) if left.references.subsetOf(AttributeSet(output)) =>
-        IsNotNull(left)
-
-      case BinaryComparison(_, right) if right.references.subsetOf(AttributeSet(output)) =>
-        IsNotNull(right)
-    }
+    isNotNullConstraints ++=
+      constraints.foldLeft(ExpressionSet())((set, expr) =>
+        set ++ maybeNullExpressionSet(expr, AttributeSet(output))).map(IsNotNull)
 
     isNotNullConstraints -- constraints
   }
