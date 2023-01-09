@@ -405,7 +405,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       "Our unexpected executor does not have a request time.")
   }
 
-  test("SPARK-41848: executor core decrease should base on taskCpus") {
+  test("SPARK-41848: executor cores should be decreased based on taskCpus") {
     val testStartTime = System.currentTimeMillis()
 
     val execCores = 3
