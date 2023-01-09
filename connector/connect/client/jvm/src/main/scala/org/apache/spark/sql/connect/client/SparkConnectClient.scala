@@ -144,7 +144,7 @@ object SparkConnectClient {
      * Note: The connection string, if used, will override any previous host/port settings.
      */
     def connectionString(connectionString: String): Builder = {
-      // TODO: Support ssl/bearer token params
+      // TODO(SPARK-41917): Support SSL and Auth tokens.
       val uri = new URI(connectionString)
       verifyURI(uri)
       parseURIParams(uri)
