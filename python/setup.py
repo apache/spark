@@ -282,7 +282,7 @@ try:
             "pyspark.licenses": ["*.txt"],
             "pyspark.examples.src.main.python": ["*.py", "*/*.py"],
         },
-        data_files=[("json", ["errors/error-classes.json"])],
+        data_files=[("json", ["pyspark/errors/error-classes.json"])],
         scripts=scripts,
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
