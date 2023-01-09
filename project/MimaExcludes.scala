@@ -87,6 +87,11 @@ object MimaExcludes {
     // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
     ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil"),
 
+    // [SPARK-36620] [SHUFFLE] Expose shuffle push metrics
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetricDistributions.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.this"),
+    ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
+
     // [SPARK-40324][SQL] Provide query context in AnalysisException
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.withPosition"),
@@ -153,7 +158,18 @@ object MimaExcludes {
     // [SPARK-41423][CORE] Protobuf serializer for StageDataWrapper for Scala 2.13
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.rddIds"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.accumulatorUpdates"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.StageData.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.StageData.this"),
+
+    // [SPARK-41890][CORE][SQL][UI] Reduce `toSeq` in `RDDOperationGraphWrapperSerializer`/`SparkPlanGraphWrapperSerializer` for Scala 2.13
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.nodes"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.edges"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.metrics"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy$default$4"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply")
   )
 
   // Defulat exclude rules

@@ -54,6 +54,16 @@ class CachedQuantileSerializer extends ProtobufSerDe {
       .setShuffleRemoteBytesRead(data.shuffleRemoteBytesRead)
       .setShuffleRemoteBytesReadToDisk(data.shuffleRemoteBytesReadToDisk)
       .setShuffleTotalBlocksFetched(data.shuffleTotalBlocksFetched)
+      .setShuffleCorruptMergedBlockChunks(data.shuffleCorruptMergedBlockChunks)
+      .setShuffleMergedFetchFallbackCount(data.shuffleMergedFetchFallbackCount)
+      .setShuffleMergedRemoteBlocksFetched(data.shuffleMergedRemoteBlocksFetched)
+      .setShuffleMergedLocalBlocksFetched(data.shuffleMergedLocalBlocksFetched)
+      .setShuffleMergedRemoteChunksFetched(data.shuffleMergedRemoteChunksFetched)
+      .setShuffleMergedLocalChunksFetched(data.shuffleMergedLocalChunksFetched)
+      .setShuffleMergedRemoteBytesRead(data.shuffleMergedRemoteBytesRead)
+      .setShuffleMergedLocalBytesRead(data.shuffleMergedLocalBytesRead)
+      .setShuffleRemoteReqsDuration(data.shuffleRemoteReqsDuration)
+      .setShuffleMergedRemoteReqsDuration(data.shuffleMergedRemoteReqsDuration)
       .setShuffleWriteBytes(data.shuffleWriteBytes)
       .setShuffleWriteRecords(data.shuffleWriteRecords)
       .setShuffleWriteTime(data.shuffleWriteTime)
@@ -92,6 +102,16 @@ class CachedQuantileSerializer extends ProtobufSerDe {
       shuffleRemoteBytesRead = binary.getShuffleRemoteBytesRead,
       shuffleRemoteBytesReadToDisk = binary.getShuffleRemoteBytesReadToDisk,
       shuffleTotalBlocksFetched = binary.getShuffleTotalBlocksFetched,
+      shuffleCorruptMergedBlockChunks = binary.getShuffleCorruptMergedBlockChunks,
+      shuffleMergedFetchFallbackCount = binary.getShuffleMergedFetchFallbackCount,
+      shuffleMergedRemoteBlocksFetched = binary.getShuffleMergedRemoteBlocksFetched,
+      shuffleMergedLocalBlocksFetched = binary.getShuffleMergedLocalBlocksFetched,
+      shuffleMergedRemoteChunksFetched = binary.getShuffleMergedRemoteChunksFetched,
+      shuffleMergedLocalChunksFetched = binary.getShuffleMergedLocalChunksFetched,
+      shuffleMergedRemoteBytesRead = binary.getShuffleMergedRemoteBytesRead,
+      shuffleMergedLocalBytesRead = binary.getShuffleMergedLocalBytesRead,
+      shuffleRemoteReqsDuration = binary.getShuffleRemoteReqsDuration,
+      shuffleMergedRemoteReqsDuration = binary.getShuffleMergedRemoteReqsDuration,
       shuffleWriteBytes = binary.getShuffleWriteBytes,
       shuffleWriteRecords = binary.getShuffleWriteRecords,
       shuffleWriteTime = binary.getShuffleWriteTime)

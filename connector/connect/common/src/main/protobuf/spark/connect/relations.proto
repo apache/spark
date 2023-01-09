@@ -691,7 +691,7 @@ message WithColumns {
   // Only one name part is expected from each Expression.Alias.
   //
   // An exception is thrown when duplicated names are present in the mapping.
-  repeated Expression.Alias name_expr_list = 2;
+  repeated Expression.Alias aliases = 2;
 }
 
 // Specify a hint over a relation. Hint should have a name and optional parameters.

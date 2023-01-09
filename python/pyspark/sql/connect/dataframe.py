@@ -33,12 +33,14 @@ from typing import (
 import sys
 import random
 import pandas
+import datetime
+import json
 import warnings
 from collections.abc import Iterable
 
-from pyspark import _NoValue, SparkContext, SparkConf
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import DataType, StructType, Row
+from pyspark.sql.types import StructType, Row
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
@@ -90,6 +92,9 @@ class DataFrame:
     isEmpty.__doc__ = PySparkDataFrame.isEmpty.__doc__
 
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     select.__doc__ = PySparkDataFrame.select.__doc__
@@ -183,17 +188,92 @@ class DataFrame:
 
     coalesce.__doc__ = PySparkDataFrame.coalesce.__doc__
 
-    def repartition(self, numPartitions: int) -> "DataFrame":
-        if not numPartitions > 0:
-            raise ValueError("numPartitions must be positive.")
-        return DataFrame.withPlan(
-            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
-            self._session,
-        )
+    @overload
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartition(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                return DataFrame.withPlan(
+                    plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
+                    self._session,
+                )
+            else:
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, list(cols)),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, list(cols)),
+                self.sparkSession,
+            )
+        else:
+            raise TypeError("numPartitions should be an int or Column")
 
     repartition.__doc__ = PySparkDataFrame.repartition.__doc__
 
+    @overload
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartitionByRange(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        def _convert_col(col: "ColumnOrName") -> "ColumnOrName":
+            from pyspark.sql.connect.expressions import SortOrder, ColumnReference
+
+            if isinstance(col, Column):
+                if isinstance(col._expr, SortOrder):
+                    return col
+                else:
+                    return Column(SortOrder(col._expr))
+            else:
+                return Column(SortOrder(ColumnReference(name=col)))
+
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                raise ValueError("At least one partition-by expression must be specified.")
+            else:
+                sort = []
+                sort.extend([_convert_col(c) for c in cols])
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, sort),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            sort = []
+            sort.extend([_convert_col(c) for c in cols])
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, sort),
+                self.sparkSession,
+            )
+        else:
+            raise TypeError("numPartitions should be an int, string or Column")
+
+    repartitionByRange.__doc__ = PySparkDataFrame.repartitionByRange.__doc__
+
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise TypeError("Parameter 'subset' must be a list of columns")
+
         if subset is None:
             return DataFrame.withPlan(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
@@ -248,6 +328,9 @@ class DataFrame:
     first.__doc__ = PySparkDataFrame.first.__doc__
 
     def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, Column):
@@ -405,26 +488,56 @@ class DataFrame:
 
     def sample(
         self,
-        fraction: float,
-        *,
-        withReplacement: bool = False,
+        withReplacement: Optional[Union[float, bool]] = None,
+        fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> "DataFrame":
-        if not isinstance(fraction, float):
-            raise TypeError(f"'fraction' must be float, but got {type(fraction).__name__}")
-        if not isinstance(withReplacement, bool):
+
+        # For the cases below:
+        #   sample(True, 0.5 [, seed])
+        #   sample(True, fraction=0.5 [, seed])
+        #   sample(withReplacement=False, fraction=0.5 [, seed])
+        is_withReplacement_set = type(withReplacement) == bool and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(faction=0.5 [, seed])
+        is_withReplacement_omitted_kwargs = withReplacement is None and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(0.5 [, seed])
+        is_withReplacement_omitted_args = isinstance(withReplacement, float)
+
+        if not (
+            is_withReplacement_set
+            or is_withReplacement_omitted_kwargs
+            or is_withReplacement_omitted_args
+        ):
+            argtypes = [
+                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None
+            ]
             raise TypeError(
-                f"'withReplacement' must be bool, but got {type(withReplacement).__name__}"
+                "withReplacement (optional), fraction (required) and seed (optional)"
+                " should be a bool, float and number; however, "
+                "got [%s]." % ", ".join(argtypes)
             )
-        if seed is not None and not isinstance(seed, int):
-            raise TypeError(f"'seed' must be None or int, but got {type(seed).__name__}")
+
+        if is_withReplacement_omitted_args:
+            if fraction is not None:
+                seed = cast(int, fraction)
+            fraction = withReplacement
+            withReplacement = None
+
+        if withReplacement is None:
+            withReplacement = False
+
+        seed = int(seed) if seed is not None else None
 
         return DataFrame.withPlan(
             plan.Sample(
                 child=self._plan,
                 lower_bound=0.0,
-                upper_bound=fraction,
-                with_replacement=withReplacement,
+                upper_bound=fraction,  # type: ignore[arg-type]
+                with_replacement=withReplacement,  # type: ignore[arg-type]
                 seed=seed,
             ),
             session=self._session,
@@ -475,8 +588,18 @@ class DataFrame:
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of column name and column.")
 
+        names: List[str] = []
+        columns: List[Column] = []
+        for columnName, column in colsMap.items():
+            names.append(columnName)
+            columns.append(column)
+
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, colsMap),
+            plan.WithColumns(
+                self._plan,
+                columnNames=names,
+                columns=columns,
+            ),
             session=self._session,
         )
 
@@ -486,11 +609,31 @@ class DataFrame:
         if not isinstance(col, Column):
             raise TypeError("col should be Column")
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, {colName: col}),
+            plan.WithColumns(
+                self._plan,
+                columnNames=[colName],
+                columns=[col],
+            ),
             session=self._session,
         )
 
     withColumn.__doc__ = PySparkDataFrame.withColumn.__doc__
+
+    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(
+                self._plan,
+                columnNames=[columnName],
+                columns=[self[columnName]],
+                metadata=[json.dumps(metadata)],
+            ),
+            session=self._session,
+        )
+
+    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
 
     def unpivot(
         self,
@@ -1077,10 +1220,14 @@ class DataFrame:
 
         rows: List[Row] = []
         for row in table.to_pylist():
-            _dict = {}
+            _dict: Dict[Any, Any] = {}
             for k, v in row.items():
                 if isinstance(v, bytes):
                     _dict[k] = bytearray(v)
+                elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
+                    # TODO: Should be controlled by "spark.sql.timestampType"
+                    # always remove the time zone for now
+                    _dict[k] = v.replace(tzinfo=None)
                 else:
                     _dict[k] = v
             rows.append(Row(**_dict))
@@ -1150,7 +1297,7 @@ class DataFrame:
 
     inputFiles.__doc__ = PySparkDataFrame.inputFiles.__doc__
 
-    def to(self, schema: DataType) -> "DataFrame":
+    def to(self, schema: StructType) -> "DataFrame":
         assert schema is not None
         return DataFrame.withPlan(
             plan.ToSchema(child=self._plan, schema=schema),
@@ -1325,6 +1472,9 @@ class DataFrame:
     def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("sameSemantics() is not implemented.")
 
+    def writeTo(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("writeTo() is not implemented.")
+
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
         """Returns a new :class: `DataFrame` by skipping the first `n` rows.
@@ -1454,15 +1604,10 @@ def _test() -> None:
         import pyspark.sql.connect.dataframe
 
         globs = pyspark.sql.connect.dataframe.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.dataframe tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.dataframe tests"}
-        )
-
         # Spark Connect does not support RDD but the tests depend on them.
         del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
         # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
         del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
@@ -1472,8 +1617,6 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
-        # TODO(SPARK-41824): DataFrame.explain format is different
-        del pyspark.sql.connect.dataframe.DataFrame.explain.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
 
         # TODO(SPARK-41886): The doctest output has different order
@@ -1482,24 +1625,17 @@ def _test() -> None:
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
 
-        # TODO(SPARK-41827): groupBy requires all cols be Column or str
-        del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
-
-        # TODO(SPARK-41830): fix sample parameters
-        del pyspark.sql.connect.dataframe.DataFrame.sample.__doc__
-
-        # TODO(SPARK-41831): fix transform to accept ColumnReference
-        del pyspark.sql.connect.dataframe.DataFrame.transform.__doc__
-
         # TODO(SPARK-41832): fix unionByName
         del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
 
         # TODO(SPARK-41818): Support saveAsTable
         del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.dataframe tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.dataframe,
@@ -1510,7 +1646,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

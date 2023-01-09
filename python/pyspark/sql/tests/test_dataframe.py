@@ -531,7 +531,7 @@ class DataFrameTestsMixin:
 
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
-        self.assertRaises(AssertionError, self.df.withColumns)
+        self.assertRaises(Exception, self.df.withColumns)
 
     def test_generic_hints(self):
         from pyspark.sql import DataFrame

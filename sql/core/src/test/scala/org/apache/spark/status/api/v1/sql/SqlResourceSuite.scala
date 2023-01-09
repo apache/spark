@@ -56,7 +56,7 @@ object SqlResourceSuite {
 
   val edges: Seq[SparkPlanGraphEdge] = Seq(SparkPlanGraphEdge(3, 2))
 
-  val nodesWhenCodegenIsOff: Seq[SparkPlanGraphNode] =
+  val nodesWhenCodegenIsOff: collection.Seq[SparkPlanGraphNode] =
     SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
 
   val metrics: Seq[SQLPlanMetric] = {

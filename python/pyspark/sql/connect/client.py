@@ -19,6 +19,7 @@ import logging
 import os
 import urllib.parse
 import uuid
+import json
 from typing import Iterable, Optional, Any, Union, List, Tuple, Dict, NoReturn, cast
 
 import pandas as pd
@@ -447,14 +448,20 @@ class SparkConnectClient(object):
         # Server side should populate the struct field which is the schema.
         assert proto_schema.HasField("struct")
 
-        fields = [
-            StructField(
-                f.name,
-                self._proto_schema_to_pyspark_schema(f.data_type),
-                f.nullable,
+        fields = []
+        for f in proto_schema.struct.fields:
+            if f.HasField("metadata"):
+                metadata = json.loads(f.metadata)
+            else:
+                metadata = None
+            fields.append(
+                StructField(
+                    f.name,
+                    self._proto_schema_to_pyspark_schema(f.data_type),
+                    f.nullable,
+                    metadata,
+                )
             )
-            for f in proto_schema.struct.fields
-        ]
         return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:

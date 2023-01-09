@@ -348,6 +348,45 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       assert(df.union(fieldNameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
     }
   }
+
+  test("SPARK-41538: Metadata column should be appended at the end of project") {
+    val tableName = "table_1"
+    val viewName = "view_1"
+    withTable(tableName) {
+      withView(viewName) {
+        sql(s"CREATE TABLE $tableName (a ARRAY<STRING>, s STRUCT<id: STRING>) USING parquet")
+        val id = "id1"
+        sql(s"INSERT INTO $tableName values(ARRAY('a'), named_struct('id', '$id'))")
+        sql(
+          s"""
+             |CREATE VIEW $viewName (id)
+             |AS WITH source AS (
+             |    SELECT * FROM $tableName
+             |),
+             |renamed AS (
+             |    SELECT s.id FROM source
+             |)
+             |SELECT id FROM renamed
+             |""".stripMargin)
+        val query =
+          s"""
+             |with foo AS (
+             |  SELECT '$id' as id
+             |),
+             |bar AS (
+             |  SELECT '$id' as id
+             |)
+             |SELECT
+             |  1
+             |FROM foo
+             |FULL OUTER JOIN bar USING(id)
+             |FULL OUTER JOIN $viewName USING(id)
+             |WHERE foo.id IS NOT NULL
+             |""".stripMargin
+        checkAnswer(sql(query), Row(1))
+      }
+    }
+  }
 }
 
 class MetadataTestTable(

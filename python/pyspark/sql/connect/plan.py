@@ -17,6 +17,7 @@
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
+import json
 import pyarrow as pa
 from inspect import signature, isclass
 
@@ -377,19 +378,48 @@ class Project(LogicalPlan):
 class WithColumns(LogicalPlan):
     """Logical plan object for a withColumns operation."""
 
-    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Column]) -> None:
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        columnNames: Sequence[str],
+        columns: Sequence[Column],
+        metadata: Optional[Sequence[str]] = None,
+    ) -> None:
         super().__init__(child)
-        self._cols_map = cols_map
+
+        assert isinstance(columnNames, list)
+        assert len(columnNames) > 0
+        assert all(isinstance(c, str) for c in columnNames)
+
+        assert isinstance(columns, list)
+        assert len(columns) == len(columnNames)
+        assert all(isinstance(c, Column) for c in columns)
+
+        if metadata is not None:
+            assert isinstance(metadata, list)
+            assert len(metadata) == len(columnNames)
+            for m in metadata:
+                assert isinstance(m, str)
+                # validate json string
+                assert m == "" or json.loads(m) is not None
+
+        self._columnNames = columnNames
+        self._columns = columns
+        self._metadata = metadata
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.with_columns.input.CopyFrom(self._child.plan(session))
-        for k, v in self._cols_map.items():
-            name_expr = proto.Expression.Alias()
-            name_expr.name.append(k)
-            name_expr.expr.CopyFrom(v.to_plan(session))
-            plan.with_columns.name_expr_list.append(name_expr)
+
+        for i in range(0, len(self._columnNames)):
+            alias = proto.Expression.Alias()
+            alias.expr.CopyFrom(self._columns[i].to_plan(session))
+            alias.name.append(self._columnNames[i])
+            if self._metadata is not None:
+                alias.metadata = self._metadata[i]
+            plan.with_columns.aliases.append(alias)
+
         return plan
 
 
@@ -809,6 +839,41 @@ class Repartition(LogicalPlan):
             rel.repartition.input.CopyFrom(self._child.plan(session))
         rel.repartition.shuffle = self._shuffle
         rel.repartition.num_partitions = self._num_partitions
+        return rel
+
+
+class RepartitionByExpression(LogicalPlan):
+    """Repartition Relation into a different number of partitions using Expression"""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        num_partitions: Optional[int],
+        columns: List["ColumnOrName"],
+    ) -> None:
+        super().__init__(child)
+        self.num_partitions = num_partitions
+        self.columns = columns
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        rel = proto.Relation()
+
+        part_exprs = []
+        for c in self.columns:
+            if isinstance(c, Column):
+                part_exprs.append(c.to_plan(session))
+            elif c == "*":
+                exp = proto.Expression()
+                exp.unresolved_star.SetInParent()
+                part_exprs.append(exp)
+            else:
+                part_exprs.append(self.unresolved_attr(c))
+        rel.repartition_by_expression.partition_exprs.extend(part_exprs)
+
+        if self._child is not None:
+            rel.repartition_by_expression.input.CopyFrom(self._child.plan(session))
+        if self.num_partitions is not None:
+            rel.repartition_by_expression.num_partitions = self.num_partitions
         return rel
 
 
