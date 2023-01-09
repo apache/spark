@@ -1147,26 +1147,26 @@ class DataFrame:
         table = self._session.client.to_table(query)
 
         rows: List[Row] = []
+        columns = [column.to_pylist() for column in table.columns]
         i = 0
         while i < table.num_rows:
-            keys: List[Any] = []
             values: List[Any] = []
             j = 0
             while j < table.num_columns:
-                k = table.column_names[j]
-                v = table.column(j).to_pylist()[i]
-                keys.append(k)
+                v = columns[j][i]
                 if isinstance(v, bytes):
                     values.append(bytearray(v))
                 elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
                     # TODO: Should be controlled by "spark.sql.timestampType"
                     # always remove the time zone for now
                     values.append(v.replace(tzinfo=None))
+                elif isinstance(v, dict):
+                    values.append(Row(**v))
                 else:
                     values.append(v)
                 j += 1
             new_row = Row(*values)
-            new_row.__fields__ = keys
+            new_row.__fields__ = table.column_names
             rows.append(new_row)
             i += 1
         return rows
