@@ -130,7 +130,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       sql("CREATE TABLE t(col TIMESTAMP) USING parquet")
       val df = sql("SELECT date_part('month', col) FROM t")
       checkKeywordsExistsInExplain(df,
-        "Project [month(cast(col#x as date)) AS date_part(month, col)#x]")
+        "Project [month(cast(col#x as date)) AS date_part('month', col)#x]")
     }
   }
 
@@ -225,17 +225,17 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
     checkKeywordsExistsInExplain(sql("select '1' || 1 + 2"),
-      "Project [13", " AS (concat(1, 1) + 2)#x")
+      "Project [13", " AS '1' || 1 + 2#x")
     checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
-      "Project [-1b AS concat((1 - 2), b)#x]")
+      "Project [-1b AS 1 - 2 || 'b'#x]")
     checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
-      "Project [11b AS concat(((2 * 4) + 3), b)#x]")
+      "Project [11b AS 2 * 4 + 3 || 'b'#x]")
     checkKeywordsExistsInExplain(sql("select 3 + 1 || 'a' || 4 / 2"),
-      "Project [4a2.0 AS concat(concat((3 + 1), a), (4 / 2))#x]")
+      "Project [4a2.0 AS 3 + 1 || 'a' || 4 / 2#x]")
     checkKeywordsExistsInExplain(sql("select 1 == 1 OR 'a' || 'b' ==  'ab'"),
-      "Project [true AS ((1 = 1) OR (concat(a, b) = ab))#x]")
+      "Project [true AS 1 == 1 OR 'a' || 'b' == 'ab'#x]")
     checkKeywordsExistsInExplain(sql("select 'a' || 'c' == 'ac' AND 2 == 3"),
-      "Project [false AS ((concat(a, c) = ac) AND (2 = 3))#x]")
+      "Project [false AS 'a' || 'c' == 'ac' AND 2 == 3#x]")
   }
 
   test("explain for these functions; use range to avoid constant folding") {
@@ -662,7 +662,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |Arguments: 0""".stripMargin,
         """
           |(20) AdaptiveSparkPlan
-          |Output [1]: [max(id)#xL]
+          |Output [1]: [MAX(id)#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin
       )
