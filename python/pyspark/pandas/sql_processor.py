@@ -282,13 +282,13 @@ class SQLProcessor:
         >>> sql = sql_processor.sql
         >>> str0 = 'abc'
         >>> sql("select {str0}")
-           abc
+           "abc"
         0  abc
 
         >>> str1 = 'abc"abc'
         >>> str2 = "abc'abc"
         >>> sql("select {str0}, {str1}, {str2}")
-           abc  abc"abc  abc'abc
+           "abc"  "abc\\"abc"  "abc\\'abc"
         0  abc  abc"abc  abc'abc
 
         >>> strs = ['a', 'b']
