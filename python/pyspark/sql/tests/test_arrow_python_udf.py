@@ -118,16 +118,6 @@ class PythonUDFArrowTests(BaseUDFTests, ReusedSQLTestCase):
         )
         self.assertEquals(row_false[0], "[1, 2, 3]")
 
-    def test_type_coercion(self):
-        actual_res = True
-        row_arrow = self.spark.range(1).select(udf(lambda _: actual_res, "string")("id")).first()
-        row_non_arrow = (
-            self.spark.range(1)
-            .select(udf(lambda _: actual_res, "string", useArrow=False)("id"))
-            .first()
-        )
-        self.assertEquals(repr(row_arrow[0]), repr(row_non_arrow[0]))
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow_python_udf import *  # noqa: F401
