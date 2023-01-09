@@ -90,9 +90,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_np_scalar_input(self):
         super().test_np_scalar_input()
 
-    def test_nth_value(self):
-        super().test_nth_value()
-
     # TODO(SPARK-41901): Parity in String representation of Column
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_overlay(self):
