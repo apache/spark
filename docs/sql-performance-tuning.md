@@ -375,7 +375,7 @@ Data skew can severely downgrade the performance of join queries. This feature d
        <td><code>spark.sql.adaptive.forceOptimizeSkewedJoin</code></td>
        <td>false</td>
        <td>
-         When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.
+         When true, force enable OptimizeSkewedJoin, which is an adaptive rule to optimize skewed joins to avoid straggler tasks, even if it introduces extra shuffle.
        </td>
        <td>3.3.0</td>
      </tr>
