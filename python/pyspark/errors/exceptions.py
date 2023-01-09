@@ -15,10 +15,9 @@
 # limitations under the License.
 #
 
-"""
-"""
-from typing import Dict, Optional, cast
 import os
+from typing import Dict, Optional, cast
+
 from pyspark.errors.utils import ErrorClassesJsonReader
 
 
@@ -51,10 +50,10 @@ class PySparkException(Exception):
         self.error_class = error_class
         self.message_parameters = message_parameters
 
-    def get_error_class(self) -> Optional[str]:
+    def getErrorClass(self) -> Optional[str]:
         return self.error_class
 
-    def get_message_parameters(self) -> Optional[Dict[str, str]]:
+    def getMessageParameters(self) -> Optional[Dict[str, str]]:
         return self.message_parameters
 
     def __str__(self) -> str:

@@ -49,33 +49,35 @@ class ErrorClassesJsonReader:
         For example,
         when given `error_class` is "EXAMPLE_ERROR_CLASS",
         and corresponding error class in JSON file looks like the below:
-        ====================================================
-        "EXAMPLE_ERROR_CLASS" : {
-          "message" : [
-            "Problem <A> because of <B>."
-          ]
-        }
-        ====================================================
+
+        .. code-block:: json
+
+            "EXAMPLE_ERROR_CLASS" : {
+              "message" : [
+                "Problem <A> because of <B>."
+              ]
+            }
 
         In this case, this function returns:
         "Problem <A> because of <B>."
 
         For sub error class, when given `error_class` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
         and corresponding error class in JSON file looks like the below:
-        ====================================================
-        "EXAMPLE_ERROR_CLASS" : {
-          "message" : [
-            "Problem <A> because of <B>."
-          ],
-          "subClass" : {
-            "SUB_ERROR_CLASS" : {
+
+        .. code-block:: json
+
+            "EXAMPLE_ERROR_CLASS" : {
               "message" : [
-                "Do <C> to fix the problem."
-              ]
+                "Problem <A> because of <B>."
+              ],
+              "subClass" : {
+                "SUB_ERROR_CLASS" : {
+                  "message" : [
+                    "Do <C> to fix the problem."
+                  ]
+                }
+              }
             }
-          }
-        }
-        ====================================================
 
         In this case, this function returns:
         "Problem <A> because <B>. Do <C> to fix the problem."

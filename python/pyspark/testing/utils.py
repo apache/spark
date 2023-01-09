@@ -146,25 +146,26 @@ class ReusedPySparkTestCase(unittest.TestCase):
         error_class: str,
         message_parameters: Optional[Dict[str, str]] = None,
     ):
-        # If exception is generated as a context of assertRaises,
-        # get an actual exception from the context.
-        if isinstance(exception, unittest.case._AssertRaisesContext):
-            exception = exception.exception
-
         # Test if given error is an instance of PySparkException.
-        assert isinstance(
-            exception, PySparkException
-        ), f"checkError requires 'PySparkException', got '{exception.__class__.__name__}'."
+        self.assertIsInstance(
+            exception,
+            PySparkException,
+            f"checkError requires 'PySparkException', got '{exception.__class__.__name__}'.",
+        )
 
         # Test error class
         expected = error_class
-        actual = exception.get_error_class()
-        assert expected == actual, f"Expected error class was '{expected}', got '{actual}'."
+        actual = exception.getErrorClass()
+        self.assertEqual(
+            expected, actual, f"Expected error class was '{expected}', got '{actual}'."
+        )
 
         # Test message parameters
         expected = message_parameters
-        actual = exception.get_message_parameters()
-        assert expected == actual, f"Expected message parameters was '{expected}', got '{actual}'"
+        actual = exception.getMessageParameters()
+        self.assertEqual(
+            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+        )
 
 
 class ByteArrayOutput:

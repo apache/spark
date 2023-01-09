@@ -17,11 +17,11 @@
 #
 
 import os
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+
 from pyspark.errors.utils import ErrorClassesJsonReader
 
 
-class ErrorsTest(ReusedSQLTestCase):
+class ErrorsTest:
     def test_error_classes(self):
         # Test error classes is sorted alphabetically
         json_path = f"{os.path.dirname(os.path.abspath(__file__))}/../error-classes.json"
@@ -37,7 +37,7 @@ class ErrorsTest(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_utils import *  # noqa: F401
+    from pyspark.sql.tests.test_errors import *  # noqa: F401
 
     try:
         import xmlrunner
