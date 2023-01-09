@@ -1,0 +1,7 @@
+{
+  "COLUMN_IN_LIST" : {
+    "message" : [
+      "<funcName> does not allow a column in a list"
+    ]
+  }
+}

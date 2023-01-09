@@ -39,6 +39,8 @@ Throw with arbitrary error message:
       extends TestException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
         with SparkThrowable {
         
+      override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
       override def getErrorClass: String = errorClass
     }
 
