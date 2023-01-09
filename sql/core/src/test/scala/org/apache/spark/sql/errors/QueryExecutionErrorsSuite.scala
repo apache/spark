@@ -82,18 +82,18 @@ class QueryExecutionErrorsSuite
     (df1, df2)
   }
 
-  test("INVALID_PARAMETER_VALUE: invalid key lengths in AES functions") {
+  test("INVALID_PARAMETER_VALUE.AES_KEY_LENGTH: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
         exception = intercept[SparkException] {
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE",
-        parameters = Map("parameter" -> "key",
+        errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
+        parameters = Map(
+          "parameter" -> "`key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("expects a binary value with 16, 24 or 32 bytes, but got " +
-            inputBytes.toString + " bytes.")),
+          "actualLength" -> inputBytes.toString),
         sqlState = "22023")
     }
 
@@ -116,7 +116,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE: AES decrypt failure - key mismatch") {
+  test("INVALID_PARAMETER_VALUE.AES_KEY: AES decrypt failure - key mismatch") {
     val (_, df2) = getAesInputs()
     Seq(
       ("value16", "1234567812345678"),
@@ -126,11 +126,10 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE",
-        parameters = Map("parameter" -> "expr, key",
+        errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
+        parameters = Map("parameter" -> "`expr`, `key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("Detail message: " +
-            "Given final block not properly padded. " +
+          "detailMessage" -> ("Given final block not properly padded. " +
             "Such issues can arise if a bad key is used during decryption.")),
         sqlState = "22023")
     }

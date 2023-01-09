@@ -613,7 +613,6 @@ private[spark] class Executor(
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(TimeUnit.NANOSECONDS.toMillis(
           afterSerializationNs - beforeSerializationNs))
-
         // Expose task metrics using the Dropwizard metrics system.
         // Update task metrics counters
         executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)
@@ -622,27 +621,6 @@ private[spark] class Executor(
         executorSource.METRIC_DESERIALIZE_TIME.inc(task.metrics.executorDeserializeTime)
         executorSource.METRIC_DESERIALIZE_CPU_TIME.inc(task.metrics.executorDeserializeCpuTime)
         executorSource.METRIC_RESULT_SERIALIZE_TIME.inc(task.metrics.resultSerializationTime)
-        executorSource.METRIC_SHUFFLE_FETCH_WAIT_TIME
-          .inc(task.metrics.shuffleReadMetrics.fetchWaitTime)
-        executorSource.METRIC_SHUFFLE_WRITE_TIME.inc(task.metrics.shuffleWriteMetrics.writeTime)
-        executorSource.METRIC_SHUFFLE_TOTAL_BYTES_READ
-          .inc(task.metrics.shuffleReadMetrics.totalBytesRead)
-        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ
-          .inc(task.metrics.shuffleReadMetrics.remoteBytesRead)
-        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ_TO_DISK
-          .inc(task.metrics.shuffleReadMetrics.remoteBytesReadToDisk)
-        executorSource.METRIC_SHUFFLE_LOCAL_BYTES_READ
-          .inc(task.metrics.shuffleReadMetrics.localBytesRead)
-        executorSource.METRIC_SHUFFLE_RECORDS_READ
-          .inc(task.metrics.shuffleReadMetrics.recordsRead)
-        executorSource.METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED
-          .inc(task.metrics.shuffleReadMetrics.remoteBlocksFetched)
-        executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
-          .inc(task.metrics.shuffleReadMetrics.localBlocksFetched)
-        executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
-          .inc(task.metrics.shuffleWriteMetrics.bytesWritten)
-        executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
-          .inc(task.metrics.shuffleWriteMetrics.recordsWritten)
         executorSource.METRIC_INPUT_BYTES_READ
           .inc(task.metrics.inputMetrics.bytesRead)
         executorSource.METRIC_INPUT_RECORDS_READ
@@ -654,6 +632,7 @@ private[spark] class Executor(
         executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
+        incrementShuffleMetrics(executorSource, task.metrics)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
@@ -789,6 +768,53 @@ private[spark] class Executor(
           metricsPoller.onTaskCompletion(taskId, task.stageId, task.stageAttemptId)
         }
       }
+    }
+
+    private def incrementShuffleMetrics(
+      executorSource: ExecutorSource,
+      metrics: TaskMetrics
+    ): Unit = {
+      executorSource.METRIC_SHUFFLE_FETCH_WAIT_TIME
+        .inc(metrics.shuffleReadMetrics.fetchWaitTime)
+      executorSource.METRIC_SHUFFLE_WRITE_TIME.inc(metrics.shuffleWriteMetrics.writeTime)
+      executorSource.METRIC_SHUFFLE_TOTAL_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.totalBytesRead)
+      executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.remoteBytesRead)
+      executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ_TO_DISK
+        .inc(metrics.shuffleReadMetrics.remoteBytesReadToDisk)
+      executorSource.METRIC_SHUFFLE_LOCAL_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.localBytesRead)
+      executorSource.METRIC_SHUFFLE_RECORDS_READ
+        .inc(metrics.shuffleReadMetrics.recordsRead)
+      executorSource.METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.remoteBlocksFetched)
+      executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.localBlocksFetched)
+      executorSource.METRIC_SHUFFLE_REMOTE_REQS_DURATION
+        .inc(metrics.shuffleReadMetrics.remoteReqsDuration)
+      executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
+        .inc(metrics.shuffleWriteMetrics.bytesWritten)
+      executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
+        .inc(metrics.shuffleWriteMetrics.recordsWritten)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS
+        .inc(metrics.shuffleReadMetrics.corruptMergedBlockChunks)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_FETCH_FALLBACK_COUNT
+        .inc(metrics.shuffleReadMetrics.mergedFetchFallbackCount)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.remoteMergedBlocksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.localMergedBlocksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.remoteMergedChunksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.localMergedChunksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.remoteMergedBytesRead)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.localMergedBytesRead)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION
+        .inc(metrics.shuffleReadMetrics.remoteMergedReqsDuration)
     }
 
     private def hasFetchFailure: Boolean = {

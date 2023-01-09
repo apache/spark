@@ -16,31 +16,12 @@
 #
 
 import unittest
-import os
 
-from pyspark.sql import SparkSession
 from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(DataFrameParityTests, cls).setUpClass()
-        cls._spark = cls.spark  # Assign existing Spark session to run the server
-        # Sets the remote address. Now, we create a remote Spark Session.
-        # Note that this is only allowed in testing.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        cls.spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
-
-    @classmethod
-    def tearDownClass(cls):
-        super(DataFrameParityTests, cls).tearDownClass()
-        cls._spark.stop()
-        del os.environ["SPARK_REMOTE"]
-
+class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     # TODO(SPARK-41612): support Catalog.isCached
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_cache(self):
@@ -71,11 +52,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_create_nan_decimal_dataframe(self):
         super().test_create_nan_decimal_dataframe()
 
-    # TODO(SPARK-41869): DataFrame dropDuplicates should throw error on non list argument
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_drop_duplicates(self):
-        super().test_drop_duplicates()
-
     # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
@@ -96,8 +72,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_generic_hints(self):
         super().test_generic_hints()
 
-    # Spark Connect does not support RDD but the tests depend on them.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()
 
@@ -126,8 +101,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_pandas_api(self):
         super().test_pandas_api()
 
-    # TODO(SPARK-41840): DataFrame.show(): 'Column' object is not callable
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
 
@@ -161,8 +135,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_to(self):
         super().test_to()
 
-    # Spark Connect does not support RDD but the tests depend on them.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 

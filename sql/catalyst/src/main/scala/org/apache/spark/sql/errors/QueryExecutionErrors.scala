@@ -450,7 +450,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def constructorNotFoundError(cls: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2020",
-      messageParameters = Map("cls" -> cls.toString()))
+      messageParameters = Map("cls" -> cls))
   }
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
@@ -725,10 +725,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("paths" -> allPaths.mkString(", ")))
   }
 
-  def failedToFindDataSourceError(
+  def dataSourceNotFoundError(
       provider: String, error: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
-      errorClass = "_LEGACY_ERROR_TEMP_2051",
+      errorClass = "DATA_SOURCE_NOT_FOUND",
       messageParameters = Map("provider" -> provider),
       cause = error)
   }
@@ -1234,7 +1234,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def unknownColumnError(unknownColumn: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2115",
-      messageParameters = Map("unknownColumn" -> unknownColumn.toString()))
+      messageParameters = Map("unknownColumn" -> unknownColumn))
   }
 
   def unexpectedAccumulableUpdateValueError(o: Any): SparkIllegalArgumentException = {
@@ -1451,7 +1451,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def rootConverterReturnNullError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2137",
+      errorClass = "INVALID_JSON_ROOT_FIELD",
       messageParameters = Map.empty)
   }
 
@@ -1489,13 +1489,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2142",
       messageParameters = Map(
         "schema" -> schema.toString()))
-  }
-
-  def schemaForTypeUnsupportedError(tpe: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2143",
-      messageParameters = Map(
-        "tpe" -> tpe))
   }
 
   def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {
@@ -1861,7 +1854,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "message" -> e.getMessage,
         "dbName" -> dbName,
-        "tableName" -> tableName.toString()),
+        "tableName" -> tableName),
       cause = e)
   }
 
@@ -2049,7 +2042,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2209",
       messageParameters = Map(
-        "srcName" -> srcName.toString(),
+        "srcName" -> srcName,
         "disabledSources" -> disabledSources,
         "table" -> table.toString()))
   }
@@ -2650,12 +2643,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
       messageParameters = Map(
-        "parameter" -> "key",
+        "parameter" -> toSQLId("key"),
         "functionName" -> aesFuncName,
-        "expected" -> ("expects a binary value with 16, 24 or 32 bytes, " +
-          s"but got ${actualLength.toString} bytes.")))
+        "actualLength" -> actualLength.toString()))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
@@ -2669,11 +2661,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
       messageParameters = Map(
-        "parameter" -> "expr, key",
+        "parameter" -> (toSQLId("expr") + ", " + toSQLId("key")),
         "functionName" -> aesFuncName,
-        "expected" -> s"Detail message: $detailMessage"))
+        "detailMessage" -> detailMessage))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {
@@ -2779,13 +2771,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def invalidPatternError(funcName: String, pattern: String): RuntimeException = {
+  def invalidPatternError(
+      funcName: String,
+      pattern: String,
+      cause: Throwable): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       messageParameters = Map(
-        "parameter" -> "regexp",
+        "parameter" -> toSQLId("regexp"),
         "functionName" -> toSQLId(funcName),
-        "expected" -> toSQLValue(pattern, StringType)))
+        "value" -> toSQLValue(pattern, StringType)),
+      cause = cause)
   }
 
   def tooManyArrayElementsError(

@@ -23,7 +23,7 @@ import collection.JavaConverters._
 import org.apache.commons.collections4.MapUtils
 
 import org.apache.spark.status.StageDataWrapper
-import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPeakMetricsDistributions, InputMetricDistributions, InputMetrics, OutputMetricDistributions, OutputMetrics, ShuffleReadMetricDistributions, ShuffleReadMetrics, ShuffleWriteMetricDistributions, ShuffleWriteMetrics, SpeculationStageSummary, StageData, TaskData, TaskMetricDistributions, TaskMetrics}
+import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPeakMetricsDistributions, InputMetricDistributions, InputMetrics, OutputMetricDistributions, OutputMetrics, ShufflePushReadMetricDistributions, ShufflePushReadMetrics, ShuffleReadMetricDistributions, ShuffleReadMetrics, ShuffleWriteMetricDistributions, ShuffleWriteMetrics, SpeculationStageSummary, StageData, TaskData, TaskMetricDistributions, TaskMetrics}
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
@@ -76,6 +76,16 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       .setShuffleLocalBytesRead(stageData.shuffleLocalBytesRead)
       .setShuffleReadBytes(stageData.shuffleReadBytes)
       .setShuffleReadRecords(stageData.shuffleReadRecords)
+      .setShuffleCorruptMergedBlockChunks(stageData.shuffleCorruptMergedBlockChunks)
+      .setShuffleMergedFetchFallbackCount(stageData.shuffleMergedFetchFallbackCount)
+      .setShuffleMergedRemoteBlocksFetched(stageData.shuffleMergedRemoteBlocksFetched)
+      .setShuffleMergedLocalBlocksFetched(stageData.shuffleMergedLocalBlocksFetched)
+      .setShuffleMergedRemoteChunksFetched(stageData.shuffleMergedRemoteChunksFetched)
+      .setShuffleMergedLocalChunksFetched(stageData.shuffleMergedLocalChunksFetched)
+      .setShuffleMergedRemoteBytesRead(stageData.shuffleMergedRemoteBytesRead)
+      .setShuffleMergedLocalBytesRead(stageData.shuffleMergedLocalBytesRead)
+      .setShuffleRemoteReqsDuration(stageData.shuffleRemoteReqsDuration)
+      .setShuffleMergedRemoteReqsDuration(stageData.shuffleMergedRemoteReqsDuration)
       .setShuffleWriteBytes(stageData.shuffleWriteBytes)
       .setShuffleWriteTime(stageData.shuffleWriteTime)
       .setShuffleWriteRecords(stageData.shuffleWriteRecords)
@@ -83,6 +93,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       .setDetails(stageData.details)
       .setSchedulingPool(stageData.schedulingPool)
       .setResourceProfileId(stageData.resourceProfileId)
+      .setIsShufflePushEnabled(stageData.isShufflePushEnabled)
+      .setShuffleMergersCount(stageData.shuffleMergersCount)
     stageData.submissionTime.foreach { d =>
       stageDataBuilder.setSubmissionTime(d.getTime)
     }
@@ -213,6 +225,23 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       .setRemoteBytesReadToDisk(srm.remoteBytesReadToDisk)
       .setLocalBytesRead(srm.localBytesRead)
       .setRecordsRead(srm.recordsRead)
+      .setRemoteReqsDuration(srm.remoteReqsDuration)
+      .setShufflePushReadMetrics(serializeShufflePushReadMetrics(srm.shufflePushReadMetrics))
+      .build()
+  }
+
+  private def serializeShufflePushReadMetrics(
+      sprm: ShufflePushReadMetrics): StoreTypes.ShufflePushReadMetrics = {
+    StoreTypes.ShufflePushReadMetrics.newBuilder()
+      .setCorruptMergedBlockChunks(sprm.corruptMergedBlockChunks)
+      .setMergedFetchFallbackCount(sprm.mergedFetchFallbackCount)
+      .setRemoteMergedBlocksFetched(sprm.remoteMergedBlocksFetched)
+      .setLocalMergedBlocksFetched(sprm.localMergedBlocksFetched)
+      .setRemoteMergedChunksFetched(sprm.remoteMergedChunksFetched)
+      .setLocalMergedChunksFetched(sprm.localMergedChunksFetched)
+      .setRemoteMergedBytesRead(sprm.remoteMergedBytesRead)
+      .setLocalMergedBytesRead(sprm.localMergedBytesRead)
+      .setRemoteMergedReqsDuration(sprm.remoteMergedReqsDuration)
       .build()
   }
 
@@ -288,6 +317,24 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     srmd.remoteBytesRead.foreach(rbr => builder.addRemoteBytesRead(rbr))
     srmd.remoteBytesReadToDisk.foreach(rbrtd => builder.addRemoteBytesReadToDisk(rbrtd))
     srmd.totalBlocksFetched.foreach(tbf => builder.addTotalBlocksFetched(tbf))
+    srmd.remoteReqsDuration.foreach(rrd => builder.addRemoteReqsDuration(rrd))
+    builder.setShufflePushReadMetricsDist(
+      serializeShufflePushReadMetricDistributions(srmd.shufflePushReadMetricsDist))
+    builder.build()
+  }
+
+  private def serializeShufflePushReadMetricDistributions(
+      sprmd: ShufflePushReadMetricDistributions): StoreTypes.ShufflePushReadMetricDistributions = {
+    val builder = StoreTypes.ShufflePushReadMetricDistributions.newBuilder()
+    sprmd.corruptMergedBlockChunks.foreach(cmbc => builder.addCorruptMergedBlockChunks(cmbc))
+    sprmd.mergedFetchFallbackCount.foreach(mffc => builder.addMergedFetchFallbackCount(mffc))
+    sprmd.remoteMergedBlocksFetched.foreach(rmbf => builder.addRemoteMergedBlocksFetched(rmbf))
+    sprmd.localMergedBlocksFetched.foreach(lmbf => builder.addLocalMergedBlocksFetched(lmbf))
+    sprmd.remoteMergedChunksFetched.foreach(rmcf => builder.addRemoteMergedChunksFetched(rmcf))
+    sprmd.localMergedChunksFetched.foreach(lmcf => builder.addLocalMergedChunksFetched(lmcf))
+    sprmd.remoteMergedBytesRead.foreach(rmbr => builder.addRemoteMergedBytesRead(rmbr))
+    sprmd.localMergedBytesRead.foreach(lmbr => builder.addLocalMergedBytesRead(lmbr))
+    sprmd.remoteMergedReqsDuration.foreach(rmrd => builder.addRemoteMergedReqsDuration(rmrd))
     builder.build()
   }
 
@@ -410,6 +457,16 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       shuffleLocalBytesRead = binary.getShuffleLocalBytesRead,
       shuffleReadBytes = binary.getShuffleReadBytes,
       shuffleReadRecords = binary.getShuffleReadRecords,
+      shuffleCorruptMergedBlockChunks = binary.getShuffleCorruptMergedBlockChunks,
+      shuffleMergedFetchFallbackCount = binary.getShuffleMergedFetchFallbackCount,
+      shuffleMergedRemoteBlocksFetched = binary.getShuffleMergedRemoteBlocksFetched,
+      shuffleMergedLocalBlocksFetched = binary.getShuffleMergedLocalBlocksFetched,
+      shuffleMergedRemoteChunksFetched = binary.getShuffleMergedRemoteChunksFetched,
+      shuffleMergedLocalChunksFetched = binary.getShuffleMergedLocalChunksFetched,
+      shuffleMergedRemoteBytesRead = binary.getShuffleMergedRemoteBytesRead,
+      shuffleMergedLocalBytesRead = binary.getShuffleMergedLocalBytesRead,
+      shuffleRemoteReqsDuration = binary.getShuffleRemoteReqsDuration,
+      shuffleMergedRemoteReqsDuration = binary.getShuffleMergedRemoteReqsDuration,
       shuffleWriteBytes = binary.getShuffleWriteBytes,
       shuffleWriteTime = binary.getShuffleWriteTime,
       shuffleWriteRecords = binary.getShuffleWriteRecords,
@@ -426,7 +483,9 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       resourceProfileId = binary.getResourceProfileId,
       peakExecutorMetrics = peakExecutorMetrics,
       taskMetricsDistributions = taskMetricsDistributions,
-      executorMetricsDistributions = executorMetricsDistributions
+      executorMetricsDistributions = executorMetricsDistributions,
+      isShufflePushEnabled = binary.getIsShufflePushEnabled,
+      shuffleMergersCount = binary.getShuffleMergersCount
     )
   }
 
@@ -496,7 +555,34 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       remoteBytesRead = binary.getRemoteBytesReadList.asScala.map(_.toDouble).toIndexedSeq,
       remoteBytesReadToDisk =
         binary.getRemoteBytesReadToDiskList.asScala.map(_.toDouble).toIndexedSeq,
-      totalBlocksFetched = binary.getTotalBlocksFetchedList.asScala.map(_.toDouble).toIndexedSeq
+      totalBlocksFetched = binary.getTotalBlocksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
+      remoteReqsDuration = binary.getRemoteReqsDurationList.asScala.map(_.toDouble).toIndexedSeq,
+      shufflePushReadMetricsDist =
+        deserializeShufflePushReadMetricsDistributions(binary.getShufflePushReadMetricsDist)
+    )
+  }
+
+  private def deserializeShufflePushReadMetricsDistributions(
+      binary: StoreTypes.ShufflePushReadMetricDistributions): ShufflePushReadMetricDistributions = {
+    new ShufflePushReadMetricDistributions(
+      corruptMergedBlockChunks =
+        binary.getCorruptMergedBlockChunksList.asScala.map(_.toDouble).toIndexedSeq,
+      mergedFetchFallbackCount =
+        binary.getMergedFetchFallbackCountList.asScala.map(_.toDouble).toIndexedSeq,
+      remoteMergedBlocksFetched =
+        binary.getRemoteMergedBlocksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
+      localMergedBlocksFetched =
+        binary.getLocalMergedBlocksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
+      remoteMergedChunksFetched =
+        binary.getRemoteMergedChunksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
+      localMergedChunksFetched =
+        binary.getLocalMergedChunksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
+      remoteMergedBytesRead =
+        binary.getRemoteMergedBytesReadList.asScala.map(_.toDouble).toIndexedSeq,
+      localMergedBytesRead =
+        binary.getLocalMergedBytesReadList.asScala.map(_.toDouble).toIndexedSeq,
+      remoteMergedReqsDuration =
+        binary.getRemoteMergedReqsDurationList.asScala.map(_.toDouble).toIndexedSeq
     )
   }
 
@@ -603,7 +689,24 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       binary.getRemoteBytesRead,
       binary.getRemoteBytesReadToDisk,
       binary.getLocalBytesRead,
-      binary.getRecordsRead)
+      binary.getRecordsRead,
+      binary.getRemoteReqsDuration,
+      deserializeShufflePushReadMetrics(binary.getShufflePushReadMetrics))
+  }
+
+  private def deserializeShufflePushReadMetrics(
+      binary: StoreTypes.ShufflePushReadMetrics): ShufflePushReadMetrics = {
+    new ShufflePushReadMetrics(
+      binary.getCorruptMergedBlockChunks,
+      binary.getMergedFetchFallbackCount,
+      binary.getRemoteMergedBlocksFetched,
+      binary.getLocalMergedBlocksFetched,
+      binary.getRemoteMergedChunksFetched,
+      binary.getLocalMergedChunksFetched,
+      binary.getRemoteMergedBytesRead,
+      binary.getLocalMergedBytesRead,
+      binary.getRemoteMergedReqsDuration
+    )
   }
 
   private def deserializeShuffleWriteMetrics(

@@ -31,7 +31,6 @@ from typing import (
     cast,
 )
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -1127,6 +1126,13 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 array_intersect.__doc__ = pysparkfuncs.array_intersect.__doc__
 
 
+def array_compact(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_compact", col)
+
+
+array_compact.__doc__ = pysparkfuncs.array_compact.__doc__
+
+
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
@@ -1517,21 +1523,21 @@ size.__doc__ = pysparkfuncs.size.__doc__
 def slice(
     col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
-    if isinstance(start, Column):
+    if isinstance(start, (Column, str)):
         _start = start
     elif isinstance(start, int):
         _start = lit(start)
     else:
-        raise TypeError(f"start should be a Column or int, but got {type(start).__name__}")
+        raise TypeError(f"start should be a Column, str or int, but got {type(start).__name__}")
 
-    if isinstance(length, Column):
+    if isinstance(length, (Column, str)):
         _length = length
     elif isinstance(length, int):
         _length = lit(length)
     else:
-        raise TypeError(f"start should be a Column or int, but got {type(length).__name__}")
+        raise TypeError(f"start should be a Column, str or int, but got {type(length).__name__}")
 
-    return _invoke_function("slice", _to_col(col), _start, _length)
+    return _invoke_function_over_columns("slice", col, _start, _length)
 
 
 slice.__doc__ = pysparkfuncs.slice.__doc__
@@ -2326,6 +2332,14 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 
 
+def udf(*args: Any, **kwargs: Any) -> None:
+    raise NotImplementedError("udf() is not implemented.")
+
+
+def pandas_udf(*args: Any, **kwargs: Any) -> None:
+    raise NotImplementedError("pandas_udf() is not implemented.")
+
+
 def _test() -> None:
     import os
     import sys
@@ -2339,11 +2353,7 @@ def _test() -> None:
         import pyspark.sql.connect.functions
 
         globs = pyspark.sql.connect.functions.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.functions tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.functions tests"}
-        )
+
         # Spark Connect does not support Spark Context but the test depends on that.
         del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
@@ -2354,16 +2364,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.from_csv.__doc__
         del pyspark.sql.connect.functions.from_json.__doc__
 
-        # TODO(SPARK-41455): Resolve dtypes inconsistencies of date/timestamp functions
-        del pyspark.sql.connect.functions.to_timestamp.__doc__
-        del pyspark.sql.connect.functions.to_utc_timestamp.__doc__
-        del pyspark.sql.connect.functions.date_trunc.__doc__
-        del pyspark.sql.connect.functions.from_utc_timestamp.__doc__
-
-        # TODO(SPARK-41825): Dataframe.show formatting int as double
-        del pyspark.sql.connect.functions.coalesce.__doc__
-        del pyspark.sql.connect.functions.sum_distinct.__doc__
-
         # TODO(SPARK-41834): implement Dataframe.conf
         del pyspark.sql.connect.functions.from_unixtime.__doc__
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__
@@ -2371,13 +2371,6 @@ def _test() -> None:
 
         # TODO(SPARK-41757): Fix String representation for Column class
         del pyspark.sql.connect.functions.col.__doc__
-
-        # TODO(SPARK-41842): support data type: Timestamp(NANOSECOND, null)
-        del pyspark.sql.connect.functions.hour.__doc__
-        del pyspark.sql.connect.functions.minute.__doc__
-        del pyspark.sql.connect.functions.second.__doc__
-        del pyspark.sql.connect.functions.window.__doc__
-        del pyspark.sql.connect.functions.window_time.__doc__
 
         # TODO(SPARK-41838): fix dataset.show
         del pyspark.sql.connect.functions.posexplode_outer.__doc__
@@ -2394,7 +2387,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.transform_values.__doc__
 
         # TODO(SPARK-41812): Proper column names after join
-        del pyspark.sql.connect.functions.broadcast.__doc__
         del pyspark.sql.connect.functions.count_distinct.__doc__
 
         # TODO(SPARK-41843): Implement SparkSession.udf
@@ -2406,18 +2398,15 @@ def _test() -> None:
         # TODO(SPARK-41847): mapfield,structlist invalid type
         del pyspark.sql.connect.functions.element_at.__doc__
         del pyspark.sql.connect.functions.explode.__doc__
-        del pyspark.sql.connect.functions.inline.__doc__
-        del pyspark.sql.connect.functions.inline_outer.__doc__
         del pyspark.sql.connect.functions.map_filter.__doc__
         del pyspark.sql.connect.functions.map_zip_with.__doc__
         del pyspark.sql.connect.functions.posexplode.__doc__
 
-        # TODO(SPARK-41849): implement DataFrameReader.text
-        del pyspark.sql.connect.functions.input_file_name.__doc__
-
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.functions tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.functions,
@@ -2428,7 +2417,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:
