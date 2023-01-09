@@ -14,9 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import os
 import json
 import re
 from typing import Dict
+
+from pyspark.find_spark_home import _find_spark_home
+
+
+ERROR_CLASSES_PATH = os.path.join(
+    _find_spark_home(), "python", "pyspark", "errors", "error-classes.json"
+)
 
 
 class ErrorClassesJsonReader:

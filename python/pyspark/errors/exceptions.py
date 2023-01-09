@@ -15,10 +15,9 @@
 # limitations under the License.
 #
 
-import os
 from typing import Dict, Optional, cast
 
-from pyspark.errors.utils import ErrorClassesJsonReader
+from pyspark.errors.utils import ErrorClassesJsonReader, ERROR_CLASSES_PATH
 
 
 class PySparkException(Exception):
@@ -37,7 +36,7 @@ class PySparkException(Exception):
             message is None and (error_class is not None and message_parameters is not None)
         )
 
-        self.json_path = f"{os.path.dirname(os.path.abspath(__file__))}/error-classes.json"
+        self.json_path = ERROR_CLASSES_PATH
         self.error_reader = ErrorClassesJsonReader(self.json_path)
 
         if message is None:
