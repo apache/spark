@@ -56,7 +56,7 @@ abstract class CSVSuite
 
   override protected def dataSourceFormat = "csv"
 
-  private val carsFile = "test-data/cars.csv"
+  protected val carsFile = "test-data/cars.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
   private val carsFile8859 = "test-data/cars_iso-8859-1.csv"
   private val carsTsvFile = "test-data/cars.tsv"
@@ -3142,8 +3142,6 @@ class CSVv1Suite extends CSVSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "csv")
 
-  private val carsFile = "test-data/cars.csv"
-
   test("test for FAILFAST parsing mode on CSV v1") {
     Seq(false, true).foreach { multiLine =>
       val exception = intercept[SparkException] {
@@ -3168,8 +3166,6 @@ class CSVv2Suite extends CSVSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
-
-  private val carsFile = "test-data/cars.csv"
 
   test("test for FAILFAST parsing mode on CSV v2") {
     Seq(false, true).foreach { multiLine =>
