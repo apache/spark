@@ -34,7 +34,6 @@ jobs:
           - master
           - branch-3.3
           - branch-3.2
-          - branch-3.1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3

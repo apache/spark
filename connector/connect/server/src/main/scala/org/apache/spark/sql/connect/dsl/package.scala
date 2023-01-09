@@ -913,7 +913,7 @@ package object dsl {
             WithColumns
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllNameExprList(colsMap.map { case (k, v) =>
+              .addAllAliases(colsMap.map { case (k, v) =>
                 Expression.Alias.newBuilder().addName(k).setExpr(v).build()
               }.asJava))
           .build()

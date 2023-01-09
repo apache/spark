@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWrapper}
+import org.apache.spark.status.protobuf.StoreTypes.{DeterministicLevel => GDeterministicLevel}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
 class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
@@ -48,9 +49,9 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     val wrapper = StoreTypes.RDDOperationGraphWrapper.parseFrom(bytes)
     new RDDOperationGraphWrapper(
       stageId = wrapper.getStageId.toInt,
-      edges = wrapper.getEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
-      outgoingEdges = wrapper.getOutgoingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
-      incomingEdges = wrapper.getIncomingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
+      edges = wrapper.getEdgesList.asScala.map(deserializeRDDOperationEdge),
+      outgoingEdges = wrapper.getOutgoingEdgesList.asScala.map(deserializeRDDOperationEdge),
+      incomingEdges = wrapper.getIncomingEdgesList.asScala.map(deserializeRDDOperationEdge),
       rootCluster = deserializeRDDOperationClusterWrapper(wrapper.getRootCluster)
     )
   }
@@ -74,15 +75,15 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     new RDDOperationClusterWrapper(
       id = op.getId,
       name = op.getName,
-      childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode).toSeq,
+      childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode),
       childClusters =
-        op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper).toSeq
+        op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper)
     )
   }
 
   private def serializeRDDOperationNode(node: RDDOperationNode): StoreTypes.RDDOperationNode = {
-    val outputDeterministicLevel = StoreTypes.RDDOperationNode.DeterministicLevel
-      .valueOf(node.outputDeterministicLevel.toString)
+    val outputDeterministicLevel = DeterministicLevelSerializer.serialize(
+      node.outputDeterministicLevel)
     val builder = StoreTypes.RDDOperationNode.newBuilder()
     builder.setId(node.id)
     builder.setName(node.name)
@@ -100,8 +101,8 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
       cached = node.getCached,
       barrier = node.getBarrier,
       callsite = node.getCallsite,
-      outputDeterministicLevel =
-        DeterministicLevel.withName(node.getOutputDeterministicLevel.toString)
+      outputDeterministicLevel = DeterministicLevelSerializer.deserialize(
+        node.getOutputDeterministicLevel)
     )
   }
 
@@ -116,5 +117,31 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     RDDOperationEdge(
       fromId = edge.getFromId,
       toId = edge.getToId)
+  }
+}
+
+private[protobuf] object DeterministicLevelSerializer {
+
+  def serialize(input: DeterministicLevel.Value): GDeterministicLevel = {
+    input match {
+      case DeterministicLevel.DETERMINATE =>
+        GDeterministicLevel.DETERMINISTIC_LEVEL_DETERMINATE
+      case DeterministicLevel.UNORDERED =>
+        GDeterministicLevel.DETERMINISTIC_LEVEL_UNORDERED
+      case DeterministicLevel.INDETERMINATE =>
+        GDeterministicLevel.DETERMINISTIC_LEVEL_INDETERMINATE
+    }
+  }
+
+  def deserialize(binary: GDeterministicLevel): DeterministicLevel.Value = {
+    binary match {
+      case GDeterministicLevel.DETERMINISTIC_LEVEL_DETERMINATE =>
+        DeterministicLevel.DETERMINATE
+      case GDeterministicLevel.DETERMINISTIC_LEVEL_UNORDERED =>
+        DeterministicLevel.UNORDERED
+      case GDeterministicLevel.DETERMINISTIC_LEVEL_INDETERMINATE =>
+        DeterministicLevel.INDETERMINATE
+      case _ => null
+    }
   }
 }

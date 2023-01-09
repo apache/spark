@@ -30,10 +30,10 @@ class StreamingQueryDataSerializer extends ProtobufSerDe {
   override def serialize(input: Any): Array[Byte] = {
     val data = input.asInstanceOf[StreamingQueryData]
     val builder = StoreTypes.StreamingQueryData.newBuilder()
-      .setName(data.name)
       .setId(data.id.toString)
       .setRunId(data.runId)
       .setIsActive(data.isActive)
+    Option(data.name).foreach(builder.setName)
     data.exception.foreach(builder.setException)
     builder.setStartTimestamp(data.startTimestamp)
     data.endTimestamp.foreach(builder.setEndTimestamp)
