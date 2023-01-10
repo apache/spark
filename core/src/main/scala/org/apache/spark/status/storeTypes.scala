@@ -25,23 +25,20 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
-import org.apache.spark.status.protobuf.ProtobufSerializable
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.KVIndex
 
 private[spark] case class AppStatusStoreMetadata(version: Long)
 
-private[spark] class ApplicationInfoWrapper(val info: ApplicationInfo)
-  extends ProtobufSerializable {
+private[spark] class ApplicationInfoWrapper(val info: ApplicationInfo) {
 
   @JsonIgnore @KVIndex
   def id: String = info.id
 
 }
 
-private[spark] class ApplicationEnvironmentInfoWrapper(val info: ApplicationEnvironmentInfo)
-  extends ProtobufSerializable {
+private[spark] class ApplicationEnvironmentInfoWrapper(val info: ApplicationEnvironmentInfo) {
 
   /**
    * There's always a single ApplicationEnvironmentInfo object per application, so this
@@ -52,8 +49,7 @@ private[spark] class ApplicationEnvironmentInfoWrapper(val info: ApplicationEnvi
 
 }
 
-private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary)
-  extends ProtobufSerializable {
+private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
 
   @JsonIgnore @KVIndex
   private def id: String = info.id
@@ -74,7 +70,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary)
 private[spark] class JobDataWrapper(
     val info: JobData,
     val skippedStages: Set[Int],
-    val sqlExecutionId: Option[Long]) extends ProtobufSerializable {
+    val sqlExecutionId: Option[Long]) {
 
   @JsonIgnore @KVIndex
   private def id: Int = info.jobId
@@ -87,7 +83,7 @@ private[spark] class StageDataWrapper(
     val info: StageData,
     val jobIds: Set[Int],
     @JsonDeserialize(contentAs = classOf[JLong])
-    val locality: Map[String, Long]) extends ProtobufSerializable {
+    val locality: Map[String, Long]) {
 
   @JsonIgnore @KVIndex
   private[this] val id: Array[Int] = Array(info.stageId, info.attemptId)
@@ -287,7 +283,7 @@ private[spark] class TaskDataWrapper(
     val shuffleRecordsWritten: Long,
 
     val stageId: Int,
-    val stageAttemptId: Int) extends ProtobufSerializable {
+    val stageAttemptId: Int) {
 
   // SPARK-26260: To handle non successful tasks metrics (Running, Failed, Killed).
   private def getMetricValue(metric: Long): Long = {
@@ -429,7 +425,7 @@ private[spark] class TaskDataWrapper(
   private def completionTime: Long = launchTime + duration
 }
 
-private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) extends ProtobufSerializable {
+private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
 
   @JsonIgnore @KVIndex
   def id: Int = info.id
@@ -439,8 +435,7 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) extends Pro
 
 }
 
-private[spark] class ResourceProfileWrapper(val rpInfo: ResourceProfileInfo)
-  extends ProtobufSerializable {
+private[spark] class ResourceProfileWrapper(val rpInfo: ResourceProfileInfo) {
 
   @JsonIgnore @KVIndex
   def id: Int = rpInfo.id
@@ -451,7 +446,7 @@ private[spark] class ExecutorStageSummaryWrapper(
     val stageId: Int,
     val stageAttemptId: Int,
     val executorId: String,
-    val info: ExecutorStageSummary) extends ProtobufSerializable {
+    val info: ExecutorStageSummary) {
 
   @JsonIgnore @KVIndex
   private val _id: Array[Any] = Array(stageId, stageAttemptId, executorId)
@@ -467,7 +462,7 @@ private[spark] class ExecutorStageSummaryWrapper(
 private[spark] class SpeculationStageSummaryWrapper(
     val stageId: Int,
     val stageAttemptId: Int,
-    val info: SpeculationStageSummary) extends ProtobufSerializable {
+    val info: SpeculationStageSummary) {
 
   @JsonIgnore @KVIndex("stage")
   private def stage: Array[Int] = Array(stageId, stageAttemptId)
@@ -485,7 +480,7 @@ private[spark] class StreamBlockData(
   val useDisk: Boolean,
   val deserialized: Boolean,
   val memSize: Long,
-  val diskSize: Long) extends ProtobufSerializable {
+  val diskSize: Long) {
 
   @JsonIgnore @KVIndex
   def key: Array[String] = Array(name, executorId)
@@ -516,7 +511,7 @@ private[spark] class RDDOperationGraphWrapper(
     val edges: collection.Seq[RDDOperationEdge],
     val outgoingEdges: collection.Seq[RDDOperationEdge],
     val incomingEdges: collection.Seq[RDDOperationEdge],
-    val rootCluster: RDDOperationClusterWrapper) extends ProtobufSerializable {
+    val rootCluster: RDDOperationClusterWrapper) {
 
   def toRDDOperationGraph(): RDDOperationGraph = {
     new RDDOperationGraph(edges, outgoingEdges, incomingEdges, rootCluster.toRDDOperationCluster())
@@ -592,7 +587,7 @@ private[spark] class CachedQuantile(
 
     val shuffleWriteBytes: Double,
     val shuffleWriteRecords: Double,
-    val shuffleWriteTime: Double) extends ProtobufSerializable {
+    val shuffleWriteTime: Double) {
 
   @KVIndex @JsonIgnore
   def id: Array[Any] = Array(stageId, stageAttemptId, quantile)
@@ -602,7 +597,7 @@ private[spark] class CachedQuantile(
 
 }
 
-private[spark] class ProcessSummaryWrapper(val info: ProcessSummary) extends ProtobufSerializable {
+private[spark] class ProcessSummaryWrapper(val info: ProcessSummary) {
 
   @JsonIgnore @KVIndex
   private def id: String = info.id

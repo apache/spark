@@ -32,7 +32,7 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
  */
 @DeveloperApi
 @Unstable
-trait ProtobufSerDe[T <: ProtobufSerializable] {
+trait ProtobufSerDe[T] {
 
   /**
    * Serialize the input data of the type corresponding to `supportClass`

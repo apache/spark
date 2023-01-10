@@ -31,7 +31,6 @@ import org.apache.spark.sql.streaming.ui.StreamingQueryProgressWrapper._
 import org.apache.spark.sql.streaming.ui.UIUtils.parseProgressTimestamp
 import org.apache.spark.status.{ElementTrackingStore, KVUtils}
 import org.apache.spark.status.KVUtils.KVIndexParam
-import org.apache.spark.status.protobuf.ProtobufSerializable
 import org.apache.spark.util.kvstore.KVIndex
 
 /**
@@ -123,7 +122,7 @@ private[spark] class StreamingQueryData(
     @KVIndexParam("active") val isActive: Boolean,
     val exception: Option[String],
     @KVIndexParam("startTimestamp") val startTimestamp: Long,
-    val endTimestamp: Option[Long] = None) extends ProtobufSerializable
+    val endTimestamp: Option[Long] = None)
 
 /**
  * This class contains all message related to UI display, each instance corresponds to a single

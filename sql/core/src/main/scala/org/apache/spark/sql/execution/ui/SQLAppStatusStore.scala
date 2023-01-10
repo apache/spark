@@ -28,7 +28,6 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVIndexParam
-import org.apache.spark.status.protobuf.ProtobufSerializable
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
 /**
@@ -103,7 +102,7 @@ class SQLExecutionUIData(
      * from the SQL listener instance.
      */
     @JsonDeserialize(keyAs = classOf[JLong])
-    val metricValues: Map[Long, String]) extends ProtobufSerializable {
+    val metricValues: Map[Long, String]) {
 
   @JsonIgnore @KVIndex("completionTime")
   private def completionTimeIndex: Long = completionTime.map(_.getTime).getOrElse(-1L)
@@ -112,7 +111,7 @@ class SQLExecutionUIData(
 class SparkPlanGraphWrapper(
     @KVIndexParam val executionId: Long,
     val nodes: collection.Seq[SparkPlanGraphNodeWrapper],
-    val edges: collection.Seq[SparkPlanGraphEdge]) extends ProtobufSerializable {
+    val edges: collection.Seq[SparkPlanGraphEdge]) {
 
   def toSparkPlanGraph(): SparkPlanGraph = {
     SparkPlanGraph(nodes.map(_.toSparkPlanGraphNode()), edges)
