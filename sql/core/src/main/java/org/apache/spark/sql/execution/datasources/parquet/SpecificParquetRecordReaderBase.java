@@ -28,11 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import scala.Option;
+
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.parquet.VersionParser;
 import org.apache.parquet.VersionParser.ParsedVersion;
 import org.apache.parquet.column.page.PageReadStore;
-import scala.Option;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
