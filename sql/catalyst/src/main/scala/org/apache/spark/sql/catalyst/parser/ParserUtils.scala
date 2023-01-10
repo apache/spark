@@ -272,25 +272,23 @@ object ParserUtils {
    */
   private def toExprAlias(ctx: ParseTree, sb: StringBuilder): Unit = {
     val childCount = ctx.getChildCount
-    if (childCount > 0) {
-      var i = 0
-      while (i < childCount) {
-        ctx.getChild(i) match {
-          case term: TerminalNodeImpl =>
-            val s = term.getText
-            s match {
-              case "(" | "[" | "," | "." | "]" | ")" => stripGap(sb)
-              case _ =>
-            }
-            sb.append(s)
-            s match {
-              case "(" | "[" | "." | "]" | ")" =>
-              case _ => sb.append(" ")
-            }
-          case child => toExprAlias(child, sb)
-        }
-        i = i + 1
+    var i = 0
+    while (i < childCount) {
+      ctx.getChild(i) match {
+        case term: TerminalNodeImpl =>
+          val s = term.getText
+          s match {
+            case "(" | "[" | "," | "." | "]" | ")" => stripGap(sb)
+            case _ =>
+          }
+          sb.append(s)
+          s match {
+            case "(" | "[" | "." | "]" | ")" =>
+            case _ => sb.append(" ")
+          }
+        case child => toExprAlias(child, sb)
       }
+      i = i + 1
     }
   }
 
