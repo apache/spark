@@ -23,12 +23,9 @@ import org.apache.spark.sql.execution.ui.{SparkPlanGraphClusterWrapper, SparkPla
 import org.apache.spark.status.protobuf.ProtobufSerDe
 import org.apache.spark.status.protobuf.StoreTypes
 
-class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
+class SparkPlanGraphWrapperSerializer extends ProtobufSerDe[SparkPlanGraphWrapper] {
 
-  override val supportClass: Class[_] = classOf[SparkPlanGraphWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val plan = input.asInstanceOf[SparkPlanGraphWrapper]
+  override def serialize(plan: SparkPlanGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.SparkPlanGraphWrapper.newBuilder()
     builder.setExecutionId(plan.executionId)
     plan.nodes.foreach { node =>

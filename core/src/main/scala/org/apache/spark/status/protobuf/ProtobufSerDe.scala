@@ -32,23 +32,20 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
  */
 @DeveloperApi
 @Unstable
-trait ProtobufSerDe {
-
-  /**
-   * Specify the data types supported by the current `ProtobufSerDe`
-   */
-  val supportClass: Class[_]
+trait ProtobufSerDe[T <: ProtobufSerializable] {
 
   /**
    * Serialize the input data of the type corresponding to `supportClass`
    * to `Array[Byte]`, since the current input parameter type is `Any`,
    * the input type needs to be guaranteed from the code level.
    */
-  def serialize(input: Any): Array[Byte]
+  def serialize(input: T): Array[Byte]
 
   /**
    * Deserialize the input `Array[Byte]` to an object of the
    * type corresponding to `supportClass`.
    */
-  def deserialize(bytes: Array[Byte]): Any
+  def deserialize(bytes: Array[Byte]): T
 }
+
+trait ProtobufSerializable

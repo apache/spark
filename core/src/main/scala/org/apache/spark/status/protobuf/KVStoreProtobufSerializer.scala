@@ -17,6 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
+import java.lang.reflect.ParameterizedType
 import java.util.ServiceLoader
 
 import collection.JavaConverters._
@@ -26,7 +27,7 @@ import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
   override def serialize(o: Object): Array[Byte] =
     KVStoreProtobufSerializer.getSerializer(o.getClass) match {
-      case Some(serializer) => serializer.serialize(o)
+      case Some(serializer) => serializer.serialize(o.asInstanceOf[ProtobufSerializable])
       case _ => super.serialize(o)
     }
 
@@ -40,10 +41,12 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
 
 private[spark] object KVStoreProtobufSerializer {
 
- private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe] =
-   ServiceLoader.load(classOf[ProtobufSerDe])
-     .asScala.map(serDe => serDe.supportClass -> serDe).toMap
+  private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe[ProtobufSerializable]] =
+    ServiceLoader.load(classOf[ProtobufSerDe[ProtobufSerializable]]).asScala.map { serDe =>
+      serDe.getClass.getGenericInterfaces.head.asInstanceOf[ParameterizedType]
+        .getActualTypeArguments.head.asInstanceOf[Class[_]] -> serDe
+    }.toMap
 
-  def getSerializer(klass: Class[_]): Option[ProtobufSerDe] =
+  def getSerializer(klass: Class[_]): Option[ProtobufSerDe[ProtobufSerializable]] =
     serializerMap.get(klass)
 }
