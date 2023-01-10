@@ -2136,11 +2136,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(NotImplementedError):
             RemoteSparkSession.getActiveSession()
 
+        with self.assertRaises(NotImplementedError):
+            RemoteSparkSession.builder.enableHiveSupport()
+
         for f in (
             "newSession",
             "conf",
             "sparkContext",
             "streams",
+            "readStream",
             "udf",
             "version",
         ):
