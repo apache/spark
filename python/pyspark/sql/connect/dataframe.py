@@ -642,6 +642,8 @@ class DataFrame:
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
+        assert ids is not None, "ids must not be None"
+
         def to_jcols(
             cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
         ) -> List["ColumnOrName"]:
@@ -1629,9 +1631,6 @@ def _test() -> None:
         # TODO(SPARK-41823): ambiguous column names
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
-
-        # TODO(SPARK-41886): The doctest output has different order
-        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
 
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__

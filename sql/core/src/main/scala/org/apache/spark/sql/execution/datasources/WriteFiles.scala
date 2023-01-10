@@ -52,6 +52,7 @@ case class WriteFiles(
     options: Map[String, String],
     staticPartitions: TablePartitionSpec) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override protected def stringArgs: Iterator[Any] = Iterator(child)
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteFiles =
     copy(child = newChild)
 }
