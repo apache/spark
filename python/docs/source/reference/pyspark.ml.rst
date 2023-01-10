@@ -339,6 +339,19 @@ Image
     _ImageSchema
 
 
+Distributor
+-----------
+
+
+.. currentmodule:: pyspark.ml.torch.distributor
+
+.. autosummary::
+    :template: autosummary/class_with_docs.rst
+    :toctree: api/
+
+    TorchDistributor
+
+
 Utilities
 ---------
 
