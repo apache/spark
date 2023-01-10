@@ -2019,7 +2019,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
     // staleBlockPushes tracks the number of stale shuffle block push requests
     static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";
-    static final String IGNORED_BLOCK_BYTES = "ignoredBlockBytes";
 
     private final Map<String, Metric> allMetrics;
     private final Meter blockAppendCollisions;
