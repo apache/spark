@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.status.protobuf.{JobExecutionStatusSerializer, ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecuittionUIData] {
+class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
 
   override def serialize(ui: SQLExecutionUIData): Array[Byte] = {
     val builder = StoreTypes.SQLExecutionUIData.newBuilder()
