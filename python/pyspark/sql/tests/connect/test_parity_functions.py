@@ -110,10 +110,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_sorting_functions_with_column(self):
         super().test_sorting_functions_with_column()
 
-    @unittest.skip("Because the plan is different from pyspark, so the result is not determined.")
-    def test_sampleby(self):
-        super().test_sampleby()
-
 
 if __name__ == "__main__":
     import unittest
