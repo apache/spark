@@ -1091,13 +1091,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             self.assertEqual(
                 self.connect.createDataFrame(pdf).collect(),
-                self.spark.createDataFrame(pdf).collect()
+                self.spark.createDataFrame(pdf).collect(),
             )
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
             self.assertEqual(
                 self.connect.createDataFrame(pdf).collect(),
-                self.spark.createDataFrame(pdf).collect()
+                self.spark.createDataFrame(pdf).collect(),
             )
 
     def test_select_expr(self):
