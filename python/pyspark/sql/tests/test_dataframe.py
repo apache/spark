@@ -751,6 +751,7 @@ class DataFrameTestsMixin:
             )
 
     def test_unpivot_negative(self):
+        # SPARK-39877: test the DataFrame.unpivot method
         df = self.spark.createDataFrame(
             [
                 (1, 10, 1.0, "one"),
