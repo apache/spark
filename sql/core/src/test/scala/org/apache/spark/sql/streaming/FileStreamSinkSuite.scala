@@ -709,14 +709,14 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
     // Read with pruning, should read only files in partition dir id=1
     checkFileScanPartitions(df.filter("id = 1")) { partitions =>
       val filesToBeRead = partitions.flatMap(_.files)
-      assert(filesToBeRead.map(_.filePath).forall(_.contains("/id=1/")))
+      assert(filesToBeRead.map(_.uriEncodedPath).forall(_.contains("/id=1/")))
       assert(filesToBeRead.map(_.partitionValues).distinct.size === 1)
     }
 
     // Read with pruning, should read only files in partition dir id=1 and id=2
     checkFileScanPartitions(df.filter("id in (1,2)")) { partitions =>
       val filesToBeRead = partitions.flatMap(_.files)
-      assert(!filesToBeRead.map(_.filePath).exists(_.contains("/id=3/")))
+      assert(!filesToBeRead.map(_.uriEncodedPath).exists(_.contains("/id=3/")))
       assert(filesToBeRead.map(_.partitionValues).distinct.size === 2)
     }
   }

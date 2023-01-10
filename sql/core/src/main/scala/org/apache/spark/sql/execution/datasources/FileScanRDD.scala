@@ -147,7 +147,7 @@ class FileScanRDD(
        * Create an array of constant column vectors containing all required metadata columns
        */
       private def createMetadataColumnVector(c: ColumnarBatch): Array[ColumnVector] = {
-        val path = new Path(currentFile.filePath)
+        val path = currentFile.hadoopPath
         metadataColumns.map(_.name).map {
           case FILE_PATH =>
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)

@@ -23,6 +23,7 @@ import java.nio.file.Files
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.test.SharedSparkSession
 

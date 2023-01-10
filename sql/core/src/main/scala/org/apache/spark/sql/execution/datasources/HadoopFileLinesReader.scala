@@ -48,7 +48,7 @@ class HadoopFileLinesReader(
 
   private val _iterator = {
     val fileSplit = new FileSplit(
-      new Path(new URI(file.filePath)),
+      file.hadoopPath,
       file.start,
       file.length,
       // The locality is decided by `getPreferredLocations` in `FileScanRDD`.

@@ -132,7 +132,8 @@ case class ParquetPartitionReaderFactory(
           val footer = getFooter(file)
 
           if (footer != null && footer.getBlocks.size > 0) {
-            ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath, dataSchema,
+            ParquetUtils.createAggInternalRowFromFooter(footer, file.uriEncodedPath,
+              dataSchema,
               partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(footer.getFileMetaData))
           } else {
@@ -175,7 +176,7 @@ case class ParquetPartitionReaderFactory(
         private val batch: ColumnarBatch = {
           val footer = getFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
-            val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath,
+            val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.uriEncodedPath,
               dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(footer.getFileMetaData))
             AggregatePushDownUtils.convertAggregatesRowToBatch(
@@ -209,7 +210,7 @@ case class ParquetPartitionReaderFactory(
           RebaseSpec) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
 
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.hadoopPath
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
     lazy val footerFileMetaData = getFooter(file).getFileMetaData

@@ -71,8 +71,8 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
       if (!imageSourceOptions.dropInvalid && requiredSchema.isEmpty) {
         Iterator(emptyUnsafeRow)
       } else {
-        val origin = file.filePath
-        val path = new Path(origin)
+        val origin = file.uriEncodedPath
+        val path = file.hadoopPath // TODO (URI)
         val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
         val stream = fs.open(path)
         val bytes = try {

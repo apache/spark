@@ -37,7 +37,7 @@ class HadoopFileWholeTextReader(file: PartitionedFile, conf: Configuration)
   extends Iterator[Text] with Closeable {
   private val _iterator = {
     val fileSplit = new CombineFileSplit(
-      Array(new Path(new URI(file.filePath))),
+      Array(file.hadoopPath),
       Array(file.start),
       Array(file.length),
       // The locality is decided by `getPreferredLocations` in `FileScanRDD`.

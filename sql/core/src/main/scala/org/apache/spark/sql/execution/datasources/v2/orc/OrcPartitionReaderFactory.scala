@@ -86,7 +86,7 @@ case class OrcPartitionReaderFactory(
     if (aggregation.nonEmpty) {
       return buildReaderWithAggregates(file, conf)
     }
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.hadoopPath
 
     val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf))(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
@@ -127,7 +127,7 @@ case class OrcPartitionReaderFactory(
     if (aggregation.nonEmpty) {
       return buildColumnarReaderWithAggregates(file, conf)
     }
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.hadoopPath
 
     val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf))(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
@@ -181,7 +181,7 @@ case class OrcPartitionReaderFactory(
   private def buildReaderWithAggregates(
       file: PartitionedFile,
       conf: Configuration): PartitionReader[InternalRow] = {
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.hadoopPath
     new PartitionReader[InternalRow] {
       private var hasNext = true
       private lazy val row: InternalRow = {
@@ -209,7 +209,7 @@ case class OrcPartitionReaderFactory(
   private def buildColumnarReaderWithAggregates(
       file: PartitionedFile,
       conf: Configuration): PartitionReader[ColumnarBatch] = {
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.hadoopPath
     new PartitionReader[ColumnarBatch] {
       private var hasNext = true
       private lazy val batch: ColumnarBatch = {
