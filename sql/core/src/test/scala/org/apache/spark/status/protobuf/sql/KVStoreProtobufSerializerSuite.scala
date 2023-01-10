@@ -174,6 +174,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           assert(m1.metricType == m2.metricType)
         }
       }
+      val metrics = Map(6L -> "a", 7L -> "b", 13L -> "c", 14L -> "d")
+      assert(n1.toSparkPlanGraphNode().makeDotNode(metrics) ==
+        n2.toSparkPlanGraphNode().makeDotNode(metrics))
     }
 
     result.nodes.zip(input.nodes).foreach { case (n1, n2) =>
