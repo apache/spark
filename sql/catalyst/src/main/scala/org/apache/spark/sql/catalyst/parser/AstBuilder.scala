@@ -1466,9 +1466,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       throw QueryParsingErrors.invalidTableValuedFunctionNameError(name, ctx)
     }
 
-    val tvf = UnresolvedTableValuedFunction(
-      name, func.expression.asScala.map(expression).toSeq, aliases)
-    tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+    val tvf = UnresolvedTableValuedFunction(name, func.expression.asScala.map(expression).toSeq)
+
+    val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(name, tvf, aliases) else tvf
+
+    tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
   /**

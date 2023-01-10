@@ -274,12 +274,26 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(joined_plan3.toPandas(), joined_plan4.toPandas())
 
     def test_collect(self):
-        df = self.connect.read.table(self.tbl_name)
-        data = df.limit(10).collect()
+        cdf = self.connect.read.table(self.tbl_name)
+        sdf = self.spark.read.table(self.tbl_name)
+
+        data = cdf.limit(10).collect()
         self.assertEqual(len(data), 10)
         # Check Row has schema column names.
         self.assertTrue("name" in data[0])
         self.assertTrue("id" in data[0])
+
+        cdf = cdf.select(
+            CF.log("id"), CF.log("id"), CF.struct("id", "name"), CF.struct("id", "name")
+        ).limit(10)
+        sdf = sdf.select(
+            SF.log("id"), SF.log("id"), SF.struct("id", "name"), SF.struct("id", "name")
+        ).limit(10)
+
+        self.assertEqual(
+            cdf.collect(),
+            sdf.collect(),
+        )
 
     def test_collect_timestamp(self):
         from pyspark.sql import functions as SF
@@ -1287,6 +1301,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # Hint with wrong combination
         with self.assertRaises(SparkConnectException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
+
+    def test_join_hint(self):
+
+        cdf1 = self.connect.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        cdf2 = self.connect.createDataFrame(
+            [Row(height=80, name="Tom"), Row(height=85, name="Bob")]
+        )
+
+        self.assertTrue(
+            "BroadcastHashJoin" in cdf1.join(cdf2.hint("BROADCAST"), "name")._explain_string()
+        )
+        self.assertTrue("SortMergeJoin" in cdf1.join(cdf2.hint("MERGE"), "name")._explain_string())
+        self.assertTrue(
+            "ShuffledHashJoin" in cdf1.join(cdf2.hint("SHUFFLE_HASH"), "name")._explain_string()
+        )
 
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
