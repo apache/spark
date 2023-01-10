@@ -41,11 +41,15 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
 
 private[spark] object KVStoreProtobufSerializer {
 
-  private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe[Any]] =
+  private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe[Any]] = {
+    def getGenericsType(klass: Class[_]): Class[_] = {
+      klass.getGenericInterfaces.head.asInstanceOf[ParameterizedType]
+        .getActualTypeArguments.head.asInstanceOf[Class[_]]
+    }
     ServiceLoader.load(classOf[ProtobufSerDe[Any]]).asScala.map { serDe =>
-      serDe.getClass.getGenericInterfaces.head.asInstanceOf[ParameterizedType]
-        .getActualTypeArguments.head.asInstanceOf[Class[_]] -> serDe
+      getGenericsType(serDe.getClass) -> serDe
     }.toMap
+  }
 
   def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] =
     serializerMap.get(klass)
