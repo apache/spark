@@ -47,5 +47,3 @@ trait ProtobufSerDe[T] {
    */
   def deserialize(bytes: Array[Byte]): T
 }
-
-trait ProtobufSerializable
