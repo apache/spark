@@ -2006,18 +2006,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * A class that wraps all the push-based shuffle service metrics.
    */
   static class PushMergeMetrics implements MetricSet {
-    // blockAppendCollisions tracks how many times a shuffle block collided because
-    // of another block for the same reduce partition was being written
+    // blockAppendCollisions tracks the number of shuffle push blocks collided in shuffle services
+    // as another block for the same reduce partition were being written
     static final String BLOCK_APPEND_COLLISIONS_METRIC = "blockAppendCollisions";
-    // lateBlockPushes tracks how many times a shuffle block push request is too late
+    // lateBlockPushes tracks the number of shuffle push blocks that are received in shuffle
+    // service after the specific shuffle merge has been finalized
     static final String LATE_BLOCK_PUSHES_METRIC = "lateBlockPushes";
-    // blockBytesWritten tracks the length of the pushed block data written to file in bytes
+    // blockBytesWritten tracks the size of the pushed block data written to file in bytes
     static final String BLOCK_BYTES_WRITTEN_METRIC = "blockBytesWritten";
     // deferredBlockBytes tracks the size of the current deferred block parts buffered in memory
     static final String DEFERRED_BLOCK_BYTES_METRIC = "deferredBlockBytes";
     // deferredBlocks tracks the number of the current deferred block parts buffered in memory
     static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
-    // staleBlockPushes tracks how many times a shuffle block push request it stale
+    // staleBlockPushes tracks the number of stale shuffle block push requests
     static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";
 
     private final Map<String, Metric> allMetrics;

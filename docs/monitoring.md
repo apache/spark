@@ -1421,14 +1421,19 @@ Note: applies to the shuffle service
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
 
-Below shuffle service server-side metrics are specific to the Push-Based Shuffle
-
-- blockAppendCollisions - how many times a shuffle block collided because of another block for the same reduce partition was being written
-- lateBlockPushes - how many times a shuffle block push request is too late
-- blockBytesWritten - the length of the pushed block data written to file in bytes
-- deferredBlockBytes - the size of the current deferred block parts buffered in memory
-- deferredBlocks - the number of the current deferred block parts buffered in memory
-- staleBlockPushes - how many times a shuffle block push request it stale
+- Notes: below shuffle service server-side metrics are specific to the Push-Based Shuffle
+(with `spark.shuffle.push.enabled` set as true on the client side, and with the server side
+flag `spark.shuffle.push.server.mergedShuffleFileManagerImpl` set as the appropriate
+org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for the Push-Based
+Shuffle to be enabled)
+  - blockAppendCollisions - the number of shuffle push blocks collided in shuffle services
+    as another block for the same reduce partition were being written
+  - lateBlockPushes - the number of shuffle push blocks that are received in shuffle service
+    after the specific shuffle merge has been finalized
+  - blockBytesWritten - the size of the pushed block data written to file in bytes
+  - deferredBlockBytes - the size of the current deferred block parts buffered in memory
+  - deferredBlocks - the number of the current deferred block parts buffered in memory
+  - staleBlockPushes - the number of stale shuffle block push requests
 
 # Advanced Instrumentation
 
