@@ -799,8 +799,30 @@
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [
-      "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>"
+      "The value of parameter(s) <parameter> in <functionName> is invalid:"
     ],
+    "subClass" : {
+      "AES_KEY" : {
+        "message" : [
+          "detail message: <detailMessage>"
+        ]
+      },
+      "AES_KEY_LENGTH" : {
+        "message" : [
+          "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
+        ]
+      },
+      "PATTERN" : {
+        "message" : [
+          "<value>"
+        ]
+      },
+      "ZERO_INDEX" : {
+        "message" : [
+          "expects %1$, %2$ and so on, but got %0$."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "INVALID_PROPERTY_KEY" : {
@@ -811,11 +833,6 @@
   "INVALID_PROPERTY_VALUE" : {
     "message" : [
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
-    ]
-  },
-  "INVALID_PROTOBUF_MESSAGE_TYPE" : {
-    "message" : [
-      "<protobufClassName> is not a Protobuf message type"
     ]
   },
   "INVALID_SCHEMA" : {
@@ -2322,11 +2339,6 @@
       "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1101" : {
-    "message" : [
-      "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1103" : {
     "message" : [
       "Unsupported component type <clz> in arrays."
@@ -2930,11 +2942,6 @@
   "_LEGACY_ERROR_TEMP_1229" : {
     "message" : [
       "<decimalType> can only support precision up to <precision>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1230" : {
-    "message" : [
-      "Negative scale is not allowed: <scale>. You can use <config>=true to enable legacy mode to allow it."
     ]
   },
   "_LEGACY_ERROR_TEMP_1231" : {
@@ -4139,11 +4146,6 @@
   "_LEGACY_ERROR_TEMP_2142" : {
     "message" : [
       "Attributes for type <schema> is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2143" : {
-    "message" : [
-      "Schema for type <tpe> is not supported"
     ]
   },
   "_LEGACY_ERROR_TEMP_2144" : {

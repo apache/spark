@@ -5299,6 +5299,107 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "inputType" -> "\"INT\""
       ))
   }
+
+  test("array_append -> Unit Test cases for the function ") {
+    val df1 = Seq((Array[Int](3, 2, 5, 1, 2), 3)).toDF("a", "b")
+    checkAnswer(df1.select(array_append(col("a"), col("b"))), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
+    val df2 = Seq((Array[String]("a", "b", "c"), "d")).toDF("a", "b")
+    checkAnswer(df2.select(array_append(col("a"), col("b"))), Seq(Row(Seq("a", "b", "c", "d"))))
+    val df3 = Seq((Array[String]("a", "b", "c"), 3)).toDF("a", "b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.select(array_append(col("a"), col("b")))
+      },
+      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`array_append`",
+        "dataType" -> "\"ARRAY\"",
+        "leftType" -> "\"ARRAY<STRING>\"",
+        "rightType" -> "\"INT\"",
+        "sqlExpr" -> "\"array_append(a, b)\"")
+    )
+
+    checkAnswer(df1.selectExpr("array_append(a, 3)"), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
+
+    checkAnswer(df2.selectExpr("array_append(a, b)"), Seq(Row(Seq("a", "b", "c", "d"))))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("array_append(a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`array_append`",
+        "leftType" -> "\"ARRAY<STRING>\"",
+        "rightType" -> "\"INT\"",
+        "sqlExpr" -> "\"array_append(a, b)\"",
+        "dataType" -> "\"ARRAY\""
+      ),
+      context = ExpectedContext(
+        fragment = "array_append(a, b)",
+        start = 0,
+        stop = 17
+      )
+    )
+    // Adding null check Unit Tests
+    val df4 = Seq((Array[String]("a", "b", "c"), "d"),
+      (null, "d"),
+      (Array[String]("x", "y", "z"), null),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(df4.selectExpr("array_append(a, b)"),
+      Seq(Row(Seq("a", "b", "c", "d")), Row(null), Row(Seq("x", "y", "z", null)), Row(null)))
+
+    val df5 = Seq((Array[Double](3d, 2d, 5d, 1d, 2d), 3)).toDF("a", "b")
+    checkAnswer(df5.selectExpr("array_append(a, b)"),
+      Seq(Row(Seq(3d, 2d, 5d, 1d, 2d, 3d))))
+
+    val df6 = Seq(("x", "y")).toDF("a", "b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df6.selectExpr("array_append(a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"array_append(a, b)\"",
+        "paramIndex" -> "0",
+        "requiredType" -> "\"ARRAY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"STRING\""
+      ),
+      context = ExpectedContext(
+        fragment = "array_append(a, b)",
+        start = 0,
+        stop = 17
+      )
+    )
+
+    val df7 = Seq((Array[Int](3, 2, 5, 1, 2), 3d)).toDF("a", "b")
+    checkAnswer(df7.select(array_append(col("a"), col("b"))),
+      Seq(Row(Seq(3d, 2d, 5d, 1d, 2d, 3d))))
+
+    val df8 = Seq((Array[Double](3d, 2d, 5d, 1d, 2d), 3)).toDF("a", "b")
+    checkAnswer(df8.select(array_append(col("a"), col("b"))),
+      Seq(Row(Seq(3d, 2d, 5d, 1d, 2d, 3d))))
+
+    val df9 = spark.sql("SELECT array(1, 2, null) as a, CAST(null AS INT) as b")
+    checkAnswer(df9.selectExpr("array_append(a, b)"),
+      Seq(Row(Seq(1, 2, null, null)))
+    )
+
+    val df10 = spark.createDataFrame(
+      spark.sparkContext.parallelize(
+        Seq(Row(Seq[Integer](1, 2, 3, null), null))),
+      StructType(List(
+        StructField("a", ArrayType.apply(IntegerType), true),
+        StructField("b", IntegerType, true)
+      ))
+    )
+
+    checkAnswer(df10.selectExpr("array_append(a, b)"),
+      Seq(Row(Seq(1, 2, 3, null, null)))
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {

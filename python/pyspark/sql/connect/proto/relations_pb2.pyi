@@ -2315,12 +2315,12 @@ class WithColumns(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    NAME_EXPR_LIST_FIELD_NUMBER: builtins.int
+    ALIASES_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
     @property
-    def name_expr_list(
+    def aliases(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
@@ -2339,7 +2339,7 @@ class WithColumns(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        name_expr_list: collections.abc.Iterable[
+        aliases: collections.abc.Iterable[
             pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
         ]
         | None = ...,
@@ -2348,10 +2348,7 @@ class WithColumns(google.protobuf.message.Message):
         self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "input", b"input", "name_expr_list", b"name_expr_list"
-        ],
+        self, field_name: typing_extensions.Literal["aliases", b"aliases", "input", b"input"]
     ) -> None: ...
 
 global___WithColumns = WithColumns

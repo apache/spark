@@ -20,7 +20,6 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Any
 from typing import TYPE_CHECKING
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
@@ -497,11 +496,6 @@ def _test() -> None:
         import pyspark.sql.connect.readwriter
 
         globs = pyspark.sql.connect.readwriter.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.readwriter tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.readwriter tests"}
-        )
 
         # TODO(SPARK-41817): Support reading with schema
         del pyspark.sql.connect.readwriter.DataFrameReader.load.__doc__
@@ -517,9 +511,11 @@ def _test() -> None:
         del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.readwriter tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.readwriter,
@@ -530,7 +526,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

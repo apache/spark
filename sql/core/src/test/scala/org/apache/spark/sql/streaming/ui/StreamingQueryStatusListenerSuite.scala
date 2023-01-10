@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming.ui
 
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, UUID}
 
@@ -28,7 +29,7 @@ import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, Hybr
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress, StreamTest}
+import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StreamingQueryListener, StreamingQueryProgress, StreamTest}
 import org.apache.spark.sql.streaming
 import org.apache.spark.status.{ElementTrackingStore, KVUtils}
 import org.apache.spark.util.Utils
@@ -36,8 +37,17 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
+  protected def createStore(): KVStore = new InMemoryStore()
+
+  protected def useInMemoryStore: Boolean = true
+
+  private val sourceProgresses = Array(
+    new SourceProgress("s1", "", "", "", 10, 4.0, 5.0),
+    new SourceProgress("s2", "", "", "", 10, 6.0, 7.0)
+  )
+
   test("onQueryStarted, onQueryProgress, onQueryTerminated") {
-    val kvStore = new ElementTrackingStore(new InMemoryStore(), sparkConf)
+    val kvStore = new ElementTrackingStore(createStore(), sparkConf)
     val listener = new StreamingQueryStatusListener(spark.sparkContext.conf, kvStore)
     val queryStore = new StreamingQueryStatusStore(kvStore)
 
@@ -62,6 +72,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     when(progress.processedRowsPerSecond).thenReturn(12.0)
     when(progress.batchId).thenReturn(2)
     when(progress.prettyJson).thenReturn("""{"a":1}""")
+    when(progress.sink).thenReturn(new SinkProgress("mock query", 1))
+    when(progress.sources).thenReturn(sourceProgresses)
     val processEvent = new streaming.StreamingQueryListener.QueryProgressEvent(progress)
     listener.onQueryProgress(processEvent)
 
@@ -77,7 +89,19 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     assert(activeQuery.get.lastProgress.inputRowsPerSecond == 10.0)
     assert(activeQuery.get.lastProgress.processedRowsPerSecond == 12.0)
     assert(activeQuery.get.lastProgress.batchId == 2)
-    assert(activeQuery.get.lastProgress.prettyJson == """{"a":1}""")
+    if (useInMemoryStore) {
+      assert(activeQuery.get.lastProgress.prettyJson == """{"a":1}""")
+    } else {
+      // When using disk-based KV Store, the mock progress object will be written to KV Store
+      // and read back as an instance of StreamingQueryProgress. Here we can simple check if
+      // the json value contains the id and runId fields.
+      val jsonFragment =
+        s"""
+           |  "id" : "$id",
+           |  "runId" : "$runId",
+           |""".stripMargin
+      assert(activeQuery.get.lastProgress.prettyJson.contains(jsonFragment))
+    }
 
     // handle terminate event
     val terminateEvent = new StreamingQueryListener.QueryTerminatedEvent(id, runId, None)
@@ -90,7 +114,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("same query start multiple times") {
-    val kvStore = new ElementTrackingStore(new InMemoryStore(), sparkConf)
+    val kvStore = new ElementTrackingStore(createStore(), sparkConf)
     val listener = new StreamingQueryStatusListener(spark.sparkContext.conf, kvStore)
     val queryStore = new StreamingQueryStatusStore(kvStore)
 
@@ -124,7 +148,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("test small retained queries") {
-    val kvStore = new ElementTrackingStore(new InMemoryStore(), sparkConf)
+    val kvStore = new ElementTrackingStore(createStore(), sparkConf)
     val conf = spark.sparkContext.conf
     conf.set(StaticSQLConf.STREAMING_UI_RETAINED_QUERIES.key, "2")
     val listener = new StreamingQueryStatusListener(conf, kvStore)
@@ -166,7 +190,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("test small retained progress") {
-    val kvStore = new ElementTrackingStore(new InMemoryStore(), sparkConf)
+    val kvStore = new ElementTrackingStore(createStore(), sparkConf)
     val conf = spark.sparkContext.conf
     conf.set(StaticSQLConf.STREAMING_UI_RETAINED_PROGRESS_UPDATES.key, "5")
     val listener = new StreamingQueryStatusListener(conf, kvStore)
@@ -189,7 +213,6 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     def mockProgressData(id: UUID, runId: UUID): StreamingQueryProgress = {
       val format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
       format.setTimeZone(getTimeZone("UTC"))
-
       val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
       when(progress.id).thenReturn(id)
       when(progress.runId).thenReturn(runId)
@@ -198,6 +221,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
       when(progress.processedRowsPerSecond).thenReturn(12.0)
       when(progress.batchId).thenReturn(batchId)
       when(progress.prettyJson).thenReturn("""{"a":1}""")
+      when(progress.sink).thenReturn(new SinkProgress("mock query", 1))
+      when(progress.sources).thenReturn(sourceProgresses)
 
       batchId += 1
       progress
@@ -218,7 +243,41 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("SPARK-38056: test writing StreamingQueryData to an in-memory store") {
-    testStreamingQueryData(new InMemoryStore())
+    testStreamingQueryData(createStore())
+  }
+
+  protected def testStreamingQueryData(kvStore: KVStore): Unit = {
+    val id = UUID.randomUUID()
+    val testData = new StreamingQueryData(
+      "some-query",
+      id,
+      id.toString,
+      isActive = false,
+      None,
+      1L,
+      None
+    )
+    val store = new ElementTrackingStore(kvStore, sparkConf)
+    store.write(testData)
+    store.close(closeParent = false)
+  }
+}
+
+class StreamingQueryStatusListenerWithDiskStoreSuite extends StreamingQueryStatusListenerSuite {
+  private var storePath: File = _
+
+  override def createStore(): KVStore = {
+    storePath = Utils.createTempDir()
+    KVUtils.createKVStore(Some(storePath), live = true, sparkConf)
+  }
+
+  override def useInMemoryStore: Boolean = false
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    if (storePath != null && storePath.exists()) {
+      Utils.deleteRecursively(storePath)
+    }
   }
 
   test("SPARK-38056: test writing StreamingQueryData to a LevelDB store") {
@@ -246,21 +305,5 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
       kvStore.close()
       Utils.deleteRecursively(testDir)
     }
-  }
-
-  private def testStreamingQueryData(kvStore: KVStore): Unit = {
-    val id = UUID.randomUUID()
-    val testData = new StreamingQueryData(
-      "some-query",
-      id,
-      id.toString,
-      isActive = false,
-      None,
-      1L,
-      None
-    )
-    val store = new ElementTrackingStore(kvStore, sparkConf)
-    store.write(testData)
-    store.close(closeParent = false)
   }
 }

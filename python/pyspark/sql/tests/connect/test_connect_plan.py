@@ -585,6 +585,32 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             df.repartition(-1)._plan.to_proto(self.connect)
         self.assertTrue("numPartitions must be positive" in str(context.exception))
 
+    def test_repartition_by_expression(self):
+        # SPARK-41354: test dataframe.repartition(expressions)
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.repartition(10, "col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(10, plan.root.repartition_by_expression.num_partitions)
+        self.assertEqual(
+            [
+                f.unresolved_attribute.unparsed_identifier
+                for f in plan.root.repartition_by_expression.partition_exprs
+            ],
+            ["col_a", "col_b"],
+        )
+
+    def test_repartition_by_range(self):
+        # SPARK-41354: test dataframe.repartitionByRange(expressions)
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.repartitionByRange(10, "col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(10, plan.root.repartition_by_expression.num_partitions)
+        self.assertEqual(
+            [
+                f.sort_order.child.unresolved_attribute.unparsed_identifier
+                for f in plan.root.repartition_by_expression.partition_exprs
+            ],
+            ["col_a", "col_b"],
+        )
+
     def test_to(self):
         # SPARK-41464: test `to` API in Python client.
         df = self.connect.readTable(table_name=self.tbl_name)

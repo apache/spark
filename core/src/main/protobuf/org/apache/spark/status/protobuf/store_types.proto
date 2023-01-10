@@ -112,6 +112,16 @@ message TaskDataWrapper {
   int64 shuffle_records_written = 39;
   int64 stage_id = 40;
   int32 stage_attempt_id = 41;
+  int64 shuffle_corrupt_merged_block_chunks = 42;
+  int64 shuffle_merged_fetch_fallback_count = 43;
+  int64 shuffle_merged_remote_blocks_fetched = 44;
+  int64 shuffle_merged_local_blocks_fetched = 45;
+  int64 shuffle_merged_remote_chunks_fetched = 46;
+  int64 shuffle_merged_local_chunks_fetched = 47;
+  int64 shuffle_merged_remote_bytes_read = 48;
+  int64 shuffle_merged_local_bytes_read = 49;
+  int64 shuffle_remote_reqs_duration = 50;
+  int64 shuffle_merged_remote_req_duration = 51;
 }
 
 message ExecutorMetrics {
@@ -297,6 +307,16 @@ message CachedQuantile {
   double shuffle_write_bytes = 30;
   double shuffle_write_records = 31;
   double shuffle_write_time = 32;
+  double shuffle_corrupt_merged_block_chunks = 33;
+  double shuffle_merged_fetch_fallback_count = 34;
+  double shuffle_merged_remote_blocks_fetched = 35;
+  double shuffle_merged_local_blocks_fetched = 36;
+  double shuffle_merged_remote_chunks_fetched = 37;
+  double shuffle_merged_local_chunks_fetched = 38;
+  double shuffle_merged_remote_bytes_read = 39;
+  double shuffle_merged_local_bytes_read = 40;
+  double shuffle_remote_reqs_duration = 41;
+  double shuffle_merged_remote_reqs_duration = 42;
 }
 
 message SpeculationStageSummary {
@@ -569,6 +589,19 @@ message StageData {
   optional ExecutorMetrics peak_executor_metrics = 50;
   optional TaskMetricDistributions task_metrics_distributions = 51;
   optional ExecutorMetricsDistributions executor_metrics_distributions = 52;
+
+  int64 shuffle_corrupt_merged_block_chunks = 53;
+  int64 shuffle_merged_fetch_fallback_count = 54;
+  int64 shuffle_merged_remote_blocks_fetched = 55;
+  int64 shuffle_merged_local_blocks_fetched = 56;
+  int64 shuffle_merged_remote_chunks_fetched = 57;
+  int64 shuffle_merged_local_chunks_fetched = 58;
+  int64 shuffle_merged_remote_bytes_read = 59;
+  int64 shuffle_merged_local_bytes_read = 60;
+  int64 shuffle_remote_reqs_duration = 61;
+  int64 shuffle_merged_remote_reqs_duration = 62;
+  bool is_shuffle_push_enabled = 63;
+  int32 shuffle_mergers_count = 64;
 }
 
 message TaskMetrics {
@@ -606,6 +639,20 @@ message ShuffleReadMetrics {
   int64 remote_bytes_read_to_disk = 5;
   int64 local_bytes_read = 6;
   int64 records_read = 7;
+  int64 remote_reqs_duration = 8;
+  ShufflePushReadMetrics shuffle_push_read_metrics = 9;
+}
+
+message ShufflePushReadMetrics {
+  int64 corrupt_merged_block_chunks = 1;
+  int64 merged_fetch_fallback_count = 2;
+  int64 remote_merged_blocks_fetched = 3;
+  int64 local_merged_blocks_fetched = 4;
+  int64 remote_merged_chunks_fetched = 5;
+  int64 local_merged_chunks_fetched = 6;
+  int64 remote_merged_bytes_read = 7;
+  int64 local_merged_bytes_read = 8;
+  int64 remote_merged_reqs_duration = 9;
 }
 
 message ShuffleWriteMetrics {
@@ -654,6 +701,20 @@ message ShuffleReadMetricDistributions {
   repeated double remote_bytes_read = 6;
   repeated double remote_bytes_read_to_disk = 7;
   repeated double total_blocks_fetched = 8;
+  repeated double remote_reqs_duration = 9;
+  ShufflePushReadMetricDistributions shuffle_push_read_metrics_dist = 10;
+}
+
+message ShufflePushReadMetricDistributions {
+  repeated double corrupt_merged_block_chunks = 1;
+  repeated double merged_fetch_fallback_count = 2;
+  repeated double remote_merged_blocks_fetched = 3;
+  repeated double local_merged_blocks_fetched = 4;
+  repeated double remote_merged_chunks_fetched = 5;
+  repeated double local_merged_chunks_fetched = 6;
+  repeated double remote_merged_bytes_read = 7;
+  repeated double local_merged_bytes_read = 8;
+  repeated double remote_merged_reqs_duration = 9;
 }
 
 message ShuffleWriteMetricDistributions {
@@ -685,55 +746,4 @@ message ExecutorMetricsDistributions {
 message ExecutorPeakMetricsDistributions {
   repeated double quantiles = 1;
   repeated ExecutorMetrics executor_metrics = 2;
-}
-
-message StateOperatorProgress {
-  string operator_name = 1;
-  int64 num_rows_total = 2;
-  int64 num_rows_updated = 3;
-  int64 all_updates_time_ms = 4;
-  int64 num_rows_removed = 5;
-  int64 all_removals_time_ms = 6;
-  int64 commit_time_ms = 7;
-  int64 memory_used_bytes = 8;
-  int64 num_rows_dropped_by_watermark = 9;
-  int64 num_shuffle_partitions = 10;
-  int64 num_state_store_instances = 11;
-  map<string, int64> custom_metrics = 12;
-}
-
-message SourceProgress {
-  string description = 1;
-  string start_offset = 2;
-  string end_offset = 3;
-  string latest_offset = 4;
-  int64 num_input_rows = 5;
-  double input_rows_per_second = 6;
-  double processed_rows_per_second = 7;
-  map<string, string> metrics = 8;
-}
-
-message SinkProgress {
-  string description = 1;
-  int64 num_output_rows = 2;
-  map<string, string> metrics = 3;
-}
-
-message StreamingQueryProgress {
-  string id = 1;
-  string run_id = 2;
-  string name = 3;
-  string timestamp = 4;
-  int64 batch_id = 5;
-  int64 batch_duration = 6;
-  map<string, int64> duration_ms = 7;
-  map<string, string> event_time = 8;
-  repeated StateOperatorProgress state_operators = 9;
-  repeated SourceProgress sources = 10;
-  SinkProgress sink = 11;
-  map<string, string> observed_metrics = 12;
-}
-
-message StreamingQueryProgressWrapper {
-  StreamingQueryProgress progress = 1;
 }
