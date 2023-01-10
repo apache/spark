@@ -1617,7 +1617,7 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-    test("SPARK-39217: Makes DPP support the pruning side has Union") {
+  test("SPARK-39217: Makes DPP support the pruning side has Union") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       val df = sql(
         """
