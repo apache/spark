@@ -623,6 +623,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_tuning",
         "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
+        "pyspark.ml.torch.tests.test_distributor",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
