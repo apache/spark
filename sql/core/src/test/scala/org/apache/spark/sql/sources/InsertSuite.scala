@@ -27,7 +27,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -2313,27 +2312,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               Row(4, Period.ofYears(5), Duration.ofDays(6)),
               Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
-      }
-    }
-  }
-
-  test("check overflow with expression proxy") {
-    val tabName = "tbl1"
-    withTable(tabName) {
-      spark.sql(
-        """
-          |CREATE TABLE `tbl1`
-          |(a int, b int)
-          |USING parquet
-        """.stripMargin)
-      withSQLConf(
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
-        spark.sql(
-          """
-            |INSERT INTO `tbl1`
-            |select id as a, id as b from range(1, 5)
-        """.stripMargin)
       }
     }
   }

@@ -127,5 +127,6 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     assert(runtime.cache.size() == 0)
     checkOverflow.eval()
     assert(runtime.cache.size() == 1)
+    assert(runtime.cache.get(proxy) == ResultProxy(1))
   }
 }
