@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.{Closeable, FileNotFoundException, IOException}
+import java.net.URI
 
 import scala.util.control.NonFatal
 
@@ -25,6 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
@@ -51,12 +53,17 @@ import org.apache.spark.util.NextIterator
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
-    filePath: String,
+    filePath: SparkPath,
     start: Long,
     length: Long,
     @transient locations: Array[String] = Array.empty,
     modificationTime: Long = 0L,
     fileSize: Long = 0L) {
+
+  def pathUri: URI = filePath.uri
+  def hadoopPath: Path = filePath.hadoopPath
+  def uriEncodedPath: String = filePath.uriEncoded
+
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -140,7 +147,7 @@ class FileScanRDD(
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
           updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
-            new Path(currentFile.filePath), currentFile.fileSize, currentFile.modificationTime)
+            currentFile.hadoopPath, currentFile.fileSize, currentFile.modificationTime)
         }
 
       /**
@@ -223,7 +230,8 @@ class FileScanRDD(
           updateMetadataRow()
           logInfo(s"Reading File $currentFile")
           // Sets InputFileBlockHolder for the file block's information
-          InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
+          InputFileBlockHolder
+            .set(currentFile.uriEncodedPath, currentFile.start, currentFile.length)
 
           resetCurrentIterator()
           if (ignoreMissingFiles || ignoreCorruptFiles) {
@@ -278,12 +286,13 @@ class FileScanRDD(
           } catch {
             case e: SchemaColumnConvertNotSupportedException =>
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
-                currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
+                currentFile.uriEncodedPath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
             case sue: SparkUpgradeException => throw sue
             case NonFatal(e) =>
               e.getCause match {
                 case sue: SparkUpgradeException => throw sue
-                case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
+                case _ =>
+                  throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.uriEncodedPath)
               }
           }
         } else {
