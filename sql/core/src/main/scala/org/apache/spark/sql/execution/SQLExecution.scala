@@ -57,28 +57,6 @@ object SQLExecution {
   }
 
   /**
-   * Track the "root" SQL Execution Id for nested/sub queries.
-   * For the root execution, rootExecutionId == executionId.
-   */
-  private def setRootExecutionId(sc: SparkContext, executionId: String): Unit = {
-    // The current execution is the root execution if the root execution ID is null
-    if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
-      sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId)
-    }
-  }
-
-  /**
-   * Unset the "root" SQL Execution Id once the "root" SQL execution completes.
-   */
-  private def unsetRootExecutionId(sc: SparkContext, executionId: String): Unit = {
-    // The current execution is the root execution if rootExecutionId == executionId.
-    // Unset the property since the root sql execution is complete.
-    if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId) {
-      sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
-    }
-  }
-
-  /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
    */
@@ -90,7 +68,12 @@ object SQLExecution {
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
     sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
-    setRootExecutionId(sc, executionId.toString)
+    // Track the "root" SQL Execution Id for nested/sub queries. The current execution is the
+    // root execution if the root execution ID is null.
+    // And for the root execution, rootExecutionId == executionId.
+    if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
+      sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId.toString)
+    }
     val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
     try {
@@ -166,7 +149,11 @@ object SQLExecution {
     } finally {
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
-      unsetRootExecutionId(sc, executionId.toString)
+      // Unset the "root" SQL Execution Id once the "root" SQL execution completes.
+      // The current execution is the root execution if rootExecutionId == executionId.
+      if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
+        sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
+      }
     }
   }
 

@@ -82,7 +82,7 @@ object SqlResourceSuite {
 
     new SQLExecutionUIData(
       executionId = 0,
-      rootExecutionId = 0,
+      rootExecutionId = 1,
       description = DESCRIPTION,
       details = "",
       physicalPlanDescription = PLAN_DESCRIPTION,
