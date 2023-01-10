@@ -957,6 +957,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         for cfunc, sfunc in [
             (CF.array_distinct, SF.array_distinct),
+            (CF.array_compact, SF.array_compact),
             (CF.array_max, SF.array_max),
             (CF.array_min, SF.array_min),
             (CF.reverse, SF.reverse),
@@ -1639,6 +1640,27 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 sdf.select(SF.from_json("b", schema, {"mode": "FAILFAST"})),
             )
 
+        # SPARK-41880: from_json support non-literal expression
+        c_schema = CF.schema_of_json(CF.lit("""{"a": 2}"""))
+        s_schema = SF.schema_of_json(SF.lit("""{"a": 2}"""))
+
+        self.compare_by_show(
+            cdf.select(CF.from_json(cdf.a, c_schema)),
+            sdf.select(SF.from_json(sdf.a, s_schema)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_json("a", c_schema)),
+            sdf.select(SF.from_json("a", s_schema)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_json(cdf.a, c_schema, {"mode": "FAILFAST"})),
+            sdf.select(SF.from_json(sdf.a, s_schema, {"mode": "FAILFAST"})),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_json("a", c_schema, {"mode": "FAILFAST"})),
+            sdf.select(SF.from_json("a", s_schema, {"mode": "FAILFAST"})),
+        )
+
         # test get_json_object
         self.assert_eq(
             cdf.select(
@@ -2153,6 +2175,18 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 SF.call_udf("abs", sdf.a), SF.call_udf("xxhash64", "b", sdf.c, "d")
             ).toPandas(),
         )
+
+    def test_unsupported_functions(self):
+        # SPARK-41928: Disable unsupported functions.
+
+        from pyspark.sql.connect import functions as CF
+
+        for f in (
+            "udf",
+            "pandas_udf",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(CF, f)()
 
 
 if __name__ == "__main__":
