@@ -1302,6 +1302,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
+    def test_join_hint(self):
+
+        cdf1 = self.connect.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        cdf2 = self.connect.createDataFrame(
+            [Row(height=80, name="Tom"), Row(height=85, name="Bob")]
+        )
+
+        self.assertTrue(
+            "BroadcastHashJoin" in cdf1.join(cdf2.hint("BROADCAST"), "name")._explain_string()
+        )
+        self.assertTrue("SortMergeJoin" in cdf1.join(cdf2.hint("MERGE"), "name")._explain_string())
+        self.assertTrue(
+            "ShuffledHashJoin" in cdf1.join(cdf2.hint("SHUFFLE_HASH"), "name")._explain_string()
+        )
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(
@@ -2121,11 +2136,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(NotImplementedError):
             RemoteSparkSession.getActiveSession()
 
+        with self.assertRaises(NotImplementedError):
+            RemoteSparkSession.builder.enableHiveSupport()
+
         for f in (
             "newSession",
             "conf",
             "sparkContext",
             "streams",
+            "readStream",
             "udf",
             "version",
         ):
