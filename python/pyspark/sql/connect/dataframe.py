@@ -642,6 +642,8 @@ class DataFrame:
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
+        assert ids is not None, "ids must not be None"
+
         def to_jcols(
             cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
         ) -> List["ColumnOrName"]:
