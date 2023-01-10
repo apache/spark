@@ -777,10 +777,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("database" -> quoted))
   }
 
-  def cannotDropViewWithDropTableError(): Throwable = {
+  def wrongCommandForObjectTypeError(
+      operation: String,
+      requiredType: String,
+      objectName: String,
+      foundType: String,
+      alternative: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1056",
-      messageParameters = Map.empty)
+      errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+      messageParameters = Map(
+        "operation" -> operation,
+        "requiredType" -> requiredType,
+        "objectName" -> objectName,
+        "foundType" -> foundType,
+        "alternative" -> alternative
+      )
+    )
   }
 
   def showColumnsWithConflictDatabasesError(
