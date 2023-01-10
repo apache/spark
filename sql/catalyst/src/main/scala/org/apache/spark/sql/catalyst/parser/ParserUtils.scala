@@ -268,7 +268,9 @@ object ParserUtils {
 
   /**
    * Adds a gap after every term node except of '(', ')', '[', ']',
-   * and removes a gap before '(', ')', '[', ']', ','.
+   * and removes a gap before '(', ')', '[', ']', ','. For example:
+   *   ( columnA + 1 ) -> (columnA + 1)
+   *   map ( 1 , a ) [ 1 ] -> map(1, a)[1]
    */
   private def toExprAlias(ctx: ParseTree, sb: StringBuilder): Unit = {
     val childCount = ctx.getChildCount
