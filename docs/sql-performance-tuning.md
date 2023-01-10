@@ -286,6 +286,27 @@ This feature coalesces the post shuffle partitions based on the map output stati
    </tr>
  </table>
  
+### Spliting skewed shuffle partitions
+ <table class="table">
+   <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+   <tr>
+     <td><code>spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled</code></td>
+     <td>true</td>
+     <td>
+       When true and <code>spark.sql.adaptive.enabled</code> is true, Spark will optimize the skewed shuffle partitions in RebalancePartitions and split them to smaller ones according to the target size (specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>), to avoid data skew.
+     </td>
+     <td>3.2.0</td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor</code></td>
+     <td>0.2</td>
+     <td>
+       A partition will be merged during splitting if its size is small than this factor multiply <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
+     </td>
+     <td>3.3.0</td>
+   </tr>
+ </table>
+
 ### Converting sort-merge join to broadcast join
 AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the adaptive broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
   <table class="table">
@@ -297,6 +318,14 @@ AQE converts sort-merge join to broadcast hash join when the runtime statistics 
          Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when performing a join. By setting this value to -1, broadcasting can be disabled. The default value is the same as <code>spark.sql.autoBroadcastJoinThreshold</code>. Note that, this config is used only in adaptive framework.
        </td>
        <td>3.2.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.localShuffleReader.enabled</code></td>
+       <td>true</td>
+       <td>
+         When true and <code>spark.sql.adaptive.enabled</code> is true, Spark tries to use local shuffle reader to read the shuffle data when the shuffle partitioning is not needed, for example, after converting sort-merge join to broadcast-hash join.
+       </td>
+       <td>3.0.0</td>
      </tr>
   </table>
 
@@ -342,4 +371,33 @@ Data skew can severely downgrade the performance of join queries. This feature d
        </td>
        <td>3.0.0</td>
      </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.forceOptimizeSkewedJoin</code></td>
+       <td>false</td>
+       <td>
+         When true, force enable OptimizeSkewedJoin, which is an adaptive rule to optimize skewed joins to avoid straggler tasks, even if it introduces extra shuffle.
+       </td>
+       <td>3.3.0</td>
+     </tr>
    </table>
+
+### Misc
+  <table class="table">
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+    <tr>
+      <td><code>spark.sql.adaptive.optimizer.excludedRules</code></td>
+      <td>(none)</td>
+      <td>
+        Configures a list of rules to be disabled in the adaptive optimizer, in which the rules are specified by their rule names and separated by comma. The optimizer will log the rules that have indeed been excluded.
+      </td>
+      <td>3.1.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.adaptive.customCostEvaluatorClass</code></td>
+      <td>(none)</td>
+      <td>
+        The custom cost evaluator class to be used for adaptive execution. If not being set, Spark will use its own <code>SimpleCostEvaluator</code> by default.
+      </td>
+      <td>3.2.0</td>
+    </tr>
+  </table>
