@@ -1278,7 +1278,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       synchronized (partitionInfo) {
         AppShuffleMergePartitionsInfo info =
             appShuffleInfo.shuffles.get(partitionInfo.appAttemptShuffleMergeId.shuffleId);
-        boolean isStaleBlockPush = isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId);
+        boolean isStaleBlockPush =
+            isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId);
         boolean isTooLateBlockPush = isTooLate(info, partitionInfo.reduceId);
         if (isStaleBlockPush || isTooLateBlockPush) {
           freeDeferredBufs();
@@ -1319,23 +1320,21 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
         } else {
           logger.trace("{} onData deferred", partitionInfo);
-          // If we cannot write to disk, we buffer the current block chunk in memory
-          // so it could potentially be written to disk later. We take our best effort
-          // without guarantee that the block will be written to disk. If the block data
-          // is divided into multiple chunks during TCP transportation, each #onData
-          // invocation is an attempt to write the block to disk. If the block is still
-          // not written to disk after all #onData invocations, the final #onComplete
-          // invocation is the last attempt to write the block to disk. If we still
-          // couldn't write this block to disk after this, we give up on this block
-          // push request and respond failure to client. We could potentially buffer
-          //
-          // the block longer or wait for a few iterations inside #onData or #onComplete
-          // to increase the chance of writing the block to disk, however this would
-          // incur more memory footprint or decrease the server processing throughput
-          // for the shuffle service. In addition, during test we observed that by
-          // randomizing the order in which clients send block push requests batches,
-          // only ~0.5% blocks failed to be written to disk due to this reason. We thus
-          // decide to optimize for server throughput and memory usage.
+          // If we cannot write to disk, we buffer the current block chunk in memory so it could
+          // potentially be written to disk later. We take our best effort without guarantee
+          // that the block will be written to disk. If the block data is divided into multiple
+          // chunks during TCP transportation, each #onData invocation is an attempt to write
+          // the block to disk. If the block is still not written to disk after all #onData
+          // invocations, the final #onComplete invocation is the last attempt to write the
+          // block to disk. If we still couldn't write this block to disk after this, we give up
+          // on this block push request and respond failure to client. We could potentially
+          // buffer the block longer or wait for a few iterations inside #onData or #onComplete
+          // to increase the chance of writing the block to disk, however this would incur more
+          // memory footprint or decrease the server processing throughput for the shuffle
+          // service. In addition, during test we observed that by randomizing the order in
+          // which clients sends block push requests batches, only ~0.5% blocks failed to be
+          // written to disk due to this reason. We thus decide to optimize for server
+          // throughput and memory usage.
           if (deferredBufs == null) {
             deferredBufs = new ArrayList<>();
           }
@@ -2020,6 +2019,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
     // staleBlockPushes tracks the number of stale shuffle block push requests
     static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";
+    static final String IGNORED_BLOCK_BYTES = "ignoredBlockBytes";
 
     private final Map<String, Metric> allMetrics;
     private final Meter blockAppendCollisions;
