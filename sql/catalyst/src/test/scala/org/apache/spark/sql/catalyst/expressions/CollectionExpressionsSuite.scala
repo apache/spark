@@ -2590,4 +2590,79 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2017-02-12")))
     }
   }
+
+  test("ArrayAppend Expression Test") {
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(null, ArrayType(StringType)),
+        Literal.create("c", StringType)),
+      null)
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(null, ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      null)
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(""), ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      Seq("", null))
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      Seq("a", "b", "c", null))
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3d, DoubleType)),
+      Seq(Double.NaN, 1d, 2d, 3d))
+    // Null entry check
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3d, DoubleType)),
+      Seq(null, 1d, 2d, 3d))
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
+        Literal.create("c", StringType)),
+      Seq("a", "b", "c", "c"))
+
+    assert(
+      ArrayAppend(
+        Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3, IntegerType))
+        .checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> "`array_append`",
+            "dataType" -> "\"ARRAY\"",
+            "leftType" -> "\"ARRAY<DOUBLE>\"",
+            "rightType" -> "\"INT\""))
+    )
+
+
+    assert(
+      ArrayAppend(
+        Literal.create("Hi", StringType),
+        Literal.create("Spark", StringType))
+        .checkInputDataTypes() == DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> "\"ARRAY\"",
+          "inputSql" -> "\"Hi\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+
+  }
 }
