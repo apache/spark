@@ -25,6 +25,7 @@ import json
 from pyspark import SparkConf, SparkContext
 from pyspark.resource.profile import ResourceProfileBuilder
 from pyspark.resource.requests import TaskResourceRequests
+from pyspark.taskcontext import TaskContext
 
 
 class StageSchedulingTest(unittest.TestCase):
@@ -73,8 +74,6 @@ class StageSchedulingTest(unittest.TestCase):
         os.mkdir(pids_output_dir)
 
         def mapper(_):
-            from pyspark.taskcontext import TaskContext
-
             task_id = TaskContext.get().partitionId()
             pid_file_path = os.path.join(pids_output_dir, str(task_id))
             with open(pid_file_path, mode="w"):
@@ -91,10 +90,10 @@ class StageSchedulingTest(unittest.TestCase):
             .map(mapper)
             .collect()
         )
-        assert max(results) == expected_max_concurrent_tasks
+        self.assertEqual(max(results), expected_max_concurrent_tasks)
 
-    def test_stage_scheduling_4_cpus_per_task(self):
-        rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(4)).build
+    def test_stage_scheduling_3_cpu_per_task(self):
+        rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(3)).build
         self._test_stage_scheduling(
             cpus_per_worker=4,
             gpus_per_worker=0,
@@ -103,14 +102,14 @@ class StageSchedulingTest(unittest.TestCase):
             expected_max_concurrent_tasks=1,
         )
 
-    def test_stage_scheduling_1_cpu_per_task(self):
-        rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(1)).build
+    def test_stage_scheduling_2_cpu_per_task(self):
+        rp = ResourceProfileBuilder().require(TaskResourceRequests().cpus(2)).build
         self._test_stage_scheduling(
             cpus_per_worker=4,
             gpus_per_worker=0,
             num_tasks=4,
             resource_profile=rp,
-            expected_max_concurrent_tasks=4,
+            expected_max_concurrent_tasks=2,
         )
 
     def test_stage_scheduling_2_cpus_2_gpus_per_task(self):
@@ -127,9 +126,23 @@ class StageSchedulingTest(unittest.TestCase):
             expected_max_concurrent_tasks=2,
         )
 
+    def test_stage_scheduling_2_cpus_3_gpus_per_task(self):
+        rp = (
+            ResourceProfileBuilder()
+            .require(TaskResourceRequests().cpus(2).resource("gpu", 3))
+            .build
+        )
+        self._test_stage_scheduling(
+            cpus_per_worker=4,
+            gpus_per_worker=4,
+            num_tasks=2,
+            resource_profile=rp,
+            expected_max_concurrent_tasks=1,
+        )
+
 
 if __name__ == "__main__":
-    from pyspark.tests.test_memory_profiler import *  # noqa: F401
+    from pyspark.tests.test_stage_sched import *  # noqa: F401
 
     try:
         import xmlrunner
