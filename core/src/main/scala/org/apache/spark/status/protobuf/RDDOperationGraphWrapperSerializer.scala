@@ -49,9 +49,9 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     val wrapper = StoreTypes.RDDOperationGraphWrapper.parseFrom(bytes)
     new RDDOperationGraphWrapper(
       stageId = wrapper.getStageId.toInt,
-      edges = wrapper.getEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
-      outgoingEdges = wrapper.getOutgoingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
-      incomingEdges = wrapper.getIncomingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
+      edges = wrapper.getEdgesList.asScala.map(deserializeRDDOperationEdge),
+      outgoingEdges = wrapper.getOutgoingEdgesList.asScala.map(deserializeRDDOperationEdge),
+      incomingEdges = wrapper.getIncomingEdgesList.asScala.map(deserializeRDDOperationEdge),
       rootCluster = deserializeRDDOperationClusterWrapper(wrapper.getRootCluster)
     )
   }
@@ -75,9 +75,9 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     new RDDOperationClusterWrapper(
       id = op.getId,
       name = op.getName,
-      childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode).toSeq,
+      childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode),
       childClusters =
-        op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper).toSeq
+        op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper)
     )
   }
 

@@ -110,8 +110,8 @@ class SQLExecutionUIData(
 
 class SparkPlanGraphWrapper(
     @KVIndexParam val executionId: Long,
-    val nodes: Seq[SparkPlanGraphNodeWrapper],
-    val edges: Seq[SparkPlanGraphEdge]) {
+    val nodes: collection.Seq[SparkPlanGraphNodeWrapper],
+    val edges: collection.Seq[SparkPlanGraphEdge]) {
 
   def toSparkPlanGraph(): SparkPlanGraph = {
     SparkPlanGraph(nodes.map(_.toSparkPlanGraphNode()), edges)
@@ -123,8 +123,8 @@ class SparkPlanGraphClusterWrapper(
     val id: Long,
     val name: String,
     val desc: String,
-    val nodes: Seq[SparkPlanGraphNodeWrapper],
-    val metrics: Seq[SQLPlanMetric]) {
+    val nodes: collection.Seq[SparkPlanGraphNodeWrapper],
+    val metrics: collection.Seq[SQLPlanMetric]) {
 
   def toSparkPlanGraphCluster(): SparkPlanGraphCluster = {
     new SparkPlanGraphCluster(id, name, desc,

@@ -552,6 +552,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.6.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         paths : str or list

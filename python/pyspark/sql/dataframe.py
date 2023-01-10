@@ -639,7 +639,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Print out the physical plan only (default).
 
-        >>> df.explain()
+        >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         *(1) Scan ExistingRDD[age...,name...]
 
@@ -657,7 +657,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Print out the plans with two sections: a physical plan outline and node details
 
-        >>> df.explain(mode="formatted")
+        >>> df.explain(mode="formatted")  # doctest: +SKIP
         == Physical Plan ==
         * Scan ExistingRDD (...)
         (1) Scan ExistingRDD [codegen id : ...]
@@ -1116,7 +1116,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-        >>> df.join(df2, "name").explain()
+        >>> df.join(df2, "name").explain()  # doctest: +SKIP
         == Physical Plan ==
         ...
         ... +- SortMergeJoin ...

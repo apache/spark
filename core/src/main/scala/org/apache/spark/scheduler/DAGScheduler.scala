@@ -2734,7 +2734,7 @@ private[spark] class DAGScheduler(
 
   private def updateStageInfoForPushBasedShuffle(stage: Stage): Unit = {
     // With adaptive shuffle mergers, StageInfo's
-    // isPushBasedShuffleEnabled and shuffleMergers need to be updated at the end.
+    // isShufflePushEnabled and shuffleMergers need to be updated at the end.
     stage match {
       case s: ShuffleMapStage =>
         stage.latestInfo.setPushBasedShuffleEnabled(s.shuffleDep.shuffleMergeEnabled)
