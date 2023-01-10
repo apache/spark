@@ -417,6 +417,7 @@ message SQLExecutionUIData {
   repeated int64 stages = 11;
   bool metric_values_is_null = 12;
   map<int64, string> metric_values = 13;
+  optional int64 root_execution_id = 14;
 }
 
 message SparkPlanGraphNode {
