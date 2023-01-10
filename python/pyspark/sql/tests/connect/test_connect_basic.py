@@ -1082,13 +1082,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "naive": [datetime(2019, 1, 1, 0)],
                 "aware": [
                     Timestamp(
-                        year=2019, month=1, day=1, nanosecond=1, tz=timezone(timedelta(hours=-8))
+                        year=2019, month=1, day=1, nanosecond=500, tz=timezone(timedelta(hours=-8))
                     )
                 ],
             }
         )
-        rows = self.connect.createDataFrame(pdf).collect()
-        self.assertEqual(1, len(rows))
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            self.assertEqual(
+                self.connect.createDataFrame(pdf).collect(),
+                self.spark.createDataFrame(pdf).collect()
+            )
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+            self.assertEqual(
+                self.connect.createDataFrame(pdf).collect(),
+                self.spark.createDataFrame(pdf).collect()
+            )
 
     def test_select_expr(self):
         # SPARK-41201: test selectExpr API.

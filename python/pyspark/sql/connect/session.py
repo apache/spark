@@ -219,27 +219,34 @@ class SparkSession:
                 is_datetime64_dtype,
                 is_datetime64tz_dtype,
             )
+            from pyspark.sql.pandas.types import (
+                _check_series_convert_timestamps_internal,
+                _get_local_timezone,
+            )
 
+            # Copying the frame to avoid modifying it.
+            data_copy = data.copy()
             # We need double conversions for the truncation, first truncate to microseconds.
-            for col in data:
-                print("Checking", col)
-                if is_datetime64tz_dtype(data[col].dtype):
-                    data[col] = data[col].astype("datetime64[us, UTC]")
-                elif is_datetime64_dtype(data[col].dtype):
-                    data[col] = data[col].astype("datetime64[us]")
+            for col in data_copy:
+                if is_datetime64tz_dtype(data_copy[col].dtype):
+                    data_copy[col] = _check_series_convert_timestamps_internal(
+                        data_copy[col], _get_local_timezone()
+                    ).astype("datetime64[us, UTC]")
+                elif is_datetime64_dtype(data_copy[col].dtype):
+                    data_copy[col] = data_copy[col].astype("datetime64[us]")
 
             # Create a new schema and change the types to the truncated microseconds.
-            pd_schema = pa.Schema.from_pandas(data)
+            pd_schema = pa.Schema.from_pandas(data_copy)
             new_schema = pa.schema([])
             for x in range(len(pd_schema.types)):
                 f = pd_schema.field(x)
                 if isinstance(f.type, pa.TimestampType) and f.type.unit == "ns":
-                    tmp = f.with_type(pa.timestamp("us", f.type.tz))
+                    tmp = f.with_type(pa.timestamp("us"))
                     new_schema = new_schema.append(tmp)
                 else:
                     new_schema = new_schema.append(f)
             new_schema = new_schema.with_metadata(pd_schema.metadata)
-            _table = pa.Table.from_pandas(data, schema=new_schema)
+            _table = pa.Table.from_pandas(data_copy, schema=new_schema)
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
