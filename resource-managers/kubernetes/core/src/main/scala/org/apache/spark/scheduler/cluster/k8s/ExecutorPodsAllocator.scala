@@ -468,14 +468,10 @@ class ExecutorPodsAllocator(
       // Refresh all pre-resources' owner references
       preResources.foreach { resource =>
         try {
-          if (resource.isInstanceOf[PersistentVolumeClaim]) {
-            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
-              refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
-                driverPod.get)
-            } else {
-              refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
-                createdExecutorPod)
-            }
+          if (resource.isInstanceOf[PersistentVolumeClaim] &&
+            conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+            refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
+              driverPod.get)
           } else {
             refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
               createdExecutorPod)
