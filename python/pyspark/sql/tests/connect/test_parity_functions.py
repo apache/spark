@@ -110,8 +110,7 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_sorting_functions_with_column(self):
         super().test_sorting_functions_with_column()
 
-    # TODO(SPARK-41907): sampleby returning wrong output
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Because the plan is different from pyspark, so the result is not determined.")
     def test_sampleby(self):
         super().test_sampleby()
 
