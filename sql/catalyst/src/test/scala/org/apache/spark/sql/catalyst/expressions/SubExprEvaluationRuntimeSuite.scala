@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.LongType
 
 class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
@@ -116,5 +117,15 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     // ( (one * two) * (one * two) )
     assert(proxys.size == 2)
     assert(proxys.forall(_.child.semanticEquals(mul2_1)))
+  }
+
+  test("CheckOverflowInTableInsert with ExpressionProxy child") {
+    val runtime = new SubExprEvaluationRuntime(1)
+    val proxy = ExpressionProxy(Cast(Literal.apply(1), LongType), 0, runtime)
+    val checkOverflow = CheckOverflowInTableInsert(Cast(Literal.apply(1), LongType), "col")
+      .withNewChildrenInternal(IndexedSeq(proxy))
+    assert(runtime.cache.size() == 0)
+    checkOverflow.eval()
+    assert(runtime.cache.size() == 1)
   }
 }
