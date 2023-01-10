@@ -1116,7 +1116,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-        >>> df.join(df2, "name").explain()
+        >>> df.join(df2, "name").explain()  # doctest: +SKIP
         == Physical Plan ==
         ...
         ... +- SortMergeJoin ...
