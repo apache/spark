@@ -20,4 +20,5 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 
 private[spark] case class KubernetesExecutorSpec(
     pod: SparkPod,
+    executorPreKubernetesResources: Seq[HasMetadata],
     executorKubernetesResources: Seq[HasMetadata])

@@ -31,7 +31,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
-import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
+import org.apache.spark.deploy.k8s.KubernetesUtils.{createPreResource, refreshOwnerReferenceInResource}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, DYN_ALLOCATION_MAX_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.resource.ResourceProfile
@@ -434,33 +434,58 @@ class ExecutorPodsAllocator(
         .addToContainers(executorPod.container)
         .endSpec()
         .build()
-      val resources = replacePVCsIfNeeded(
-        podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
-      val createdExecutorPod =
-        kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
-      try {
-        addOwnerReference(createdExecutorPod, resources)
-        resources
-          .filter(_.getKind == "PersistentVolumeClaim")
-          .foreach { resource =>
-            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
-              addOwnerReference(driverPod.get, Seq(resource))
-            }
-            val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
-              s"StorageClass ${pvc.getSpec.getStorageClassName}")
-            kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
+      val preResources = replacePVCsIfNeeded(
+        podWithAttachedContainer, resolvedExecutorSpec.executorPreKubernetesResources, reusablePVCs)
+
+      preResources.foreach { resource =>
+        try {
+          createPreResource(kubernetesClient, resource, namespace)
+          if (resource.isInstanceOf[PersistentVolumeClaim]) {
             PVC_COUNTER.incrementAndGet()
           }
+        } catch {
+          case NonFatal(e) =>
+            logError("Please check \"kubectl auth can-i create [resource]\" first." +
+              " It should be yes. And please also check feature step implementation.")
+            kubernetesClient.resourceList(Seq(resource): _*).delete()
+            throw e
+        }
+      }
+
+      var createdExecutorPod: Pod = null
+      try {
+        createdExecutorPod =
+          kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
       } catch {
         case NonFatal(e) =>
-          kubernetesClient.pods()
-            .inNamespace(namespace)
-            .resource(createdExecutorPod)
-            .delete()
+          kubernetesClient.resourceList(preResources: _*).delete()
+          logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
           throw e
+      }
+
+      // Refresh all pre-resources' owner references
+      preResources.foreach { resource =>
+        try {
+          if (resource.isInstanceOf[PersistentVolumeClaim]) {
+            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+              refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
+                driverPod.get)
+            } else {
+              refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
+                createdExecutorPod)
+            }
+          } else {
+            refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
+              createdExecutorPod)
+          }
+        } catch {
+          case NonFatal(e) =>
+            kubernetesClient.pods().inNamespace(namespace).resource(createdExecutorPod).delete()
+            kubernetesClient.resourceList(Seq(resource): _*).delete()
+            throw e
+        }
       }
     }
   }

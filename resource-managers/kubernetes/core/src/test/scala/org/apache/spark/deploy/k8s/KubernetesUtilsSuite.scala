@@ -22,16 +22,26 @@ import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, PersistentVolumeClaim, PersistentVolumeClaimBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionBuilder
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.PrivateMethodTester
+import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{never, times, verify, when}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.deploy.k8s.Fabric8Aliases.{PERSISTENT_VOLUME_CLAIMS, PVC_WITH_NAMESPACE, RESOURCE_LIST}
 
-class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
+class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester with BeforeAndAfter {
   private val HOST = "test-host"
+  private val NAMESPACE = "test-namespace"
+  private val POD_UID = "pod-id"
+  private val POD_API_VERSION = "v1"
+  private val POD_KIND = "pod"
   private val POD = new PodBuilder()
     .withNewSpec()
     .withHostname(HOST)
@@ -40,6 +50,77 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
       new ContainerBuilder().withName("second").build())
     .endSpec()
     .build()
+  private val EXECUTOR_POD = new PodBuilder(POD)
+    .withNewMetadata()
+      .withName("executor")
+      .withUid("executor-" + POD_UID)
+    .endMetadata()
+    .withApiVersion(POD_API_VERSION)
+    .withKind(POD_KIND)
+    .build()
+  private val PVC = new PersistentVolumeClaimBuilder()
+    .withNewMetadata()
+      .withName("test-pvc")
+      .endMetadata()
+    .build()
+  private val CRD = new CustomResourceDefinitionBuilder()
+    .withNewMetadata()
+      .withName("test-crd")
+      .endMetadata()
+    .build()
+  private val PVC_WITH_OWNER_REFERENCES = new PersistentVolumeClaimBuilder(PVC)
+    .editMetadata()
+      .addNewOwnerReference()
+        .withName("executor")
+        .withApiVersion(POD_API_VERSION)
+        .withUid("executor-" + POD_UID)
+        .withKind(POD_KIND)
+        .withController(true)
+        .endOwnerReference()
+      .endMetadata()
+    .build()
+  private val CRD_WITH_OWNER_REFERENCES = new CustomResourceDefinitionBuilder(CRD)
+    .editMetadata()
+      .addNewOwnerReference()
+        .withName("executor")
+        .withApiVersion(POD_API_VERSION)
+        .withUid("executor-" + POD_UID)
+        .withKind(POD_KIND)
+        .withController(true)
+        .endOwnerReference()
+      .endMetadata()
+    .build()
+
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
+
+  @Mock
+  private var kubernetesClient: KubernetesClient = _
+
+  @Mock
+  private var persistentVolumeClaims: PERSISTENT_VOLUME_CLAIMS = _
+
+  @Mock
+  private var pvcWithNamespace: PVC_WITH_NAMESPACE = _
+
+  @Mock
+  private var pvcResource: io.fabric8.kubernetes.client.dsl.Resource[PersistentVolumeClaim] = _
+
+  @Mock
+  private var resourceList: RESOURCE_LIST = _
+
+  private var createdPvcArgumentCaptor: ArgumentCaptor[PersistentVolumeClaim] = _
+  private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
+
+  before {
+    MockitoAnnotations.openMocks(this).close()
+    when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
+    when(persistentVolumeClaims.inNamespace(any())).thenReturn(pvcWithNamespace)
+    when(pvcWithNamespace.resource(any())).thenReturn(pvcResource)
+    when(pvcWithNamespace.withName(any())).thenReturn(pvcResource)
+    when(kubernetesClient.resourceList(any(classOf[HasMetadata]))).thenReturn(resourceList)
+    createdPvcArgumentCaptor = ArgumentCaptor.forClass(classOf[PersistentVolumeClaim])
+    createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
+  }
 
   test("Selects the given container as spark container.") {
     val sparkPod = KubernetesUtils.selectSparkContainer(POD, Some("second"))
@@ -158,5 +239,64 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
           ("testKey2", "v1", null),
           ("testKey3", null, null)))
     assert(outputEnvVars == expectedEnvVars)
+  }
+
+  test("SPARK-41781: verify pvc creation as expected") {
+    KubernetesUtils.createPreResource(kubernetesClient, PVC, NAMESPACE)
+    verify(pvcResource, times(1)).create()
+    verify(resourceList, never()).createOrReplace()
+  }
+
+  test("SPARK-41781: verify resource creation as expected") {
+    KubernetesUtils.createPreResource(kubernetesClient, CRD, NAMESPACE)
+    verify(pvcResource, never()).create()
+    verify(resourceList, times(1)).createOrReplace()
+  }
+
+  test("SPARK-41781: verify pvc creation exception as expected") {
+    when(pvcResource.create()).thenThrow(new KubernetesClientException("PVC fails to create"))
+    intercept[KubernetesClientException] {
+      KubernetesUtils.createPreResource(kubernetesClient, PVC, NAMESPACE)
+    }
+    verify(resourceList, never()).createOrReplace()
+  }
+
+  test("SPARK-41781: verify resource creation exception as expected") {
+    when(resourceList.createOrReplace())
+      .thenThrow(new KubernetesClientException("Resource fails to create"))
+    intercept[KubernetesClientException] {
+      KubernetesUtils.createPreResource(kubernetesClient, CRD, NAMESPACE)
+    }
+    verify(pvcResource, never()).create()
+  }
+
+  test("SPARK-41781: verify ownerReference in PVC refreshed as expected") {
+    when(pvcResource.get()).thenReturn(PVC)
+    when(pvcResource.patch(createdPvcArgumentCaptor.capture())).thenReturn(PVC)
+
+    KubernetesUtils.refreshOwnerReferenceInResource(
+      kubernetesClient,
+      PVC,
+      NAMESPACE,
+      EXECUTOR_POD)
+
+    val pvcWithOwnerReference = createdPvcArgumentCaptor.getValue
+    assert(pvcWithOwnerReference === PVC_WITH_OWNER_REFERENCES)
+    verify(resourceList, never()).createOrReplace()
+  }
+
+  test("SPARK-41781: verify ownerReference in CRD refreshed as expected") {
+    doReturn(resourceList)
+      .when(kubernetesClient)
+      .resourceList(createdResourcesArgumentCaptor.capture())
+    KubernetesUtils.refreshOwnerReferenceInResource(
+      kubernetesClient,
+      CRD,
+      NAMESPACE,
+      EXECUTOR_POD)
+
+    val crdWithOwnerReference = createdResourcesArgumentCaptor.getValue
+    assert(crdWithOwnerReference === CRD_WITH_OWNER_REFERENCES)
+    verify(pvcResource, never()).patch()
   }
 }

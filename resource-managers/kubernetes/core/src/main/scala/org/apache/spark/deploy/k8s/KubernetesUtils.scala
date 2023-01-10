@@ -23,7 +23,7 @@ import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, PersistentVolumeClaim, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -413,5 +413,53 @@ object KubernetesUtils extends Logging {
             .build())
           .build()
       }
+  }
+
+  /**
+   * Create pre-resource in need before pod creation
+   */
+  @Since("3.4.0")
+  def createPreResource(
+      client: KubernetesClient,
+      resource: HasMetadata,
+      namespace: String): Unit = {
+    resource match {
+      case pvc: PersistentVolumeClaim =>
+        client.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
+      case other =>
+        client.resourceList(Seq(other): _*).createOrReplace()
+    }
+  }
+
+  /**
+   * Refresh OwnerReference in the given resource
+   * making the driver or executor pod an owner of them
+   */
+  @Since("3.4.0")
+  def refreshOwnerReferenceInResource(
+      client: KubernetesClient,
+      resource: HasMetadata,
+      namespace: String,
+      pod: Pod): Unit = {
+    resource match {
+      case pvc: PersistentVolumeClaim =>
+        val createdPVC =
+          client
+            .persistentVolumeClaims()
+            .inNamespace(namespace)
+            .withName(pvc.getMetadata.getName)
+            .get()
+        addOwnerReference(pod, Seq(createdPVC))
+        logDebug(s"Trying to refresh PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
+          s"OwnerReference ${pvc.getMetadata.getOwnerReferences}")
+        client
+          .persistentVolumeClaims()
+          .inNamespace(namespace)
+          .withName(pvc.getMetadata.getName)
+          .patch(pvc)
+      case other =>
+        addOwnerReference(pod, Seq(other))
+        client.resourceList(Seq(other): _*).createOrReplace()
+    }
   }
 }

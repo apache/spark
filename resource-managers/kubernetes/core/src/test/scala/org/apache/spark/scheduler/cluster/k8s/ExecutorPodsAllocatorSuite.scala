@@ -48,12 +48,20 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val driverPodName = "driver"
 
+  private val persistentVolumeClaimName = "pvc"
+
   private val driverPod = new PodBuilder()
     .withNewMetadata()
       .withName(driverPodName)
       .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
       .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
       .withUid("driver-pod-uid")
+      .endMetadata()
+    .build()
+
+  private val pvc = new PersistentVolumeClaimBuilder()
+    .withNewMetadata()
+      .withName(persistentVolumeClaimName)
       .endMetadata()
     .build()
 
@@ -111,6 +119,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var schedulerBackend: KubernetesClusterSchedulerBackend = _
 
+  @Mock
+  private var deletableList: RESOURCE_LIST = _
+
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
   private var podsAllocatorUnderTest: ExecutorPodsAllocator = _
@@ -143,6 +154,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(persistentVolumeClaims.inNamespace("default")).thenReturn(pvcWithNamespace)
     when(pvcWithNamespace.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
     when(pvcWithNamespace.resource(any())).thenReturn(pvcResource)
+    when(pvcWithNamespace.withName(any())).thenReturn(pvcResource)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
@@ -736,7 +748,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(
         executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
-        Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")))
+        Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")),
+        Seq.empty)
     })
 
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -832,8 +845,11 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
         KubernetesExecutorSpec(
           executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
-          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")),
+          Seq.empty)
       })
+    when(pvcResource.get).thenReturn(pvc)
+    when(pvcResource.patch(any(classOf[PersistentVolumeClaim]))).thenReturn(pvc)
 
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       confWithPVC, secMgr, executorBuilder,
@@ -901,7 +917,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
         KubernetesExecutorSpec(
           executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
-          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")),
+          Seq.empty)
       })
 
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -916,9 +933,11 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
 
     when(pvcResource.create()).thenThrow(new KubernetesClientException("PVC fails to create"))
+    when(kubernetesClient.resourceList(any(classOf[HasMetadata]))).thenReturn(deletableList)
     intercept[KubernetesClientException] {
       podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
     }
+    verify(deletableList, times(1)).delete()
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
   }
@@ -927,6 +946,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     (invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt,
-        k8sConf.resourceProfileId.toInt), Seq.empty)
+        k8sConf.resourceProfileId.toInt), Seq.empty, Seq.empty)
   }
 }
