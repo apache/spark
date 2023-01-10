@@ -1627,9 +1627,6 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
-        # TODO(SPARK-41886): The doctest output has different order
-        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
-
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
 
