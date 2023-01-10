@@ -834,13 +834,19 @@ object SparkConnectClient {
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
       Seq(
+        "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
 
     dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
       Seq(
+        "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion
       )
     },
@@ -865,6 +871,8 @@ object SparkConnectClient {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
+      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
+      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
     ),
 
     (assembly / assemblyMergeStrategy) := {
