@@ -64,7 +64,7 @@ object ExtractValue {
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
-      case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
+      case (MapType(_, _, _), _) => GetMapValue(child, extraction)
 
       case (otherType, _) =>
         throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(

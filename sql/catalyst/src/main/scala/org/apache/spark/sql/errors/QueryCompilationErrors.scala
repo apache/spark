@@ -1096,11 +1096,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     dataType match {
       case StructType(_) =>
         new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_1105",
+          errorClass = "INVALID_EXTRACT_FIELD_TYPE",
           messageParameters = Map("extraction" -> extraction.toString))
       case other =>
         new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_1106",
+          errorClass = "INVALID_CHILD_FIELD_TYPE",
           messageParameters = Map(
             "child" -> child.toString,
             "other" -> other.catalogString))
@@ -2082,7 +2082,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def ambiguousReferenceToFieldsError(fields: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1209",
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       messageParameters = Map("fields" -> fields))
   }
 

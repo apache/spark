@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -460,24 +460,44 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("error message of ExtractValue") {
-    val structType = StructType(StructField("a", StringType, true) :: Nil)
-    val otherType = StringType
+    val testResolver = (a: String, b: String) => a == b
+    val childStructFiledLiteral = Literal.create(create_row("test value"),
+      StructType(StructField("test_field", StringType) :: Nil))
+    val extractionIntegerFieldLiteral = Literal.create(null, IntegerType)
+    val childStringFiledLiteral = Literal.create("test value", StringType)
+    val extractionStringFieldLiteral = Literal.create("test_field", StringType)
+    val childStructFiledLiteralWithDuplicateColumns = Literal.create(
+      create_row("test value 1", "test value 2"),
+      StructType(
+        StructField("test_field", StringType) :: StructField("test_field", StringType) :: Nil))
 
-    def checkErrorMessage(
-      childDataType: DataType,
-      fieldDataType: DataType,
-      errorMessage: String): Unit = {
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        ExtractValue(
-          Literal.create(null, childDataType),
-          Literal.create(null, fieldDataType),
-          _ == _)
-      }
-      assert(e.getMessage().contains(errorMessage))
-    }
+    checkError(
+      exception = intercept[AnalysisException](
+        ExtractValue(childStructFiledLiteral, extractionIntegerFieldLiteral, testResolver)),
+      errorClass = "INVALID_EXTRACT_FIELD_TYPE",
+      parameters = Map("extraction" -> extractionIntegerFieldLiteral.toString)
+    )
 
-    checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
-    checkErrorMessage(otherType, StringType, "Can't extract value from")
+    checkError(
+      exception = intercept[AnalysisException](
+        ExtractValue(childStringFiledLiteral, extractionStringFieldLiteral, testResolver)),
+      errorClass = "INVALID_CHILD_FIELD_TYPE",
+      parameters = Map(
+        "child" -> childStringFiledLiteral.toString,
+        "other" -> childStringFiledLiteral.dataType.catalogString)
+    )
+
+    val fields = childStructFiledLiteralWithDuplicateColumns
+      .dataType.asInstanceOf[StructType]
+      .fields
+      .mkString(", ")
+    checkError(
+      exception = intercept[AnalysisException](
+        ExtractValue(childStructFiledLiteralWithDuplicateColumns,
+          extractionStringFieldLiteral, testResolver)),
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      parameters = Map("fields" -> fields)
+    )
   }
 
   test("ensure to preserve metadata") {
