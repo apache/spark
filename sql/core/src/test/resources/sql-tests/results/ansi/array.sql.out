@@ -602,3 +602,75 @@ select array_compact(array(null))
 struct<array_compact(array(NULL)):array<void>>
 -- !query output
 []
+
+
+-- !query
+select array_append(array(1, 2, 3), 4)
+-- !query schema
+struct<array_append(array(1, 2, 3), 4):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_append(array('a', 'b', 'c'), 'd')
+-- !query schema
+struct<array_append(array(a, b, c), d):array<string>>
+-- !query output
+["a","b","c","d"]
+
+
+-- !query
+select array_append(array(1, 2, 3, NULL), NULL)
+-- !query schema
+struct<array_append(array(1, 2, 3, NULL), NULL):array<int>>
+-- !query output
+[1,2,3,null,null]
+
+
+-- !query
+select array_append(array('a', 'b', 'c', NULL), NULL)
+-- !query schema
+struct<array_append(array(a, b, c, NULL), NULL):array<string>>
+-- !query output
+["a","b","c",null,null]
+
+
+-- !query
+select array_append(CAST(null AS ARRAY<String>), 'a')
+-- !query schema
+struct<array_append(NULL, a):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_append(CAST(null AS ARRAY<String>), CAST(null as String))
+-- !query schema
+struct<array_append(NULL, CAST(NULL AS STRING)):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_append(array(), 1)
+-- !query schema
+struct<array_append(array(), 1):array<int>>
+-- !query output
+[1]
+
+
+-- !query
+select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String))
+-- !query schema
+struct<array_append(array(), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null]
+
+
+-- !query
+select array_append(array(CAST(NULL AS String)), CAST(NULL AS String))
+-- !query schema
+struct<array_append(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null,null]

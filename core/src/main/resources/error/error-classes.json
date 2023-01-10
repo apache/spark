@@ -2944,11 +2944,6 @@
       "<decimalType> can only support precision up to <precision>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1230" : {
-    "message" : [
-      "Negative scale is not allowed: <scale>. You can use <config>=true to enable legacy mode to allow it."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1231" : {
     "message" : [
       "<key> is not a valid partition column in table <tblName>."
