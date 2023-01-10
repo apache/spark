@@ -28,7 +28,6 @@ from pyspark.resource.requests import TaskResourceRequests
 
 
 class StageSchedulingTest(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
 
@@ -39,22 +38,29 @@ class StageSchedulingTest(unittest.TestCase):
             self.sc = None
 
     def _test_stage_scheduling(
-            self, cpus_per_worker, gpus_per_worker, num_tasks, resource_profile,
-            expected_max_concurrent_tasks,
+        self,
+        cpus_per_worker,
+        gpus_per_worker,
+        num_tasks,
+        resource_profile,
+        expected_max_concurrent_tasks,
     ):
         conf = SparkConf()
-        conf.setMaster(f"local-cluster[1,{cpus_per_worker},1024]") \
-            .set("spark.task.maxFailures", "1")
+        conf.setMaster(f"local-cluster[1,{cpus_per_worker},1024]").set(
+            "spark.task.maxFailures", "1"
+        )
 
         if gpus_per_worker:
             worker_res_config_file = os.path.join(self.temp_dir, "worker_res.json")
-            worker_res = [{
-                "id": {
-                    "componentName": "spark.worker",
-                    "resourceName": "gpu",
-                },
-                "addresses": [str(i) for i in range(gpus_per_worker)],
-            }]
+            worker_res = [
+                {
+                    "id": {
+                        "componentName": "spark.worker",
+                        "resourceName": "gpu",
+                    },
+                    "addresses": [str(i) for i in range(gpus_per_worker)],
+                }
+            ]
             with open(worker_res_config_file, "w") as fp:
                 json.dump(worker_res, fp)
 
@@ -68,6 +74,7 @@ class StageSchedulingTest(unittest.TestCase):
 
         def mapper(_):
             from pyspark.taskcontext import TaskContext
+
             task_id = TaskContext.get().partitionId()
             pid_file_path = os.path.join(pids_output_dir, str(task_id))
             with open(pid_file_path, mode="w"):
@@ -77,8 +84,13 @@ class StageSchedulingTest(unittest.TestCase):
             time.sleep(1)
             os.remove(pid_file_path)
             return num_concurrent_tasks
-        results = self.sc.parallelize(range(num_tasks), num_tasks) \
-            .withResources(resource_profile).map(mapper).collect()
+
+        results = (
+            self.sc.parallelize(range(num_tasks), num_tasks)
+            .withResources(resource_profile)
+            .map(mapper)
+            .collect()
+        )
         assert max(results) == expected_max_concurrent_tasks
 
     def test_stage_scheduling_4_cpus_per_task(self):
@@ -102,9 +114,11 @@ class StageSchedulingTest(unittest.TestCase):
         )
 
     def test_stage_scheduling_2_cpus_2_gpus_per_task(self):
-        rp = ResourceProfileBuilder().require(
-            TaskResourceRequests().cpus(2).resource("gpu", 2)
-        ).build
+        rp = (
+            ResourceProfileBuilder()
+            .require(TaskResourceRequests().cpus(2).resource("gpu", 2))
+            .build
+        )
         self._test_stage_scheduling(
             cpus_per_worker=4,
             gpus_per_worker=4,
