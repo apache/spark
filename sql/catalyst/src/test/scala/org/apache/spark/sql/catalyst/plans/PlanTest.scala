@@ -23,7 +23,7 @@ import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{GetViewColumnByNameAndOrdinal, SimpleAnalyzer}
+import org.apache.spark.sql.catalyst.analysis.{GetViewColumnByNameAndOrdinal, SimpleAnalyzer, UnresolvedAlias}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -137,6 +137,7 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
         val projList = projectList.map { e =>
           e.transformUp {
             case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
+            case a: UnresolvedAlias if a.aliasFunc.isDefined => a.copy(aliasFunc = None)
           }
         }.asInstanceOf[Seq[NamedExpression]]
         Project(projList, child)
