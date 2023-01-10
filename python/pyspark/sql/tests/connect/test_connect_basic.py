@@ -1681,7 +1681,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
             self.connect.read.table(self.tbl_name).observe(observation_name)
         with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
-            self.connect.read.table(self.tbl_name).observe(observation_name, lit(1), "id")
+            self.connect.read.table(self.tbl_name).observe(observation_name, CF.lit(1), "id")
 
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
