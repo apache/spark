@@ -400,7 +400,7 @@ private[spark] class Executor(
 
   class TaskRunner(
       execBackend: ExecutorBackend,
-      private val taskDescription: TaskDescription,
+      val taskDescription: TaskDescription,
       private val plugins: Option[PluginContainer])
     extends Runnable {
 
