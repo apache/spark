@@ -772,7 +772,10 @@ case class StructsToJson(
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
+  extends UnaryExpression
+  with CodegenFallback
+  with QueryErrorsBase
+  with NullIntolerant {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -793,27 +796,17 @@ case class SchemaOfJson(
   @transient
   private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
 
-  @transient
-  private lazy val json = child.eval().asInstanceOf[UTF8String]
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.foldable && json != null) {
-      super.checkInputDataTypes()
-    } else if (!child.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "json",
-          "inputType" -> toSQLType(child.dataType),
-          "inputExpr" -> toSQLExpr(child)))
-    } else {
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "json"))
-    }
-  }
-
   override def eval(v: InternalRow): Any = {
+    val json: UTF8String = if (child.foldable) {
+      child.eval().asInstanceOf[UTF8String]
+    } else {
+      v.getUTF8String(0)
+    }
+
+    if (json == null) {
+      return null
+    }
+
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
       // To match with schema inference from JSON datasource.
