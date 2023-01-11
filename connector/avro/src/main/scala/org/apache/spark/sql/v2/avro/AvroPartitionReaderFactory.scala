@@ -16,14 +16,11 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import java.net.URI
-
 import scala.util.control.NonFatal
 
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast

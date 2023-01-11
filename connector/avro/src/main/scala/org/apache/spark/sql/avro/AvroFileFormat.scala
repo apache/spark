@@ -18,7 +18,6 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.URI
 
 import scala.util.control.NonFatal
 

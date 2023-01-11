@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.net.URI
 import java.util.Properties
 
 import scala.collection.JavaConverters._

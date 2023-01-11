@@ -38,7 +38,11 @@ class HadoopFileLinesReaderSuite extends SharedSparkSession {
     Files.write(path.toPath, text.getBytes(StandardCharsets.UTF_8))
 
     val lines = ranges.flatMap { case (start, length) =>
-      val file = PartitionedFile(InternalRow.empty, path.getCanonicalPath, start, length)
+      val file = PartitionedFile(
+        InternalRow.empty,
+        SparkPath.fromPathString(path.getCanonicalPath),
+        start,
+        length)
       val hadoopConf = conf.getOrElse(spark.sessionState.newHadoopConf())
       val reader = new HadoopFileLinesReader(file, delimOpt, hadoopConf)
 

@@ -28,6 +28,7 @@ import scala.util.Random
 import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.paths.SparkPath.{fromUriString => sp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -47,7 +48,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     withFileStreamSinkLog { sinkLog =>
       val logs = Array(
         SinkFileStatus(
-          path = "/a/b/x",
+          path = sp("/a/b/x"),
           size = 100L,
           isDir = false,
           modificationTime = 1000L,
@@ -55,7 +56,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
           blockSize = 10000L,
           action = FileStreamSinkLog.ADD_ACTION),
         SinkFileStatus(
-          path = "/a/b/z",
+          path = sp("/a/b/z"),
           size = 300L,
           isDir = false,
           modificationTime = 3000L,
@@ -87,7 +88,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
       val expected = Seq(
         SinkFileStatus(
-          path = "/a/b/x",
+          path = sp("/a/b/x"),
           size = 100L,
           isDir = false,
           modificationTime = 1000L,
@@ -95,7 +96,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
           blockSize = 10000L,
           action = FileStreamSinkLog.ADD_ACTION),
         SinkFileStatus(
-          path = "/a/b/z",
+          path = sp("/a/b/z"),
           size = 300L,
           isDir = false,
           modificationTime = 3000L,
@@ -214,16 +215,16 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
   test("read Spark 2.1.0 log format") {
     assert(readFromResource("file-sink-log-version-2.1.0") === Seq(
-      SinkFileStatus("/a/b/0", 1, false, 1, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/2", 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/3", 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/4", 400, false, 400, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/5", 500, false, 500, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/6", 600, false, 600, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/7", 700, false, 700, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/8", 800, false, 800, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/9", 900, false, 900, 3, 200, FileStreamSinkLog.ADD_ACTION)
+      SinkFileStatus(sp("/a/b/0"), 1, false, 1, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/1"), 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/2"), 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/3"), 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/4"), 400, false, 400, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/5"), 500, false, 500, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/6"), 600, false, 600, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/7"), 700, false, 700, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/8"), 800, false, 800, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus(sp("/a/b/9"), 900, false, 900, 3, 200, FileStreamSinkLog.ADD_ACTION)
     ))
   }
 
@@ -274,7 +275,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
       action: String,
       modificationTime: Long = Long.MaxValue): SinkFileStatus = {
     SinkFileStatus(
-      path = path,
+      path = sp(path),
       size = 100L,
       isDir = false,
       modificationTime = modificationTime,

@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.JobContext
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -519,7 +520,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           .filter(_.toString.endsWith(".parquet"))
           .map(_.getFileName.toString)
           .toSet
-        val trackingFileNames = tracking.map(new Path(_).getName).toSet
+        val trackingFileNames = tracking.map(SparkPath.fromUriString(_).toPath.getName).toSet
 
         // there would be possible to have race condition:
         // - some tasks complete while abortJob is being called
@@ -569,7 +570,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           val allFiles = sinkLog.allFiles()
           // only files from non-empty partition should be logged
           assert(allFiles.length < 10)
-          assert(allFiles.forall(file => fs.exists(new Path(file.path))))
+          assert(allFiles.forall(file => fs.exists(file.path.toPath)))
 
           // the query should be able to read all rows correctly with metadata log
           val outputDf = spark.read.format(format).load(outputDir.getCanonicalPath)
@@ -668,7 +669,7 @@ class PendingCommitFilesTrackingManifestFileCommitProtocol(jobId: String, path: 
 
   override def onTaskCommit(taskCommit: FileCommitProtocol.TaskCommitMessage): Unit = {
     super.onTaskCommit(taskCommit)
-    addPendingCommitFiles(taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]].map(_.path))
+    addPendingCommitFiles(taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]].map(_.path.uriEncoded))
   }
 }
 
