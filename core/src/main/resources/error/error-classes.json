@@ -623,7 +623,7 @@
   },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the index because it already exists. <message>."
+      "Cannot create the index <indexName> on table <tableName> because it already exists."
     ],
     "sqlState" : "42000"
   },
