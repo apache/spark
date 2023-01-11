@@ -38,7 +38,6 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def lenientSerialization: Boolean = false
 }
 
-// TODO check BeanEncoder
 object AgnosticEncoders {
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
     extends AgnosticEncoder[Option[E]] {

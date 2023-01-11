@@ -1535,10 +1535,10 @@ class SessionCatalog(
 
   /**
    * Unregister a temporary or permanent function from a session-specific [[FunctionRegistry]]
-   * Return true if function exists.
+   * or [[TableFunctionRegistry]]. Return true if function exists.
    */
   def unregisterFunction(name: FunctionIdentifier): Boolean = {
-    functionRegistry.dropFunction(name)
+    functionRegistry.dropFunction(name) || tableFunctionRegistry.dropFunction(name)
   }
 
   /**

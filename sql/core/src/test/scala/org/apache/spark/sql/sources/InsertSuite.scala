@@ -1552,7 +1552,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them") {
     case class Config(
         sqlConf: Option[(String, String)],
-        insertNullsToStorage: Boolean = true,
         useDataFrames: Boolean = false)
     def runTest(dataSource: String, config: Config): Unit = {
       def insertIntoT(): Unit = {
@@ -1591,10 +1590,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("insert into t values(null, null, null)")
         }
         sql("alter table t add column (x boolean default true)")
-        // By default, INSERT commands into some tables (such as JSON) do not store NULL values.
-        // Therefore, if such destination columns have DEFAULT values, SELECTing the same columns
-        // will return the default values (instead of NULL) since nothing is present in storage.
-        val insertedSColumn = if (config.insertNullsToStorage) null else "abcdef"
+        val insertedSColumn = null
         checkAnswer(spark.table("t"),
           Seq(
             Row("xyz", 42, "abcdef", true),
@@ -2031,27 +2027,33 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
+    val tableName = "t"
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true",
         SQLConf.FASTFAIL_ON_FILEFORMAT_OUTPUT.key -> fastFail.toString) {
-        withTable("t") {
+        withTable(tableName) {
           sql(
-            """
-              |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+            s"""
+              |CREATE TABLE $tableName(i INT, part1 INT) USING PARQUET
               |PARTITIONED BY (part1)
           """.stripMargin)
 
           val df = Seq((1, 1)).toDF("i", "part1")
           val err = intercept[SparkException] {
-            df.write.mode("overwrite").format("parquet").insertInto("t")
+            df.write.mode("overwrite").format("parquet").insertInto(tableName)
           }
 
           if (fastFail) {
             assert(err.getMessage.contains("can not write to output file: " +
               "org.apache.hadoop.fs.FileAlreadyExistsException"))
           } else {
-            assert(err.getMessage.contains("Task failed while writing rows"))
+            checkError(
+              exception = err.getCause.asInstanceOf[SparkException],
+              errorClass = "TASK_WRITE_FAILED",
+              parameters = Map("path" -> s".*$tableName"),
+              matchPVals = true
+            )
           }
         }
       }

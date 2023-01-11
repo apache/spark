@@ -34,7 +34,7 @@ class ErrorParserSuite extends AnalysisTest {
   test("semantic errors") {
     checkError(
       exception = parseException("select *\nfrom r\norder by q\ncluster by q"),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(fragment = "order by q\ncluster by q", start = 16, stop = 38))
   }

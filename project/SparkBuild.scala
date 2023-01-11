@@ -88,7 +88,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.21.11"
+  val protoVersion = "3.21.12"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -225,12 +225,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.10 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.12 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.10"
+        val silencerVersion = "1.7.12"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -834,13 +834,19 @@ object SparkConnectClient {
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
       Seq(
+        "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
 
     dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
       Seq(
+        "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion
       )
     },
@@ -865,6 +871,8 @@ object SparkConnectClient {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
+      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
+      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
     ),
 
     (assembly / assemblyMergeStrategy) := {

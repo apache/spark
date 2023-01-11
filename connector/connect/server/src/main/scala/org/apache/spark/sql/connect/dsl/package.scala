@@ -60,6 +60,18 @@ package object dsl {
               .newBuilder()
               .setColName(s))
           .build()
+
+      def asc: Expression =
+        Expression
+          .newBuilder()
+          .setSortOrder(
+            Expression.SortOrder
+              .newBuilder()
+              .setChild(protoAttr)
+              .setDirectionValue(
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+              .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST))
+          .build()
     }
 
     implicit class DslExpression(val expr: Expression) {
@@ -362,6 +374,52 @@ package object dsl {
     }
 
     implicit class DslStatFunctions(val logicalPlan: Relation) {
+      def cov(col1: String, col2: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCov(
+            proto.StatCov
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .build())
+          .build()
+      }
+
+      def corr(col1: String, col2: String, method: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCorr(
+            proto.StatCorr
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .setMethod(method)
+              .build())
+          .build()
+      }
+
+      def corr(col1: String, col2: String): Relation = corr(col1, col2, "pearson")
+
+      def approxQuantile(
+          cols: Array[String],
+          probabilities: Array[Double],
+          relativeError: Double): Relation = {
+        Relation
+          .newBuilder()
+          .setApproxQuantile(
+            proto.StatApproxQuantile
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .addAllProbabilities(probabilities.toSeq.map(Double.box).asJava)
+              .setRelativeError(relativeError)
+              .build())
+          .build()
+      }
+
       def crosstab(col1: String, col2: String): Relation = {
         Relation
           .newBuilder()
@@ -374,6 +432,26 @@ package object dsl {
               .build())
           .build()
       }
+
+      def freqItems(cols: Array[String], support: Double): Relation = {
+        Relation
+          .newBuilder()
+          .setFreqItems(
+            proto.StatFreqItems
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .setSupport(support)
+              .build())
+          .build()
+      }
+
+      def freqItems(cols: Array[String]): Relation = freqItems(cols, 0.01)
+
+      def freqItems(cols: Seq[String], support: Double): Relation =
+        freqItems(cols.toArray, support)
+
+      def freqItems(cols: Seq[String]): Relation = freqItems(cols, 0.01)
     }
 
     def select(exprs: Expression*): Relation = {
@@ -601,13 +679,61 @@ package object dsl {
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
         val agg = Aggregate.newBuilder()
         agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
 
         for (groupingExpr <- groupingExprs) {
           agg.addGroupingExpressions(groupingExpr)
         }
         for (aggregateExpr <- aggregateExprs) {
-          agg.addResultExpressions(aggregateExpr)
+          agg.addAggregateExpressions(aggregateExpr)
         }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def rollup(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def cube(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def pivot(groupingExprs: Expression*)(
+          pivotCol: Expression,
+          pivotValues: Seq[proto.Expression.Literal])(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        agg.setPivot(
+          Aggregate.Pivot.newBuilder().setCol(pivotCol).addAllValues(pivotValues.asJava).build())
+
         Relation.newBuilder().setAggregate(agg.build()).build()
       }
 
@@ -649,12 +775,76 @@ package object dsl {
               .setShuffle(false))
           .build()
 
-      def repartition(num: Integer): Relation =
+      def repartition(num: Int): Relation =
         Relation
           .newBuilder()
           .setRepartition(
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
+
+      @scala.annotation.varargs
+      def repartition(partitionExprs: Expression*): Relation = {
+        repartition(None, partitionExprs)
+      }
+
+      @scala.annotation.varargs
+      def repartition(num: Int, partitionExprs: Expression*): Relation = {
+        repartition(Some(num), partitionExprs)
+      }
+
+      private def repartition(numOpt: Option[Int], partitionExprs: Seq[Expression]): Relation = {
+        val expressions = RepartitionByExpression
+          .newBuilder()
+          .setInput(logicalPlan)
+        numOpt.foreach(expressions.setNumPartitions)
+        for (expr <- partitionExprs) {
+          expressions.addPartitionExprs(expr)
+        }
+        Relation
+          .newBuilder()
+          .setRepartitionByExpression(expressions)
+          .build()
+      }
+
+      @scala.annotation.varargs
+      def repartitionByRange(partitionExprs: Expression*): Relation = {
+        repartitionByRange(None, partitionExprs)
+      }
+
+      @scala.annotation.varargs
+      def repartitionByRange(num: Int, partitionExprs: Expression*): Relation = {
+        repartitionByRange(Some(num), partitionExprs)
+      }
+
+      private def repartitionByRange(
+          numOpt: Option[Int],
+          partitionExprs: Seq[Expression]): Relation = {
+        val expressions = RepartitionByExpression
+          .newBuilder()
+          .setInput(logicalPlan)
+        numOpt.foreach(expressions.setNumPartitions)
+        partitionExprs
+          .map(expr =>
+            expr.getExprTypeCase match {
+              case Expression.ExprTypeCase.SORT_ORDER => expr
+              case _ =>
+                Expression
+                  .newBuilder()
+                  .setSortOrder(
+                    Expression.SortOrder
+                      .newBuilder()
+                      .setChild(expr)
+                      .setDirectionValue(
+                        proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+                      .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST))
+                  .build()
+            })
+          .foreach(order => expressions.addPartitionExprs(order))
+        Relation
+          .newBuilder()
+          .setRepartitionByExpression(expressions)
+          .build()
+      }
 
       def na: DslNAFunctions = new DslNAFunctions(logicalPlan)
 
@@ -723,13 +913,17 @@ package object dsl {
             WithColumns
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllNameExprList(colsMap.map { case (k, v) =>
+              .addAllAliases(colsMap.map { case (k, v) =>
                 Expression.Alias.newBuilder().addName(k).setExpr(v).build()
               }.asJava))
           .build()
       }
 
       def hint(name: String, parameters: Any*): Relation = {
+        val expressions = parameters.map { parameter =>
+          proto.Expression.newBuilder().setLiteral(toConnectProtoValue(parameter)).build()
+        }
+
         Relation
           .newBuilder()
           .setHint(
@@ -737,7 +931,7 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .setName(name)
-              .addAllParameters(parameters.map(toConnectProtoValue).asJava))
+              .addAllParameters(expressions.asJava))
           .build()
       }
 
@@ -811,7 +1005,7 @@ package object dsl {
                   .setUpperBound(x(1))
                   .setWithReplacement(false)
                   .setSeed(seed)
-                  .setForceStableSort(true)
+                  .setDeterministicOrder(true)
                   .build())
               .build()
           }

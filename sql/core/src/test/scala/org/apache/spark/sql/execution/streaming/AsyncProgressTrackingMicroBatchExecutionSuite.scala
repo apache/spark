@@ -722,36 +722,41 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    val commitDir = new File(checkpointLocation + path)
 
-    testStream(
-      ds,
-      extraOptions = Map(
-        ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
-        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
-      )
-    )(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 0),
-      CheckAnswer(0),
-      Execute { q =>
-        waitPendingOffsetWrites(q)
-        // to simulate write error
-        import java.io._
-        val commitDir = new File(checkpointLocation + path)
-        commitDir.setReadOnly()
+    try {
+      testStream(
+        ds,
+        extraOptions = Map(
+          ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+          ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+        )
+      )(
+        StartStream(checkpointLocation = checkpointLocation),
+        AddData(inputData, 0),
+        CheckAnswer(0),
+        Execute { q =>
+          waitPendingOffsetWrites(q)
+          // to simulate write error
+          commitDir.setReadOnly()
 
-      },
-      AddData(inputData, 1),
-      Execute {
-        q =>
-          eventually(timeout(Span(5, Seconds))) {
-            val e = intercept[StreamingQueryException] {
-              q.processAllAvailable()
+        },
+        AddData(inputData, 1),
+        Execute {
+          q =>
+            eventually(timeout(Span(5, Seconds))) {
+              val e = intercept[StreamingQueryException] {
+                q.processAllAvailable()
+              }
+              e.getCause.getCause.getMessage should include("Permission denied")
             }
-            e.getCause.getCause.getMessage should include("Permission denied")
-          }
-      }
-    )
+        }
+      )
+    } finally {
+      // SPARK-41894: Restore the write permission of `commitDir`
+      // so that `mvn clean` can run successfully.
+      commitDir.setWritable(true)
+    }
   }
 
     // Tests that errors that occurred during async offset log write gets bubbled up

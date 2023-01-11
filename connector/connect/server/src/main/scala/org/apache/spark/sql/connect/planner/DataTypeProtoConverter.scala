@@ -95,13 +95,17 @@ object DataTypeProtoConverter {
   }
 
   private def toCatalystStructType(t: proto.DataType.Struct): StructType = {
-    // TODO: support metadata
     val fields = t.getFieldsList.toSeq.map { protoField =>
+      val metadata = if (protoField.hasMetadata) {
+        Metadata.fromJson(protoField.getMetadata)
+      } else {
+        Metadata.empty
+      }
       StructField(
         name = protoField.getName,
         dataType = toCatalystType(protoField.getDataType),
         nullable = protoField.getNullable,
-        metadata = Metadata.empty)
+        metadata = metadata)
     }
     StructType.apply(fields)
   }
@@ -249,19 +253,28 @@ object DataTypeProtoConverter {
           .build()
 
       case StructType(fields: Array[StructField]) =>
-        // TODO: support metadata
         val protoFields = fields.toSeq.map {
           case StructField(
                 name: String,
                 dataType: DataType,
                 nullable: Boolean,
                 metadata: Metadata) =>
-            proto.DataType.StructField
-              .newBuilder()
-              .setName(name)
-              .setDataType(toConnectProtoType(dataType))
-              .setNullable(nullable)
-              .build()
+            if (metadata.equals(Metadata.empty)) {
+              proto.DataType.StructField
+                .newBuilder()
+                .setName(name)
+                .setDataType(toConnectProtoType(dataType))
+                .setNullable(nullable)
+                .build()
+            } else {
+              proto.DataType.StructField
+                .newBuilder()
+                .setName(name)
+                .setDataType(toConnectProtoType(dataType))
+                .setNullable(nullable)
+                .setMetadata(metadata.json)
+                .build()
+            }
         }
         proto.DataType
           .newBuilder()

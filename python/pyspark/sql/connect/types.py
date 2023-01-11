@@ -15,9 +15,13 @@
 # limitations under the License.
 #
 
-from typing import Optional
+import datetime
+import json
+
+from typing import Any, Optional, Callable
 
 from pyspark.sql.types import (
+    Row,
     DataType,
     ByteType,
     ShortType,
@@ -57,7 +61,9 @@ JVM_LONG_MAX: int = (1 << 63) - 1
 
 def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     ret = pb2.DataType()
-    if isinstance(data_type, StringType):
+    if isinstance(data_type, NullType):
+        ret.null.CopyFrom(pb2.DataType.NULL())
+    elif isinstance(data_type, StringType):
         ret.string.CopyFrom(pb2.DataType.String())
     elif isinstance(data_type, BooleanType):
         ret.boolean.CopyFrom(pb2.DataType.Boolean())
@@ -92,7 +98,16 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
             struct_field.name = field.name
             struct_field.data_type.CopyFrom(pyspark_types_to_proto_types(field.dataType))
             struct_field.nullable = field.nullable
+            if field.metadata is not None and len(field.metadata) > 0:
+                struct_field.metadata = json.dumps(field.metadata)
             ret.struct.fields.append(struct_field)
+    elif isinstance(data_type, MapType):
+        ret.map.key_type.CopyFrom(pyspark_types_to_proto_types(data_type.keyType))
+        ret.map.value_type.CopyFrom(pyspark_types_to_proto_types(data_type.valueType))
+        ret.map.value_contains_null = data_type.valueContainsNull
+    elif isinstance(data_type, ArrayType):
+        ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
+        ret.array.contains_null = data_type.containsNull
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
@@ -151,14 +166,17 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             schema.array.contains_null,
         )
     elif schema.HasField("struct"):
-        fields = [
-            StructField(
-                f.name,
-                proto_schema_to_pyspark_data_type(f.data_type),
-                f.nullable,
+        fields = []
+        for f in schema.struct.fields:
+            if f.HasField("metadata"):
+                metadata = json.loads(f.metadata)
+            else:
+                metadata = None
+            fields.append(
+                StructField(
+                    f.name, proto_schema_to_pyspark_data_type(f.data_type), f.nullable, metadata
+                )
             )
-            for f in schema.struct.fields
-        ]
         return StructType(fields)
     elif schema.HasField("map"):
         return MapType(
@@ -168,3 +186,113 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         )
     else:
         raise Exception(f"Unsupported data type {schema}")
+
+
+def _need_converter(dataType: DataType) -> bool:
+    if isinstance(dataType, NullType):
+        return True
+    elif isinstance(dataType, StructType):
+        return True
+    elif isinstance(dataType, ArrayType):
+        return _need_converter(dataType.elementType)
+    elif isinstance(dataType, MapType):
+        # Different from PySpark, here always needs conversion,
+        # since the input from Arrow is a list of tuples.
+        return True
+    elif isinstance(dataType, BinaryType):
+        return True
+    elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+        # Always remove the time zone info for now
+        return True
+    else:
+        return False
+
+
+def _create_converter(dataType: DataType) -> Callable:
+    assert dataType is not None and isinstance(dataType, DataType)
+
+    if not _need_converter(dataType):
+        return lambda value: value
+
+    if isinstance(dataType, NullType):
+        return lambda value: None
+
+    elif isinstance(dataType, StructType):
+
+        field_convs = {f.name: _create_converter(f.dataType) for f in dataType.fields}
+        need_conv = any(_need_converter(f.dataType) for f in dataType.fields)
+
+        def convert_struct(value: Any) -> Row:
+            if value is None:
+                return Row()
+            else:
+                assert isinstance(value, dict)
+
+                if need_conv:
+                    _dict = {}
+                    for k, v in value.items():
+                        assert isinstance(k, str)
+                        _dict[k] = field_convs[k](v)
+                    return Row(**_dict)
+                else:
+                    return Row(**value)
+
+        return convert_struct
+
+    elif isinstance(dataType, ArrayType):
+
+        element_conv = _create_converter(dataType.elementType)
+
+        def convert_array(value: Any) -> Any:
+            if value is None:
+                return None
+            else:
+                assert isinstance(value, list)
+                return [element_conv(v) for v in value]
+
+        return convert_array
+
+    elif isinstance(dataType, MapType):
+
+        key_conv = _create_converter(dataType.keyType)
+        value_conv = _create_converter(dataType.valueType)
+
+        def convert_map(value: Any) -> Any:
+            if value is None:
+                return None
+            else:
+                assert isinstance(value, list)
+                assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
+                return dict((key_conv(t[0]), value_conv(t[1])) for t in value)
+
+        return convert_map
+
+    elif isinstance(dataType, BinaryType):
+
+        def convert_binary(value: Any) -> Any:
+            if value is None:
+                return None
+            else:
+                assert isinstance(value, bytes)
+                return bytearray(value)
+
+        return convert_binary
+
+    elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+
+        def convert_timestample(value: Any) -> Any:
+            if value is None:
+                return None
+            else:
+                assert isinstance(value, datetime.datetime)
+                if value.tzinfo is not None:
+                    # always remove the time zone for now
+                    return value.replace(tzinfo=None)
+                else:
+                    return value
+
+        return convert_timestample
+
+    else:
+
+        return lambda value: value

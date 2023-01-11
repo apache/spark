@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, Expression, LateralColumnAliasReference, LeafExpression, Literal, NamedExpression, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, LateralColumnAliasReference, NamedExpression, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.LATERAL_COLUMN_ALIAS_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -82,25 +81,9 @@ import org.apache.spark.sql.internal.SQLConf
  *    +- Aggregate [dept#14] [avg(salary#16) AS avg(salary)#26, avg(bonus#17) AS avg(bonus)#27,
  *                            dept#14]
  *       +- Child [dept#14,name#15,salary#16,bonus#17]
- *
- *
- * The name resolution priority:
- * local table column > local lateral column alias > outer reference
- *
- * Because lateral column alias has higher resolution priority than outer reference, it will try
- * to resolve an [[OuterReference]] using lateral column alias in phase 1, similar as an
- * [[UnresolvedAttribute]]. If success, it strips [[OuterReference]] and also wraps it with
- * [[LateralColumnAliasReference]].
  */
 object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
   case class AliasEntry(alias: Alias, index: Int)
-
-  /**
-   * A tag to store the nameParts from the original unresolved attribute.
-   * It is set for [[OuterReference]], used in the current rule to convert [[OuterReference]] back
-   * to [[LateralColumnAliasReference]].
-   */
-  val NAME_PARTS_FROM_UNRESOLVED_ATTR = TreeNodeTag[Seq[String]]("name_parts_from_unresolved_attr")
 
   private def assignAlias(expr: Expression): NamedExpression = {
     expr match {
@@ -111,6 +94,11 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
+      plan
+    } else if (plan.containsPattern(TEMP_RESOLVED_COLUMN)) {
+      // We should not change the plan if `TempResolvedColumn` is present in the query plan. It
+      // needs certain plan shape to get resolved, such as Filter/Sort + Aggregate. LCA resolution
+      // may break the plan shape, like adding Project above Aggregate.
       plan
     } else {
       // phase 2: unwrap
@@ -168,8 +156,8 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
 
           // Check if current Aggregate is eligible to lift up with Project: the aggregate
-          // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) lateral
-          // column alias reference or 4) literals.
+          // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) leaf
+          // expressions excluding attributes not in grouping expressions
           // This check is to prevent unnecessary transformation on invalid plan, to guarantee it
           // throws the same exception. For example, cases like non-aggregate expressions not
           // in group by, once transformed, will throw a different exception: missing input.
@@ -177,10 +165,9 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             exp match {
               case e if AggregateExpression.isAggregate(e) => true
               case e if groupingExpressions.exists(_.semanticEquals(e)) => true
-              case _: Literal | _: LateralColumnAliasReference => true
+              case a: Attribute => false
               case s: ScalarSubquery if s.children.nonEmpty
-                  && !groupingExpressions.exists(_.semanticEquals(s)) => false
-              case _: LeafExpression => false
+                && !groupingExpressions.exists(_.semanticEquals(s)) => false
               case e => e.children.forall(eligibleToLiftUp)
             }
           }
@@ -210,14 +197,10 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 ne.toAttribute
             }.asInstanceOf[NamedExpression]
           }
-          if (newAggExprs.isEmpty) {
-            agg
-          } else {
-            Project(
-              projectList = projectExprs,
-              child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
-            )
-          }
+          Project(
+            projectList = projectExprs,
+            child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
+          )
       }
     }
   }

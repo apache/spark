@@ -1466,9 +1466,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       throw QueryParsingErrors.invalidTableValuedFunctionNameError(name, ctx)
     }
 
-    val tvf = UnresolvedTableValuedFunction(
-      name, func.expression.asScala.map(expression).toSeq, aliases)
-    tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+    val tvf = UnresolvedTableValuedFunction(name, func.expression.asScala.map(expression).toSeq)
+
+    val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(name, tvf, aliases) else tvf
+
+    tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
   /**
@@ -1705,9 +1707,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * - Null-safe Equal: '<=>'
    * - Not Equal: '<>' or '!='
    * - Less than: '<'
-   * - Less then or Equal: '<='
+   * - Less than or Equal: '<='
    * - Greater than: '>'
-   * - Greater then or Equal: '>='
+   * - Greater than or Equal: '>='
    */
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.left)
@@ -4709,7 +4711,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         Seq(describeFuncName.getText)
       }
     DescribeFunction(
-      UnresolvedFunc(
+      UnresolvedFunctionName(
         functionName,
         "DESCRIBE FUNCTION",
         requirePersistent = false,
@@ -4747,7 +4749,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    RefreshFunction(UnresolvedFunc(
+    RefreshFunction(UnresolvedFunctionName(
       functionIdentifier,
       "REFRESH FUNCTION",
       requirePersistent = true,

@@ -203,7 +203,7 @@ private[yarn] class YarnAllocator(
 
   // The default profile is always present so we need to initialize the datastructures keyed by
   // ResourceProfile id to ensure its present if things start running before a request for
-  // executors could add it. This approach is easier then going and special casing everywhere.
+  // executors could add it. This approach is easier than going and special casing everywhere.
   private def initDefaultProfile(): Unit = synchronized {
     allocatedHostToContainersMapPerRPId(DEFAULT_RESOURCE_PROFILE_ID) =
       new HashMap[String, mutable.Set[ContainerId]]()
@@ -705,7 +705,7 @@ private[yarn] class YarnAllocator(
       containersToUse: ArrayBuffer[Container],
       remaining: ArrayBuffer[Container]): Unit = {
     // Match on the exact resource we requested so there shouldn't be a mismatch,
-    // we are relying on YARN to return a container with resources no less then we requested.
+    // we are relying on YARN to return a container with resources no less than we requested.
     // If we change this, or starting validating the container, be sure the logic covers SPARK-6050.
     val rpId = getResourceProfileIdFromPriority(allocatedContainer.getPriority)
     val resourceForRP = rpIdToYarnResource.get(rpId)

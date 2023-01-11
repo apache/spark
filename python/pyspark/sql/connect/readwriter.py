@@ -198,6 +198,38 @@ class DataFrameReader(OptionUtils):
 
     parquet.__doc__ = PySparkDataFrameReader.parquet.__doc__
 
+    def text(
+        self,
+        path: str,
+        wholetext: Optional[bool] = None,
+        lineSep: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            wholetext=wholetext,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+        )
+
+        return self.load(path=path, format="text")
+
+    text.__doc__ = PySparkDataFrameReader.text.__doc__
+
+    def csv(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("csv() is not implemented.")
+
+    def orc(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("orc() is not implemented.")
+
+    def jdbc(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("jdbc() not supported for DataFrameWriter")
+
 
 DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__
 
@@ -458,3 +490,60 @@ class DataFrameWriter(OptionUtils):
 
     def jdbc(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("jdbc() not supported for DataFrameWriter")
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.readwriter
+
+        globs = pyspark.sql.connect.readwriter.__dict__.copy()
+
+        # TODO(SPARK-41817): Support reading with schema
+        del pyspark.sql.connect.readwriter.DataFrameReader.load.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameReader.text.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.csv.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.text.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
+
+        # TODO(SPARK-41818): Support saveAsTable
+        del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
+
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.readwriter tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.readwriter,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.readwriter doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

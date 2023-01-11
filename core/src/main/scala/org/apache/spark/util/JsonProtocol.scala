@@ -407,6 +407,8 @@ private[spark] object JsonProtocol {
     g.writeFieldName("Accumulables")
     accumulablesToJson(stageInfo.accumulables.values, g)
     g.writeNumberField("Resource Profile Id", stageInfo.resourceProfileId)
+    g.writeBooleanField("Shuffle Push Enabled", stageInfo.isShufflePushEnabled)
+    g.writeNumberField("Shuffle Push Mergers Count", stageInfo.shuffleMergerCount)
     g.writeEndObject()
   }
 
@@ -508,6 +510,28 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics, g: JsonGenerator): Unit = {
+    def writeShufflePushReadMetrics(): Unit = {
+      g.writeStartObject()
+      g.writeNumberField("Corrupt Merged Block Chunks",
+        taskMetrics.shuffleReadMetrics.corruptMergedBlockChunks)
+      g.writeNumberField("Merged Fetch Fallback Count",
+        taskMetrics.shuffleReadMetrics.mergedFetchFallbackCount)
+      g.writeNumberField("Merged Remote Blocks Fetched",
+        taskMetrics.shuffleReadMetrics.remoteMergedBlocksFetched)
+      g.writeNumberField("Merged Local Blocks Fetched",
+        taskMetrics.shuffleReadMetrics.localMergedBlocksFetched)
+      g.writeNumberField("Merged Remote Chunks Fetched",
+        taskMetrics.shuffleReadMetrics.remoteMergedChunksFetched)
+      g.writeNumberField("Merged Local Chunks Fetched",
+        taskMetrics.shuffleReadMetrics.localMergedChunksFetched)
+      g.writeNumberField("Merged Remote Bytes Read",
+        taskMetrics.shuffleReadMetrics.remoteMergedBytesRead)
+      g.writeNumberField("Merged Local Bytes Read",
+        taskMetrics.shuffleReadMetrics.localMergedBytesRead)
+      g.writeNumberField("Merged Remote Requests Duration",
+        taskMetrics.shuffleReadMetrics.remoteMergedReqsDuration)
+      g.writeEndObject()
+    }
     def writeShuffleReadMetrics(): Unit = {
       g.writeStartObject()
       g.writeNumberField(
@@ -519,6 +543,10 @@ private[spark] object JsonProtocol {
         "Remote Bytes Read To Disk", taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk)
       g.writeNumberField("Local Bytes Read", taskMetrics.shuffleReadMetrics.localBytesRead)
       g.writeNumberField("Total Records Read", taskMetrics.shuffleReadMetrics.recordsRead)
+      g.writeNumberField("Remote Requests Duration",
+        taskMetrics.shuffleReadMetrics.remoteReqsDuration)
+      g.writeFieldName("Push Based Shuffle")
+      writeShufflePushReadMetrics()
       g.writeEndObject()
     }
     def writeShuffleWriteMetrics(): Unit = {
@@ -1105,11 +1133,17 @@ private[spark] object JsonProtocol {
         case None => Seq.empty[AccumulableInfo]
       }
     }
+    val isShufflePushEnabled =
+      jsonOption(json.get("Shuffle Push Enabled")).map(_.extractBoolean).getOrElse(false)
+    val shufflePushMergersCount =
+      jsonOption(json.get("Shuffle Push Mergers Count")).map(_.extractInt).getOrElse(0)
 
     val rpId = jsonOption(json.get("Resource Profile Id")).map(_.extractInt)
     val stageProf = rpId.getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val stageInfo = new StageInfo(stageId, attemptId, stageName, numTasks, rddInfos,
-      parentIds, details, resourceProfileId = stageProf)
+      parentIds, details, resourceProfileId = stageProf,
+      isShufflePushEnabled = isShufflePushEnabled,
+      shuffleMergerCount = shufflePushMergersCount)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
@@ -1225,6 +1259,29 @@ private[spark] object JsonProtocol {
       readMetrics.incFetchWaitTime(readJson.get("Fetch Wait Time").extractLong)
       readMetrics.incRecordsRead(
         jsonOption(readJson.get("Total Records Read")).map(_.extractLong).getOrElse(0L))
+      readMetrics.incRemoteReqsDuration(jsonOption(readJson.get("Remote Requests Duration"))
+        .map(_.extractLong).getOrElse(0L))
+      jsonOption(readJson.get("Shuffle Push Read Metrics")).foreach { shufflePushReadJson =>
+        readMetrics.incCorruptMergedBlockChunks(jsonOption(
+          shufflePushReadJson.get("Corrupt Merged Block Chunks"))
+            .map(_.extractLong).getOrElse(0L))
+        readMetrics.incMergedFetchFallbackCount(jsonOption(
+          shufflePushReadJson.get("Merged Fallback Count")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incRemoteMergedBlocksFetched(jsonOption(shufflePushReadJson
+          .get("Merged Remote Blocks Fetched")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incLocalMergedBlocksFetched(jsonOption(shufflePushReadJson
+          .get("Merged Local Blocks Fetched")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incRemoteMergedChunksFetched(jsonOption(shufflePushReadJson
+          .get("Merged Remote Chunks Fetched")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incLocalMergedChunksFetched(jsonOption(shufflePushReadJson
+          .get("Merged Local Chunks Fetched")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incRemoteMergedBytesRead(jsonOption(shufflePushReadJson
+          .get("Merged Remote Bytes Read")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incLocalMergedBytesRead(jsonOption(shufflePushReadJson
+          .get("Merged Local Bytes Read")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incRemoteMergedReqsDuration(jsonOption(shufflePushReadJson
+          .get("Merged Remote Requests Duration")).map(_.extractLong).getOrElse(0L))
+      }
       metrics.mergeShuffleReadMetrics()
     }
 
