@@ -405,19 +405,19 @@ message SQLPlanMetric {
 
 message SQLExecutionUIData {
   int64 execution_id = 1;
-  string description = 2;
-  string details = 3;
-  string physical_plan_description = 4;
-  map<string, string> modified_configs = 5;
-  repeated SQLPlanMetric metrics = 6;
-  int64 submission_time = 7;
-  optional int64 completion_time = 8;
-  optional string error_message = 9;
-  map<int64, JobExecutionStatus> jobs = 10;
-  repeated int64 stages = 11;
-  bool metric_values_is_null = 12;
-  map<int64, string> metric_values = 13;
-  optional int64 root_execution_id = 14;
+  int64 root_execution_id = 2;
+  string description = 3;
+  string details = 4;
+  string physical_plan_description = 5;
+  map<string, string> modified_configs = 6;
+  repeated SQLPlanMetric metrics = 7;
+  int64 submission_time = 8;
+  optional int64 completion_time = 9;
+  optional string error_message = 10;
+  map<int64, JobExecutionStatus> jobs = 11;
+  repeated int64 stages = 12;
+  bool metric_values_is_null = 13;
+  map<int64, string> metric_values = 14;
 }
 
 message SparkPlanGraphNode {
