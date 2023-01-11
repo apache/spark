@@ -33,20 +33,34 @@ from typing import (
 import sys
 import random
 import pandas
-import datetime
 import json
 import warnings
 from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import StructType, Row
+from pyspark.sql.types import (
+    _create_row,
+    Row,
+    StructType,
+    ArrayType,
+    MapType,
+    TimestampType,
+    TimestampNTZType,
+)
+from pyspark.sql.dataframe import (
+    DataFrame as PySparkDataFrame,
+    DataFrameNaFunctions as PySparkDataFrameNaFunctions,
+    DataFrameStatFunctions as PySparkDataFrameStatFunctions,
+)
+from pyspark.sql.pandas.types import from_arrow_schema
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
+from pyspark.sql.connect.types import _create_converter
 from pyspark.sql.connect.functions import (
     _to_col,
     _invoke_function,
@@ -54,14 +68,14 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
-from pyspark.sql.dataframe import (
-    DataFrame as PySparkDataFrame,
-    DataFrameNaFunctions as PySparkDataFrameNaFunctions,
-    DataFrameStatFunctions as PySparkDataFrameStatFunctions,
-)
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        LiteralType,
+        PrimitiveType,
+        OptionalPrimitiveType,
+    )
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -668,17 +682,26 @@ class DataFrame:
 
     melt = unpivot
 
-    def hint(self, name: str, *params: Any) -> "DataFrame":
-        for param in params:
-            # TODO(SPARK-41887): support list type as hint parameter
-            if param is not None and not isinstance(param, (int, str, float)):
+    def hint(
+        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+    ) -> "DataFrame":
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]  # type: ignore[assignment]
+
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+
+        allowed_types = (str, list, float, int)
+        for p in parameters:
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    f"param should be a str, float or int, but got {type(param).__name__}"
-                    f" {param}"
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)
+                    )
                 )
 
         return DataFrame.withPlan(
-            plan.Hint(self._plan, name, list(params)),
+            plan.Hint(self._plan, name, list(parameters)),
             session=self._session,
         )
 
@@ -1223,29 +1246,44 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table = self._session.client.to_table(query)
 
+        # We first try the inferred schema from PyArrow Table instead of always fetching
+        # the Connect Dataframe schema by 'self.schema', for two reasons:
+        # 1, the schema maybe quietly simple, then we can save an RPC;
+        # 2, if we always invoke 'self.schema' here, all catalog functions based on
+        # 'dataframe.collect' will be invoked twice (1, collect data, 2, fetch schema),
+        # and then some of them (e.g. "CREATE DATABASE") fail due to the second invocation.
+
+        schema: Optional[StructType] = None
+        try:
+            schema = from_arrow_schema(table.schema)
+        except Exception:
+            # may fail due to 'from_arrow_schema' not supporting nested struct
+            schema = None
+
+        if schema is None:
+            schema = self.schema
+        else:
+            if any(
+                isinstance(
+                    f.dataType, (StructType, ArrayType, MapType, TimestampType, TimestampNTZType)
+                )
+                for f in schema.fields
+            ):
+                schema = self.schema
+
+        assert schema is not None and isinstance(schema, StructType)
+
+        field_converters = [_create_converter(f.dataType) for f in schema.fields]
+
+        # table.to_pylist() automatically remove columns with duplicated names,
+        # to avoid this, use columnar lists here.
+        # TODO: support duplicated field names in the one struct. e.g. SF.struct("a", "a")
+        columnar_data = [column.to_pylist() for column in table.columns]
+
         rows: List[Row] = []
-        columns = [column.to_pylist() for column in table.columns]
-        i = 0
-        while i < table.num_rows:
-            values: List[Any] = []
-            j = 0
-            while j < table.num_columns:
-                v = columns[j][i]
-                if isinstance(v, bytes):
-                    values.append(bytearray(v))
-                elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
-                    # TODO: Should be controlled by "spark.sql.timestampType"
-                    # always remove the time zone for now
-                    values.append(v.replace(tzinfo=None))
-                elif isinstance(v, dict):
-                    values.append(Row(**v))
-                else:
-                    values.append(v)
-                j += 1
-            new_row = Row(*values)
-            new_row.__fields__ = table.column_names
-            rows.append(new_row)
-            i += 1
+        for i in range(0, table.num_rows):
+            values = [field_converters[j](columnar_data[j][i]) for j in range(0, table.num_columns)]
+            rows.append(_create_row(fields=table.column_names, values=values))
         return rows
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__

@@ -34,6 +34,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     val bytes = serializer.serialize(input)
     val result = serializer.deserialize(bytes, classOf[SQLExecutionUIData])
     assert(result.executionId == input.executionId)
+    assert(result.rootExecutionId == input.rootExecutionId)
     assert(result.description == input.description)
     assert(result.details == input.details)
     assert(result.physicalPlanDescription == input.physicalPlanDescription)

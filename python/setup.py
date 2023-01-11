@@ -231,6 +231,7 @@ try:
             "pyspark.ml",
             "pyspark.ml.linalg",
             "pyspark.ml.param",
+            "pyspark.ml.torch",
             "pyspark.sql",
             "pyspark.sql.avro",
             "pyspark.sql.connect",
