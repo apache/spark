@@ -70,7 +70,12 @@ from pyspark.sql.connect.functions import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        LiteralType,
+        PrimitiveType,
+        OptionalPrimitiveType,
+    )
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -677,17 +682,26 @@ class DataFrame:
 
     melt = unpivot
 
-    def hint(self, name: str, *params: Any) -> "DataFrame":
-        for param in params:
-            # TODO(SPARK-41887): support list type as hint parameter
-            if param is not None and not isinstance(param, (int, str, float)):
+    def hint(
+        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+    ) -> "DataFrame":
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]  # type: ignore[assignment]
+
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+
+        allowed_types = (str, list, float, int)
+        for p in parameters:
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    f"param should be a str, float or int, but got {type(param).__name__}"
-                    f" {param}"
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)
+                    )
                 )
 
         return DataFrame.withPlan(
-            plan.Hint(self._plan, name, list(params)),
+            plan.Hint(self._plan, name, list(parameters)),
             session=self._session,
         )
 
