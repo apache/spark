@@ -27,7 +27,7 @@ import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
   override def serialize(o: Object): Array[Byte] =
     KVStoreProtobufSerializer.getSerializer(o.getClass) match {
-      case Some(serializer) => serializer.serialize(o.asInstanceOf[Any])
+      case Some(serializer) => serializer.serialize(o)
       case _ => super.serialize(o)
     }
 
