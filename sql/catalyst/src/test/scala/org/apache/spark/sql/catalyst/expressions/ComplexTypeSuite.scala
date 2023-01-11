@@ -460,43 +460,37 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("error message of ExtractValue") {
-    val testResolver = (a: String, b: String) => a == b
-    val childStructFiledLiteral = Literal.create(create_row("test value"),
-      StructType(StructField("test_field", StringType) :: Nil))
-    val extractionIntegerFieldLiteral = Literal.create(null, IntegerType)
-    val childStringFiledLiteral = Literal.create("test value", StringType)
-    val extractionStringFieldLiteral = Literal.create("test_field", StringType)
-    val childStructFiledLiteralWithDuplicateColumns = Literal.create(
-      create_row("test value 1", "test value 2"),
-      StructType(
-        StructField("test_field", StringType) :: StructField("test_field", StringType) :: Nil))
-
     checkError(
       exception = intercept[AnalysisException](
-        ExtractValue(childStructFiledLiteral, extractionIntegerFieldLiteral, testResolver)),
+        ExtractValue(
+          child = Literal.create(null, StructType(StructField("a", StringType) :: Nil)),
+          extraction = Literal.create(null, IntegerType),
+          resolver = _ == _)),
       errorClass = "INVALID_EXTRACT_FIELD_TYPE",
-      parameters = Map("extraction" -> extractionIntegerFieldLiteral.toString)
+      parameters = Map("extraction" -> "null")
     )
 
     checkError(
       exception = intercept[AnalysisException](
-        ExtractValue(childStringFiledLiteral, extractionStringFieldLiteral, testResolver)),
+        ExtractValue(
+          child = Literal.create("test string value", StringType),
+          extraction = Literal.create("test_field", StringType),
+          resolver = _ == _)),
       errorClass = "INVALID_CHILD_FIELD_TYPE",
-      parameters = Map(
-        "child" -> childStringFiledLiteral.toString,
-        "other" -> childStringFiledLiteral.dataType.catalogString)
+      parameters = Map("child" -> "test string value", "other" -> "string")
     )
 
-    val fields = childStructFiledLiteralWithDuplicateColumns
-      .dataType.asInstanceOf[StructType]
-      .fields
-      .mkString(", ")
     checkError(
       exception = intercept[AnalysisException](
-        ExtractValue(childStructFiledLiteralWithDuplicateColumns,
-          extractionStringFieldLiteral, testResolver)),
+        ExtractValue(
+          child = Literal.create(create_row("test value 1", "test value 2"),
+            StructType(StructField("test_field", StringType) ::
+              StructField("test_field", StringType) :: Nil)),
+          extraction = Literal.create("test_field", StringType),
+          resolver = _ == _)),
       errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
-      parameters = Map("fields" -> fields)
+      parameters = Map("fields" ->
+        "StructField(test_field,StringType,true), StructField(test_field,StringType,true)")
     )
   }
 
