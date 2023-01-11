@@ -120,10 +120,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_sample(self):
         super().test_sample()
 
-    @unittest.skip("Spark Connect convert AnalysisException to SparkConnectAnalysisException.")
-    def test_to(self):
-        super().test_to()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
