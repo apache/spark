@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
  * The status of a file outputted by [[FileStreamSink]]. A file is visible only if it appears in
  * the sink log and its action is not "delete".
  *
- * @param path the file path.
+ * @param path the file path as a uri-encoded string.
  * @param size the file size.
  * @param isDir whether this file is a directory.
  * @param modificationTime the file last modification time.
@@ -38,24 +38,30 @@ import org.apache.spark.sql.internal.SQLConf
  * @param action the file action. Must be either "add" or "delete".
  */
 case class SinkFileStatus(
-    path: SparkPath,
+    path: String,
     size: Long,
     isDir: Boolean,
     modificationTime: Long,
     blockReplication: Int,
     blockSize: Long,
     action: String) {
+  def sparkPath: SparkPath = SparkPath.fromPathString(path)
 
   def toFileStatus: FileStatus = {
     new FileStatus(
-      size, isDir, blockReplication, blockSize, modificationTime, path.toPath)
+      size,
+      isDir,
+      blockReplication,
+      blockSize,
+      modificationTime,
+      SparkPath.fromUriString(path).toPath)
   }
 }
 
 object SinkFileStatus {
   def apply(f: FileStatus): SinkFileStatus = {
     SinkFileStatus(
-      path = SparkPath.fromPath(f.getPath),
+      path = SparkPath.fromPath(f.getPath).uriEncoded,
       size = f.getLen,
       isDir = f.isDirectory,
       modificationTime = f.getModificationTime,

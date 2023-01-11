@@ -1534,7 +1534,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   test("restore from file stream source log") {
     def createEntries(batchId: Long, count: Int): Array[FileEntry] = {
       (1 to count).map { idx =>
-        FileEntry(sp(s"path_${batchId}_$idx"), 10000 * batchId + count, batchId)
+        FileEntry(s"path_${batchId}_$idx", 10000 * batchId + count, batchId)
       }.toArray
     }
 
@@ -1671,11 +1671,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   test("FileStreamSourceLog - read Spark 2.1.0 log format") {
     assert(readLogFromResource("file-source-log-version-2.1.0") === Seq(
-      FileEntry(sp("/a/b/0"), 1480730949000L, 0L),
-      FileEntry(sp("/a/b/1"), 1480730950000L, 1L),
-      FileEntry(sp("/a/b/2"), 1480730950000L, 2L),
-      FileEntry(sp("/a/b/3"), 1480730950000L, 3L),
-      FileEntry(sp("/a/b/4"), 1480730951000L, 4L)
+      FileEntry("/a/b/0", 1480730949000L, 0L),
+      FileEntry("/a/b/1", 1480730950000L, 1L),
+      FileEntry("/a/b/2", 1480730950000L, 2L),
+      FileEntry("/a/b/3", 1480730950000L, 3L),
+      FileEntry("/a/b/4", 1480730951000L, 4L)
     ))
   }
 
@@ -1837,8 +1837,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
     val metadataLog =
       new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
-      assert(metadataLog.add(0, Array(FileEntry(sp(s"$scheme:///file1"), 100L, 0))))
-      assert(metadataLog.add(1, Array(FileEntry(sp(s"$scheme:///file2"), 200L, 0))))
+      assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
+      assert(metadataLog.add(1, Array(FileEntry(s"$scheme:///file2", 200L, 0))))
 
       val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil), Nil,
         dir.getAbsolutePath, Map.empty)
@@ -2198,7 +2198,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           val files = metadataLog.get(batchId).getOrElse(Array.empty[FileEntry])
           assert(files.forall(_.batchId == batchId))
 
-          val actualInputFiles = files.map { p => p.path.toUri.getPath }
+          val actualInputFiles = files.map { p => p.sparkPath.toUri.getPath }
           val expectedInputFiles = inputFiles.slice(batchId.toInt * 10, batchId.toInt * 10 + 10)
             .map(_.getCanonicalPath)
           assert(actualInputFiles === expectedInputFiles)

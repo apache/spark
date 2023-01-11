@@ -112,7 +112,7 @@ class FileStreamSource(
   private var allFilesForTriggerAvailableNow: Seq[(SparkPath, Long)] = _
 
   metadataLog.restore().foreach { entry =>
-    seenFiles.add(entry.path, entry.timestamp)
+    seenFiles.add(entry.sparkPath, entry.timestamp)
   }
   seenFiles.purge()
 
@@ -193,7 +193,7 @@ class FileStreamSource(
       metadataLogCurrentOffset += 1
 
       val fileEntries = batchFiles.map { case (p, timestamp) =>
-        FileEntry(path = p, timestamp = timestamp, batchId = metadataLogCurrentOffset)
+        FileEntry(path = p.uriEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
         logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
@@ -239,7 +239,7 @@ class FileStreamSource(
     val newDataSource =
       DataSource(
         sparkSession,
-        paths = files.map(_.path.toPath.toString),
+        paths = files.map(_.sparkPath.toPath.toString),
         userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
@@ -368,7 +368,12 @@ object FileStreamSource {
   val DISCARD_UNSEEN_FILES_RATIO = 0.2
   val MAX_CACHED_UNSEEN_FILES = 10000
 
-  case class FileEntry(path: SparkPath, timestamp: Timestamp, batchId: Long) extends Serializable
+  case class FileEntry(
+      path: String, // uri-encoded path string
+      timestamp: Timestamp,
+      batchId: Long) extends Serializable {
+    def sparkPath: SparkPath = SparkPath.fromUriString(path)
+  }
 
   /**
    * A custom hash map used to track the list of files seen. This map is not thread-safe.
@@ -551,7 +556,7 @@ object FileStreamSource {
     }
 
     override protected def cleanTask(entry: FileEntry): Unit = {
-      val curPath = entry.path.toPath
+      val curPath = entry.sparkPath.toPath
       val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
 
       try {
@@ -575,7 +580,7 @@ object FileStreamSource {
     extends FileStreamSourceCleaner with Logging {
 
     override protected def cleanTask(entry: FileEntry): Unit = {
-      val curPath = entry.path.toPath
+      val curPath = entry.sparkPath.toPath
       try {
         logDebug(s"Removing completed file $curPath")
 
