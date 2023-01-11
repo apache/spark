@@ -57,13 +57,11 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_duplicated_column_names(self):
         super().test_duplicated_column_names()
 
-    # TODO(SPARK-41871): DataFrame hint parameter can be a float
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support JVM function _jdf but the tests depend on them")
     def test_extended_hint_types(self):
         super().test_extended_hint_types()
 
-    # TODO: comparing types, need to expose connect types
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support JVM function _jdf but the tests depend on them")
     def test_generic_hints(self):
         super().test_generic_hints()
 
@@ -179,10 +177,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas_with_duplicated_column_names(self):
         super().test_to_pandas_with_duplicated_column_names()
 
-    # TODO(SPARK-41877): createDataframe throw proper errors
+    # TODO(SPARK-41963): Different exception message in DataFrame.unpivot
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_unpivot(self):
-        super().test_unpivot()
+    def test_unpivot_negative(self):
+        super().test_unpivot_negative()
 
 
 if __name__ == "__main__":

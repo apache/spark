@@ -14,29 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.connect.common.config
 
-package org.apache.spark.sql.execution.ui
-
-import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
-
-class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
-
-  def conf: SparkConf = sparkUI.conf
-
-  override val name = "SQL / DataFrame"
-
-  val parent = sparkUI
-
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  parent.attachTab(this)
-
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
-
-object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+private[connect] object ConnectCommon {
+  val CONNECT_GRPC_BINDING_PORT: Int = 15002
 }
