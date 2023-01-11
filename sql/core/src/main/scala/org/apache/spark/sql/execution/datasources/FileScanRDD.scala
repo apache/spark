@@ -60,8 +60,8 @@ case class PartitionedFile(
     modificationTime: Long = 0L,
     fileSize: Long = 0L) {
 
-  def pathUri: URI = filePath.uri
-  def hadoopPath: Path = filePath.hadoopPath
+  def pathUri: URI = filePath.toUri
+  def toPath: Path = filePath.toPath
   def uriEncodedPath: String = filePath.uriEncoded
 
   override def toString: String = {
@@ -147,14 +147,14 @@ class FileScanRDD(
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
           updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
-            currentFile.hadoopPath, currentFile.fileSize, currentFile.modificationTime)
+            currentFile.toPath, currentFile.fileSize, currentFile.modificationTime)
         }
 
       /**
        * Create an array of constant column vectors containing all required metadata columns
        */
       private def createMetadataColumnVector(c: ColumnarBatch): Array[ColumnVector] = {
-        val path = currentFile.hadoopPath
+        val path = currentFile.toPath
         metadataColumns.map(_.name).map {
           case FILE_PATH =>
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)

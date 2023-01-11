@@ -19,20 +19,22 @@ package org.apache.spark.paths
 
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 /**
- * A Spark Path is the result of a URI.toString call.
+ * A SparkPath is the result of a URI.toString call.
  */
 case class SparkPath private (private val underlying: String) {
   def uriEncoded: String = underlying
-  def uri: URI = new URI(underlying)
-  def hadoopPath: Path = new Path(uri)
+  def toUri: URI = new URI(underlying)
+  def toPath: Path = new Path(toUri)
+  override def toString: String = underlying
 }
 
 object SparkPath {
   def fromPathString(str: String): SparkPath = fromPath(new Path(str))
   def fromPath(path: Path): SparkPath = fromUri(path.toUri)
+  def fromFileStatus(fs: FileStatus): SparkPath = fromPath(fs.getPath)
   def fromUri(uri: URI): SparkPath = fromUriString(uri.toString)
   def fromUriString(str: String): SparkPath = SparkPath(str)
 }

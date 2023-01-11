@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.net.URI
-
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.FileStatus
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 
@@ -39,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @param action the file action. Must be either "add" or "delete".
  */
 case class SinkFileStatus(
-    path: String,
+    path: SparkPath,
     size: Long,
     isDir: Boolean,
     modificationTime: Long,
@@ -49,14 +48,14 @@ case class SinkFileStatus(
 
   def toFileStatus: FileStatus = {
     new FileStatus(
-      size, isDir, blockReplication, blockSize, modificationTime, new Path(new URI(path)))
+      size, isDir, blockReplication, blockSize, modificationTime, path.toPath)
   }
 }
 
 object SinkFileStatus {
   def apply(f: FileStatus): SinkFileStatus = {
     SinkFileStatus(
-      path = f.getPath.toUri.toString,
+      path = SparkPath.fromPath(f.getPath),
       size = f.getLen,
       isDir = f.isDirectory,
       modificationTime = f.getModificationTime,

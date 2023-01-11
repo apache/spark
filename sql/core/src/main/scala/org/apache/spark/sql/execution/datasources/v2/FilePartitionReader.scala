@@ -103,7 +103,7 @@ class FilePartitionReader[T](
     logInfo(s"Reading file $reader")
     // Sets InputFileBlockHolder for the file block's information
     val file = reader.file
-    InputFileBlockHolder.set(file.filePath.uriEncoded, file.start, file.length)
+    InputFileBlockHolder.set(file.uriEncodedPath, file.start, file.length)
     reader
   }
 }

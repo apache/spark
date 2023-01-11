@@ -37,7 +37,7 @@ object PartitionedFileUtil {
         val remaining = file.getLen - offset
         val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
         val hosts = getBlockHosts(getBlockLocations(file), offset, size)
-        PartitionedFile(partitionValues, filePath.toUri.toString, offset, size, hosts,
+        PartitionedFile(partitionValues, SparkPath.fromPath(filePath), offset, size, hosts,
           file.getModificationTime, file.getLen)
       }
     } else {
@@ -50,7 +50,7 @@ object PartitionedFileUtil {
       filePath: Path,
       partitionValues: InternalRow): PartitionedFile = {
     val hosts = getBlockHosts(getBlockLocations(file), 0, file.getLen)
-    PartitionedFile(partitionValues, filePath.toUri.toString, 0, file.getLen, hosts,
+    PartitionedFile(partitionValues, SparkPath.fromPath(filePath), 0, file.getLen, hosts,
       file.getModificationTime, file.getLen)
   }
 

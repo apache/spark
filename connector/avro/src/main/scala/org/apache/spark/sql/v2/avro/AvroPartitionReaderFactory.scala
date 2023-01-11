@@ -62,9 +62,9 @@ case class AvroPartitionReaderFactory(
     val conf = broadcastedConf.value.value
     val userProvidedSchema = options.schema
 
-    if (options.ignoreExtension || partitionedFile.filePath.endsWith(".avro")) {
+    if (options.ignoreExtension || partitionedFile.uriEncodedPath.endsWith(".avro")) {
       val reader = {
-        val in = new FsInput(new Path(new URI(partitionedFile.filePath)), conf)
+        val in = new FsInput(partitionedFile.toPath, conf)
         try {
           val datumReader = userProvidedSchema match {
             case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)

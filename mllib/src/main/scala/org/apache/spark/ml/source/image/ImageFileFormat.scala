@@ -72,7 +72,7 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
         Iterator(emptyUnsafeRow)
       } else {
         val origin = file.uriEncodedPath
-        val path = file.hadoopPath // TODO (URI)
+        val path = file.toPath // TODO (URI)
         val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
         val stream = fs.open(path)
         val bytes = try {

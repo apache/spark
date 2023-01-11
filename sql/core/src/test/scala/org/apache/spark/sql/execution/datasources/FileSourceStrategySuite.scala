@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -283,10 +284,14 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("Locality support for FileScanRDD") {
     val partition = FilePartition(0, Array(
-      PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1")),
-      PartitionedFile(InternalRow.empty, "fakePath0", 10, 20, Array("host1", "host2")),
-      PartitionedFile(InternalRow.empty, "fakePath1", 0, 5, Array("host3")),
-      PartitionedFile(InternalRow.empty, "fakePath2", 0, 5, Array("host4"))
+      PartitionedFile(
+        InternalRow.empty, SparkPath.fromPathString("fakePath0"), 0, 10, Array("host0", "host1")),
+      PartitionedFile(
+        InternalRow.empty, SparkPath.fromPathString("fakePath0"), 10, 20, Array("host1", "host2")),
+      PartitionedFile(
+        InternalRow.empty, SparkPath.fromPathString("fakePath1"), 0, 5, Array("host3")),
+      PartitionedFile(
+        InternalRow.empty, SparkPath.fromPathString("fakePath2"), 0, 5, Array("host4"))
     ))
 
     val fakeRDD = new FileScanRDD(
