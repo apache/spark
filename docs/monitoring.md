@@ -1421,10 +1421,9 @@ Note: applies to the shuffle service
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
 
-Note: below shuffle service server-side metrics are specific to the Push-Based Shuffle, they
-will be valid with the server side flag `spark.shuffle.push.server.mergedShuffleFileManagerImpl`
-set as the appropriate org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for
-the Push-Based Shuffle
+Note: applies to the shuffle service when the server side flag
+`spark.shuffle.push.server.mergedShuffleFileManagerImpl` set as the appropriate
+org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for the Push-Based Shuffle
 
 - blockAppendCollisions - the number of shuffle push blocks collided in shuffle services
   as another block for the same reduce partition were being written
