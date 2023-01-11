@@ -2365,9 +2365,6 @@ def _test() -> None:
         # TODO(SPARK-41757): Fix String representation for Column class
         del pyspark.sql.connect.functions.col.__doc__
 
-        # TODO(SPARK-41838): fix dataset.show
-        del pyspark.sql.connect.functions.explode_outer.__doc__
-
         # TODO(SPARK-41837): createDataFrame datatype conversion error
         del pyspark.sql.connect.functions.to_csv.__doc__
         del pyspark.sql.connect.functions.to_json.__doc__
