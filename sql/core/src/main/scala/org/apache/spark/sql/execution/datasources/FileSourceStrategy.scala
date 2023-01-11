@@ -259,9 +259,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         partitionColumns ++ constantMetadataColumns
 
       // Rebind metadata attribute references in filters after the metadata attribute struct has
-      // been flattened. Only data filters can contain metadata references. The rebinding will
-      // categorize the references as either [[FileSourceConstantMetadataAttribute]] or
-      // [[FileSourceGeneratedMetadataAttribute]].
+      // been flattened. Only data filters can contain metadata references. After the rebinding
+      // all references will be bound to output attributes which are either
+      // [[FileSourceConstantMetadataAttribute]] or [[FileSourceGeneratedMetadataAttribute]] after
+      // the flattening from the metadata struct.
       def rebindFileSourceMetadataAttributesInFilters(
           filters: Seq[Expression]): Seq[Expression] =
         filters.map { filter =>

@@ -85,7 +85,6 @@ abstract class PartitioningAwareFileIndex(
     // - Bind all file constant metadata attribute references to their respective index
     val requiredMetadataColumnNames: mutable.Buffer[String] = mutable.Buffer.empty
     val boundedFilterMetadataStructOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
-      val metadataStruct = fileMetadataFilter.references.head
       Predicate.createInterpreted(fileMetadataFilter.transform {
         case attr: AttributeReference =>
           val existingMetadataColumnIndex = requiredMetadataColumnNames.indexOf(attr.name)
@@ -95,7 +94,7 @@ abstract class PartitioningAwareFileIndex(
             requiredMetadataColumnNames += attr.name
             requiredMetadataColumnNames.length - 1
           }
-          BoundReference(metadataColumnIndex, metadataStruct.dataType, nullable = true)
+          BoundReference(metadataColumnIndex, attr.dataType, nullable = true)
       })
     }
 
