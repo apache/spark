@@ -629,7 +629,7 @@
   },
   "INDEX_NOT_FOUND" : {
     "message" : [
-      "Cannot find the index. <message>."
+      "Cannot find the index <indexName>."
     ],
     "sqlState" : "42000"
   },

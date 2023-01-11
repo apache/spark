@@ -2667,7 +2667,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       },
       errorClass = "INDEX_NOT_FOUND",
       parameters = Map(
-        "message" -> "Failed to drop index people_index in test.people"
+        "indexName" -> "people_index"
       )
     )
     assert(jdbcTable.indexExists("people_index") == false)
