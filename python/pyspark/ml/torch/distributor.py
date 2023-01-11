@@ -43,8 +43,8 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
 
     Parameters
     ----------
-    sc : SparkContext
-        The SparkContext for the distributor.
+    sc : :class:`SparkContext`
+        The :class:`SparkContext` for the distributor.
     key : str
         string for conf name
     default_value : str
@@ -78,12 +78,12 @@ def get_gpus_owned(sc: SparkContext) -> list[str]:
 
     Parameters
     ----------
-    sc : SparkContext
-        The SparkContext that has GPUs available.
+    sc : :class:`SparkContext`
+        The :class:`SparkContext` that has GPUs available.
 
     Returns
     -------
-    list[str]
+    list
         The correct mapping of addresses to workers.
 
     Raises
@@ -331,7 +331,7 @@ class TorchDistributor(Distributor):
         args_string = list(map(str, args))  # converting all args to strings
 
         return (
-            ["python", "-m", "pyspark.ml.torch.distributor.torch_run_process_wrapper"]
+            [sys.executable, "-m", "pyspark.ml.torch.distributor.torch_run_process_wrapper"]
             + torchrun_args
             + [f"--nproc_per_node={processes_per_node}"]
             + [path_to_train_file, *args_string]

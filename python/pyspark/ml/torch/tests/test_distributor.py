@@ -151,7 +151,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         local_mode_input_params = {"num_processes": 4, "local_mode": True}
 
         expected_local_mode_output = [
-            "python",
+            sys.executable,
             "-m",
             "pyspark.ml.torch.distributor.torch_run_process_wrapper",
             "--standalone",
