@@ -98,7 +98,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final int UNDEFINED_ATTEMPT_ID = -1;
 
   /**
-   * The flag for deleting the current merged shuffle data.
+   * The flag for deleting all merged shuffle data.
    */
   public static final int DELETE_ALL_MERGED_SHUFFLE = -1;
 
@@ -432,32 +432,24 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
               msg.appId, msg.appAttemptId, msg.shuffleId, mergePartitionsInfo.shuffleMergeId);
       AppAttemptShuffleMergeId appAttemptShuffleMergeId = new AppAttemptShuffleMergeId(
           msg.appId, msg.appAttemptId, msg.shuffleId, shuffleMergeId);
-      if(deleteCurrentMergedShuffle) {
-        // request to clean up shuffle we are currently hosting
+      if(deleteCurrentMergedShuffle || shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
         if (!mergePartitionsInfo.isFinalized()) {
+          // Clean up shuffle data before the shuffle was finalized. Close and delete all the open
+          // files.
           submitCleanupTask(() ->
-            closeAndDeleteOutdatedPartitions(
-                currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
+              closeAndDeleteOutdatedPartitions(
+                  currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
         } else {
+          // Current shuffle was finalized, delete all the merged files through reduceIds set
+          // in finalizeShuffleMerge method.
           submitCleanupTask(() ->
-            deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
-                mergePartitionsInfo.getReduceIds(), false));
+              deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
+                  mergePartitionsInfo.getReduceIds(), false));
         }
       } else if(shuffleMergeId < mergePartitionsInfo.shuffleMergeId) {
         throw new RuntimeException(String.format("Asked to remove old shuffle merged data for " +
                 "application %s shuffleId %s shuffleMergeId %s, but current shuffleMergeId %s ",
             msg.appId, msg.shuffleId, shuffleMergeId, mergePartitionsInfo.shuffleMergeId));
-      } else if (shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
-        // cleanup request for newer shuffle - remove the outdated data we have.
-        if (!mergePartitionsInfo.isFinalized()) {
-          submitCleanupTask(() ->
-              closeAndDeleteOutdatedPartitions(
-                  currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
-        } else {
-          submitCleanupTask(() ->
-              deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
-                  mergePartitionsInfo.getReduceIds(), false));
-        }
       }
       writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
       return new AppShuffleMergePartitionsInfo(shuffleMergeId, true);
