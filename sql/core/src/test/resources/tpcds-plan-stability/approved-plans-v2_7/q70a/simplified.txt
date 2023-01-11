@@ -54,31 +54,32 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                                   Filter [ranking]
                                                                     InputAdapter
                                                                       Window [_w0,s_state]
-                                                                        WholeStageCodegen (5)
-                                                                          Sort [s_state,_w0]
-                                                                            HashAggregate [sum] [sum(UnscaledValue(ss_net_profit)),_w0,s_state,sum]
-                                                                              InputAdapter
-                                                                                Exchange [s_state] #7
-                                                                                  WholeStageCodegen (4)
-                                                                                    HashAggregate [s_state,ss_net_profit] [sum,sum]
-                                                                                      Project [ss_net_profit,s_state]
-                                                                                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                                          Project [ss_net_profit,ss_sold_date_sk,s_state]
-                                                                                            BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                                                                              Filter [ss_store_sk]
-                                                                                                ColumnarToRow
-                                                                                                  InputAdapter
-                                                                                                    Scan parquet spark_catalog.default.store_sales [ss_store_sk,ss_net_profit,ss_sold_date_sk]
-                                                                                                      ReusedSubquery [d_date_sk] #1
-                                                                                              InputAdapter
-                                                                                                BroadcastExchange #8
-                                                                                                  WholeStageCodegen (2)
-                                                                                                    Filter [s_store_sk]
-                                                                                                      ColumnarToRow
-                                                                                                        InputAdapter
-                                                                                                          Scan parquet spark_catalog.default.store [s_store_sk,s_state]
-                                                                                          InputAdapter
-                                                                                            ReusedExchange [d_date_sk] #4
+                                                                        WindowGroupLimit [s_state,_w0]
+                                                                          WholeStageCodegen (5)
+                                                                            Sort [s_state,_w0]
+                                                                              HashAggregate [sum] [sum(UnscaledValue(ss_net_profit)),_w0,s_state,sum]
+                                                                                InputAdapter
+                                                                                  Exchange [s_state] #7
+                                                                                    WholeStageCodegen (4)
+                                                                                      HashAggregate [s_state,ss_net_profit] [sum,sum]
+                                                                                        Project [ss_net_profit,s_state]
+                                                                                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                                            Project [ss_net_profit,ss_sold_date_sk,s_state]
+                                                                                              BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                                                                Filter [ss_store_sk]
+                                                                                                  ColumnarToRow
+                                                                                                    InputAdapter
+                                                                                                      Scan parquet spark_catalog.default.store_sales [ss_store_sk,ss_net_profit,ss_sold_date_sk]
+                                                                                                        ReusedSubquery [d_date_sk] #1
+                                                                                                InputAdapter
+                                                                                                  BroadcastExchange #8
+                                                                                                    WholeStageCodegen (2)
+                                                                                                      Filter [s_store_sk]
+                                                                                                        ColumnarToRow
+                                                                                                          InputAdapter
+                                                                                                            Scan parquet spark_catalog.default.store [s_store_sk,s_state]
+                                                                                            InputAdapter
+                                                                                              ReusedExchange [d_date_sk] #4
                                   WholeStageCodegen (19)
                                     HashAggregate [s_state,sum,isEmpty] [sum(total_sum),total_sum,s_county,g_state,g_county,lochierarchy,sum,isEmpty]
                                       InputAdapter
