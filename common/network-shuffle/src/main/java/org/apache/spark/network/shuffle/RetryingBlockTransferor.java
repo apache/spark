@@ -200,9 +200,6 @@ public class RetryingBlockTransferor {
     boolean isSaslTimeout = enableSaslRetries &&
         (e instanceof TransportClient.SaslTimeoutException ||
             (e.getCause() != null && e.getCause() instanceof TransportClient.SaslTimeoutException));
-    if (isSaslTimeout) {
-      listener.onSaslTimeout();
-    }
     boolean hasRemainingRetries = retryCount < maxRetries;
     return (isSaslTimeout || isIOException) &&
         hasRemainingRetries && errorHandler.shouldRetryError(e);
@@ -300,12 +297,6 @@ public class RetryingBlockTransferor {
     public String getTransferType() {
       throw new RuntimeException(
         "Invocation on RetryingBlockTransferListener.getTransferType is unexpected.");
-    }
-
-    @Override
-    public void onSaslTimeout() {
-      throw new RuntimeException(
-          "Invocation on RetryingBlockTransferListener.onSaslTimeout is unexpected.");
     }
   }
 }

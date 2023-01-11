@@ -41,6 +41,4 @@ public interface BlockTransferListener extends EventListener {
    * Return a string indicating the type of the listener such as fetch, push, or something else
    */
   String getTransferType();
-
-  void onSaslTimeout();
 }

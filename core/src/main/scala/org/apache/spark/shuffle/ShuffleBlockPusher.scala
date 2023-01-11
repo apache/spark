@@ -25,7 +25,7 @@ import java.util.concurrent.ExecutorService
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkEnv, TaskContext}
+import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.executor.{CoarseGrainedExecutorBackend, ExecutorBackend}
 import org.apache.spark.internal.Logging
@@ -250,10 +250,6 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
           logWarning(s"Pushing block $blockId to $address failed.", exception)
         }
         handleResult(PushResult(blockId, exception))
-      }
-
-      override def onSaslTimeout(): Unit = {
-        TaskContext.get().taskMetrics().incSaslRequestRetries(1)
       }
     }
     // In addition to randomizing the order of the push requests, further randomize the order

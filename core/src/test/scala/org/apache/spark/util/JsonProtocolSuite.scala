@@ -2567,111 +2567,104 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 11,
-      |          "Name": "$SASL_REQUEST_RETRIES",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 12,
       |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 13,
+      |          "ID": 12,
       |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 14,
+      |          "ID": 13,
       |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 15,
+      |          "ID": 14,
       |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_DISK}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 16,
+      |          "ID": 15,
       |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 17,
+      |          "ID": 16,
       |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 18,
+      |          "ID": 17,
       |          "Name": "${shuffleRead.RECORDS_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 19,
+      |          "ID": 18,
       |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 20,
+      |          "ID": 19,
       |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 21,
+      |          "ID": 20,
       |          "Name": "${shuffleWrite.WRITE_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 22,
+      |          "ID": 21,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 23,
+      |          "ID": 22,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 23,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 25,
+      |          "ID": 24,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 26,
+      |          "ID": 25,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,

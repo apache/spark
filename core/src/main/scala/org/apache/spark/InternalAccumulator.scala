@@ -41,7 +41,6 @@ private[spark] object InternalAccumulator {
   val DISK_BYTES_SPILLED = METRICS_PREFIX + "diskBytesSpilled"
   val PEAK_EXECUTION_MEMORY = METRICS_PREFIX + "peakExecutionMemory"
   val UPDATED_BLOCK_STATUSES = METRICS_PREFIX + "updatedBlockStatuses"
-  val SASL_REQUEST_RETRIES = METRICS_PREFIX + "saslRequestRetries"
   val TEST_ACCUM = METRICS_PREFIX + "testAccumulator"
 
   // scalastyle:off

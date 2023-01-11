@@ -250,7 +250,6 @@ public class RetryingBlockTransferorSuite {
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener).getTransferType();
-    verify(listener).onSaslTimeout();
     verifyNoMoreInteractions(listener);
   }
 

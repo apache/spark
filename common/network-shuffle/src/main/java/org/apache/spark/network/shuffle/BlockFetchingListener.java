@@ -46,7 +46,4 @@ public interface BlockFetchingListener extends BlockTransferListener {
   default String getTransferType() {
     return "fetch";
   }
-
-  @Override
-  default void onSaslTimeout() {}
 }
