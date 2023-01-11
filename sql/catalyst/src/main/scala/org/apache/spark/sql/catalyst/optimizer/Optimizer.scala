@@ -93,6 +93,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         GenerateOptimization,
         // Operator combine
         CollapseRepartition,
+        CollapsePercentiles,
         CollapseProject,
         OptimizeWindowFunctions,
         CollapseWindow,
@@ -237,6 +238,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PushPredicateThroughJoin,
       LimitPushDown,
       ColumnPruning,
+      CollapsePercentiles,
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
@@ -1183,6 +1185,72 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       case _ => false
     }
   }
+}
+
+/**
+ * Combine percentile functions.
+ * For example:
+ * SELECT max(value1) as max_value1, percentile(value2, 0.3) as p1,
+ *        percentile(value3, 0.4) + percentile(value3, 0.5) as p2,
+ *        percentile(value2, 0.6) as p3
+ * FROM t1
+ * will be optimized to:
+ * SELECT max_value1, _combined_percentile_0[0] as p1, p2, _combined_percentile_0[1] as p3
+ * FROM (
+ *    SELECT  max(value1) as max_value1,
+ *            percentile(value3, 0.4) + percentile(value3, 0.5) as p2,
+ *            percentile(value2, array(0.3, 0.6)) as _combined_percentile_0
+ *    FROM t1) as t1
+ */
+object CollapsePercentiles extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformUpWithPruning(_.containsPattern(AGGREGATE), ruleId) {
+      case agg @ Aggregate(groupingExprs, aggExprs, child) =>
+        val percentileMap =
+          new mutable.HashMap[(Percentile, AggregateMode, Boolean, Option[Expression]),
+            mutable.HashMap[Percentile, Expression]]()
+        aggExprs.collect {
+          case Alias(AggregateExpression(p: Percentile, mode, isDistinct, filter, _), _)
+            if p.percentageExpression.dataType.isInstanceOf[DoubleType] =>
+            val group = (p.copy(percentageExpression = Literal(0)), mode, isDistinct, filter)
+            val mapping =
+              percentileMap.getOrElse(group, new mutable.HashMap[Percentile, Expression]())
+            percentileMap += group -> (mapping += p -> p.percentageExpression)
+        }
+        val combinedAggExprs =
+          percentileMap.filter(_._2.size > 1).zipWithIndex.map {
+            case ((group, children), idx) =>
+              val newAgg =
+                AggregateExpression(
+                  group._1.copy(percentageExpression =
+                    Literal.create(children.values.map(_.eval()).toSeq.asInstanceOf[Seq[Double]],
+                      ArrayType(DoubleType, false))),
+                  group._2, group._3, group._4, NamedExpression.newExprId)
+              Alias(newAgg, s"_combined_percentile_$idx")() -> children
+          }
+        val replacedMapping: mutable.Map[AggregateFunction, GetArrayItem] =
+          combinedAggExprs.flatMap { case (newAggExpr, kv) =>
+            kv.zipWithIndex.map { case (kv2, idx) =>
+              kv2._1 -> GetArrayItem(newAggExpr.toAttribute, Literal(idx))
+            }
+          }
+        if (combinedAggExprs.size > 0) {
+          val newAggExprs = aggExprs.filter {
+            case Alias(a: AggregateExpression, _)
+              if replacedMapping.contains(a.aggregateFunction) => false
+            case _ => true
+          } ++ combinedAggExprs.keys
+          val newProjectList = aggExprs.collect {
+            case a @ Alias(aggExpr: AggregateExpression, name)
+              if replacedMapping.contains(aggExpr.aggregateFunction) =>
+              Alias(replacedMapping(aggExpr.aggregateFunction), name)(exprId = a.exprId)
+            case agg => agg.toAttribute
+          }
+          Project(newProjectList, Aggregate(groupingExprs, newAggExprs, child))
+        } else {
+          agg
+        }
+    }
 }
 
 /**
