@@ -221,6 +221,15 @@ class DataFrameReader(OptionUtils):
 
     text.__doc__ = PySparkDataFrameReader.text.__doc__
 
+    def csv(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("csv() is not implemented.")
+
+    def orc(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("orc() is not implemented.")
+
+    def jdbc(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("jdbc() not supported for DataFrameWriter")
+
 
 DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__
 
