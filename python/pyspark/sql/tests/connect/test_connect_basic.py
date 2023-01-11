@@ -1317,6 +1317,24 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "ShuffledHashJoin" in cdf1.join(cdf2.hint("SHUFFLE_HASH"), "name")._explain_string()
         )
 
+    def test_extended_hint_types(self):
+        cdf = self.connect.range(100).toDF("id")
+
+        cdf.hint(
+            "my awesome hint",
+            1.2345,
+            "what",
+            ["itworks1", "itworks2", "itworks3"],
+        ).show()
+
+        with self.assertRaisesRegex(TypeError, "all parameters should be in"):
+            cdf.hint(
+                "my awesome hint",
+                1.2345,
+                "what",
+                {"itworks1": "itworks2"},
+            ).show()
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(

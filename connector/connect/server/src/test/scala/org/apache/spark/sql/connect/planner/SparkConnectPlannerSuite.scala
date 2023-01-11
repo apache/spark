@@ -591,7 +591,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue(10000)))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(10000)).build()))
         .build())
 
     val df = Dataset.ofRows(spark, logical)
@@ -636,7 +637,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue("id")))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue("id")).build()))
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
@@ -658,7 +660,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue(true)))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(true)).build()))
         .build())
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
