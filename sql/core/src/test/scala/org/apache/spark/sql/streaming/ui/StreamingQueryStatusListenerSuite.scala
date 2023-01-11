@@ -181,9 +181,13 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None)
     listener.onQueryTerminated(terminateEvent1)
     checkInactiveQueryStatus(1, Seq(id1))
+    Thread.sleep(1)
+
     val terminateEvent2 = new StreamingQueryListener.QueryTerminatedEvent(id2, runId2, None)
     listener.onQueryTerminated(terminateEvent2)
     checkInactiveQueryStatus(2, Seq(id1, id2))
+    Thread.sleep(1)
+    
     val terminateEvent3 = new StreamingQueryListener.QueryTerminatedEvent(id3, runId3, None)
     listener.onQueryTerminated(terminateEvent3)
     checkInactiveQueryStatus(2, Seq(id2, id3))
