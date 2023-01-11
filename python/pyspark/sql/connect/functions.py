@@ -2384,7 +2384,7 @@ def _test() -> None:
         # TODO(SPARK-41845): Fix count bug
         del pyspark.sql.connect.functions.count.__doc__
 
-        # TODO(SPARK-41847): mapfield,structlist invalid type
+        # TODO(SPARK-41988): Fix map_filter and map_zip_with output order
         del pyspark.sql.connect.functions.map_filter.__doc__
         del pyspark.sql.connect.functions.map_zip_with.__doc__
 
