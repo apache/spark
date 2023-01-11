@@ -69,6 +69,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
           case w: V1WriteCommand =>
             if (hasLogicalSort && conf.getConf(SQLConf.PLANNED_WRITE_ENABLED)) {
               assert(w.query.isInstanceOf[WriteFiles])
+              assert(w.partitionColumns == w.query.asInstanceOf[WriteFiles].partitionColumns)
               optimizedPlan = w.query.asInstanceOf[WriteFiles].child
             } else {
               optimizedPlan = w.query

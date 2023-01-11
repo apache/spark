@@ -2136,11 +2136,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(NotImplementedError):
             RemoteSparkSession.getActiveSession()
 
+        with self.assertRaises(NotImplementedError):
+            RemoteSparkSession.builder.enableHiveSupport()
+
         for f in (
             "newSession",
             "conf",
             "sparkContext",
             "streams",
+            "readStream",
             "udf",
             "version",
         ):
@@ -2158,6 +2162,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.catalog, f)()
+
+    def test_unsupported_io_functions(self):
+        # SPARK-41964: Disable unsupported functions.
+        # DataFrameWriterV2 is also not implemented yet
+
+        for f in ("csv", "orc", "jdbc"):
+            with self.assertRaises(NotImplementedError):
+                getattr(self.connect.read, f)()
+
+        for f in ("jdbc",):
+            with self.assertRaises(NotImplementedError):
+                getattr(self.connect.read, f)()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
