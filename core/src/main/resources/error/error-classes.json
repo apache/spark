@@ -1400,7 +1400,7 @@
       },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
-          "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec."
+          "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
       "JDBC_TRANSACTION" : {
