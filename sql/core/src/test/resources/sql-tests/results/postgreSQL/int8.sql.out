@@ -853,12 +853,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "errorClass" : "FAILED_FUNCTION_CALL",
   "messageParameters" : {
-    "arguments" : "long, long, integer",
-    "details" : "[FAILED_FUNCTION_CALL] Failed preparing of the function `range` for call. Please, double check function's arguments.",
-    "name" : "range",
-    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+    "funcName" : "`range`"
   },
   "queryContext" : [ {
     "objectType" : "",

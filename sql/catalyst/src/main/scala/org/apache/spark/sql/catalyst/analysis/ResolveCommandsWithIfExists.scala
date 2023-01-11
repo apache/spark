@@ -31,7 +31,7 @@ object ResolveCommandsWithIfExists extends Rule[LogicalPlan] {
     _.containsPattern(COMMAND)) {
     case UncacheTable(u: UnresolvedRelation, ifExists, _) if ifExists =>
       NoopCommand("UNCACHE TABLE", u.multipartIdentifier)
-    case DropFunction(u: UnresolvedFunc, ifExists) if ifExists =>
+    case DropFunction(u: UnresolvedFunctionName, ifExists) if ifExists =>
       NoopCommand("DROP FUNCTION", u.multipartIdentifier)
   }
 }

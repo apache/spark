@@ -201,8 +201,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "expected 2 columns but found"
+  test("insert with column list - missing columns") {
+    val v2Msg = "Cannot write incompatible data to table 'testcat.t1'"
     val cols = Seq("c1", "c2", "c3", "c4")
 
     withTable("t1") {
@@ -368,5 +368,17 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
     super.sparkConf
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+  }
+
+  test("static partition column name should not be used in the column list") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')")
+        },
+        errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
+        parameters = Map("staticName" -> "c"))
+    }
   }
 }

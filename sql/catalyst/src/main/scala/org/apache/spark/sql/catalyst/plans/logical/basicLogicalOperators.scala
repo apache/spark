@@ -449,22 +449,54 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
-      }
+  /**
+   * Merges a sequence of attributes to have a common datatype and updates the
+   * nullability to be consistent with the attributes being merged.
+   */
+  private def mergeAttributes(attributes: Seq[Attribute]): Attribute = {
+    val firstAttr = attributes.head
+    val nullable = attributes.exists(_.nullable)
+    val newDt = attributes.map(_.dataType).reduce(StructType.unionLikeMerge)
+    if (firstAttr.dataType == newDt) {
+      firstAttr.withNullability(nullable)
+    } else {
+      AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+        firstAttr.exprId, firstAttr.qualifier)
     }
   }
 
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def output: Seq[Attribute] = children.map(_.output).transpose.map(mergeAttributes)
+
+  override def metadataOutput: Seq[Attribute] = {
+    val childrenMetadataOutput = children.map(_.metadataOutput)
+    // This follows similar code in `CheckAnalysis` to check if the output of a Union is correct,
+    // but just silently doesn't return an output instead of throwing an error. It also ensures
+    // that the attribute and data type names are the same.
+    val refDataTypes = childrenMetadataOutput.head.map(_.dataType)
+    val refAttrNames = childrenMetadataOutput.head.map(_.name)
+    childrenMetadataOutput.tail.foreach { childMetadataOutput =>
+      // We can only propagate the metadata output correctly if every child has the same
+      // number of columns
+      if (childMetadataOutput.length != refDataTypes.length) return Nil
+      // Check if the data types match by name and type
+      val childDataTypes = childMetadataOutput.map(_.dataType)
+      childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
+        if (!DataType.equalsStructurally(dt1, dt2, true) ||
+           !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver)) {
+          return Nil
+        }
+      }
+      // Check that the names of the attributes match
+      val childAttrNames = childMetadataOutput.map(_.name)
+      childAttrNames.zip(refAttrNames).foreach { case (attrName1, attrName2) =>
+        if (!conf.resolver(attrName1, attrName2)) {
+          return Nil
+        }
+      }
+    }
+    // If the metadata output matches, merge the attributes and return them
+    childrenMetadataOutput.transpose.map(mergeAttributes)
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -913,18 +945,21 @@ object Range {
     if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
   }
 
-  private def castAndEval[T](expression: Expression, dataType: DataType): T = {
+  private def castAndEval[T](expression: Expression, dataType: DataType, paramIndex: Int): T = {
     typeCoercion.implicitCast(expression, dataType)
       .map(_.eval())
       .filter(_ != null)
       .getOrElse {
-        throw QueryCompilationErrors.incompatibleRangeInputDataTypeError(expression, dataType)
+        throw QueryCompilationErrors
+          .unexpectedInputDataTypeError("range", paramIndex, dataType, expression)
       }.asInstanceOf[T]
   }
 
-  def toLong(expression: Expression): Long = castAndEval[Long](expression, LongType)
+  def toLong(expression: Expression, paramIndex: Int): Long =
+    castAndEval[Long](expression, LongType, paramIndex)
 
-  def toInt(expression: Expression): Int = castAndEval[Int](expression, IntegerType)
+  def toInt(expression: Expression, paramIndex: Int): Int =
+    castAndEval[Int](expression, IntegerType, paramIndex)
 }
 
 @ExpressionDescription(
@@ -969,11 +1004,13 @@ case class Range(
 
   require(step != 0, s"step ($step) cannot be 0")
 
-  def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) =
-    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), Some(Range.toInt(numSlices)))
+  def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) = {
+    this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3),
+      Some(Range.toInt(numSlices, 4)))
+  }
 
   def this(start: Expression, end: Expression, step: Expression) =
-    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), None)
+    this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3), None)
 
   def this(start: Expression, end: Expression) = this(start, end, Literal.create(1L, LongType))
 

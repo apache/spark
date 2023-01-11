@@ -169,9 +169,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case u: UnresolvedRelation =>
         u.tableNotFound(u.multipartIdentifier)
 
-      case u: UnresolvedFunc =>
-        throw QueryCompilationErrors.noSuchFunctionError(
-          u.multipartIdentifier, u, u.possibleQualifiedName)
+      case u: UnresolvedFunctionName =>
+        val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
+        throw QueryCompilationErrors.unresolvedRoutineError(
+          u.multipartIdentifier,
+          Seq("system.builtin", "system.session", catalogPath),
+          u.origin)
 
       case u: UnresolvedHint =>
         u.failAnalysis(
@@ -232,6 +235,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
+
+        // Fail if we still have an unresolved all in group by. This needs to run before the
+        // general unresolved check below to throw a more tailored error message.
+        ResolveGroupByAll.checkAnalysis(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -325,6 +332,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "_LEGACY_ERROR_TEMP_2413",
               messageParameters = Map("argName" -> e.prettyName))
 
+          case p: Parameter =>
+            p.failAnalysis(
+              errorClass = "UNBOUND_SQL_PARAMETER",
+              messageParameters = Map("name" -> toSQLId(p.name)))
+
           case _ =>
         })
 
@@ -397,16 +409,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                       messageParameters = Map("sqlExpr" -> expr.sql))
                   }
                 }
-              case e: Attribute if groupingExprs.isEmpty =>
-                // Collect all [[AggregateExpressions]]s.
-                val aggExprs = aggregateExprs.filter(_.collect {
-                  case a: AggregateExpression => a
-                }.nonEmpty)
-                e.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2422",
-                  messageParameters = Map(
-                    "sqlExpr" -> e.sql,
-                    "aggExprs" -> aggExprs.map(_.sql).mkString("(", ", ", ")")))
+              case _: Attribute if groupingExprs.isEmpty =>
+                operator.failAnalysis(
+                  errorClass = "MISSING_GROUP_BY",
+                  messageParameters = Map.empty)
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
               case s: ScalarSubquery
@@ -917,7 +923,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
 
     // Validate the subquery plan.
-    checkAnalysis(expr.plan)
+    checkAnalysis0(expr.plan)
 
     // Check if there is outer attribute that cannot be found from the plan.
     checkOuterReference(plan, expr)

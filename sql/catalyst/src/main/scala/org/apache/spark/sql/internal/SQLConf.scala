@@ -1160,7 +1160,7 @@ object SQLConf {
       .doc("Enables vectorized orc decoding for nested column.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
@@ -1402,6 +1402,18 @@ object SQLConf {
         "reported by a V2 data source through SupportsReportPartitioning, and will try to " +
         "avoid shuffle if necessary.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
+      .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
+        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning and if " +
+        "they share compatible partition keys, even if they don't have the exact same partition " +
+        "values, Spark will calculate a superset of partition values and pushdown that info to " +
+        "scan nodes, which will use empty partitions for the missing partition values on either " +
+        "side. This could help to eliminate unnecessary shuffles")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4045,7 +4057,7 @@ object SQLConf {
         "higher resolution priority than the lateral column alias.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4534,6 +4546,9 @@ class SQLConf extends Serializable with Logging {
 
   def v2BucketingEnabled: Boolean = getConf(SQLConf.V2_BUCKETING_ENABLED)
 
+  def v2BucketingPushPartValuesEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -4997,7 +5012,7 @@ class SQLConf extends Serializable with Logging {
   /**
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
-  def redactOptions[K, V](options: Seq[(K, V)]): Seq[(K, V)] = {
+  def redactOptions[K, V](options: collection.Seq[(K, V)]): collection.Seq[(K, V)] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))

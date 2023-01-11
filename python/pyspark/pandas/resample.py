@@ -16,7 +16,7 @@
 #
 
 """
-A wrapper for ResampledData to behave similar to pandas Resampler.
+A wrapper for ResampledData to behave like pandas Resampler.
 """
 from abc import ABCMeta, abstractmethod
 from distutils.version import LooseVersion
@@ -101,7 +101,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._offset = to_offset(rule)
         if self._offset.rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
-        if not self._offset.n > 0:  # type: ignore[attr-defined]
+        if not getattr(self._offset, "n") > 0:
             raise ValueError("rule offset must be positive")
 
         if closed is None:
@@ -134,7 +134,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _bin_time_stamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
         sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
         origin_scol = F.lit(origin)
-        (rule_code, n) = (self._offset.rule_code, self._offset.n)  # type: ignore[attr-defined]
+        (rule_code, n) = (self._offset.rule_code, getattr(self._offset, "n"))
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
         left_labeled, right_labeled = (self._label == "left", self._label == "right")
 

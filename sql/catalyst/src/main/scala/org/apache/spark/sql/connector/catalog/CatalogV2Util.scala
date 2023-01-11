@@ -330,21 +330,28 @@ private[sql] object CatalogV2Util {
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
     try {
-      if (timeTravelSpec.nonEmpty) {
-        timeTravelSpec.get match {
-          case v: AsOfVersion =>
-            Option(catalog.asTableCatalog.loadTable(ident, v.version))
-          case ts: AsOfTimestamp =>
-            Option(catalog.asTableCatalog.loadTable(ident, ts.timestamp))
-        }
-      } else {
-        Option(catalog.asTableCatalog.loadTable(ident))
-      }
+      Option(getTable(catalog, ident, timeTravelSpec))
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
       case _: NoSuchNamespaceException => None
     }
+
+  def getTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      timeTravelSpec: Option[TimeTravelSpec] = None): Table = {
+    if (timeTravelSpec.nonEmpty) {
+      timeTravelSpec.get match {
+        case v: AsOfVersion =>
+          catalog.asTableCatalog.loadTable(ident, v.version)
+        case ts: AsOfTimestamp =>
+          catalog.asTableCatalog.loadTable(ident, ts.timestamp)
+      }
+    } else {
+      catalog.asTableCatalog.loadTable(ident)
+    }
+  }
 
   def loadFunction(catalog: CatalogPlugin, ident: Identifier): Option[UnboundFunction] = {
     try {

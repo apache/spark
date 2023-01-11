@@ -560,21 +560,31 @@ case class RocksDBConf(
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
-  val ROCKSDB_CONF_NAME_PREFIX = "spark.sql.streaming.stateStore.rocksdb"
+  val ROCKSDB_SQL_CONF_NAME_PREFIX = "spark.sql.streaming.stateStore.rocksdb"
 
-  private case class ConfEntry(name: String, default: String) {
-    def fullName: String = s"$ROCKSDB_CONF_NAME_PREFIX.${name}".toLowerCase(Locale.ROOT)
+  private abstract class ConfEntry(name: String, val default: String) {
+    def fullName: String = name.toLowerCase(Locale.ROOT)
   }
 
+  private case class SQLConfEntry(name: String, override val default: String)
+    extends ConfEntry(name, default) {
+
+    override def fullName: String =
+      s"$ROCKSDB_SQL_CONF_NAME_PREFIX.${name}".toLowerCase(Locale.ROOT)
+  }
+
+  private case class ExtraConfEntry(name: String, override val default: String)
+    extends ConfEntry(name, default)
+
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
-  private val COMPACT_ON_COMMIT_CONF = ConfEntry("compactOnCommit", "false")
-  private val BLOCK_SIZE_KB_CONF = ConfEntry("blockSizeKB", "4")
-  private val BLOCK_CACHE_SIZE_MB_CONF = ConfEntry("blockCacheSizeMB", "8")
-  private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = ConfEntry("lockAcquireTimeoutMs", "60000")
-  private val RESET_STATS_ON_LOAD = ConfEntry("resetStatsOnLoad", "true")
+  private val COMPACT_ON_COMMIT_CONF = SQLConfEntry("compactOnCommit", "false")
+  private val BLOCK_SIZE_KB_CONF = SQLConfEntry("blockSizeKB", "4")
+  private val BLOCK_CACHE_SIZE_MB_CONF = SQLConfEntry("blockCacheSizeMB", "8")
+  private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = SQLConfEntry("lockAcquireTimeoutMs", "60000")
+  private val RESET_STATS_ON_LOAD = SQLConfEntry("resetStatsOnLoad", "true")
   // Config to specify the number of open files that can be used by the DB. Value of -1 means
   // that files opened are always kept open.
-  private val MAX_OPEN_FILES_CONF = ConfEntry("maxOpenFiles", "-1")
+  private val MAX_OPEN_FILES_CONF = SQLConfEntry("maxOpenFiles", "-1")
   // Configuration to set the RocksDB format version. When upgrading the RocksDB version in Spark,
   // it may introduce a new table format version that can not be supported by an old RocksDB version
   // used by an old Spark version. Hence, we store the table format version in the checkpoint when
@@ -586,7 +596,7 @@ object RocksDBConf {
   //
   // Note: this is also defined in `SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION`. These two
   // places should be updated together.
-  private val FORMAT_VERSION = ConfEntry("formatVersion", "5")
+  private val FORMAT_VERSION = SQLConfEntry("formatVersion", "5")
 
   // Flag to enable/disable tracking the total number of rows.
   // When this is enabled, this class does additional lookup on write operations (put/delete) to
@@ -594,33 +604,45 @@ object RocksDBConf {
   // The additional lookups bring non-trivial overhead on write-heavy workloads - if your query
   // does lots of writes on state, it would be encouraged to turn off the config and turn on
   // again when you really need the know the number for observability/debuggability.
-  private val TRACK_TOTAL_NUMBER_OF_ROWS = ConfEntry("trackTotalNumberOfRows", "true")
+  private val TRACK_TOTAL_NUMBER_OF_ROWS = SQLConfEntry("trackTotalNumberOfRows", "true")
 
   def apply(storeConf: StateStoreConf): RocksDBConf = {
-    val confs = CaseInsensitiveMap[String](storeConf.confs)
+    val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
+    val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
+
+    def getConfigMap(conf: ConfEntry): CaseInsensitiveMap[String] = {
+      conf match {
+        case _: SQLConfEntry => sqlConfs
+        case _: ExtraConfEntry => extraConfs
+      }
+    }
 
     def getBooleanConf(conf: ConfEntry): Boolean = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toBoolean } getOrElse {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toBoolean } getOrElse {
         throw new IllegalArgumentException(s"Invalid value for '${conf.fullName}', must be boolean")
       }
     }
 
     def getIntConf(conf: ConfEntry): Int = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toInt } getOrElse {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toInt } getOrElse {
         throw new IllegalArgumentException(s"Invalid value for '${conf.fullName}', " +
           "must be an integer")
       }
     }
 
     def getPositiveLongConf(conf: ConfEntry): Long = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toLong } filter { _ >= 0 } getOrElse {
+      Try {
+        getConfigMap(conf).getOrElse(conf.fullName, conf.default).toLong
+      } filter { _ >= 0 } getOrElse {
         throw new IllegalArgumentException(
           s"Invalid value for '${conf.fullName}', must be a positive integer")
       }
     }
 
     def getPositiveIntConf(conf: ConfEntry): Int = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toInt } filter { _ >= 0 } getOrElse {
+      Try {
+        getConfigMap(conf).getOrElse(conf.fullName, conf.default).toInt
+      } filter { _ >= 0 } getOrElse {
         throw new IllegalArgumentException(
           s"Invalid value for '${conf.fullName}', must be a positive integer")
       }

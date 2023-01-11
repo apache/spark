@@ -517,8 +517,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-20311 range(N) as alias") {
     def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
-        .select(star())
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("range",
+          UnresolvedTableValuedFunction("range", args.map(Literal(_))), outputNames)
+        .select(star()))
     }
     assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
@@ -1294,5 +1296,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     assertAnalysisSuccess(finalPlan)
+  }
+
+  test("SPARK-41271: bind named parameters to literals") {
+    comparePlans(
+      Parameter.bind(
+        plan = parsePlan("SELECT * FROM a LIMIT :limitA"),
+        args = Map("limitA" -> Literal(10))),
+      parsePlan("SELECT * FROM a LIMIT 10"))
+    // Ignore unused arguments
+    comparePlans(
+      Parameter.bind(
+        plan = parsePlan("SELECT c FROM a WHERE c < :param2"),
+        args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
+      parsePlan("SELECT c FROM a WHERE c < 20"))
   }
 }

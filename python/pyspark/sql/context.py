@@ -65,7 +65,7 @@ class SQLContext:
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
     here for backward compatibility.
 
-    A SQLContext can be used create :class:`DataFrame`, register :class:`DataFrame` as
+    A SQLContext can be used to create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
 
     .. deprecated:: 3.0.0
@@ -385,7 +385,7 @@ class SQLContext:
         :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
         each record will also be wrapped into a tuple, which can be converted to row later.
 
-        If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
+        If schema inference is needed, ``samplingRatio`` is used to determine the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
         .. versionadded:: 1.3.0
@@ -749,7 +749,7 @@ class HiveContext(SQLContext):
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:
-        """Invalidate and refresh all the cached the metadata of the given
+        """Invalidate and refresh all the cached metadata of the given
         table. For performance reasons, Spark SQL or the external data source
         library it uses might cache certain metadata about a table, such as the
         location of blocks. When those change outside of Spark SQL, users should

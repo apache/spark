@@ -17,6 +17,16 @@ SELECT (
   SELECT * FROM t
 );
 
+-- Make sure CTE in subquery is scoped to that subquery rather than global
+-- the 2nd half of the union should fail because the cte is scoped to the first half
+SELECT * FROM
+  (
+   WITH cte AS (SELECT * FROM range(10))
+   SELECT * FROM cte WHERE id = 8
+  ) a
+UNION
+SELECT * FROM cte;
+
 -- CTE in CTE definition shadows outer
 WITH
   t AS (SELECT 1),

@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -74,11 +74,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
       messageParameters = Map(
-        "parameter" -> "strfmt",
-        "functionName" -> toSQLId("format_string"),
-        "expected" -> "expects %1$, %2$ and so on, but got %0$."))
+        "parameter" -> toSQLId("strfmt"),
+        "functionName" -> toSQLId("format_string")))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
@@ -161,6 +160,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "MISSING_STATIC_PARTITION_COLUMN",
       messageParameters = Map("columnName" -> staticName))
+  }
+
+  def staticPartitionInUserSpecifiedColumnsError(staticName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
+      messageParameters = Map("staticName" -> staticName))
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
@@ -631,10 +636,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def functionUndefinedError(name: FunctionIdentifier): Throwable = {
+  def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1041",
-      messageParameters = Map("name" -> name.toString))
+      errorClass = "UNRESOLVED_ROUTINE",
+      messageParameters = Map(
+        "routineName" -> toSQLId(name.funcName),
+        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")))
+  }
+
+  def unresolvedRoutineError(
+      nameParts: Seq[String],
+      searchPath: Seq[String],
+      context: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVED_ROUTINE",
+      messageParameters = Map(
+        "routineName" -> toSQLId(nameParts),
+        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")
+      ),
+      origin = context)
   }
 
   def invalidFunctionArgumentsError(
@@ -1051,21 +1071,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "requiredType" -> requiredType))
   }
 
-  def invalidStringLiteralParameter(
-      funcName: String,
-      argName: String,
-      invalidValue: String,
-      allowedValues: Option[String] = None): Throwable = {
-    val endingMsg = allowedValues.map(" " + _).getOrElse("")
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1101",
-      messageParameters = Map(
-        "argName" -> argName,
-        "funcName" -> funcName,
-        "invalidValue" -> invalidValue,
-        "endingMsg" -> endingMsg))
-  }
-
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_EXTRACT_FIELD",
@@ -1155,7 +1160,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new CannotReplaceMissingTableException(tableIdentifier, cause)
   }
 
-  def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
+  private def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1113",
       messageParameters = Map(
@@ -1477,7 +1482,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1144",
       messageParameters = Map(
-        "targetSize" -> targetPartitionSchema.fields.size.toString,
+        "targetSize" -> targetPartitionSchema.fields.length.toString,
         "providedPartitionsSize" -> providedPartitionsSize.toString))
   }
 
@@ -1764,24 +1769,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cannotApplyTableValuedFunctionError(
-      name: String, arguments: String, usage: String, details: String = ""): Throwable = {
+  def unexpectedInputDataTypeError(
+      functionName: String,
+      paramIndex: Int,
+      dataType: DataType,
+      expression: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1179",
+      errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "name" -> name,
-        "usage" -> usage,
-        "arguments" -> arguments,
-        "details" -> details))
-  }
-
-  def incompatibleRangeInputDataTypeError(
-      expression: Expression, dataType: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1180",
-      messageParameters = Map(
-        "expectedDataType" -> dataType.typeName,
-        "foundDataType" -> expression.dataType.typeName))
+        "paramIndex" -> paramIndex.toString,
+        "functionName" -> toSQLId(functionName),
+        "requiredType" -> toSQLType(dataType),
+        "inputSql" -> toSQLExpr(expression),
+        "inputType" -> toSQLType(expression.dataType)))
   }
 
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
@@ -2242,11 +2242,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1230",
-      messageParameters = Map(
-        "scale" -> scale.toString,
-        "config" -> LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key))
+    SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
+      s" Set the config ${toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)}" +
+      " to \"true\" to allow it.")
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
@@ -2298,16 +2296,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       tableIdent: TableIdentifier,
       dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1235",
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
       messageParameters = Map(
-        "name" -> name,
-        "tableIdent" -> tableIdent.toString,
-        "dataType" -> dataType.toString))
+        "columnType" -> toSQLType(dataType),
+        "columnName" -> toSQLId(name),
+        "tableName" -> toSQLId(tableIdent.toString)))
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1236",
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
       messageParameters = Map.empty)
   }
 
@@ -2352,26 +2350,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tablePath" -> tablePath,
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
-  }
-
-  def noSuchFunctionError(
-      rawName: Seq[String],
-      t: TreeNode[_],
-      fullName: Option[Seq[String]] = None): Throwable = {
-    if (rawName.length == 1 && fullName.isDefined) {
-      new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1242",
-        messageParameters = Map(
-          "rawName" -> rawName.head,
-          "fullName" -> fullName.get.quoted
-        ),
-        origin = t.origin)
-    } else {
-      new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1243",
-        messageParameters = Map("rawName" -> rawName.quoted),
-        origin = t.origin)
-    }
   }
 
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
@@ -3369,12 +3347,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cause = Option(cause))
   }
 
-  def protobufMessageTypeError(protobufClassName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_PROTOBUF_MESSAGE_TYPE",
-      messageParameters = Map("protobufClassName" -> protobufClassName))
-  }
-
   def protobufDescriptorDependencyError(dependencyName: String): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
@@ -3411,7 +3383,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def ambiguousLateralColumnAlias(name: String, numOfMatches: Int): Throwable = {
+  def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
       messageParameters = Map(
@@ -3420,12 +3392,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       )
     )
   }
-  def ambiguousLateralColumnAlias(nameParts: Seq[String], numOfMatches: Int): Throwable = {
+  def ambiguousLateralColumnAliasError(nameParts: Seq[String], numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
       messageParameters = Map(
         "name" -> toSQLId(nameParts),
         "n" -> numOfMatches.toString
+      )
+    )
+  }
+
+  def lateralColumnAliasInAggFuncUnsupportedError(
+      lcaNameParts: Seq[String], aggExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+      messageParameters = Map(
+        "lca" -> toSQLId(lcaNameParts),
+        "aggFunc" -> toSQLExpr(aggExpr)
       )
     )
   }

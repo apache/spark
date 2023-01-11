@@ -229,4 +229,11 @@ private[spark] object UI {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .createWithDefault("LOCAL")
+
+  val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
+    .doc("Whether to group sub executions together in SQL UI when they belong to the same " +
+      "root execution")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
 }

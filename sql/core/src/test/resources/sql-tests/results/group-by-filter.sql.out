@@ -49,17 +49,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "(count(testdata.b) FILTER (WHERE (testdata.a >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`)",
-    "sqlExpr" : "testdata.a"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 8,
-    "fragment" : "a"
+    "startIndex" : 1,
+    "stopIndex" : 54,
+    "fragment" : "SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData"
   } ]
 }
 

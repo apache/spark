@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, WINDOW_TIME}
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -51,6 +52,8 @@ case class WindowTime(windowColumn: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
 
   override def dataType: DataType = child.dataType.asInstanceOf[StructType].head.dataType
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW_TIME)
 
   override def prettyName: String = "window_time"
 

@@ -53,7 +53,7 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.utils import QuietTest
 
 
-class DataFrameTests(ReusedSQLTestCase):
+class DataFrameTestsMixin:
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -74,7 +74,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
-        df = self.sc.parallelize(vals).toDF()
+        df = self.spark.createDataFrame(vals)
         items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
         self.assertTrue(1 in items[0])
         self.assertTrue(-2.0 in items[1])
@@ -531,7 +531,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
-        self.assertRaises(AssertionError, self.df.withColumns)
+        self.assertRaises(Exception, self.df.withColumns)
 
     def test_generic_hints(self):
         from pyspark.sql import DataFrame
@@ -691,16 +691,6 @@ class DataFrameTests(ReusedSQLTestCase):
                         ],
                     )
 
-        with self.subTest(desc="with no value columns"):
-            for values in [[], ()]:
-                with self.subTest(values=values):
-                    with self.assertRaisesRegex(
-                        AnalysisException,
-                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
-                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
-                    ):
-                        df.unpivot("id", values, "var", "val")
-
         with self.subTest(desc="with single value column"):
             for values in ["int", ["int"], ("int",)]:
                 with self.subTest(values=values):
@@ -736,14 +726,6 @@ class DataFrameTests(ReusedSQLTestCase):
                         ],
                     )
 
-        with self.subTest(desc="with value columns without common data type"):
-            with self.assertRaisesRegex(
-                AnalysisException,
-                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
-                r"a least common type, some types do not: .*",
-            ):
-                df.unpivot("id", ["int", "str"], "var", "val")
-
         with self.subTest(desc="with columns"):
             for id in [df.id, [df.id], (df.id,)]:
                 for values in [[df.int, df.double], (df.int, df.double)]:
@@ -767,6 +749,35 @@ class DataFrameTests(ReusedSQLTestCase):
                 df.unpivot("id", ["int", "double"], "var", "val").collect(),
                 df.melt("id", ["int", "double"], "var", "val").collect(),
             )
+
+    def test_unpivot_negative(self):
+        # SPARK-39877: test the DataFrame.unpivot method
+        df = self.spark.createDataFrame(
+            [
+                (1, 10, 1.0, "one"),
+                (2, 20, 2.0, "two"),
+                (3, 30, 3.0, "three"),
+            ],
+            ["id", "int", "double", "str"],
+        )
+
+        with self.subTest(desc="with no value columns"):
+            for values in [[], ()]:
+                with self.subTest(values=values):
+                    with self.assertRaisesRegex(
+                        AnalysisException,
+                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
+                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
+                    ):
+                        df.unpivot("id", values, "var", "val").collect()
+
+        with self.subTest(desc="with value columns without common data type"):
+            with self.assertRaisesRegex(
+                AnalysisException,
+                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
+                r"a least common type, some types do not: .*",
+            ):
+                df.unpivot("id", ["int", "str"], "var", "val").collect()
 
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
@@ -1566,6 +1577,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'",
             )
+
+
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
