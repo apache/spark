@@ -33,6 +33,7 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
     val ui = input.asInstanceOf[SQLExecutionUIData]
     val builder = StoreTypes.SQLExecutionUIData.newBuilder()
     builder.setExecutionId(ui.executionId)
+    builder.setRootExecutionId(ui.rootExecutionId)
     builder.setDescription(ui.description)
     builder.setDetails(ui.details)
     builder.setPhysicalPlanDescription(ui.physicalPlanDescription)
@@ -80,6 +81,7 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
 
     new SQLExecutionUIData(
       executionId = ui.getExecutionId,
+      rootExecutionId = ui.getRootExecutionId,
       description = ui.getDescription,
       details = ui.getDetails,
       physicalPlanDescription = ui.getPhysicalPlanDescription,

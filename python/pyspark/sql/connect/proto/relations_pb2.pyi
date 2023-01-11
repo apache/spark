@@ -2375,7 +2375,7 @@ class Hint(google.protobuf.message.Message):
     def parameters(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Hint parameters."""
     def __init__(
@@ -2383,9 +2383,7 @@ class Hint(google.protobuf.message.Message):
         *,
         input: global___Relation | None = ...,
         name: builtins.str = ...,
-        parameters: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
+        parameters: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
         | None = ...,
     ) -> None: ...
     def HasField(
