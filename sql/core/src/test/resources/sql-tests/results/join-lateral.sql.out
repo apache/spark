@@ -838,6 +838,15 @@ NULL	[4]	NULL
 
 
 -- !query
+SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2))
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+
+
+-- !query
 SELECT * FROM t1, LATERAL RANGE(3)
 -- !query schema
 struct<c1:int,c2:int,id:bigint>

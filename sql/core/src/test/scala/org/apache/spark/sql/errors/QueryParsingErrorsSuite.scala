@@ -75,8 +75,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       " JOIN LATERAL t2" -> ("JOIN LATERAL t2", 17, 31),
       ", LATERAL (t2 JOIN t3)" -> ("FROM t1, LATERAL (t2 JOIN t3)", 9, 37),
       ", LATERAL (LATERAL t2)" -> ("FROM t1, LATERAL (LATERAL t2)", 9, 37),
-      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38),
-      ", LATERAL RANGE(0, 1)" -> ("FROM t1, LATERAL RANGE(0, 1)", 9, 36)
+      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38)
     ).foreach { case (sqlText, (fragment, start, stop)) =>
       checkError(
         exception = parseException(s"SELECT * FROM t1$sqlText"),
