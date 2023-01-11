@@ -1707,9 +1707,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * - Null-safe Equal: '<=>'
    * - Not Equal: '<>' or '!='
    * - Less than: '<'
-   * - Less then or Equal: '<='
+   * - Less than or Equal: '<='
    * - Greater than: '>'
-   * - Greater then or Equal: '>='
+   * - Greater than or Equal: '>='
    */
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.left)
