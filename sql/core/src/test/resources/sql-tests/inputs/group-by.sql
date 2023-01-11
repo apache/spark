@@ -45,6 +45,9 @@ SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k HAVING k > 1;
 
+-- GROUP BY alias inside subquery expression with conflicting outer reference
+SELECT * FROM testData WHERE a = 1 AND EXISTS (SELECT 1 AS a GROUP BY a);
+
 -- GROUP BY alias with invalid col in SELECT list
 SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k;
 

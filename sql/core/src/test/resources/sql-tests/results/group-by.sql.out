@@ -183,6 +183,15 @@ struct<k:int,count(b):bigint>
 
 
 -- !query
+SELECT * FROM testData WHERE a = 1 AND EXISTS (SELECT 1 AS a GROUP BY a)
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+1	1
+1	2
+
+
+-- !query
 SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k
 -- !query schema
 struct<>
