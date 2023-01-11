@@ -81,7 +81,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         exception = parseException(s"SELECT * FROM t1$sqlText"),
         errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
-        parameters = Map("inputString" -> "LATERAL can only be used with subquery."),
+        parameters = Map("inputString" ->
+          "LATERAL can only be used with subquery and table-valued functions."),
         context = ExpectedContext(fragment, start, stop))
     }
   }
