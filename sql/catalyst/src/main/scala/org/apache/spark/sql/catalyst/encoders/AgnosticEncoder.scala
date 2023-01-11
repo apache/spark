@@ -16,12 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.encoders
 
+import java.{sql => jsql}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInt}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -34,9 +35,9 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def nullable: Boolean = !isPrimitive
   def dataType: DataType
   override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
+  def lenientSerialization: Boolean = false
 }
 
-// TODO check RowEncoder
 // TODO check BeanEncoder
 object AgnosticEncoders {
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
@@ -46,35 +47,42 @@ object AgnosticEncoders {
     override val clsTag: ClassTag[Option[E]] = ClassTag(classOf[Option[E]])
   }
 
-  case class ArrayEncoder[E](element: AgnosticEncoder[E])
+  case class ArrayEncoder[E](element: AgnosticEncoder[E], containsNull: Boolean)
     extends AgnosticEncoder[Array[E]] {
     override def isPrimitive: Boolean = false
-    override def dataType: DataType = ArrayType(element.dataType, element.nullable)
+    override def dataType: DataType = ArrayType(element.dataType, containsNull)
     override val clsTag: ClassTag[Array[E]] = element.clsTag.wrap
   }
 
-  case class IterableEncoder[C <: Iterable[E], E](
+  case class IterableEncoder[C, E](
       override val clsTag: ClassTag[C],
-      element: AgnosticEncoder[E])
+      element: AgnosticEncoder[E],
+      containsNull: Boolean,
+      override val lenientSerialization: Boolean)
     extends AgnosticEncoder[C] {
     override def isPrimitive: Boolean = false
-    override val dataType: DataType = ArrayType(element.dataType, element.nullable)
+    override val dataType: DataType = ArrayType(element.dataType, containsNull)
   }
 
   case class MapEncoder[C, K, V](
       override val clsTag: ClassTag[C],
       keyEncoder: AgnosticEncoder[K],
-      valueEncoder: AgnosticEncoder[V])
+      valueEncoder: AgnosticEncoder[V],
+      valueContainsNull: Boolean)
     extends AgnosticEncoder[C] {
     override def isPrimitive: Boolean = false
     override val dataType: DataType = MapType(
       keyEncoder.dataType,
       valueEncoder.dataType,
-      valueEncoder.nullable)
+      valueContainsNull)
   }
 
-  case class EncoderField(name: String, enc: AgnosticEncoder[_]) {
-    def structField: StructField = StructField(name, enc.dataType, enc.nullable)
+  case class EncoderField(
+      name: String,
+      enc: AgnosticEncoder[_],
+      nullable: Boolean,
+      metadata: Metadata) {
+    def structField: StructField = StructField(name, enc.dataType, nullable, metadata)
   }
 
   // This supports both Product and DefinedByConstructorParams
@@ -85,6 +93,13 @@ object AgnosticEncoders {
     override def isPrimitive: Boolean = false
     override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
+  }
+
+  case class RowEncoder(fields: Seq[EncoderField]) extends AgnosticEncoder[Row] {
+    override def isPrimitive: Boolean = false
+    override val schema: StructType = StructType(fields.map(_.structField))
+    override def dataType: DataType = schema
+    override def clsTag: ClassTag[Row] = classTag[Row]
   }
 
   // This will only work for encoding from/to Sparks' InternalRow format.
@@ -137,18 +152,40 @@ object AgnosticEncoders {
   // Nullable leaf encoders
   case object StringEncoder extends LeafEncoder[String](StringType)
   case object BinaryEncoder extends LeafEncoder[Array[Byte]](BinaryType)
-  case object SparkDecimalEncoder extends LeafEncoder[Decimal](DecimalType.SYSTEM_DEFAULT)
-  case object ScalaDecimalEncoder extends LeafEncoder[BigDecimal](DecimalType.SYSTEM_DEFAULT)
-  case object JavaDecimalEncoder extends LeafEncoder[JBigDecimal](DecimalType.SYSTEM_DEFAULT)
   case object ScalaBigIntEncoder extends LeafEncoder[BigInt](DecimalType.BigIntDecimal)
   case object JavaBigIntEncoder extends LeafEncoder[JBigInt](DecimalType.BigIntDecimal)
   case object CalendarIntervalEncoder extends LeafEncoder[CalendarInterval](CalendarIntervalType)
   case object DayTimeIntervalEncoder extends LeafEncoder[Duration](DayTimeIntervalType())
   case object YearMonthIntervalEncoder extends LeafEncoder[Period](YearMonthIntervalType())
-  case object DateEncoder extends LeafEncoder[java.sql.Date](DateType)
-  case object LocalDateEncoder extends LeafEncoder[LocalDate](DateType)
-  case object TimestampEncoder extends LeafEncoder[java.sql.Timestamp](TimestampType)
-  case object InstantEncoder extends LeafEncoder[Instant](TimestampType)
+  case class DateEncoder(override val lenientSerialization: Boolean)
+    extends LeafEncoder[jsql.Date](DateType)
+  case class LocalDateEncoder(override val lenientSerialization: Boolean)
+    extends LeafEncoder[LocalDate](DateType)
+  case class TimestampEncoder(override val lenientSerialization: Boolean)
+    extends LeafEncoder[jsql.Timestamp](TimestampType)
+  case class InstantEncoder(override val lenientSerialization: Boolean)
+    extends LeafEncoder[Instant](TimestampType)
   case object LocalDateTimeEncoder extends LeafEncoder[LocalDateTime](TimestampNTZType)
+
+  case class SparkDecimalEncoder(dt: DecimalType) extends LeafEncoder[Decimal](dt)
+  case class ScalaDecimalEncoder(dt: DecimalType) extends LeafEncoder[BigDecimal](dt)
+  case class JavaDecimalEncoder(dt: DecimalType, override val lenientSerialization: Boolean)
+    extends LeafEncoder[JBigDecimal](dt)
+
+  val STRICT_DATE_ENCODER: DateEncoder = DateEncoder(lenientSerialization = false)
+  val STRICT_LOCAL_DATE_ENCODER: LocalDateEncoder = LocalDateEncoder(lenientSerialization = false)
+  val STRICT_TIMESTAMP_ENCODER: TimestampEncoder = TimestampEncoder(lenientSerialization = false)
+  val STRICT_INSTANT_ENCODER: InstantEncoder = InstantEncoder(lenientSerialization = false)
+  val LENIENT_DATE_ENCODER: DateEncoder = DateEncoder(lenientSerialization = true)
+  val LENIENT_LOCAL_DATE_ENCODER: LocalDateEncoder = LocalDateEncoder(lenientSerialization = true)
+  val LENIENT_TIMESTAMP_ENCODER: TimestampEncoder = TimestampEncoder(lenientSerialization = true)
+  val LENIENT_INSTANT_ENCODER: InstantEncoder = InstantEncoder(lenientSerialization = true)
+
+  val DEFAULT_SPARK_DECIMAL_ENCODER: SparkDecimalEncoder =
+    SparkDecimalEncoder(DecimalType.SYSTEM_DEFAULT)
+  val DEFAULT_SCALA_DECIMAL_ENCODER: ScalaDecimalEncoder =
+    ScalaDecimalEncoder(DecimalType.SYSTEM_DEFAULT)
+  val DEFAULT_JAVA_DECIMAL_ENCODER: JavaDecimalEncoder =
+    JavaDecimalEncoder(DecimalType.SYSTEM_DEFAULT, lenientSerialization = false)
 }
 

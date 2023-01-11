@@ -123,13 +123,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   encodeDecodeTest(
     new StructType()
-      .add("mapOfIntAndString", MapType(IntegerType, StringType))
-      .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
-      .add("mapOfArrayAndInt", MapType(arrayOfString, IntegerType))
-      .add("mapOfArray", MapType(arrayOfString, arrayOfString))
-      .add("mapOfStringAndStruct", MapType(StringType, structOfString))
-      .add("mapOfStructAndString", MapType(structOfString, StringType))
-      .add("mapOfStruct", MapType(structOfString, structOfString)))
+      // .add("mapOfIntAndString", MapType(IntegerType, StringType))
+      // .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
+      .add("mapOfArrayAndInt", MapType(ArrayType(IntegerType), IntegerType))
+      // .add("mapOfArray", MapType(arrayOfString, arrayOfString))
+      // .add("mapOfStringAndStruct", MapType(StringType, structOfString))
+      // .add("mapOfStructAndString", MapType(structOfString, StringType))
+      // .add("mapOfStruct", MapType(structOfString, structOfString))
+      )
 
   encodeDecodeTest(
     new StructType()

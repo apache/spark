@@ -30,7 +30,6 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -1908,14 +1907,14 @@ case class GetExternalRowField(
  * Validates the actual data type of input expression at runtime.  If it doesn't match the
  * expectation, throw an exception.
  */
-case class ValidateExternalType(child: Expression, expected: DataType, lenient: Boolean)
+case class ValidateExternalType(child: Expression, expected: DataType, externalDataType: DataType)
   extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ObjectType(classOf[Object]))
 
   override def nullable: Boolean = child.nullable
 
-  override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected, lenient)
+  override val dataType: DataType = externalDataType
 
   private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
