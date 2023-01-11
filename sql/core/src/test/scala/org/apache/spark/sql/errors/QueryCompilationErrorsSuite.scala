@@ -679,6 +679,32 @@ class QueryCompilationErrorsSuite
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }
+
+  test("SPARK-38743 - Test the error class: MISSING_STATIC_PARTITION_COLUMN") {
+    val tableName: String = "static_part_table"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (a STRING, b INT, c STRING)
+           |USING parquet
+           |PARTITIONED BY (c)
+           |""".stripMargin)
+
+      val df = Seq(("A", 123, "C")).toDF("a", "b", "c")
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").saveAsTable(s"$tableName")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1163",
+        parameters = Map(
+          "tableName" -> s"spark_catalog.default.$tableName",
+          "specifiedPartCols" -> "",
+          "existingPartCols" -> "c"
+        )
+      )
+      df.write.mode("append").partitionBy("c").saveAsTable(s"$tableName")
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
