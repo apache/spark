@@ -736,18 +736,31 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   test("SPARK-41896: Filter by a function that takes the metadata struct as argument") {
     withTempPath { dir =>
       val idColumnName = "id"
-      spark.range(end = 40)
+      val numFiles = 4
+      spark.range(end = numFiles)
         .toDF(idColumnName)
+        .withColumn("partition", col(idColumnName))
         .write
         .format("parquet")
+        .partitionBy("partition")
         .save(dir.getAbsolutePath)
 
-      spark.udf.register("size_bigger_10",
-        (metadata: Row) => { metadata.getAs[Long]("file_size") > 10 })
+      // Select path and partition value for a random file.
+      val testFileData = spark.read.load(dir.getAbsolutePath)
+        .select(idColumnName, METADATA_FILE_PATH).collect().head
+      val testFilePartition = testFileData.getLong(0)
+      val testFilePath = testFileData.getString(1)
 
-      spark.read.load(dir.getAbsolutePath)
-        .where("size_bigger_10(_metadata)")
-        .collect()
+      // Create and use a filter using the file path.
+      spark.udf.register("isTestFile",
+        (metadata: Row) => { metadata.getAs[String]("file_path") == testFilePath })
+      val udfFilterResult = spark.read.load(dir.getAbsolutePath)
+        .select(idColumnName, METADATA_FILE_PATH)
+        .where("isTestFile(_metadata)")
+        .collect().head
+
+      assert(testFilePartition === udfFilterResult.getLong(0))
+      assert(testFilePath === udfFilterResult.getString(1))
     }
   }
 }
