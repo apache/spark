@@ -91,6 +91,11 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
+    "message" : [
+      "Failed to set permissions on created path <path> back to <permission>."
+    ]
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
@@ -1103,11 +1108,6 @@
       "Failed to rename as <sourcePath> was not found"
     ],
     "sqlState" : "22023"
-  },
-  "RESET_PERMISSION_TO_ORIGINAL" : {
-    "message" : [
-      "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
-    ]
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [

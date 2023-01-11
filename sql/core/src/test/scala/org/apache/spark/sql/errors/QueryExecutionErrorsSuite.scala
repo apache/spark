@@ -417,7 +417,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("RESET_PERMISSION_TO_ORIGINAL: can't set permission") {
+  test("CANNOT_RESTORE_PERMISSIONS_FOR_PATH: can't set permission") {
       withTable("t") {
         withSQLConf(
           "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
@@ -431,10 +431,9 @@ class QueryExecutionErrorsSuite
 
           checkError(
             exception = e.getCause.asInstanceOf[SparkSecurityException],
-            errorClass = "RESET_PERMISSION_TO_ORIGINAL",
+            errorClass = "CANNOT_RESTORE_PERMISSIONS_FOR_PATH",
             parameters = Map("permission" -> ".+",
-              "path" -> ".+",
-              "message" -> ".+"),
+              "path" -> ".+"),
             matchPVals = true)
       }
     }
