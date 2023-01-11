@@ -151,6 +151,11 @@ private[storage] class BlockInfoManager extends Logging {
   private[this] val blockInfoWrappers = new ConcurrentHashMap[BlockId, BlockInfoWrapper]
 
   /**
+   * Record visible rdd blocks stored in the block manager.
+   */
+  private[this] val visibleRDDBlocks = ConcurrentHashMap.newKeySet[RDDBlockId]
+
+  /**
    * Stripe used to control multi-threaded access to block information.
    *
    * We are using this instead of the synchronizing on the [[BlockInfo]] objects to avoid race
@@ -179,6 +184,14 @@ private[storage] class BlockInfoManager extends Logging {
   registerTask(BlockInfo.NON_TASK_WRITER)
 
   // ----------------------------------------------------------------------------------------------
+
+  def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    blockInfoWrappers.contains(blockId) && visibleRDDBlocks.contains(blockId)
+  }
+
+  def addVisibleBlocks(blockId: RDDBlockId): Boolean = {
+    visibleRDDBlocks.add(blockId)
+  }
 
   /**
    * Called at the start of a task in order to register that task with this [[BlockInfoManager]].
@@ -503,6 +516,11 @@ private[storage] class BlockInfoManager extends Logging {
           s"Task $taskAttemptId called remove() on block $blockId without a write lock")
       } else {
         blockInfoWrappers.remove(blockId)
+        blockId match {
+          case rddBlockId: RDDBlockId =>
+            visibleRDDBlocks.remove(rddBlockId)
+          case _ =>
+        }
         info.readerCount = 0
         info.writerTask = BlockInfo.NO_WRITER
         writeLocksByTask.get(taskAttemptId).remove(blockId)
@@ -525,6 +543,7 @@ private[storage] class BlockInfoManager extends Logging {
     blockInfoWrappers.clear()
     readLocksByTask.clear()
     writeLocksByTask.clear()
+    visibleRDDBlocks.clear()
   }
 
 }

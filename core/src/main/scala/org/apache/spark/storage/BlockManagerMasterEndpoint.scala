@@ -76,8 +76,11 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
-  private val visibleRDDBlocks = new mutable.HashSet[RDDBlockId]
+
+  // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
+  // Record the visible RDD blocks which have been generated at least from one successful task.
+  private val visibleRDDBlocks = new mutable.HashSet[RDDBlockId]
 
   // Mapping from host name to shuffle (mergers) services where the current app
   // registered an executor in the past. Older hosts are removed when the
@@ -219,14 +222,17 @@ class BlockManagerMasterEndpoint(
     case GetRDDBlockVisibility(blockId) =>
       context.reply(visibleRDDBlocks.contains(blockId))
 
-    case UpdateRDDBlockVisibility(taskId) =>
-      context.reply(updateRDDBlockVisibility(taskId))
+    case UpdateRDDBlockVisibility(taskId, visible) =>
+      context.reply(updateRDDBlockVisibility(taskId, visible))
   }
 
-  private def updateRDDBlockVisibility(taskId: Long): Unit = {
-    tidToRddBlockIds.get(taskId).foreach { blockIds =>
-      blockIds.foreach(visibleRDDBlocks.add)
+  private def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
+    if (visible) {
+      tidToRddBlockIds.get(taskId).foreach { blockIds =>
+        blockIds.foreach(visibleRDDBlocks.add)
+      }
     }
+
     tidToRddBlockIds.remove(taskId)
   }
 

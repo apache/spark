@@ -112,8 +112,8 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Unit](UpdateRDDBlockTaskInfo(blockId, taskId))
   }
 
-  def updateRDDBlockVisibility(taskId: Long): Unit = {
-    driverEndpoint.askSync[Unit](UpdateRDDBlockVisibility(taskId))
+  def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
+    driverEndpoint.askSync[Unit](UpdateRDDBlockVisibility(taskId, visible))
   }
 
   /** Check whether a block is visible */

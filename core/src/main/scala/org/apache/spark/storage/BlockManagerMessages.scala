@@ -97,7 +97,7 @@ private[spark] object BlockManagerMessages {
 
   case class UpdateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long) extends ToBlockManagerMaster
 
-  case class UpdateRDDBlockVisibility(taskId: Long) extends ToBlockManagerMaster
+  case class UpdateRDDBlockVisibility(taskId: Long, visible: Boolean) extends ToBlockManagerMaster
 
   case class GetRDDBlockVisibility(blockId: RDDBlockId) extends ToBlockManagerMaster
 

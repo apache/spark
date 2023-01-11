@@ -1342,7 +1342,7 @@ private[spark] class BlockManager(
 
     // Attempt to read the block from local or remote storage. If it's present, then we don't need
     // to go through the local-get-or-put path.
-    if (master.isRDDBlockVisible(blockId)) { // Read from cache only when the block is visible.
+    if (isRDDBlockVisible(blockId)) { // Read from cache only when the block is visible.
       get[T](blockId)(classTag) match {
         case Some(block) =>
           return Left(block)
@@ -1351,8 +1351,8 @@ private[spark] class BlockManager(
       }
       // Initially we hold no locks on this block.
     } else {
-      // Need to compute the block, since the block maybe already exists, force
-      // compute the block here.
+      // Need to compute the block. Since if the block already exists, `doPutIterator` will skip
+      // computing the partition, force to compute the block here.
       val iterator = makeIterator()
       getIterator = () => iterator
     }
@@ -1480,6 +1480,22 @@ private[spark] class BlockManager(
     val blockStoreUpdater =
       ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster)
     blockStoreUpdater.save()
+  }
+
+  // Check whether a rdd block is visible or not.
+  private def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    // If the rdd block visibility information not available in the block manager,
+    // asking master for the information.
+    if (blockInfoManager.isRDDBlockVisible(blockId)) {
+      return true
+    }
+
+    if (master.isRDDBlockVisible(blockId)) {
+      blockInfoManager.addVisibleBlocks(blockId)
+      true
+    } else {
+      false
+    }
   }
 
   /**
