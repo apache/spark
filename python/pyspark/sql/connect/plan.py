@@ -426,26 +426,32 @@ class WithColumns(LogicalPlan):
 class Hint(LogicalPlan):
     """Logical plan object for a Hint operation."""
 
-    def __init__(self, child: Optional["LogicalPlan"], name: str, params: List[Any]) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], name: str, parameters: List[Any]) -> None:
         super().__init__(child)
 
         assert isinstance(name, str)
 
-        self.name = name
+        self._name = name
 
-        # TODO(SPARK-41887): support list type as hint parameter
-        assert isinstance(params, list) and all(
-            p is not None and isinstance(p, (int, str, float)) for p in params
-        )
-        self.params = params
+        for param in parameters:
+            assert isinstance(param, (list, str, float, int))
+            if isinstance(param, list):
+                assert all(isinstance(p, (str, float, int)) for p in param)
+
+        self._parameters = parameters
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        from pyspark.sql.connect.functions import array, lit
+
         assert self._child is not None
         plan = proto.Relation()
         plan.hint.input.CopyFrom(self._child.plan(session))
-        plan.hint.name = self.name
-        for v in self.params:
-            plan.hint.parameters.append(LiteralExpression._from_value(v).to_plan(session).literal)
+        plan.hint.name = self._name
+        for param in self._parameters:
+            if isinstance(param, list):
+                plan.hint.parameters.append(array(*[lit(p) for p in param]).to_plan(session))
+            else:
+                plan.hint.parameters.append(lit(param).to_plan(session))
         return plan
 
 
