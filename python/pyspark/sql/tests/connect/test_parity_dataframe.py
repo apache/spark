@@ -62,11 +62,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_extended_hint_types(self):
         super().test_extended_hint_types()
 
-    # TODO: comparing types, need to expose connect types
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_generic_hints(self):
-        super().test_generic_hints()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()
