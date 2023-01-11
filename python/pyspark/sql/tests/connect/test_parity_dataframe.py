@@ -120,8 +120,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_sample(self):
         super().test_sample()
 
-    # TODO(SPARK-41875): throw proper errors in Dataset.to()
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect convert AnalysisException to SparkConnectAnalysisException.")
     def test_to(self):
         super().test_to()
 
