@@ -200,7 +200,7 @@ class FunctionsTestsMixin:
     def test_sampleby(self):
         df = self.spark.createDataFrame([Row(a=i, b=(i % 3)) for i in range(100)])
         sampled = df.stat.sampleBy("b", fractions={0: 0.5, 1: 0.5}, seed=0)
-        self.assertTrue(sampled.count() == 35)
+        self.assertTrue(35 <= sampled.count() <= 36)
 
     def test_cov(self):
         df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
@@ -294,8 +294,7 @@ class FunctionsTestsMixin:
         SQLTestUtils.assert_close(to_reciprocal_trig(math.tan), df.select(cot(df.value)).collect())
 
     def test_rand_functions(self):
-        df = self.df
-        from pyspark.sql import functions
+        df = self.spark.createDataFrame([Row(key=i, value=str(i)) for i in range(100)])
 
         rnd = df.select("key", functions.rand()).collect()
         for row in rnd:

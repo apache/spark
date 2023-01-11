@@ -174,3 +174,260 @@ struct<id:bigint>
 -- !query output
 0
 1
+
+
+-- !query
+select i from range(0, 2) t(i)
+-- !query schema
+struct<i:bigint>
+-- !query output
+0
+1
+
+
+-- !query
+select * from explode(array(1, 2))
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+
+
+-- !query
+select * from explode(map('a', 1, 'b', 2))
+-- !query schema
+struct<key:string,value:int>
+-- !query output
+a	1
+b	2
+
+
+-- !query
+select * from explode(array())
+-- !query schema
+struct<col:void>
+-- !query output
+
+
+
+-- !query
+select * from explode(map())
+-- !query schema
+struct<key:void,value:void>
+-- !query output
+
+
+
+-- !query
+select * from explode(array(1, 2)) t(c1)
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+2
+
+
+-- !query
+select * from explode(map('a', 1, 'b', 2)) t(k, v)
+-- !query schema
+struct<k:string,v:int>
+-- !query output
+a	1
+b	2
+
+
+-- !query
+select * from explode(null)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 27,
+    "fragment" : "explode(null)"
+  } ]
+}
+
+
+-- !query
+select * from explode(null) t(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "explode(null) t(c1)"
+  } ]
+}
+
+
+-- !query
+select * from explode(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 24,
+    "fragment" : "explode(1)"
+  } ]
+}
+
+
+-- !query
+select * from explode(1, 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "expectedNum" : "1",
+    "functionName" : "`explode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 27,
+    "fragment" : "explode(1, 2)"
+  } ]
+}
+
+
+-- !query
+select * from explode(explode(array(1)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "messageParameters" : {
+    "expression" : "\"explode(explode(array(1)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 40,
+    "fragment" : "explode(explode(array(1)))"
+  } ]
+}
+
+
+-- !query
+select * from explode(array(1, 2)) t(c1, c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "messageParameters" : {
+    "aliasesNum" : "2",
+    "funcName" : "explode",
+    "outColsNum" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 44,
+    "fragment" : "explode(array(1, 2)) t(c1, c2)"
+  } ]
+}
+
+
+-- !query
+select * from explode_outer(array(1, 2))
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+
+
+-- !query
+select * from explode_outer(map('a', 1, 'b', 2))
+-- !query schema
+struct<key:string,value:int>
+-- !query output
+a	1
+b	2
+
+
+-- !query
+select * from explode_outer(array())
+-- !query schema
+struct<col:void>
+-- !query output
+NULL
+
+
+-- !query
+select * from explode_outer(map())
+-- !query schema
+struct<key:void,value:void>
+-- !query output
+NULL	NULL
+
+
+-- !query
+select * from range(2) join explode(array(1, 2))
+-- !query schema
+struct<id:bigint,col:int>
+-- !query output
+0	1
+0	2
+1	1
+1	2
+
+
+-- !query
+select * from range(2) join explode_outer(array())
+-- !query schema
+struct<id:bigint,col:void>
+-- !query output
+0	NULL
+1	NULL

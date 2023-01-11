@@ -17,7 +17,19 @@
 
 import inspect
 import warnings
-from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, Callable, ValuesView
+from typing import (
+    Any,
+    Dict,
+    TYPE_CHECKING,
+    Union,
+    List,
+    overload,
+    Optional,
+    Tuple,
+    Callable,
+    ValuesView,
+    cast,
+)
 
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
@@ -30,6 +42,7 @@ from pyspark.sql.connect.expressions import (
     LambdaFunction,
 )
 from pyspark.sql import functions as pysparkfuncs
+from pyspark.sql.types import DataType, StructType, ArrayType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -51,7 +64,7 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
 
     Returns
     -------
-    :class:`UnresolvedFunction`
+    :class:`Column`
     """
     expressions: List[Expression] = []
     for arg in args:
@@ -154,11 +167,22 @@ def _invoke_higher_order_function(
     return _invoke_function(name, *_cols, *_funs)
 
 
+def _options_to_col(options: Dict[str, Any]) -> Column:
+    _options: List[Column] = []
+    for k, v in options.items():
+        _options.append(lit(str(k)))
+        _options.append(lit(str(v)))
+    return create_map(*_options)
+
+
 # Normal Functions
 
 
 def col(col: str) -> Column:
     return Column(ColumnReference(col))
+
+
+col.__doc__ = pysparkfuncs.col.__doc__
 
 
 column = col
@@ -170,8 +194,7 @@ def lit(col: Any) -> Column:
     elif isinstance(col, list):
         return array(*[lit(c) for c in col])
     else:
-        dataType = LiteralExpression._infer_type(col)
-        return Column(LiteralExpression(col, dataType))
+        return Column(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__
@@ -526,8 +549,13 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
 hypot.__doc__ = pysparkfuncs.hypot.__doc__
 
 
-def log(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ln", col)
+def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = None) -> Column:
+    if arg2 is None:
+        # in this case, arg1 should be "ColumnOrName"
+        return _invoke_function("ln", _to_col(cast("ColumnOrName", arg1)))
+    else:
+        # in this case, arg1 should be a float
+        return _invoke_function("log", lit(cast(float, arg1)), _to_col(arg2))
 
 
 log.__doc__ = pysparkfuncs.log.__doc__
@@ -1098,6 +1126,13 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 array_intersect.__doc__ = pysparkfuncs.array_intersect.__doc__
 
 
+def array_compact(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_compact", col)
+
+
+array_compact.__doc__ = pysparkfuncs.array_compact.__doc__
+
+
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
@@ -1253,6 +1288,7 @@ forall.__doc__ = pysparkfuncs.forall.__doc__
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
+    options: Optional[Dict[str, str]] = None,
 ) -> Column:
     if isinstance(schema, Column):
         _schema = schema
@@ -1261,25 +1297,35 @@ def from_csv(
     else:
         raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
 
-    return _invoke_function("from_csv", _to_col(col), _schema)
+    if options is None:
+        return _invoke_function("from_csv", _to_col(col), _schema)
+    else:
+        return _invoke_function("from_csv", _to_col(col), _schema, _options_to_col(options))
 
 
 from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 
 
-# TODO: 1, support ArrayType and StructType schema; 2, support options
 def from_json(
     col: "ColumnOrName",
-    schema: Union[Column, str],
+    schema: Union[ArrayType, StructType, Column, str],
+    options: Optional[Dict[str, str]] = None,
 ) -> Column:
     if isinstance(schema, Column):
         _schema = schema
+    elif isinstance(schema, DataType):
+        _schema = lit(schema.json())
     elif isinstance(schema, str):
         _schema = lit(schema)
     else:
-        raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
+        raise TypeError(
+            f"schema should be a Column or str or DataType, but got {type(schema).__name__}"
+        )
 
-    return _invoke_function("from_json", _to_col(col), _schema)
+    if options is None:
+        return _invoke_function("from_json", _to_col(col), _schema)
+    else:
+        return _invoke_function("from_json", _to_col(col), _schema, _options_to_col(options))
 
 
 from_json.__doc__ = pysparkfuncs.from_json.__doc__
@@ -1426,8 +1472,7 @@ def sequence(
 sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
-# TODO(SPARK-41493): Support options
-def schema_of_csv(csv: "ColumnOrName") -> Column:
+def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     if isinstance(csv, Column):
         _csv = csv
     elif isinstance(csv, str):
@@ -1435,14 +1480,16 @@ def schema_of_csv(csv: "ColumnOrName") -> Column:
     else:
         raise TypeError(f"csv should be a Column or str, but got {type(csv).__name__}")
 
-    return _invoke_function("schema_of_csv", _csv)
+    if options is None:
+        return _invoke_function("schema_of_csv", _csv)
+    else:
+        return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
 
 
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
-# TODO(SPARK-41494): Support options
-def schema_of_json(json: "ColumnOrName") -> Column:
+def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     if isinstance(json, Column):
         _json = json
     elif isinstance(json, str):
@@ -1450,7 +1497,10 @@ def schema_of_json(json: "ColumnOrName") -> Column:
     else:
         raise TypeError(f"json should be a Column or str, but got {type(json).__name__}")
 
-    return _invoke_function("schema_of_json", _json)
+    if options is None:
+        return _invoke_function("schema_of_json", _json)
+    else:
+        return _invoke_function("schema_of_json", _json, _options_to_col(options))
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
@@ -1473,21 +1523,21 @@ size.__doc__ = pysparkfuncs.size.__doc__
 def slice(
     col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
-    if isinstance(start, Column):
+    if isinstance(start, (Column, str)):
         _start = start
     elif isinstance(start, int):
         _start = lit(start)
     else:
-        raise TypeError(f"start should be a Column or int, but got {type(start).__name__}")
+        raise TypeError(f"start should be a Column, str or int, but got {type(start).__name__}")
 
-    if isinstance(length, Column):
+    if isinstance(length, (Column, str)):
         _length = length
     elif isinstance(length, int):
         _length = lit(length)
     else:
-        raise TypeError(f"start should be a Column or int, but got {type(length).__name__}")
+        raise TypeError(f"start should be a Column, str or int, but got {type(length).__name__}")
 
-    return _invoke_function("slice", _to_col(col), _start, _length)
+    return _invoke_function_over_columns("slice", col, _start, _length)
 
 
 slice.__doc__ = pysparkfuncs.slice.__doc__
@@ -1511,16 +1561,21 @@ def struct(
 struct.__doc__ = pysparkfuncs.struct.__doc__
 
 
-# TODO(SPARK-41493): Support options
-def to_csv(col: "ColumnOrName") -> Column:
-    return _invoke_function("to_csv", _to_col(col))
+def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    if options is None:
+        return _invoke_function("to_csv", _to_col(col))
+    else:
+        return _invoke_function("to_csv", _to_col(col), _options_to_col(options))
 
 
 to_csv.__doc__ = pysparkfuncs.to_csv.__doc__
 
 
-def to_json(col: "ColumnOrName") -> Column:
-    return _invoke_function("to_json", _to_col(col))
+def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    if options is None:
+        return _invoke_function("to_json", _to_col(col))
+    else:
+        return _invoke_function("to_json", _to_col(col), _options_to_col(options))
 
 
 to_json.__doc__ = pysparkfuncs.to_json.__doc__
@@ -1823,7 +1878,7 @@ translate.__doc__ = pysparkfuncs.translate.__doc__
 
 
 # Date/Timestamp functions
-# TODO(SPARK-41283): Resolve dtypes inconsistencies for:
+# TODO(SPARK-41455): Resolve dtypes inconsistencies for:
 #     to_timestamp, from_utc_timestamp, to_utc_timestamp,
 #     timestamp_seconds, current_timestamp, date_trunc
 
@@ -2275,3 +2330,95 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 
 unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
+
+
+def udf(*args: Any, **kwargs: Any) -> None:
+    raise NotImplementedError("udf() is not implemented.")
+
+
+def pandas_udf(*args: Any, **kwargs: Any) -> None:
+    raise NotImplementedError("pandas_udf() is not implemented.")
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.functions
+
+        globs = pyspark.sql.connect.functions.__dict__.copy()
+
+        # Spark Connect does not support Spark Context but the test depends on that.
+        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
+
+        # TODO(SPARK-41834): implement Dataframe.conf
+        del pyspark.sql.connect.functions.from_unixtime.__doc__
+        del pyspark.sql.connect.functions.timestamp_seconds.__doc__
+        del pyspark.sql.connect.functions.unix_timestamp.__doc__
+
+        # TODO(SPARK-41757): Fix String representation for Column class
+        del pyspark.sql.connect.functions.col.__doc__
+
+        # TODO(SPARK-41838): fix dataset.show
+        del pyspark.sql.connect.functions.posexplode_outer.__doc__
+        del pyspark.sql.connect.functions.explode_outer.__doc__
+
+        # TODO(SPARK-41837): createDataFrame datatype conversion error
+        del pyspark.sql.connect.functions.to_csv.__doc__
+        del pyspark.sql.connect.functions.to_json.__doc__
+
+        # TODO(SPARK-41835): Fix `transform_keys` function
+        del pyspark.sql.connect.functions.transform_keys.__doc__
+
+        # TODO(SPARK-41836): Implement `transform_values` function
+        del pyspark.sql.connect.functions.transform_values.__doc__
+
+        # TODO(SPARK-41812): Proper column names after join
+        del pyspark.sql.connect.functions.count_distinct.__doc__
+
+        # TODO(SPARK-41843): Implement SparkSession.udf
+        del pyspark.sql.connect.functions.call_udf.__doc__
+
+        # TODO(SPARK-41845): Fix count bug
+        del pyspark.sql.connect.functions.count.__doc__
+
+        # TODO(SPARK-41847): mapfield,structlist invalid type
+        del pyspark.sql.connect.functions.element_at.__doc__
+        del pyspark.sql.connect.functions.explode.__doc__
+        del pyspark.sql.connect.functions.map_filter.__doc__
+        del pyspark.sql.connect.functions.map_zip_with.__doc__
+        del pyspark.sql.connect.functions.posexplode.__doc__
+
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.functions tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.functions,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.functions doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

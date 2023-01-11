@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
@@ -848,7 +848,7 @@ class PlanParserSuite extends AnalysisTest {
   test("table valued function") {
     assertEqual(
       "select * from range(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
 
     // SPARK-34627
     val sql1 = "select * from default.range(2)"
@@ -881,12 +881,14 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-20311 range(N) as alias") {
     assertEqual(
       "SELECT * FROM range(10) AS t",
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil, Seq.empty))
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil))
         .select(star()))
     assertEqual(
       "SELECT * FROM range(7) AS t(a)",
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
-        .select(star()))
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("range",
+          UnresolvedTableValuedFunction("range", Literal(7) :: Nil), "a" :: Nil)
+      ).select(star()))
   }
 
   test("SPARK-20841 Support table column aliases in FROM clause") {

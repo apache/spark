@@ -28,7 +28,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -1146,11 +1148,14 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testCleanupOlderShuffleMergeId() throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
+    List<RemoteBlockPushResolver.AppAttemptShuffleMergeId> removedIds =
+            new CopyOnWriteArrayList<>();
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void closeAndDeleteOutdatedPartitions(
           AppAttemptShuffleMergeId appAttemptShuffleMergeId,
           Map<Integer, AppShufflePartitionInfo> partitions) {
+        removedIds.add(appAttemptShuffleMergeId);
         super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
         closed.release();
       }
@@ -1167,6 +1172,10 @@ public class RemoteBlockPushResolverSuite {
     RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
       pushResolver.validateAndGetAppShuffleInfo(testApp);
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    // For the previous merge id
+    assertEquals(1, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     assertFalse("Data files on the disk should be cleaned up",
       appShuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
     assertFalse("Meta files on the disk should be cleaned up",
@@ -1186,6 +1195,9 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 3, 0, 0, 0));
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    assertEquals(2, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[2]));
     stream3.onComplete(stream3.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 3));
@@ -1196,6 +1208,9 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 4, 0, 0, 0));
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    assertEquals(3, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     // Do not finalize shuffleMergeId 4 can happen during stage cancellation.
     stream4.onData(stream4.getID(), ByteBuffer.wrap(new byte[2]));
     stream4.onComplete(stream4.getID());
@@ -1204,6 +1219,10 @@ public class RemoteBlockPushResolverSuite {
     // but no blocks pushed for that shuffleMergeId
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 5));
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    // For the previous merge id - here the cleanup is from finalizeShuffleMerge
+    assertEquals(4, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     assertFalse("MergedBlock meta file for shuffle 0 and shuffleMergeId 4 should be cleaned"
       + " up", appShuffleInfo.getMergedShuffleMetaFile(0, 4, 0).exists());
     assertFalse("MergedBlock index file for shuffle 0 and shuffleMergeId 4 should be cleaned"
