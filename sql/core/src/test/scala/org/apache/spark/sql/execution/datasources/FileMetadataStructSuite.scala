@@ -732,4 +732,22 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       assert(collectedRows.length === halfTheNumberOfRowsPerFile)
     }
   }
+
+  test("SPARK-41896: Filter by a function that takes the metadata struct as argument") {
+    withTempPath { dir =>
+      val idColumnName = "id"
+      spark.range(end = 40)
+        .toDF(idColumnName)
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      spark.udf.register("size_bigger_10",
+        (metadata: Row) => { metadata.getAs[Long]("file_size") > 10 })
+
+      spark.read.load(dir.getAbsolutePath)
+        .where("size_bigger_10(_metadata)")
+        .collect()
+    }
+  }
 }
