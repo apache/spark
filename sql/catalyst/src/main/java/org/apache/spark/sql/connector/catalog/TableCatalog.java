@@ -81,8 +81,7 @@ public interface TableCatalog extends CatalogPlugin {
   String OPTION_PREFIX = "option.";
 
   /**
-   * TODO
-   * @return
+   * @return the set of capabilities for this TableCatalog
    */
   default Set<TableCatalogCapability> capabilities() {return Collections.emptySet();}
 

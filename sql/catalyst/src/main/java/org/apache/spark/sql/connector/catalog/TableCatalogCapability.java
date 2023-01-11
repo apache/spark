@@ -22,17 +22,24 @@ import org.apache.spark.annotation.Evolving;
 /**
  * Capabilities that can be provided by a {@link TableCatalog} implementation.
  * <p>
- * TODO
- * Table catalogs use {@link TableCatalog#capabilities()} to return a set of capabilities. Each
+ * TableCatalogs use {@link TableCatalog#capabilities()} to return a set of capabilities. Each
  * capability signals to Spark that the catalog supports a feature identified by the capability.
  * For example, returning {@link #SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS} allows Spark to
- * accept {@code GENERATED ALWAYS AS} SQL syntax in {@code CREATE TABLE} statements.
+ * accept {@code GENERATED ALWAYS AS} expressions in {@code CREATE TABLE} statements.
+ *
  * @since 3.4.0
  */
 @Evolving
 public enum TableCatalogCapability {
+
     /**
-     * TODO
+     * Signals that the TableCatalog supports defining generated columns upon table creation in SQL.
+     * <p>
+     * Without this capability, any create/replace table statements with a generated column defined
+     * in the table schema will throw an exception during analysis.
+     * <p>
+     * A generated column is defined with syntax: {@code colName colType GENERATED ALWAYS AS (expr)}
+     * The generation expression is stored in the column metadata with key "generationExpression".
      */
     SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS
 }

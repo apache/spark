@@ -1325,30 +1325,27 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-41290") {
-    // test with SessionCatalog
+  test("SPARK-41290: Generated columns only allowed with TableCatalogs that " +
+    "SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS") {
 
-    // val supportsGeneratedColumn = InMemoryTableCatalog
-    // val doesNotSupportGeneratedColumn = BasicInMemoryTableCatalog
     val tblName = "my_tab"
     val tableDefinition = s"$tblName(a INT, b INT GENERATED ALWAYS AS (a+1))"
     for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
-      withTable(tblName) {
+      // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
+      withTable(s"testcat.$tblName") {
         if (statement == "REPLACE TABLE") {
           spark.sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
         }
         spark.sql(s"$statement testcat.$tableDefinition USING foo")
       }
-      withTable(tblName) {
-        withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
-          val e = intercept[AnalysisException] {
-            sql("USE dummy")
-            spark.sql(s"$statement dummy.$tableDefinition USING foo")
-          }
-          assert(e.getMessage.contains(
-            "does not support creating generated columns with GENERATED ALWAYS AS expressions"))
-          assert(e.getErrorClass == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
+      withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+        val e = intercept[AnalysisException] {
+          sql("USE dummy")
+          spark.sql(s"$statement dummy.$tableDefinition USING foo")
         }
+        assert(e.getMessage.contains(
+          "does not support creating generated columns with GENERATED ALWAYS AS expressions"))
+        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
       }
     }
   }
