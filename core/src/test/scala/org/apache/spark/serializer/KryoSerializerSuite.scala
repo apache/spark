@@ -598,6 +598,25 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     assert(serInstance.deserialize[Any](serObj) === (obj))
     assert(serInstance.deserialize[Any](byteBuffer) === (obj))
   }
+
+  test("SPARK-40912: Ignore unexpectedly truncated buffer") {
+    // This test checks that the improvement in SPARK-40912 does not break backwards compatabillity.
+    // But the behvaior of the asIterator iterface of silently ignoring trucated data should be
+    // revisited in a follow up ticket.
+    val serInstance = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    val serialized: Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val serStream = serInstance.serializeStream(baos)
+      serStream.writeObject(KryoTest.CaseClass(0, ""))
+      serStream.close()
+      baos.toByteArray
+    }
+    // Make sure we disregard some data
+    assert(serialized.length > 2)
+    val trucated = serialized.take(2).toArray
+    val deserializationStream = serInstance.deserializeStream(new ByteArrayInputStream(trucated))
+    assert(deserializationStream.asIterator.toSeq == Seq())
+  }
 }
 
 class ClassLoaderTestingObject
