@@ -62,11 +62,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_extended_hint_types(self):
         super().test_extended_hint_types()
 
-    # TODO(SPARK-41872): Fix DataFrame createDataframe handling of None
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_fillna(self):
-        super().test_fillna()
-
     # TODO: comparing types, need to expose connect types
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_generic_hints(self):
@@ -104,11 +99,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
-
-    # TODO(SPARK-41872): Fix DataFrame createDataframe handling of None
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_replace(self):
-        super().test_replace()
 
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -189,10 +179,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas_with_duplicated_column_names(self):
         super().test_to_pandas_with_duplicated_column_names()
 
-    # TODO(SPARK-41877): createDataframe throw proper errors
+    # TODO(SPARK-41963): Different exception message in DataFrame.unpivot
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_unpivot(self):
-        super().test_unpivot()
+    def test_unpivot_negative(self):
+        super().test_unpivot_negative()
 
 
 if __name__ == "__main__":

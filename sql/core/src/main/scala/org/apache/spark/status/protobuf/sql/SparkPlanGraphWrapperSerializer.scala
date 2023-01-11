@@ -53,19 +53,27 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     StoreTypes.SparkPlanGraphNodeWrapper = {
 
     val builder = StoreTypes.SparkPlanGraphNodeWrapper.newBuilder()
-    Option(input.node).foreach(node => builder.setNode(serializeSparkPlanGraphNode(node)))
-    Option(input.cluster)
-      .foreach(cluster => builder.setCluster(serializeSparkPlanGraphClusterWrapper(cluster)))
+    if (input.node != null) {
+      builder.setNode(serializeSparkPlanGraphNode(input.node))
+    } else {
+      builder.setCluster(serializeSparkPlanGraphClusterWrapper(input.cluster))
+    }
     builder.build()
   }
 
   private def deserializeSparkPlanGraphNodeWrapper(input: StoreTypes.SparkPlanGraphNodeWrapper):
     SparkPlanGraphNodeWrapper = {
-
-    new SparkPlanGraphNodeWrapper(
-      node = deserializeSparkPlanGraphNode(input.getNode),
-      cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster)
-    )
+    if (input.hasNode) {
+      new SparkPlanGraphNodeWrapper(
+        node = deserializeSparkPlanGraphNode(input.getNode),
+        cluster = null
+      )
+    } else {
+      new SparkPlanGraphNodeWrapper(
+        node = null,
+        cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster)
+      )
+    }
   }
 
   private def serializeSparkPlanGraphEdge(edge: SparkPlanGraphEdge):

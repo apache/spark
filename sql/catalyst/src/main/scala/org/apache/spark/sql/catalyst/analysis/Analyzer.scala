@@ -2431,7 +2431,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
@@ -2453,7 +2453,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
-          val resolvedFunc = try {
+          try {
             resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
@@ -2470,26 +2470,25 @@ class Analyzer(override val catalogManager: CatalogManager)
                 errorClass = "_LEGACY_ERROR_TEMP_2308",
                 messageParameters = Map("name" -> u.name.quoted))
           }
-          // If alias names assigned, add `Project` with the aliases
-          if (u.outputNames.nonEmpty) {
-            val outputAttrs = resolvedFunc.output
-            // Checks if the number of the aliases is equal to expected one
-            if (u.outputNames.size != outputAttrs.size) {
-              u.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2307",
-                messageParameters = Map(
-                  "funcName" -> u.name.quoted,
-                  "aliasesNum" -> u.outputNames.size.toString,
-                  "outColsNum" -> outputAttrs.size.toString))
-            }
-            val aliases = outputAttrs.zip(u.outputNames).map {
-              case (attr, name) => Alias(attr, name)()
-            }
-            Project(aliases, resolvedFunc)
-          } else {
-            resolvedFunc
-          }
         }
+
+      // Resolve table-valued functions' output column aliases.
+      case u: UnresolvedTVFAliases if u.child.resolved =>
+        // Add `Project` with the aliases.
+        val outputAttrs = u.child.output
+        // Checks if the number of the aliases is equal to expected one
+        if (u.outputNames.size != outputAttrs.size) {
+          u.failAnalysis(
+            errorClass = "_LEGACY_ERROR_TEMP_2307",
+            messageParameters = Map(
+              "funcName" -> u.name.quoted,
+              "aliasesNum" -> u.outputNames.size.toString,
+              "outColsNum" -> outputAttrs.size.toString))
+        }
+        val aliases = outputAttrs.zip(u.outputNames).map {
+          case (attr, name) => Alias(attr, name)()
+        }
+        Project(aliases, u.child)
 
       case q: LogicalPlan =>
         q.transformExpressionsWithPruning(
@@ -3028,7 +3027,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    *    e.g. `SELECT * FROM tbl SORT BY explode(list)`
    */
   object ExtractGenerator extends Rule[LogicalPlan] {
-    private def hasGenerator(expr: Expression): Boolean = {
+    def hasGenerator(expr: Expression): Boolean = {
       expr.exists(_.isInstanceOf[Generator])
     }
 
@@ -3185,6 +3184,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case g: Generate => g
 
+      case u: UnresolvedTableValuedFunction => u
+
       case p if p.expressions.exists(hasGenerator) =>
         throw QueryCompilationErrors.generatorOutsideSelectError(p)
     }
@@ -3203,8 +3204,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(GENERATE), ruleId) {
       case g: Generate if !g.child.resolved || !g.generator.resolved => g
-      case g: Generate if !g.resolved =>
+      case g: Generate if !g.resolved => withPosition(g) {
+        // Check nested generators.
+        if (g.generator.children.exists(ExtractGenerator.hasGenerator)) {
+          throw QueryCompilationErrors.nestedGeneratorError(g.generator)
+        }
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+      }
     }
 
     /**
