@@ -2366,7 +2366,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.col.__doc__
 
         # TODO(SPARK-41838): fix dataset.show
-        del pyspark.sql.connect.functions.posexplode_outer.__doc__
         del pyspark.sql.connect.functions.explode_outer.__doc__
 
         # TODO(SPARK-41837): createDataFrame datatype conversion error

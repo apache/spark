@@ -43,6 +43,7 @@ from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.pandas.types import to_arrow_schema
 
 from typing import (
     Optional,
@@ -185,6 +186,19 @@ class SparkSession:
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
     ) -> "DataFrame":
+        def convert_to_arrow_data(cols: List[str], data: Iterable[Any]):
+
+            def convert(data: Iterable[Any]):
+                if isinstance(data, list):
+                    return [convert(item) for item in data]
+                elif isinstance(data, tuple):
+                    return dict(zip(cols, [convert(item) for item in data]))
+                elif isinstance(data, dict):
+                    return [item for item in data.items()]
+                else:
+                    return data
+            return convert(data)
+
         assert data is not None
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
@@ -249,7 +263,7 @@ class SparkSession:
         else:
             _data = list(data)
 
-            if _schema is None and isinstance(_data[0], (Row, dict)):
+            if _schema is None and isinstance(_data[0], (Row, dict, tuple)):
                 if isinstance(_data[0], dict):
                     # Sort the data to respect inferred schema.
                     # For dictionaries, we sort the schema in alphabetical order.
@@ -278,8 +292,14 @@ class SparkSession:
                 _table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
             elif isinstance(_data[0], dict):
                 _table = pa.Table.from_pylist(_data)
-            elif isinstance(_data[0], (list, tuple)):
+            elif isinstance(_data[0], list):
                 _table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in _data])
+            elif isinstance(_data[0], tuple):
+                result = convert_to_arrow_data(_cols, _data)
+                arrow_schema = to_arrow_schema(_inferred_schema)
+                _table = pa.Table.from_pylist(result, arrow_schema)
+#                 _table2 = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
+#                 raise ValueError(f"---{arrow_schema}---{_table}---{_table2}")
             else:
                 # input data can be [1, 2, 3]
                 _table = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
