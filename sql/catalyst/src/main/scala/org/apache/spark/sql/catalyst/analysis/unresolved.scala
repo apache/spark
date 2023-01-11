@@ -581,6 +581,10 @@ case class UnresolvedAlias(
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedAlias =
     copy(child = newChild)
+
+  override def toString: String = {
+    (Seq(child.toString) ++ aliasFunc.map(_.apply(child))).mkString("UnresolvedAlias(", ", ", ")")
+  }
 }
 
 /**
