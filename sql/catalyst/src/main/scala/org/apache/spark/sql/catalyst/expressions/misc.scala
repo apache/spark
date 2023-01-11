@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.{RandomUUIDGenerator}
+import org.apache.spark.sql.catalyst.util.{HyperLogLogPlusPlusHelper, RandomUUIDGenerator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -458,8 +458,8 @@ case class HyperLogLogPlusPlusEvalSketch(child: Expression) extends UnaryExpress
    */
   override def nullSafeEval(input: Any): Any = {
     val sketch = input.asInstanceOf[Array[Byte]]
-    val (hllHelper, internalRow) = HyperLogLogPlusPlusSketch.generateHyperLogLogPlusPlusHelper(sketch)
-    hllHelper.query(internalRow, 0)
+    val (relativeSD, internalRow) = HyperLogLogPlusPlusSketch.deserializeSketch(sketch)
+    new HyperLogLogPlusPlusHelper(relativeSD).query(internalRow, 0)
   }
 
   override protected def withNewChildInternal(newChild: Expression): HyperLogLogPlusPlusEvalSketch = copy(child = newChild)

@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.nio.ByteBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
-import org.apache.spark.sql.types.{BinaryType, DataType, LongType}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, GenericInternalRow}
+import org.apache.spark.sql.types.{BinaryType, DataType}
 
 
 // scalastyle:off
@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.{BinaryType, DataType, LongType}
 // scalastyle:on
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, relativeSD]) - Returns the re-aggregateable HyperLogLog++ sketch as a binary column.
+    _FUNC_(expr[, relativeSD]) - Returns the aggregateable HyperLogLog++ sketch as a binary column.
       `relativeSD` defines the maximum relative standard deviation allowed.""",
   examples = """
     Examples:
@@ -82,7 +82,7 @@ case class HyperLogLogPlusPlusSketch(
    * Generate the HyperLogLog sketch.
    */
   override def eval(buffer: InternalRow): Any = {
-    generateSketch(relativeSD, hllppHelper.numWords, buffer, mutableAggBufferOffset)
+    serializeSketch(relativeSD, hllppHelper.numWords, buffer, mutableAggBufferOffset)
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
@@ -97,10 +97,10 @@ case class HyperLogLogPlusPlusSketch(
 }
 
 object HyperLogLogPlusPlusSketch {
-  def generateSketch(relativeSD: Double,
-                     numWords: Integer,
-                     buffer: InternalRow,
-                     mutableAggBufferOffset: Integer): Array[Byte] = {
+  def serializeSketch(relativeSD: Double,
+                      numWords: Integer,
+                      buffer: InternalRow,
+                      mutableAggBufferOffset: Integer): Array[Byte] = {
     // Trino/Presto utilize the Airlift implementation of HLL; Airlift's
     // supported HLL storage formats are available in this doc:
     // https://github.com/airlift/airlift/blob/master/stats/docs/hll.md
@@ -109,7 +109,8 @@ object HyperLogLogPlusPlusSketch {
     // is specific to the fields accessible to us via the HyperLogLogPlusPlusTrait,
     // and use the first int to store a format value of 1 such that we can revisit
     // and add support for interoperable formats in the future
-    val byteBuffer = ByteBuffer.allocate(Integer.BYTES + java.lang.Double.BYTES + (numWords * java.lang.Double.BYTES))
+    val byteBuffer = ByteBuffer.allocate(
+      Integer.BYTES + java.lang.Double.BYTES + (numWords * java.lang.Double.BYTES))
     byteBuffer.putInt(1)
     byteBuffer.putDouble(relativeSD)
     Seq.tabulate(numWords) { i =>
@@ -119,23 +120,21 @@ object HyperLogLogPlusPlusSketch {
     byteBuffer.array()
   }
 
-  def generateHyperLogLogPlusPlusHelper(sketch: Array[Byte]):
-    (HyperLogLogPlusPlusHelper, InternalRow) = {
+  def deserializeSketch(sketch: Array[Byte]):
+    (Double, InternalRow) = {
 
     val byteBuffer = ByteBuffer.wrap(sketch)
     byteBuffer.getInt() match {
       case 1 =>
-        val hllppHelper = new HyperLogLogPlusPlusHelper(byteBuffer.getDouble())
-        val internalRow = new SpecificInternalRow(Array.fill[DataType](hllppHelper.numWords) {
-          LongType
-        })
+        val relativeSD = byteBuffer.getDouble()
+        val row = new GenericInternalRow() {
+          override def getLong(ordinal: Int): Long = {
+            byteBuffer.getLong(
+              Integer.BYTES + java.lang.Double.BYTES + (ordinal * java.lang.Double.BYTES))
+          }
+        }
 
-        (0 until hllppHelper.numWords).foreach(i => {
-          internalRow.setLong(i, byteBuffer.getLong(Integer.BYTES + java.lang.Double.BYTES +
-            (i * java.lang.Double.BYTES)))
-        })
-
-        (hllppHelper, internalRow)
+        (relativeSD, row)
       case _ => throw new UnsupportedOperationException()
     }
 

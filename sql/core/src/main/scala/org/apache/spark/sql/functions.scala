@@ -357,7 +357,7 @@ object functions {
    * @group misc_funcs
    * @since 3.2.1
    */
-  def approx_count_distinct_eval_sketch(e: Column): Column = withAggregateFunction {
+  def approx_count_distinct_eval_sketch(e: Column): Column = withExpr {
     HyperLogLogPlusPlusEvalSketch(e.expr)
   }
 

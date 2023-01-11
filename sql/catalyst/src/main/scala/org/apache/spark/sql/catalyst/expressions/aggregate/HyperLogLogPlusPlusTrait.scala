@@ -36,7 +36,10 @@ trait HyperLogLogPlusPlusTrait extends ImperativeAggregate with UnaryLike[Expres
 
   def relativeSD: Double
 
-  val hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
+  // Protected var such that HyperLogLogPlusPlusAggSketch
+  // can override at runtime based on input sketches
+  protected[aggregate] var hllppHelper: HyperLogLogPlusPlusHelper =
+    new HyperLogLogPlusPlusHelper(relativeSD)
 
   override def prettyName: String = "approx_count_distinct"
 
@@ -49,7 +52,7 @@ trait HyperLogLogPlusPlusTrait extends ImperativeAggregate with UnaryLike[Expres
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /** Allocate enough words to store all registers. */
-  override val aggBufferAttributes: Seq[AttributeReference] = {
+  override def aggBufferAttributes: Seq[AttributeReference] = {
     Seq.tabulate(hllppHelper.numWords) { i =>
       AttributeReference(s"MS[$i]", LongType)()
     }
@@ -57,7 +60,7 @@ trait HyperLogLogPlusPlusTrait extends ImperativeAggregate with UnaryLike[Expres
 
   // Note: although this simply copies aggBufferAttributes, this common code can not be placed
   // in the superclass because that will lead to initialization ordering issues.
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
+  override def inputAggBufferAttributes: Seq[AttributeReference] =
   aggBufferAttributes.map(_.newInstance())
 
   /** Fill all words with zeros. */

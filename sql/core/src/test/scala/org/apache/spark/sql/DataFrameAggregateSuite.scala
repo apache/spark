@@ -1540,6 +1540,130 @@ class DataFrameAggregateSuite extends QueryTest
     )
     checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
   }
+
+  test("SPARK-16484: approx_distinct_count_agg_sketch positive tests") {
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+
+    df1.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        approx_count_distinct_sketch("value").as("hll_sketch")
+      ).createOrReplaceTempView("first_agg")
+
+    df2.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        approx_count_distinct_sketch("value").as("hll_sketch")
+      ).createOrReplaceTempView("second_agg")
+
+    val res1 = sql(
+      """select
+        |  id,
+        |  approx_count_distinct_agg_sketch(hll_sketch) as distinct_count
+        |from (select * from first_agg union all select * from second_agg)
+        |group by 1
+        |""".stripMargin)
+
+    val res2 = sql(
+      """select
+        |  id,
+        |  approx_count_distinct_agg_sketch(hll_sketch) as distinct_count,
+        |  sum(count) as sum
+        |from (select * from first_agg union all select * from second_agg)
+        |group by 1
+        |""".stripMargin)
+
+    val res3 = sql(
+      """select
+        |  id,
+        |  sum(count) as sum,
+        |  approx_count_distinct_agg_sketch(hll_sketch, 0.01) as distinct_count
+        |from (select * from first_agg union all select * from second_agg)
+        |group by 1
+        |""".stripMargin)
+
+    checkAnswer(res1, Row(1, 6))
+    checkAnswer(res2, Row(1, 6, 15))
+    checkAnswer(res3, Row(1, 15, 6))
+  }
+
+  test("SPARK-16484: approx_distinct_count_agg_sketch negative tests") {
+
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+
+    df1.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        approx_count_distinct_sketch("value").as("hll_sketch")
+      ).createOrReplaceTempView("first_agg")
+
+    df2.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        approx_count_distinct_sketch("value").as("hll_sketch")
+      ).createOrReplaceTempView("second_agg")
+
+    df2.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        approx_count_distinct_sketch("value", 0.1).as("hll_sketch")
+      ).createOrReplaceTempView("third_agg")
+
+    // we shouldn't be able to extract a distinct count with less error than
+    // the HLL instance that wrote the sketch was configured with
+    val error1 = intercept[SparkException] {
+      val res = sql(
+        """
+          |select
+          | id,
+          | approx_count_distinct_agg_sketch(hll_sketch, 0.1) as distinct_count
+          |from (select * from first_agg union all select * from second_agg)
+          |group by 1
+          |""".stripMargin)
+      checkAnswer(res, Nil)
+    }
+    assert(error1.toString contains "IllegalStateException")
+
+    // we shouldn't be able to combine HLL sketches written with different SD configs
+    val error2 = intercept[SparkException] {
+      val res = sql(
+        """
+          |select
+          | id,
+          | approx_count_distinct_agg_sketch(hll_sketch) as distinct_count
+          |from (select * from first_agg union all select * from third_agg)
+          |group by 1
+          |""".stripMargin)
+      checkAnswer(res, Nil)
+    }
+    assert(error2.toString contains "IllegalStateException")
+  }
 }
 
 case class B(c: Option[Double])

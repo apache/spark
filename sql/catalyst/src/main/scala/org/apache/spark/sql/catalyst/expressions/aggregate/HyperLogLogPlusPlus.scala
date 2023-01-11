@@ -59,10 +59,16 @@ case class HyperLogLogPlusPlus(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HyperLogLogPlusPlusTrait {
 
+  def this(child: Expression) = {
+    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+  }
+
   def this(child: Expression, relativeSD: Expression) = {
     this(
       child = child,
-      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD)
+      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD),
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0
     )
   }
 

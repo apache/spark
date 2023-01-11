@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.lang.{Double => JDouble}
 import java.nio.ByteBuffer
 import java.util.Random
+
 import scala.collection.mutable
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, EmptyRow, HyperLogLogPlusPlusEvalSketch, Literal, SpecificInternalRow}
