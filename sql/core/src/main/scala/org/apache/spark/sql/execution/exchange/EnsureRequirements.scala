@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
@@ -77,19 +76,17 @@ case class EnsureRequirements(
       case _ => false
     }.map(_._2)
 
-    // Special case: if all sides of the join are single partition and do not include windows
-    // without partitionSpec
-    val allSinglePartition = childrenIndexes.forall { i =>
+    // Special case: if all sides of the join are single partition and it's physical size less than
+    // or equal advisoryPartitionSizeInBytes.
+    val preferSinglePartition = childrenIndexes.forall { i =>
       children(i).outputPartitioning == SinglePartition &&
-        !children(i).collectUntil(_.isInstanceOf[ShuffleExchangeExec]).exists {
-          case w: WindowExec => w.partitionSpec.isEmpty
-          case _ => false
-      }
+        children(i).logicalLink
+          .forall(_.stats.sizeInBytes <= conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES))
     }
 
     // If there are more than one children, we'll need to check partitioning & distribution of them
     // and see if extra shuffles are necessary.
-    if (childrenIndexes.length > 1 && !allSinglePartition) {
+    if (childrenIndexes.length > 1 && !preferSinglePartition) {
       val specs = childrenIndexes.map(i => {
         val requiredDist = requiredChildDistributions(i)
         assert(requiredDist.isInstanceOf[ClusteredDistribution],
