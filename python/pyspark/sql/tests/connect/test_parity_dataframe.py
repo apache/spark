@@ -57,8 +57,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_duplicated_column_names(self):
         super().test_duplicated_column_names()
 
-    # TODO(SPARK-41871): DataFrame hint parameter can be a float
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support JVM function _jdf but the tests depend on them")
     def test_extended_hint_types(self):
         super().test_extended_hint_types()
 
