@@ -796,13 +796,13 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
                   s"""
                      |INSERT OVERWRITE $local DIRECTORY '${dir.toURI}'
                      |STORED AS $format
-                     |SELECT 'id', 'id2' ${if (caseSensitivity) "id" else "ID"}
+                     |SELECT 'id', 'id2' ${if (caseSensitivity) "`'id'`" else "`'ID'`"}
                    """.stripMargin)
               }
               checkError(
                 exception = e,
                 errorClass = "COLUMN_ALREADY_EXISTS",
-                parameters = Map("columnName" -> "`id`"))
+                parameters = Map("columnName" -> "`'id'`"))
             }
           }
         }
