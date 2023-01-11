@@ -19,11 +19,16 @@ package org.apache.spark.paths
 
 import java.net.URI
 
+import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
+import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
+import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 /**
  * A SparkPath is the result of a URI.toString call.
  */
+@JsonSerialize(using = classOf[SparkPathJsonSerializer])
+@JsonDeserialize(using = classOf[SparkPathJsonDeserializer])
 case class SparkPath private (private val underlying: String) {
   def uriEncoded: String = underlying
   def toUri: URI = new URI(underlying)
@@ -37,4 +42,18 @@ object SparkPath {
   def fromFileStatus(fs: FileStatus): SparkPath = fromPath(fs.getPath)
   def fromUri(uri: URI): SparkPath = fromUriString(uri.toString)
   def fromUriString(str: String): SparkPath = SparkPath(str)
+}
+
+class SparkPathJsonSerializer extends JsonSerializer[SparkPath] {
+  override def serialize(
+      value: SparkPath,
+      gen: JsonGenerator,
+      serializers: SerializerProvider): Unit = {
+    gen.writeString(value.uriEncoded)
+  }
+}
+class SparkPathJsonDeserializer extends JsonDeserializer[SparkPath] {
+  override def deserialize(p: JsonParser, ctxt: DeserializationContext): SparkPath = {
+    SparkPath.fromUriString(p.readValueAs(classOf[String]))
+  }
 }
