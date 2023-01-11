@@ -607,6 +607,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         public void onData(String streamId, ByteBuffer buf) {
           // Ignore the requests. It reaches here either when a request is received after the
           // shuffle file is finalized or when a request is for a duplicate block.
+          pushMergeMetrics.ignoredBlockBytes.mark(buf.limit());
         }
 
         @Override
@@ -2019,6 +2020,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
     // staleBlockPushes tracks the number of stale shuffle block push requests
     static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";
+    // ignoredBlockBytes tracks the size of the blocks that are ignored after the shuffle file is
+    // finalized or when a request is for a duplicate block
+    static final String IGNORED_BLOCK_BYTES_METRIC = "ignoredBlockBytes";
 
     private final Map<String, Metric> allMetrics;
     private final Meter blockAppendCollisions;
@@ -2027,6 +2031,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private final Counter deferredBlockBytes;
     private final Meter deferredBlocks;
     private final Meter staleBlockPushes;
+    private final Meter ignoredBlockBytes;
 
     private PushMergeMetrics() {
       allMetrics = new HashMap<>();
@@ -2042,6 +2047,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       allMetrics.put(DEFERRED_BLOCKS_METRIC, deferredBlocks);
       staleBlockPushes = new Meter();
       allMetrics.put(STALE_BLOCK_PUSHES_METRIC, staleBlockPushes);
+      ignoredBlockBytes = new Meter();
+      allMetrics.put(IGNORED_BLOCK_BYTES_METRIC, ignoredBlockBytes);
     }
 
     @Override
