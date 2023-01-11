@@ -503,7 +503,7 @@ struct<array_append(array(1, 2, 3), 4):array<int>>
 -- !query
 select array_append(array('a', 'b', 'c'), 'd')
 -- !query schema
-struct<array_append(array(a, b, c), d):array<string>>
+struct<array_append(array('a', 'b', 'c'), 'd'):array<string>>
 -- !query output
 ["a","b","c","d"]
 
@@ -519,7 +519,7 @@ struct<array_append(array(1, 2, 3, NULL), NULL):array<int>>
 -- !query
 select array_append(array('a', 'b', 'c', NULL), NULL)
 -- !query schema
-struct<array_append(array(a, b, c, NULL), NULL):array<string>>
+struct<array_append(array('a', 'b', 'c', NULL), NULL):array<string>>
 -- !query output
 ["a","b","c",null,null]
 
@@ -527,7 +527,7 @@ struct<array_append(array(a, b, c, NULL), NULL):array<string>>
 -- !query
 select array_append(CAST(null AS ARRAY<String>), 'a')
 -- !query schema
-struct<array_append(NULL, a):array<string>>
+struct<array_append(CAST(null AS ARRAY < String >), 'a'):array<string>>
 -- !query output
 NULL
 
@@ -535,7 +535,7 @@ NULL
 -- !query
 select array_append(CAST(null AS ARRAY<String>), CAST(null as String))
 -- !query schema
-struct<array_append(NULL, CAST(NULL AS STRING)):array<string>>
+struct<array_append(CAST(null AS ARRAY < String >), CAST(null as String)):array<string>>
 -- !query output
 NULL
 
@@ -551,7 +551,7 @@ struct<array_append(array(), 1):array<int>>
 -- !query
 select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String))
 -- !query schema
-struct<array_append(array(), CAST(NULL AS STRING)):array<string>>
+struct<array_append(CAST(array()AS ARRAY < String >), CAST(NULL AS String)):array<string>>
 -- !query output
 [null]
 
@@ -559,6 +559,6 @@ struct<array_append(array(), CAST(NULL AS STRING)):array<string>>
 -- !query
 select array_append(array(CAST(NULL AS String)), CAST(NULL AS String))
 -- !query schema
-struct<array_append(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
+struct<array_append(array(CAST(NULL AS String)), CAST(NULL AS String)):array<string>>
 -- !query output
 [null,null]
