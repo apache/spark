@@ -2385,10 +2385,8 @@ def _test() -> None:
         del pyspark.sql.connect.functions.count.__doc__
 
         # TODO(SPARK-41847): mapfield,structlist invalid type
-        del pyspark.sql.connect.functions.explode.__doc__
         del pyspark.sql.connect.functions.map_filter.__doc__
         del pyspark.sql.connect.functions.map_zip_with.__doc__
-        del pyspark.sql.connect.functions.posexplode.__doc__
 
         globs["spark"] = (
             PySparkSession.builder.appName("sql.connect.functions tests")

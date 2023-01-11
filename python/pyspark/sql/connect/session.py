@@ -289,7 +289,10 @@ class SparkSession:
                     _cols = ["value"]
 
             if isinstance(_data[0], Row):
-                _table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
+                _dict = [tuple(row.asDict(recursive=True).values()) for row in _data]
+                result = convert_to_arrow_data(_cols, _dict)
+                arrow_schema = to_arrow_schema(_inferred_schema)
+                _table = pa.Table.from_pylist(result, arrow_schema)
             elif isinstance(_data[0], dict):
                 _table = pa.Table.from_pylist(_data)
             elif isinstance(_data[0], list):
