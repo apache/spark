@@ -52,6 +52,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
     val input1 = new SQLExecutionUIData(
       executionId = templateData.executionId,
+      rootExecutionId = templateData.rootExecutionId,
       description = templateData.description,
       details = templateData.details,
       physicalPlanDescription = templateData.physicalPlanDescription,
@@ -71,6 +72,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
     val input2 = new SQLExecutionUIData(
       executionId = templateData.executionId,
+      rootExecutionId = templateData.rootExecutionId,
       description = templateData.description,
       details = templateData.details,
       physicalPlanDescription = templateData.physicalPlanDescription,
@@ -112,24 +114,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
             )
           )
         ),
-        cluster = new SparkPlanGraphClusterWrapper(
-          id = 15,
-          name = "name_15",
-          desc = "desc_15",
-          nodes = Seq(),
-          metrics = Seq(
-            SQLPlanMetric(
-              name = "name_16",
-              accumulatorId = 16,
-              metricType = "metric_16"
-            ),
-            SQLPlanMetric(
-              name = "name_17",
-              accumulatorId = 17,
-              metricType = "metric_17"
-            )
-          )
-        )
+        cluster = null
       )),
       metrics = Seq(
         SQLPlanMetric(
@@ -145,23 +130,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       )
     )
     val node = new SparkPlanGraphNodeWrapper(
-      node = new SparkPlanGraphNode(
-        id = 2,
-        name = "name_1",
-        desc = "desc_1",
-        metrics = Seq(
-          SQLPlanMetric(
-            name = "name_2",
-            accumulatorId = 3,
-            metricType = "metric_1"
-          ),
-          SQLPlanMetric(
-            name = "name_3",
-            accumulatorId = 4,
-            metricType = "metric_2"
-          )
-        )
-      ),
+      node = null,
       cluster = cluster
     )
     val input = new SparkPlanGraphWrapper(
@@ -179,29 +148,37 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.nodes.size == input.nodes.size)
 
     def compareNodes(n1: SparkPlanGraphNodeWrapper, n2: SparkPlanGraphNodeWrapper): Unit = {
-      assert(n1.node.id == n2.node.id)
-      assert(n1.node.name == n2.node.name)
-      assert(n1.node.desc == n2.node.desc)
+      if (n1.node != null) {
+        assert(n2.node != null)
+        assert(n1.node.id == n2.node.id)
+        assert(n1.node.name == n2.node.name)
+        assert(n1.node.desc == n2.node.desc)
 
-      assert(n1.node.metrics.size == n2.node.metrics.size)
-      n1.node.metrics.zip(n2.node.metrics).foreach { case (m1, m2) =>
-        assert(m1.name == m2.name)
-        assert(m1.accumulatorId == m2.accumulatorId)
-        assert(m1.metricType == m2.metricType)
+        assert(n1.node.metrics.size == n2.node.metrics.size)
+        n1.node.metrics.zip(n2.node.metrics).foreach { case (m1, m2) =>
+          assert(m1.name == m2.name)
+          assert(m1.accumulatorId == m2.accumulatorId)
+          assert(m1.metricType == m2.metricType)
+        }
+      } else {
+        assert(n2.node == null)
+        assert(n1.cluster != null && n2.cluster != null)
+        assert(n1.cluster.id == n2.cluster.id)
+        assert(n1.cluster.name == n2.cluster.name)
+        assert(n1.cluster.desc == n2.cluster.desc)
+        assert(n1.cluster.nodes.size == n2.cluster.nodes.size)
+        n1.cluster.nodes.zip(n2.cluster.nodes).foreach { case (n3, n4) =>
+          compareNodes(n3, n4)
+        }
+        n1.cluster.metrics.zip(n2.cluster.metrics).foreach { case (m1, m2) =>
+          assert(m1.name == m2.name)
+          assert(m1.accumulatorId == m2.accumulatorId)
+          assert(m1.metricType == m2.metricType)
+        }
       }
-
-      assert(n1.cluster.id == n2.cluster.id)
-      assert(n1.cluster.name == n2.cluster.name)
-      assert(n1.cluster.desc == n2.cluster.desc)
-      assert(n1.cluster.nodes.size == n2.cluster.nodes.size)
-      n1.cluster.nodes.zip(n2.cluster.nodes).foreach { case (n3, n4) =>
-        compareNodes(n3, n4)
-      }
-      n1.cluster.metrics.zip(n2.cluster.metrics).foreach { case (m1, m2) =>
-        assert(m1.name == m2.name)
-        assert(m1.accumulatorId == m2.accumulatorId)
-        assert(m1.metricType == m2.metricType)
-      }
+      val metrics = Map(6L -> "a", 7L -> "b", 13L -> "c", 14L -> "d")
+      assert(n1.toSparkPlanGraphNode().makeDotNode(metrics) ==
+        n2.toSparkPlanGraphNode().makeDotNode(metrics))
     }
 
     result.nodes.zip(input.nodes).foreach { case (n1, n2) =>

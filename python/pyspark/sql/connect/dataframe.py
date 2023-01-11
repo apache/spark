@@ -642,6 +642,8 @@ class DataFrame:
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
+        assert ids is not None, "ids must not be None"
+
         def to_jcols(
             cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
         ) -> List["ColumnOrName"]:
@@ -1152,7 +1154,11 @@ class DataFrame:
     def sampleBy(
         self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
     ) -> "DataFrame":
-        if not isinstance(col, (Column, str)):
+        from pyspark.sql.connect.expressions import ColumnReference
+
+        if isinstance(col, str):
+            col = Column(ColumnReference(name=col))
+        elif not isinstance(col, Column):
             raise TypeError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise TypeError("fractions must be a dict but got %r" % type(fractions))
@@ -1161,7 +1167,6 @@ class DataFrame:
                 raise TypeError("key must be float, int, or string, but got %r" % type(k))
             fractions[k] = float(v)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-
         return DataFrame.withPlan(
             plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
             session=self._session,
@@ -1626,11 +1631,6 @@ def _test() -> None:
         # TODO(SPARK-41823): ambiguous column names
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
-
-        del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
-
-        # TODO(SPARK-41886): The doctest output has different order
-        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
 
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
