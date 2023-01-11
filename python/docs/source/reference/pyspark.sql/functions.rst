@@ -226,6 +226,8 @@ Aggregate Functions
 
     approxCountDistinct
     approx_count_distinct
+    approx_count_distinct_sketch
+    approx_count_distinct_agg_sketch
     avg
     collect_list
     collect_set
@@ -352,4 +354,5 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    approx_count_distinct_eval_sketch
 
