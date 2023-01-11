@@ -298,8 +298,6 @@ class SparkSession:
                 result = convert_to_arrow_data(_cols, _data)
                 arrow_schema = to_arrow_schema(_inferred_schema)
                 _table = pa.Table.from_pylist(result, arrow_schema)
-#                 _table2 = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
-#                 raise ValueError(f"---{arrow_schema}---{_table}---{_table2}")
             else:
                 # input data can be [1, 2, 3]
                 _table = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
