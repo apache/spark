@@ -2525,13 +2525,11 @@ case class CheckOverflowInTableInsert(child: Expression, columnName: String)
     copy(child = newChild)
   }
 
-  private def getCast: Cast = {
-    child match {
-      case c: Cast =>
-        c
-      case ExpressionProxy(c, _, _) =>
-        c.asInstanceOf[Cast]
-    }
+  private def getCast: Cast = child match {
+    case c: Cast =>
+      c
+    case ExpressionProxy(c, _, _) =>
+      c.asInstanceOf[Cast]
   }
 
   override def eval(input: InternalRow): Any = try {
