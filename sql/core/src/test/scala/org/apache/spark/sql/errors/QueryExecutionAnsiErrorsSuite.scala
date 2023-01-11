@@ -193,7 +193,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
     )
   }
 
-  test("interpreted CheckOverflowInTableInsert with ExpressionProxy should throw an exception") {
+  test("SPARK-41991: interpreted CheckOverflowInTableInsert with ExpressionProxy should " +
+    "throw an exception") {
     val runtime = new SubExprEvaluationRuntime(1)
     val proxy = ExpressionProxy(Cast(Literal.apply(12345678901234567890D), ByteType), 0, runtime)
     checkError(

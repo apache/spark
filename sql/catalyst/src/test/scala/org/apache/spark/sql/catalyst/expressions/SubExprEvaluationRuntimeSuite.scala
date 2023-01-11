@@ -119,7 +119,7 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     assert(proxys.forall(_.child.semanticEquals(mul2_1)))
   }
 
-  test("CheckOverflowInTableInsert with ExpressionProxy child") {
+  test("SPARK-41991: CheckOverflowInTableInsert with ExpressionProxy child") {
     val runtime = new SubExprEvaluationRuntime(1)
     val proxy = ExpressionProxy(Cast(Literal.apply(1), LongType), 0, runtime)
     val checkOverflow = CheckOverflowInTableInsert(Cast(Literal.apply(1), LongType), "col")
