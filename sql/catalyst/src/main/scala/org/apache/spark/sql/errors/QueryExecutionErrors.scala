@@ -2469,13 +2469,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def incorrectEndOffset(rowsPerSecond: Long,
       maxSeconds: Long,
       endSeconds: Long): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "INCORRECT_END_OFFSET",
-      messageParameters = Map(
-        "rowsPerSecond" -> rowsPerSecond.toString,
-        "maxSeconds" -> maxSeconds.toString,
-        "endSeconds" -> endSeconds.toString
-      ))
+    SparkException.internalError(
+      s"Max offset with ${rowsPerSecond.toString} rowsPerSecond is ${maxSeconds.toString}, " +
+        s"but it's ${endSeconds.toString} now.")
   }
 
   def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {

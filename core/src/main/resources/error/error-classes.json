@@ -611,11 +611,6 @@
       }
     }
   },
-  "INCORRECT_END_OFFSET" : {
-    "message" : [
-      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
-    ]
-  },
   "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."

@@ -228,7 +228,7 @@ class RateStreamProviderSuite extends StreamTest {
 
       checkError(
         exception = e,
-        errorClass = "INCORRECT_END_OFFSET",
+        errorClass = "INTERNAL_ERROR",
         parameters = Map(
           "rowsPerSecond" -> "100",
           "maxSeconds" -> maxSeconds.toString,
@@ -311,7 +311,7 @@ class RateStreamProviderSuite extends StreamTest {
     testStream(input)(
       AdvanceRateManualClock(2),
       ExpectFailure[SparkRuntimeException](t => {
-        Seq("INCORRECT_END_OFFSET", "rowsPerSecond").foreach { msg =>
+        Seq("INTERNAL_ERROR", "rowsPerSecond").foreach { msg =>
           assert(t.getMessage.contains(msg))
         }
       })
