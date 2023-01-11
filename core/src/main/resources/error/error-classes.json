@@ -125,6 +125,11 @@
       "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
     ]
   },
+  "COMPARATOR_RETURNS_NULL" : {
+    "message" : [
+      "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>. It should return a positive integer for \"greater than\", 0 for \"equal\" and a negative integer for \"less than\". To revert to deprecated behavior where NULL is treated as 0 (equal), you must set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
+    ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -987,11 +992,6 @@
       "Column or field <name> is nullable while it's required to be non-nullable."
     ],
     "sqlState" : "42000"
-  },
-  "NULL_COMPARISON_RESULT" : {
-    "message" : [
-      "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
-    ]
   },
   "NULL_MAP_KEY" : {
     "message" : [

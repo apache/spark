@@ -2770,10 +2770,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
-  def nullComparisonResultError(): Throwable = {
+  def comparatorReturnsNull(firstValue: String, secondValue: String): Throwable = {
     new SparkException(
-      errorClass = "NULL_COMPARISON_RESULT",
-      messageParameters = Map.empty,
+      errorClass = "COMPARATOR_RETURNS_NULL",
+      messageParameters = Map("firstValue" -> firstValue, "secondValue" -> secondValue),
       cause = null)
   }
 
