@@ -131,25 +131,38 @@ object AgnosticEncoders {
   }
 
   // Primitive encoders
-  case object PrimitiveBooleanEncoder extends LeafEncoder[Boolean](BooleanType)
-  case object PrimitiveByteEncoder extends LeafEncoder[Byte](ByteType)
-  case object PrimitiveShortEncoder extends LeafEncoder[Short](ShortType)
-  case object PrimitiveIntEncoder extends LeafEncoder[Int](IntegerType)
-  case object PrimitiveLongEncoder extends LeafEncoder[Long](LongType)
-  case object PrimitiveFloatEncoder extends LeafEncoder[Float](FloatType)
-  case object PrimitiveDoubleEncoder extends LeafEncoder[Double](DoubleType)
+  abstract class PrimitiveLeafEncoder[E : ClassTag](dataType: DataType)
+    extends LeafEncoder[E](dataType)
+  case object PrimitiveBooleanEncoder extends PrimitiveLeafEncoder[Boolean](BooleanType)
+  case object PrimitiveByteEncoder extends PrimitiveLeafEncoder[Byte](ByteType)
+  case object PrimitiveShortEncoder extends PrimitiveLeafEncoder[Short](ShortType)
+  case object PrimitiveIntEncoder extends PrimitiveLeafEncoder[Int](IntegerType)
+  case object PrimitiveLongEncoder extends PrimitiveLeafEncoder[Long](LongType)
+  case object PrimitiveFloatEncoder extends PrimitiveLeafEncoder[Float](FloatType)
+  case object PrimitiveDoubleEncoder extends PrimitiveLeafEncoder[Double](DoubleType)
 
   // Primitive wrapper encoders.
-  case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
-  case object BoxedBooleanEncoder extends LeafEncoder[java.lang.Boolean](BooleanType)
-  case object BoxedByteEncoder extends LeafEncoder[java.lang.Byte](ByteType)
-  case object BoxedShortEncoder extends LeafEncoder[java.lang.Short](ShortType)
-  case object BoxedIntEncoder extends LeafEncoder[java.lang.Integer](IntegerType)
-  case object BoxedLongEncoder extends LeafEncoder[java.lang.Long](LongType)
-  case object BoxedFloatEncoder extends LeafEncoder[java.lang.Float](FloatType)
-  case object BoxedDoubleEncoder extends LeafEncoder[java.lang.Double](DoubleType)
+  abstract class BoxedLeafEncoder[E : ClassTag, P](
+      dataType: DataType,
+      val primitive: PrimitiveLeafEncoder[P])
+    extends LeafEncoder[E](dataType)
+  case object BoxedBooleanEncoder
+    extends BoxedLeafEncoder[java.lang.Boolean, Boolean](BooleanType, PrimitiveBooleanEncoder)
+  case object BoxedByteEncoder
+    extends BoxedLeafEncoder[java.lang.Byte, Byte](ByteType, PrimitiveByteEncoder)
+  case object BoxedShortEncoder
+    extends BoxedLeafEncoder[java.lang.Short, Short](ShortType, PrimitiveShortEncoder)
+  case object BoxedIntEncoder
+    extends BoxedLeafEncoder[java.lang.Integer, Int](IntegerType, PrimitiveIntEncoder)
+  case object BoxedLongEncoder
+    extends BoxedLeafEncoder[java.lang.Long, Long](LongType, PrimitiveLongEncoder)
+  case object BoxedFloatEncoder
+    extends BoxedLeafEncoder[java.lang.Float, Float](FloatType, PrimitiveFloatEncoder)
+  case object BoxedDoubleEncoder
+    extends BoxedLeafEncoder[java.lang.Double, Double](DoubleType, PrimitiveDoubleEncoder)
 
   // Nullable leaf encoders
+  case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
   case object StringEncoder extends LeafEncoder[String](StringType)
   case object BinaryEncoder extends LeafEncoder[Array[Byte]](BinaryType)
   case object ScalaBigIntEncoder extends LeafEncoder[BigInt](DecimalType.BigIntDecimal)

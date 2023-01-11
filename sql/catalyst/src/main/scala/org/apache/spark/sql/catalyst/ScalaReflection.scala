@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import javax.lang.model.SourceVersion
 
 import scala.annotation.tailrec
+import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.reflect.internal.Symbols
 import scala.util.{Failure, Success}
@@ -140,17 +141,6 @@ object ScalaReflection extends ScalaReflection {
     case _ => false
   }
 
-  private def isBoxedEncoder(enc: AgnosticEncoder[_]): Boolean = enc match {
-    case BoxedBooleanEncoder => true
-    case BoxedByteEncoder => true
-    case BoxedShortEncoder => true
-    case BoxedIntEncoder => true
-    case BoxedLongEncoder => true
-    case BoxedFloatEncoder => true
-    case BoxedDoubleEncoder => true
-    case _ => false
-  }
-
   private def toArrayMethodName(enc: AgnosticEncoder[_]): String = enc match {
     case PrimitiveBooleanEncoder => "toBooleanArray"
     case PrimitiveByteEncoder => "toByteArray"
@@ -210,7 +200,7 @@ object ScalaReflection extends ScalaReflection {
       walkedTypePath: WalkedTypePath): Expression = enc match {
     case _ if isNativeEncoder(enc) =>
       path
-    case _ if isBoxedEncoder(enc) =>
+    case _: BoxedLeafEncoder[_, _] =>
       createDeserializerForTypesSupportValueOf(path, enc.clsTag.runtimeClass)
     case JavaEnumEncoder(tag) =>
       val toString = createDeserializerForString(path, returnNullable = false)
@@ -383,10 +373,10 @@ object ScalaReflection extends ScalaReflection {
       if (elementEncoder.isPrimitive) {
         createSerializerForPrimitiveArray(input, elementEncoder.dataType)
       } else {
-        serializerForArray(elementEncoder, containsNull, input)
+        serializerForArray(elementEncoder, containsNull, input, lenientSerialization = false)
       }
 
-    case IterableEncoder(ctag, elementEncoder, containsNull, _) =>
+    case IterableEncoder(ctag, elementEncoder, containsNull, lenientSerialization) =>
       val getter = if (classOf[scala.collection.Set[_]].isAssignableFrom(ctag.runtimeClass)) {
         // There's no corresponding Catalyst type for `Set`, we serialize a `Set` to Catalyst array.
         // Note that the property of `Set` is only kept when manipulating the data as domain object.
@@ -394,27 +384,19 @@ object ScalaReflection extends ScalaReflection {
       } else {
         input
       }
-      serializerForArray(elementEncoder, containsNull, getter)
+      serializerForArray(elementEncoder, containsNull, getter, lenientSerialization)
 
     case MapEncoder(_, keyEncoder, valueEncoder, valueContainsNull) =>
-      // TODO fix validation...
       createSerializerForMap(
         input,
         MapElementInformation(
-          lenientExternalDataTypeFor(keyEncoder),
+          ObjectType(classOf[AnyRef]),
           nullable = keyEncoder.nullable,
-          /* validateAndSerializeElement(keyEncoder, keyEncoder.nullable) */
-          serializerFor(keyEncoder, _)),
+          validateAndSerializeElement(keyEncoder, keyEncoder.nullable)),
         MapElementInformation(
-          lenientExternalDataTypeFor(valueEncoder), // TODO - how is the input typed?
+          ObjectType(classOf[AnyRef]),
           nullable = valueContainsNull,
-          // validateAndSerializeElement(valueEncoder, valueContainsNull)
-          value => {
-            expressionWithNullSafety(
-              serializerFor(valueEncoder, value),
-              valueContainsNull,
-              WalkedTypePath())
-          })
+          validateAndSerializeElement(valueEncoder, valueContainsNull))
       )
 
     case ProductEncoder(_, fields) =>
@@ -460,18 +442,48 @@ object ScalaReflection extends ScalaReflection {
   private def serializerForArray(
       elementEnc: AgnosticEncoder[_],
       elementNullable: Boolean,
-      input: Expression): Expression = {
-    if (isNativeEncoder(elementEnc) || isBoxedEncoder(elementEnc)) {
-      // TODO this does not check generic arrays when `elementNullable = true`.
-      // TODO we should probably use ArrayData.toArrayData here instead of the GenericArray
-      //  constructor. This is a bit more efficient when we are dealing with an array of
-      //  primitives.
-      createSerializerForGenericArray(input, elementEnc.dataType, elementNullable)
-    } else {
-      createSerializerForMapObjects(
-        input,
-        ObjectType(classOf[AnyRef]),
-        validateAndSerializeElement(elementEnc, elementNullable))
+      input: Expression,
+      lenientSerialization: Boolean): Expression = {
+    // Default serializer for Seq and generic Arrays. This does not work for primitive arrays.
+    val genericSerializer = createSerializerForMapObjects(
+      input,
+      ObjectType(classOf[AnyRef]),
+      validateAndSerializeElement(elementEnc, elementNullable))
+
+    // Check if it is possible the user can pass a primitive array. This is the only case when it
+    // is safe to directly convert to an array (for generic arrays and Seqs the type and the
+    // nullability can be violated). If the user has passed a primitive array we create a special
+    // code path to deal with these.
+    val primitiveEncoderOption = elementEnc match {
+      case _ if !lenientSerialization => None
+      case enc: PrimitiveLeafEncoder[_] => Option(enc)
+      case enc: BoxedLeafEncoder[_, _] => Option(enc.primitive)
+      case _ => None
+    }
+    primitiveEncoderOption match {
+      case Some(primitiveEncoder) =>
+        val primitiveArrayClass = primitiveEncoder.clsTag.wrap.runtimeClass
+        val check = Invoke(
+          targetObject = exprs.Literal.fromObject(primitiveArrayClass),
+          functionName = "isInstance",
+          BooleanType,
+          arguments = input :: Nil,
+          propagateNull = false,
+          returnNullable = false)
+        exprs.If(
+          check,
+          // TODO replace this with `createSerializerForPrimitiveArray` as
+          //  soon as Cast support ObjectType casts.
+          StaticInvoke(
+            classOf[ArrayData],
+            ArrayType(elementEnc.dataType, containsNull = false),
+            "toArrayData",
+            input :: Nil,
+            propagateNull = false,
+            returnNullable = false),
+          genericSerializer)
+      case None =>
+        genericSerializer
     }
   }
 
