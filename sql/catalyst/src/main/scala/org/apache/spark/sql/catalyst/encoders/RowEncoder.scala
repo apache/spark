@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -79,13 +79,13 @@ object RowEncoder {
       dataType: DataType,
       lenient: Boolean): AgnosticEncoder[_] = dataType match {
     case NullType => NullEncoder
-    case BooleanType => PrimitiveBooleanEncoder
-    case ByteType => PrimitiveByteEncoder
-    case ShortType => PrimitiveShortEncoder
-    case IntegerType => PrimitiveIntEncoder
-    case LongType => PrimitiveLongEncoder
-    case FloatType => PrimitiveFloatEncoder
-    case DoubleType => PrimitiveDoubleEncoder
+    case BooleanType => BoxedBooleanEncoder
+    case ByteType => BoxedByteEncoder
+    case ShortType => BoxedShortEncoder
+    case IntegerType => BoxedIntEncoder
+    case LongType => BoxedLongEncoder
+    case FloatType => BoxedFloatEncoder
+    case DoubleType => BoxedDoubleEncoder
     case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
     case BinaryType => BinaryEncoder
     case StringType => StringEncoder

@@ -408,8 +408,13 @@ object ScalaReflection extends ScalaReflection {
         MapElementInformation(
           lenientExternalDataTypeFor(valueEncoder), // TODO - how is the input typed?
           nullable = valueContainsNull,
-          /* validateAndSerializeElement(valueEncoder, valueContainsNull) */
-          serializerFor(valueEncoder, _))
+          // validateAndSerializeElement(valueEncoder, valueContainsNull)
+          value => {
+            expressionWithNullSafety(
+              serializerFor(valueEncoder, value),
+              valueContainsNull,
+              WalkedTypePath())
+          })
       )
 
     case ProductEncoder(_, fields) =>
@@ -456,15 +461,17 @@ object ScalaReflection extends ScalaReflection {
       elementEnc: AgnosticEncoder[_],
       elementNullable: Boolean,
       input: Expression): Expression = {
-    // TODO the logic here is wonky.
-    lenientExternalDataTypeFor(elementEnc) match {
-      case ot: ObjectType =>
-        createSerializerForMapObjects(
-          input,
-          ObjectType(classOf[AnyRef]), // Is this the element type?
-          validateAndSerializeElement(elementEnc, elementNullable))
-      case _ =>
-        createSerializerForGenericArray(input, elementEnc.dataType, elementNullable)
+    if (isNativeEncoder(elementEnc) || isBoxedEncoder(elementEnc)) {
+      // TODO this does not check generic arrays when `elementNullable = true`.
+      // TODO we should probably use ArrayData.toArrayData here instead of the GenericArray
+      //  constructor. This is a bit more efficient when we are dealing with an array of
+      //  primitives.
+      createSerializerForGenericArray(input, elementEnc.dataType, elementNullable)
+    } else {
+      createSerializerForMapObjects(
+        input,
+        ObjectType(classOf[AnyRef]),
+        validateAndSerializeElement(elementEnc, elementNullable))
     }
   }
 
