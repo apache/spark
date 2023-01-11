@@ -30,6 +30,7 @@ import org.apache.spark.util.Utils
 object SQLExecution {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
+  val EXECUTION_ROOT_ID_KEY = "spark.sql.execution.root.id"
 
   private val _nextExecutionId = new AtomicLong(0)
 
@@ -67,6 +68,13 @@ object SQLExecution {
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
     sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    // Track the "root" SQL Execution Id for nested/sub queries. The current execution is the
+    // root execution if the root execution ID is null.
+    // And for the root execution, rootExecutionId == executionId.
+    if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
+      sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId.toString)
+    }
+    val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
     try {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
@@ -98,6 +106,7 @@ object SQLExecution {
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
+            rootExecutionId = rootExecutionId,
             description = desc,
             details = callSite.longForm,
             physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
@@ -140,6 +149,11 @@ object SQLExecution {
     } finally {
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
+      // Unset the "root" SQL Execution Id once the "root" SQL execution completes.
+      // The current execution is the root execution if rootExecutionId == executionId.
+      if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
+        sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
+      }
     }
   }
 

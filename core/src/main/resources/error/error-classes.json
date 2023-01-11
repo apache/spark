@@ -1187,6 +1187,11 @@
     ],
     "sqlState" : "42000"
   },
+  "TASK_WRITE_FAILED" : {
+    "message" : [
+      "Task failed while writing rows to <path>."
+    ]
+  },
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the temporary view <relationName> because it already exists.",
@@ -3726,11 +3731,6 @@
   "_LEGACY_ERROR_TEMP_2053" : {
     "message" : [
       "buildReader is not supported for <format>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2054" : {
-    "message" : [
-      "Task failed while writing rows. <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2055" : {

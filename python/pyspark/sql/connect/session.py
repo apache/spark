@@ -401,6 +401,10 @@ class SparkSession:
         raise NotImplementedError("streams() is not implemented.")
 
     @property
+    def readStream(self) -> Any:
+        raise NotImplementedError("readStream() is not implemented.")
+
+    @property
     def udf(self) -> Any:
         raise NotImplementedError("udf() is not implemented.")
 
