@@ -707,7 +707,7 @@ message Hint {
   string name = 2;
 
   // (Optional) Hint parameters.
-  repeated Expression.Literal parameters = 3;
+  repeated Expression parameters = 3;
 }
 
 // Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
