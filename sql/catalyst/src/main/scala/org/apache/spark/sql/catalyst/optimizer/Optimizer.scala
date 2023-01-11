@@ -1208,31 +1208,32 @@ object CollapsePercentiles extends Rule[LogicalPlan] {
       case agg @ Aggregate(groupingExprs, aggExprs, child) =>
         val percentileMap =
           new mutable.HashMap[(Percentile, AggregateMode, Boolean, Option[Expression]),
-            mutable.HashMap[Percentile, Expression]]()
+            mutable.ArrayBuffer[Percentile]]()
         aggExprs.collect {
           case Alias(AggregateExpression(p: Percentile, mode, isDistinct, filter, _), _)
             if p.percentageExpression.dataType.isInstanceOf[DoubleType] =>
             val group = (p.copy(percentageExpression = Literal(0)), mode, isDistinct, filter)
-            val mapping =
-              percentileMap.getOrElse(group, new mutable.HashMap[Percentile, Expression]())
-            percentileMap += group -> (mapping += p -> p.percentageExpression)
+            percentileMap += group ->
+              (percentileMap.getOrElse(group, mutable.ArrayBuffer.empty[Percentile]) += p)
         }
         val combinedAggExprs =
           percentileMap.filter(_._2.size > 1).zipWithIndex.map {
             case ((group, children), idx) =>
+              val funcsMapping = children.toSeq
               val newAgg =
                 AggregateExpression(
                   group._1.copy(percentageExpression =
-                    Literal.create(children.values.map(_.eval()).toSeq.asInstanceOf[Seq[Double]],
+                    Literal.create(
+                      funcsMapping.map(_.percentageExpression.eval()).asInstanceOf[Seq[Double]],
                       ArrayType(DoubleType, false))),
                   group._2, group._3, group._4, NamedExpression.newExprId)
-              Alias(newAgg, s"_combined_percentile_$idx")() -> children
-          }
-        val replacedMapping: mutable.Map[AggregateFunction, GetArrayItem] =
-          combinedAggExprs.flatMap { case (newAggExpr, kv) =>
-            kv.zipWithIndex.map { case (kv2, idx) =>
-              kv2._1 -> GetArrayItem(newAggExpr.toAttribute, Literal(idx))
-            }
+              Alias(newAgg, s"_combined_percentile_$idx")() -> funcsMapping
+          }.toMap
+        val replacedMapping: Map[AggregateFunction, GetArrayItem] =
+          combinedAggExprs.flatMap { case (newAggExpr, funcs) =>
+            funcs.zipWithIndex.map { case (func, idx) =>
+              func -> GetArrayItem(newAggExpr.toAttribute, Literal(idx))
+            }.toMap
           }
         if (combinedAggExprs.size > 0) {
           val newAggExprs = aggExprs.filter {
