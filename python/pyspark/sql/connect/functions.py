@@ -2357,13 +2357,6 @@ def _test() -> None:
         # Spark Connect does not support Spark Context but the test depends on that.
         del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
-        # TODO(SPARK-41880): Function `from_json` should support non-literal expression
-        # TODO(SPARK-41879): `DataFrame.collect` should support nested types
-        del pyspark.sql.connect.functions.struct.__doc__
-        del pyspark.sql.connect.functions.create_map.__doc__
-        del pyspark.sql.connect.functions.from_csv.__doc__
-        del pyspark.sql.connect.functions.from_json.__doc__
-
         # TODO(SPARK-41834): implement Dataframe.conf
         del pyspark.sql.connect.functions.from_unixtime.__doc__
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__
