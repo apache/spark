@@ -126,7 +126,6 @@ class TaskMetrics private[spark] () extends Serializable {
     _updatedBlockStatuses.value.asScala.toSeq
   }
 
-
   // Setters and increment-ers
   private[spark] def setExecutorDeserializeTime(v: Long): Unit =
     _executorDeserializeTime.setValue(v)

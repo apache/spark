@@ -289,7 +289,7 @@ public class TransportClient implements Closeable {
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
-      logger.warn("RPC {} timed-out", rpcId);
+      logger.trace("RPC {} timed-out", rpcId);
       throw Throwables.propagate(new SaslTimeoutException(e));
     } catch (ExecutionException e) {
       throw Throwables.propagate(e.getCause());
