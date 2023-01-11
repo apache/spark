@@ -345,6 +345,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
   }
 
+  def collectUntil(f: BaseType => Boolean): Seq[BaseType] = {
+    val ret = new collection.mutable.ArrayBuffer[BaseType]()
+    if (f(this)) {
+      ret
+    } else {
+      ret.+=:(this)
+      ret ++ children.foldLeft(Seq.empty[BaseType]) { (l, r) => l ++ r.collectUntil(f) }
+    }
+  }
+
   /**
    * Efficient alternative to `productIterator.map(f).toArray`.
    */
