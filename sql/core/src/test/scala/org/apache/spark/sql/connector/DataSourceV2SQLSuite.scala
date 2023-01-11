@@ -1338,6 +1338,7 @@ class DataSourceV2SQLSuiteV1Filter
         }
         spark.sql(s"$statement testcat.$tableDefinition USING foo")
       }
+      // BasicInMemoryTableCatalog.capabilities() = {}
       withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
         val e = intercept[AnalysisException] {
           sql("USE dummy")
