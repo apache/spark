@@ -1420,6 +1420,8 @@ Note: applies to the shuffle service
 - registeredExecutorsSize
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
+
+
 - **note:** the metrics below apply when the server side configuration
   `spark.shuffle.push.server.mergedShuffleFileManagerImpl` is set to
   `org.apache.spark.network.shuffle.MergedShuffleFileManager` for Push-Based Shuffle
