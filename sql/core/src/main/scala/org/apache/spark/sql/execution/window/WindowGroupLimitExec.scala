@@ -66,12 +66,13 @@ case class WindowGroupLimitExec(
 
   protected override def doExecute(): RDD[InternalRow] = rankLikeFunction match {
     case _: RowNumber =>
-      child.execute().mapPartitions(SimpleGroupLimitIterator(partitionSpec, output, _, limit))
+      child.execute().mapPartitionsInternal(
+        SimpleGroupLimitIterator(partitionSpec, output, _, limit))
     case _: Rank =>
-      child.execute().mapPartitions(
+      child.execute().mapPartitionsInternal(
         RankGroupLimitIterator(partitionSpec, output, _, orderSpec, limit))
     case _: DenseRank =>
-      child.execute().mapPartitions(
+      child.execute().mapPartitionsInternal(
         DenseRankGroupLimitIterator(partitionSpec, output, _, orderSpec, limit))
   }
 
