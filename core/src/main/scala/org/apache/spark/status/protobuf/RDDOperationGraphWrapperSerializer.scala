@@ -24,12 +24,9 @@ import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWra
 import org.apache.spark.status.protobuf.StoreTypes.{DeterministicLevel => GDeterministicLevel}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
-class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
+class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraphWrapper] {
 
-  override val supportClass: Class[_] = classOf[RDDOperationGraphWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val op = input.asInstanceOf[RDDOperationGraphWrapper]
+  override def serialize(op: RDDOperationGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.RDDOperationGraphWrapper.newBuilder()
     builder.setStageId(op.stageId.toLong)
     op.edges.foreach { e =>
@@ -49,9 +46,9 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     val wrapper = StoreTypes.RDDOperationGraphWrapper.parseFrom(bytes)
     new RDDOperationGraphWrapper(
       stageId = wrapper.getStageId.toInt,
-      edges = wrapper.getEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
-      outgoingEdges = wrapper.getOutgoingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
-      incomingEdges = wrapper.getIncomingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
+      edges = wrapper.getEdgesList.asScala.map(deserializeRDDOperationEdge),
+      outgoingEdges = wrapper.getOutgoingEdgesList.asScala.map(deserializeRDDOperationEdge),
+      incomingEdges = wrapper.getIncomingEdgesList.asScala.map(deserializeRDDOperationEdge),
       rootCluster = deserializeRDDOperationClusterWrapper(wrapper.getRootCluster)
     )
   }
@@ -75,9 +72,9 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     new RDDOperationClusterWrapper(
       id = op.getId,
       name = op.getName,
-      childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode).toSeq,
+      childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode),
       childClusters =
-        op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper).toSeq
+        op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper)
     )
   }
 

@@ -14,29 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.connect.common.config
 
-package org.apache.spark.status.protobuf.sql
-
-import org.apache.spark.sql.streaming.SinkProgress
-import org.apache.spark.status.protobuf.StoreTypes
-
-private[protobuf] object SinkProgressSerializer {
-
-  def serialize(sink: SinkProgress): StoreTypes.SinkProgress = {
-    val builder = StoreTypes.SinkProgress.newBuilder()
-    builder.setDescription(sink.description)
-    builder.setNumOutputRows(sink.numOutputRows)
-    sink.metrics.forEach {
-      case (k, v) => builder.putMetrics(k, v)
-    }
-    builder.build()
-  }
-
-  def deserialize(sink: StoreTypes.SinkProgress): SinkProgress = {
-    new SinkProgress(
-      description = sink.getDescription,
-      numOutputRows = sink.getNumOutputRows,
-      metrics = sink.getMetricsMap
-    )
-  }
+private[connect] object ConnectCommon {
+  val CONNECT_GRPC_BINDING_PORT: Int = 15002
 }

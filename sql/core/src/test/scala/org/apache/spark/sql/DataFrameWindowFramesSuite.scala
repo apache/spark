@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -461,5 +462,16 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "location" -> "lower",
         "expression" -> "\"nonfoldableliteral()\"")
     )
+  }
+
+  test("SPARK-41805: Reuse expressions in WindowSpecDefinition") {
+    val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
+    val sortOrder = SortOrder($"n".cast("string").expr, Ascending)
+    val window = new WindowSpec(Seq($"n".expr), Seq(sortOrder), UnspecifiedFrame)
+    val df = ds.select(sum("i").over(window), avg("i").over(window))
+    val ws = df.queryExecution.analyzed.collect { case w: WindowNode => w }
+    assert(ws.size === 1)
+    checkAnswer(df,
+      Row(3, 1.5) :: Row(3, 1.5) :: Row(6, 2.0) :: Row(6, 2.0) :: Row(6, 2.0) :: Nil)
   }
 }

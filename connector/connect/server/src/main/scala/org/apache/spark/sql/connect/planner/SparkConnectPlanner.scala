@@ -467,29 +467,45 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
-    val (names, cols) =
-      rel.getNameExprListList.asScala
-        .map(e => {
-          if (e.getNameCount() == 1) {
-            (e.getName(0), Column(transformExpression(e.getExpr)))
-          } else {
-            throw InvalidPlanInput(
-              s"""WithColumns require column name only contains one name part,
-                 |but got ${e.getNameList.toString}""".stripMargin)
-          }
-        })
-        .unzip
+    val (colNames, cols, metadata) =
+      rel.getAliasesList.asScala.toSeq.map { alias =>
+        if (alias.getNameCount != 1) {
+          throw InvalidPlanInput(s"""WithColumns require column name only contains one name part,
+             |but got ${alias.getNameList.toString}""".stripMargin)
+        }
+
+        val metadata = if (alias.hasMetadata && alias.getMetadata.nonEmpty) {
+          Metadata.fromJson(alias.getMetadata)
+        } else {
+          Metadata.empty
+        }
+
+        (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
+      }.unzip3
+
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .withColumns(names.toSeq, cols.toSeq)
+      .withColumns(colNames, cols, metadata)
       .logicalPlan
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
-    val params = rel.getParametersList.asScala.map(toCatalystValue).toSeq.map {
-      case name: String => UnresolvedAttribute.quotedString(name)
-      case v => v
+
+    def extractValue(expr: Expression): Any = {
+      expr match {
+        case Literal(s, StringType) if s != null =>
+          UnresolvedAttribute.quotedString(s.toString)
+        case literal: Literal => literal.value
+        case UnresolvedFunction(Seq("array"), arguments, _, _, _) =>
+          arguments.map(extractValue).toArray
+        case other =>
+          throw InvalidPlanInput(
+            s"Expression should be a Literal or CreateMap or CreateArray, " +
+              s"but got ${other.getClass} $other")
+      }
     }
+
+    val params = rel.getParametersList.asScala.toSeq.map(transformExpression).map(extractValue)
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
@@ -916,39 +932,43 @@ class SparkConnectPlanner(session: SparkSession) {
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
 
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        // JsonToStructs constructors only accept DDL-formatted schema.
+        // JsonToStructs constructor doesn't accept JSON-formatted schema.
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
 
-        val schemaStr = children(1) match {
-          case Literal(s, StringType) if s != null => s.toString
-          case other =>
-            throw InvalidPlanInput(
-              s"Schema in from_json should be literal string, but got $other")
+        var schema: DataType = null
+        children(1) match {
+          case Literal(s, StringType) if s != null =>
+            try {
+              schema = DataType.fromJson(s.toString)
+            } catch {
+              case _: Exception =>
+            }
+          case _ =>
         }
-        val schema = DataType.parseTypeWithFallback(
-          schemaStr,
-          DataType.fromJson,
-          fallbackParser = DataType.fromDDL)
 
-        val options = if (children.length == 3) {
-          // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
-          // but the options here is not resolved yet: UnresolvedFunction("map", ...)
-          children(2) match {
-            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
-              ExprUtils.convertToMapData(CreateMap(arguments))
-            case other =>
-              throw InvalidPlanInput(
-                s"Options in from_json should be created by map, but got $other")
+        if (schema != null) {
+          val options = if (children.length == 3) {
+            // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
+            // but the options here is not resolved yet: UnresolvedFunction("map", ...)
+            children(2) match {
+              case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+                ExprUtils.convertToMapData(CreateMap(arguments))
+              case other =>
+                throw InvalidPlanInput(
+                  s"Options in from_json should be created by map, but got $other")
+            }
+          } else {
+            Map.empty[String, String]
           }
-        } else {
-          Map.empty[String, String]
-        }
 
-        Some(
-          JsonToStructs(
-            schema = CharVarcharUtils.failIfHasCharVarchar(schema),
-            options = options,
-            child = children.head))
+          Some(
+            JsonToStructs(
+              schema = CharVarcharUtils.failIfHasCharVarchar(schema),
+              options = options,
+              child = children.head))
+        } else {
+          None
+        }
 
       case _ => None
     }
@@ -956,15 +976,15 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
     if (alias.getNameCount == 1) {
-      val md = if (alias.hasMetadata()) {
+      val metadata = if (alias.hasMetadata() && alias.getMetadata.nonEmpty) {
         Some(Metadata.fromJson(alias.getMetadata))
       } else {
         None
       }
-      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
+      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = metadata)
     } else {
       if (alias.hasMetadata) {
-        throw new InvalidPlanInput(
+        throw InvalidPlanInput(
           "Alias expressions with more than 1 identifier must not use optional metadata.")
       }
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)

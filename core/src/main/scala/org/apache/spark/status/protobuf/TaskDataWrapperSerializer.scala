@@ -21,14 +21,9 @@ import org.apache.spark.status.TaskDataWrapper
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
-class TaskDataWrapperSerializer extends ProtobufSerDe {
+class TaskDataWrapperSerializer extends ProtobufSerDe[TaskDataWrapper] {
 
-  override val supportClass: Class[_] = classOf[TaskDataWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[TaskDataWrapper])
-
-  private def serialize(input: TaskDataWrapper): Array[Byte] = {
+  override def serialize(input: TaskDataWrapper): Array[Byte] = {
     val builder = StoreTypes.TaskDataWrapper.newBuilder()
       .setTaskId(input.taskId)
       .setIndex(input.index)
@@ -64,6 +59,16 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       .setShuffleRemoteBytesReadToDisk(input.shuffleRemoteBytesReadToDisk)
       .setShuffleLocalBytesRead(input.shuffleLocalBytesRead)
       .setShuffleRecordsRead(input.shuffleRecordsRead)
+      .setShuffleCorruptMergedBlockChunks(input.shuffleCorruptMergedBlockChunks)
+      .setShuffleMergedFetchFallbackCount(input.shuffleMergedFetchFallbackCount)
+      .setShuffleMergedRemoteBlocksFetched(input.shuffleMergedRemoteBlocksFetched)
+      .setShuffleMergedLocalBlocksFetched(input.shuffleMergedLocalBlocksFetched)
+      .setShuffleMergedRemoteChunksFetched(input.shuffleMergedRemoteChunksFetched)
+      .setShuffleMergedLocalChunksFetched(input.shuffleMergedLocalChunksFetched)
+      .setShuffleMergedRemoteBytesRead(input.shuffleMergedRemoteBytesRead)
+      .setShuffleMergedLocalBytesRead(input.shuffleMergedLocalBytesRead)
+      .setShuffleRemoteReqsDuration(input.shuffleRemoteReqsDuration)
+      .setShuffleMergedRemoteReqDuration(input.shuffleMergedRemoteReqDuration)
       .setShuffleBytesWritten(input.shuffleBytesWritten)
       .setShuffleWriteTime(input.shuffleWriteTime)
       .setShuffleRecordsWritten(input.shuffleRecordsWritten)
@@ -116,6 +121,16 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       shuffleRemoteBytesReadToDisk = binary.getShuffleRemoteBytesReadToDisk,
       shuffleLocalBytesRead = binary.getShuffleLocalBytesRead,
       shuffleRecordsRead = binary.getShuffleRecordsRead,
+      shuffleCorruptMergedBlockChunks = binary.getShuffleCorruptMergedBlockChunks,
+      shuffleMergedFetchFallbackCount = binary.getShuffleMergedFetchFallbackCount,
+      shuffleMergedRemoteBlocksFetched = binary.getShuffleMergedRemoteBlocksFetched,
+      shuffleMergedLocalBlocksFetched = binary.getShuffleMergedLocalBlocksFetched,
+      shuffleMergedRemoteChunksFetched = binary.getShuffleMergedRemoteChunksFetched,
+      shuffleMergedLocalChunksFetched = binary.getShuffleMergedLocalChunksFetched,
+      shuffleMergedRemoteBytesRead = binary.getShuffleMergedRemoteBytesRead,
+      shuffleMergedLocalBytesRead = binary.getShuffleMergedLocalBytesRead,
+      shuffleRemoteReqsDuration = binary.getShuffleRemoteReqsDuration,
+      shuffleMergedRemoteReqDuration = binary.getShuffleMergedRemoteReqDuration,
       shuffleBytesWritten = binary.getShuffleBytesWritten,
       shuffleWriteTime = binary.getShuffleWriteTime,
       shuffleRecordsWritten = binary.getShuffleRecordsWritten,

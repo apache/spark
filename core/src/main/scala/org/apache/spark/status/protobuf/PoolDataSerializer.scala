@@ -15,19 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal;
+package org.apache.spark.status.protobuf
 
-import java.io.Serializable;
+import scala.collection.JavaConverters._
 
-/**
- * Write spec is a input parameter of
- * {@link org.apache.spark.sql.execution.SparkPlan#executeWrite}.
- *
- * <p>
- * This is an empty interface, the concrete class which implements
- * {@link org.apache.spark.sql.execution.SparkPlan#doExecuteWrite}
- * should define its own class and use it.
- *
- * @since 3.4.0
- */
-public interface WriteSpec extends Serializable {}
+import org.apache.spark.status.PoolData
+import org.apache.spark.util.Utils.weakIntern
+
+class PoolDataSerializer extends ProtobufSerDe[PoolData] {
+
+  override def serialize(input: PoolData): Array[Byte] = {
+    val builder = StoreTypes.PoolData.newBuilder()
+    builder.setName(input.name)
+    input.stageIds.foreach(id => builder.addStageIds(id.toLong))
+    builder.build().toByteArray
+  }
+
+  override def deserialize(bytes: Array[Byte]): PoolData = {
+    val poolData = StoreTypes.PoolData.parseFrom(bytes)
+    new PoolData(
+      name = weakIntern(poolData.getName),
+      stageIds = poolData.getStageIdsList.asScala.map(_.toInt).toSet
+    )
+  }
+}
