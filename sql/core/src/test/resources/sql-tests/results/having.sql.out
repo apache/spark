@@ -37,6 +37,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INT\"",
     "right" : "\"ARRAY<INT>\"",

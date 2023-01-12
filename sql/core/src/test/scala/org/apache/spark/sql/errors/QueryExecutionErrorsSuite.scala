@@ -542,7 +542,7 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> unrecognizedColumnType.toString),
-      sqlState = "42000")
+      sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
   }

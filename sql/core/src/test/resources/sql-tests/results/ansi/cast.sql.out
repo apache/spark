@@ -613,6 +613,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -638,6 +639,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -663,6 +665,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -688,6 +691,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -713,6 +717,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -738,6 +743,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -763,6 +769,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -788,6 +795,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",

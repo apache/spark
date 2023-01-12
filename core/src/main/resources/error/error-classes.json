@@ -439,7 +439,8 @@
           "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
         ]
       }
-    }
+    },
+    "sqlState" : "42K09"
   },
   "DATATYPE_MISSING_SIZE" : {
     "message" : [
@@ -625,7 +626,8 @@
           "Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0B"
   },
   "INCORRECT_END_OFFSET" : {
     "message" : [
@@ -1079,7 +1081,7 @@
       "Cannot ADD or RENAME TO partition(s) <partitionList> in table <tableName> because they already exist.",
       "Choose a different name, drop the existing partition, or add the IF NOT EXISTS clause to tolerate a pre-existing partition."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "428FT"
   },
   "PARTITIONS_NOT_FOUND" : {
     "message" : [
@@ -1087,7 +1089,7 @@
       "Verify the partition specification and table name.",
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "428FT"
   },
   "PATH_NOT_FOUND" : {
     "message" : [
@@ -1165,26 +1167,27 @@
       "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42883"
   },
   "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
     "message" : [
       "More than one row returned by a subquery used as an expression."
-    ]
+    ],
+    "sqlState" : "21000"
   },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create schema <schemaName> because it already exists.",
       "Choose a different name, drop the existing schema, or add the IF NOT EXISTS clause to tolerate pre-existing schema."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42P06"
   },
   "SCHEMA_NOT_EMPTY" : {
     "message" : [
       "Cannot drop a schema <schemaName> because it contains objects.",
       "Use DROP SCHEMA ... CASCADE to drop the schema and all its objects."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "2BP01"
   },
   "SCHEMA_NOT_FOUND" : {
     "message" : [
@@ -1192,7 +1195,7 @@
       "If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.",
       "To tolerate the error on drop use DROP SCHEMA IF EXISTS."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42704"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [
@@ -1203,7 +1206,8 @@
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
@@ -1220,7 +1224,7 @@
       "Cannot create table or view <relationName> because it already exists.",
       "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42P07"
   },
   "TABLE_OR_VIEW_NOT_FOUND" : {
     "message" : [
@@ -1228,7 +1232,7 @@
       "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
       "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42P01"
   },
   "TASK_WRITE_FAILED" : {
     "message" : [
@@ -1240,22 +1244,25 @@
       "Cannot create the temporary view <relationName> because it already exists.",
       "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42P07"
   },
   "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS" : {
     "message" : [
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>"
-    ]
+    ],
+    "sqlState" : "428EK"
   },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [
       "Cannot initialize array with <numElements> elements of size <size>"
-    ]
+    ],
+    "sqlState" : "54000"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
-    ]
+    ],
+    "sqlState" : "53200"
   },
   "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -1265,17 +1272,20 @@
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
-    ]
+    ],
+    "sqlState" : "42P02"
   },
   "UNCLOSED_BRACKETED_COMMENT" : {
     "message" : [
       "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "UNEXPECTED_INPUT_TYPE" : {
     "message" : [
       "Parameter <paramIndex> of function <functionName> requires the <requiredType> type, however <inputSql> has the type <inputType>."
-    ]
+    ],
+    "sqlState" : "42K09"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -1286,13 +1296,13 @@
     "message" : [
       "UNPIVOT requires all given <given> expressions to be columns when no <empty> expressions are given. These are not columns: [<expressions>]."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42K0A"
   },
   "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
     "message" : [
       "At least one value column needs to be specified for UNPIVOT, all columns specified as ids"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42K0A"
   },
   "UNPIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
@@ -1304,19 +1314,19 @@
     "message" : [
       "All unpivot value columns must have the same size as there are value column names (<names>)"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "428C4"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type <typeName>"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42704"
   },
   "UNRESOLVED_ALL_IN_GROUP_BY" : {
     "message" : [
       "Cannot infer grouping columns for GROUP BY ALL based on the select clause. Please explicitly specify the grouping columns."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42803"
   },
   "UNRESOLVED_COLUMN" : {
     "message" : [
@@ -1334,7 +1344,7 @@
         ]
       }
     },
-    "sqlState" : "42000"
+    "sqlState" : "42703"
   },
   "UNRESOLVED_FIELD" : {
     "message" : [
@@ -1352,7 +1362,7 @@
         ]
       }
     },
-    "sqlState" : "42000"
+    "sqlState" : "42703"
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
@@ -1370,13 +1380,13 @@
         ]
       }
     },
-    "sqlState" : "42000"
+    "sqlState" : "42703"
   },
   "UNRESOLVED_ROUTINE" : {
     "message" : [
       "Cannot resolve function <routineName> on search path <searchPath>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42883"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
@@ -1399,7 +1409,8 @@
           "try to map <schema> to Tuple<ordinal>, but failed as the number of fields does not line up."
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
@@ -1574,7 +1585,8 @@
           "outside the SELECT clause, found: <plan>"
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [
@@ -1668,12 +1680,14 @@
           "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>"
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
@@ -1688,7 +1702,7 @@
       "Cannot create view <relationName> because it already exists.",
       "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42P07"
   },
   "VIEW_NOT_FOUND" : {
     "message" : [
@@ -1696,7 +1710,7 @@
       "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42P01"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
@@ -1718,7 +1732,8 @@
           "Consider to change the number of arguments because the function requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
-    }
+    },
+    "sqlState" : "42605"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
