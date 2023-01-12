@@ -1357,7 +1357,8 @@ private[spark] class BlockManager(
       getIterator = () => iterator
     }
 
-    doPutIterator(blockId, getIterator, level, classTag, keepReadLock = true) match {
+    doPutIterator(blockId, getIterator, level, classTag,
+      keepReadLock = true, checkExistingReplicas = true) match {
       case None =>
         // Report taskId -> blockId relationship to master.
         master.updateRDDBlockTaskInfo(blockId, taskId)
@@ -1596,7 +1597,8 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       tellMaster: Boolean = true,
-      keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
+      keepReadLock: Boolean = false,
+      checkExistingReplicas: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
@@ -1670,8 +1672,14 @@ private[spark] class BlockManager(
           } else {
             classTag
           }
+          val existingReplicas = if (checkExistingReplicas) {
+            master.getLocations(blockId).toSet
+          } else {
+            Set.empty[BlockManagerId]
+          }
+
           try {
-            replicate(blockId, bytesToReplicate, level, remoteClassTag)
+            replicate(blockId, bytesToReplicate, level, remoteClassTag, existingReplicas)
           } finally {
             bytesToReplicate.dispose()
           }
