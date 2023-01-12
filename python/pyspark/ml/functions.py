@@ -51,7 +51,7 @@ supported_scalar_types = (
 )
 
 
-class PredictFunction(Protocol):
+class PredictBatchFunction(Protocol):
     """Callable type for end user predict functions that take a variable number of ndarrays as
     input and returns one of the following as output:
     - single ndarray (single output)
@@ -226,7 +226,7 @@ def _validate_and_transform_single_input(
         else:
             raise ValueError(
                 "Multiple input columns found, but model expected a single "
-                "input, use `struct` or `array` to combine columns into tensors."
+                "input, use `array` or `struct` to combine columns into tensors."
             )
     else:
         # scalar columns
@@ -243,7 +243,7 @@ def _validate_and_transform_single_input(
         else:
             raise ValueError(
                 "Multiple input columns found, but model expected a single "
-                "input, use `struct` or `array` to combine columns into tensors."
+                "input, use `array` or `struct` to combine columns into tensors."
             )
 
     # if input_tensor_shapes provided, try to reshape input
@@ -348,7 +348,7 @@ def _validate_and_transform_prediction_result(
 def predict_batch_udf(
     make_predict_fn: Callable[
         [],
-        PredictFunction,
+        PredictBatchFunction,
     ],
     *,
     return_type: DataType,
@@ -383,7 +383,7 @@ def predict_batch_udf(
     ```
     from pyspark.ml.functions import predict_batch_udf
 
-    def make_predict_fn():
+    def make_mnist_fn():
         # load/init happens once per python worker
         import tensorflow as tf
         model = tf.keras.models.load_model('/path/to/mnist_model')
@@ -396,10 +396,10 @@ def predict_batch_udf(
 
         return predict
 
-    mnist = predict_batch_udf(make_predict_fn,
-                              return_type=ArrayType(FloatType()),
-                              batch_size=100,
-                              input_tensor_shapes=[[784]])
+    mnist_udf = predict_batch_udf(make_mnist_fn,
+                                  return_type=ArrayType(FloatType()),
+                                  batch_size=100,
+                                  input_tensor_shapes=[[784]])
 
     df = spark.read.parquet("/path/to/mnist_data")
     df.show(5)
@@ -413,7 +413,7 @@ def predict_batch_udf(
     # |[0.0, 0.0, 0.0, 0...|
     # +--------------------+
 
-    df.withColumn("preds", mnist("data")).show(5)
+    df.withColumn("preds", mnist_udf("data")).show(5)
     # +--------------------+--------------------+
     # |                data|               preds|
     # +--------------------+--------------------+
@@ -447,7 +447,7 @@ def predict_batch_udf(
     # |  4|
     # +---+
 
-    def make_predict_fn():
+    def make_times_two_fn():
         def predict(inputs: np.ndarray) -> np.ndarray:
             # inputs.shape = [batch_size]
             # outputs.shape = [batch_size], return_type = FloatType()
@@ -455,12 +455,12 @@ def predict_batch_udf(
 
         return predict
 
-    times_two = predict_batch_udf(make_predict_fn,
-                                  return_type=FloatType(),
-                                  batch_size=10)
+    times_two_udf = predict_batch_udf(make_times_two_fn,
+                                      return_type=FloatType(),
+                                      batch_size=10)
 
     df = spark.createDataFrame(pd.DataFrame(np.arange(100)))
-    df.withColumn("x2", times_two("0")).show(5)
+    df.withColumn("x2", times_two_udf("0")).show(5)
     # +---+---+
     # |  0| x2|
     # +---+---+
@@ -476,12 +476,12 @@ def predict_batch_udf(
 
     Input DataFrame has muliple columns of scalar values.  If the user-provided `predict` function
     expects a single input, then the user must combine the multiple columns into a single tensor
-    using `pyspark.sql.functions.struct` or `pyspark.sql.functions.array`.
+    using `pyspark.sql.functions.array` or `pyspark.sql.functions.struct`.
     ```
     import numpy as np
     import pandas as pd
     from pyspark.ml.functions import predict_batch_udf
-    from pyspark.sql.functions import struct
+    from pyspark.sql.functions import array
 
     data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
     pdf = pd.DataFrame(data, columns=['a','b','c','d'])
@@ -496,7 +496,7 @@ def predict_batch_udf(
     # |16.0|17.0|18.0|19.0|
     # +----+----+----+----+
 
-    def make_predict_fn():
+    def make_sum_fn():
         def predict(inputs: np.ndarray) -> np.ndarray:
             # inputs.shape = [batch_size, 4]
             # outputs.shape = [batch_size], return_type = FloatType()
@@ -504,12 +504,12 @@ def predict_batch_udf(
 
         return predict
 
-    sum_rows = predict_batch_udf(make_predict_fn,
-                                 return_type=FloatType(),
-                                 batch_size=10,
-                                 input_tensor_shapes=[[4]])
+    sum_udf = predict_batch_udf(make_sum_fn,
+                                return_type=FloatType(),
+                                batch_size=10,
+                                input_tensor_shapes=[[4]])
 
-    df.withColumn("sum", sum_rows(struct("a", "b", "c", "d"))).show(5)
+    df.withColumn("sum", sum_udf(array("a", "b", "c", "d"))).show(5)
     # +----+----+----+----+----+
     # |   a|   b|   c|   d| sum|
     # +----+----+----+----+----+
@@ -524,7 +524,7 @@ def predict_batch_udf(
     If the `predict` function expects multiple inputs, then the number of selected input columns
     must match the number of expected inputs.
     ```
-    def make_predict_fn():
+    def make_sum_fn():
         def predict(x1: np.ndarray, x2: np.ndarray, x3: np.ndarray, x4: np.ndarray) -> np.ndarray:
             # xN.shape = [batch_size]
             # outputs.shape = [batch_size], return_type = FloatType()
@@ -532,11 +532,11 @@ def predict_batch_udf(
 
         return predict
 
-    sum_rows = predict_batch_udf(make_predict_fn,
-                                 return_type=FloatType(),
-                                 batch_size=10)
+    sum_udf = predict_batch_udf(make_sum_fn,
+                                return_type=FloatType(),
+                                batch_size=10)
 
-    df.withColumn("sum", sum_rows("a", "b", "c", "d")).show(5)
+    df.withColumn("sum", sum_udf("a", "b", "c", "d")).show(5)
     # +----+----+----+----+----+
     # |   a|   b|   c|   d| sum|
     # +----+----+----+----+----+
@@ -576,7 +576,7 @@ def predict_batch_udf(
     # |[16.0, 17.0, 18.0...|[16.0, 17.0, 18.0]|
     # +--------------------+------------------+
 
-    def multi_sum_fn():
+    def make_multi_sum_fn():
         def predict(x1: np.ndarray, x2: np.ndarray) -> np.ndarray:
             # x1.shape = [batch_size, 4]
             # x2.shape = [batch_size, 3]
@@ -585,14 +585,14 @@ def predict_batch_udf(
 
         return predict
 
-    sum_cols = predict_batch_udf(
-        multi_sum_fn,
+    multi_sum_udf = predict_batch_udf(
+        make_multi_sum_fn,
         return_type=FloatType(),
         batch_size=5,
         input_tensor_shapes=[[4], [3]],
     )
 
-    df.withColumn("sum", sum_cols("t1", "t2")).show(5)
+    df.withColumn("sum", multi_sum_udf("t1", "t2")).show(5)
     # +--------------------+------------------+-----+
     # |                  t1|                t2|  sum|
     # +--------------------+------------------+-----+
@@ -606,7 +606,7 @@ def predict_batch_udf(
     # Note that some models can provide multiple outputs.  These can be returned as a dictionary
     # of named values, which can be represented in columnar (or row-based) formats.
 
-    def multi_sum_fn():
+    def make_multi_sum_fn():
         def predict_columnar(x1: np.ndarray, x2: np.ndarray) -> Mapping[str, np.ndarray]:
             # x1.shape = [batch_size, 4]
             # x2.shape = [batch_size, 3]
@@ -617,8 +617,8 @@ def predict_batch_udf(
 
         return predict_columnar
 
-    sum_cols = predict_batch_udf(
-        multi_sum_fn,
+    multi_sum_udf = predict_batch_udf(
+        make_multi_sum_fn,
         return_type=StructType([
             StructField("sum1", FloatType(), True),
             StructField("sum2", FloatType(), True)
@@ -627,7 +627,7 @@ def predict_batch_udf(
         input_tensor_shapes=[[4], [3]],
     )
 
-    df.withColumn("preds", sum_cols("t1", "t2")).select("t1", "t2", "preds.*").show(5)
+    df.withColumn("preds", multi_sum_udf("t1", "t2")).select("t1", "t2", "preds.*").show(5)
     # +--------------------+------------------+----+----+
     # |                  t1|                t2|sum1|sum2|
     # +--------------------+------------------+----+----+
@@ -643,10 +643,10 @@ def predict_batch_udf(
 
     Parameters
     ----------
-    make_predict_fn : Callable[[],
-        Callable[..., np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]] ]
-        Function which is responsible for loading a model and returning a `predict` function which
-        takes one or more numpy arrays as input and returns one of the following:
+    make_predict_fn : Callable[[], PredictBatchFunction]
+        Function which is responsible for loading a model and returning a
+        :py:class:`PredictBatchFunction` which takes one or more numpy arrays as input and returns
+        one of the following:
         - a numpy array (for a single output)
         - a dictionary of named numpy arrays (for multiple outputs)
         - a row-oriented list of dictionaries (for multiple outputs).
