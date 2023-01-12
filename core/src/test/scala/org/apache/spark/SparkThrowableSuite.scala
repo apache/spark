@@ -194,7 +194,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
     )
 
     assert(
@@ -206,7 +206,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         ""
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
     )
   }
 

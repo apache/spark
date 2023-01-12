@@ -535,10 +535,13 @@ class HashedRelationSuite extends SharedSparkSession {
       buffer.append(keyIterator.next().getLong(0))
     }
     // attempt an illegal next() call
-    val caught = intercept[SparkException] {
-      keyIterator.next()
-    }
-    assert(caught.getLocalizedMessage === "End of the iterator")
+    checkError(
+      exception = intercept[SparkException] {
+        keyIterator.next()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2104",
+      parameters = Map.empty
+    )
     assert(buffer.sortWith(_ < _) === randomArray)
     buffer.clear()
 
