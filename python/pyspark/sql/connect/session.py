@@ -333,8 +333,14 @@ class SparkSession:
         else:
             actual_end = end
 
+        if numPartitions is not None:
+            numPartitions = int(numPartitions)
+
         return DataFrame.withPlan(
-            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
+            Range(
+                start=int(start), end=int(actual_end), step=int(step), num_partitions=numPartitions
+            ),
+            self,
         )
 
     range.__doc__ = PySparkSession.range.__doc__
