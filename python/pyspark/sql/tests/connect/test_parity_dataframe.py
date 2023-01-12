@@ -57,10 +57,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_duplicated_column_names(self):
         super().test_duplicated_column_names()
 
-    @unittest.skip("Spark Connect does not support JVM function _jdf but the tests depend on them")
-    def test_extended_hint_types(self):
-        super().test_extended_hint_types()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()
