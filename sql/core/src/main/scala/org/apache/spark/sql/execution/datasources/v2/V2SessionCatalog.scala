@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTa
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
+import org.apache.spark.sql.connector.catalog.TableChange.{ColumnChange, DeleteColumn, RenameColumn}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -149,26 +150,42 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
-    val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(
-      catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
-    val comment = properties.get(TableCatalog.PROP_COMMENT)
-    val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
-    val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
-    val storage = if (location.isDefined) {
-      catalogTable.storage.copy(locationUri = location)
-    } else {
-      catalogTable.storage
+
+    val (columnChanges, otherChanges) = changes.toSeq.partition(change =>
+      change.isInstanceOf[ColumnChange] &&
+        // Not supported changes in alterTableDataSchema
+        !change.isInstanceOf[RenameColumn] && !change.isInstanceOf[DeleteColumn]
+    )
+
+    if(columnChanges.size > 0) {
+      val schema = CatalogV2Util.applySchemaChanges(
+        catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
+
+      catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
     }
 
-    try {
-      catalog.alterTable(
-        catalogTable.copy(
-          properties = properties, schema = schema, owner = owner, comment = comment,
-          storage = storage))
-    } catch {
-      case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+    if(otherChanges.size > 0) {
+      val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
+      val schema = CatalogV2Util.applySchemaChanges(
+        catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
+      val comment = properties.get(TableCatalog.PROP_COMMENT)
+      val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
+      val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
+      val storage = if (location.isDefined) {
+        catalogTable.storage.copy(locationUri = location)
+      } else {
+        catalogTable.storage
+      }
+
+      try {
+        catalog.alterTable(
+          catalogTable.copy(
+            properties = properties, schema = schema, owner = owner, comment = comment,
+            storage = storage))
+      } catch {
+        case _: NoSuchTableException =>
+          throw QueryCompilationErrors.noSuchTableError(ident)
+      }
     }
 
     loadTable(ident)
