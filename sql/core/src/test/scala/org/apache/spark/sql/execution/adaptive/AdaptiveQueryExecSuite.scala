@@ -31,13 +31,14 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -59,6 +60,7 @@ class AdaptiveQueryExecSuite
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
     var finalPlanCnt = 0
+    var hasMetricsEvent = false
     val listener = new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         event match {
@@ -67,6 +69,8 @@ class AdaptiveQueryExecSuite
               "AdaptiveSparkPlan isFinalPlan=true")) {
               finalPlanCnt += 1
             }
+          case _: SparkListenerSQLAdaptiveSQLMetricUpdates =>
+            hasMetricsEvent = true
           case _ => // ignore other events
         }
       }
@@ -83,13 +87,19 @@ class AdaptiveQueryExecSuite
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
-    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    val adaptiveSparkPlanExec = planAfter.asInstanceOf[AdaptiveSparkPlanExec]
+    val adaptivePlan = adaptiveSparkPlanExec.executedPlan
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries that
+    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries/IMR that
     // exist out of query stages.
-    val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
+    val subqueriesOrIMR = findInMemoryTable(adaptiveSparkPlanExec).nonEmpty ||
+      adaptivePlan.exists(_.subqueries.nonEmpty)
+    val expectedFinalPlanCnt = if (subqueriesOrIMR) 2 else 1
     assert(finalPlanCnt == expectedFinalPlanCnt)
+    val expectedMetrics = findInMemoryTable(adaptiveSparkPlanExec).nonEmpty ||
+      subqueriesAll(adaptiveSparkPlanExec).nonEmpty
+    assert(hasMetricsEvent == expectedMetrics)
     spark.sparkContext.removeSparkListener(listener)
 
     val exchanges = adaptivePlan.collect {
@@ -157,6 +167,13 @@ class AdaptiveQueryExecSuite
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
     collectWithSubqueries(plan) {
       case e: ReusedSubqueryExec => e
+    }
+  }
+
+  private def findInMemoryTable(plan: SparkPlan): Seq[InMemoryTableScanExec] = {
+    collect(plan) {
+      case c: InMemoryTableScanExec
+          if c.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => c
     }
   }
 
@@ -2698,6 +2715,21 @@ class AdaptiveQueryExecSuite
       val df2 = spark.range(1).selectExpr("id as c2")
       val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
       assert(df.rdd.getNumPartitions == 3)
+    }
+  }
+
+  test("SPARK-41214: Fix AQE cache does not update plan and metrics") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val arr = Seq(
+        (1, "Employee_1", "Department_1"),
+        (2, "Employee_2", "Department_2"))
+      val df = arr.toDF("id", "name", "department").filter($"id" < 3).groupBy($"name").count()
+      df.cache().createOrReplaceTempView("v1")
+      val arr2 = Seq((1, "Employee_1", "Department_1"))
+      val df2 = arr2.toDF("id", "name", "department").filter($"id" > 0).groupBy($"name").count()
+      df2.cache().createOrReplaceTempView("v2")
+
+      runAdaptiveAndVerifyResult("SELECT * FROM v1 JOIN v2 on v1.name = v2.name")
     }
   }
 }

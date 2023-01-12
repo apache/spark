@@ -40,6 +40,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -219,10 +220,19 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def getExecutionId: Option[Long] = {
-    // If the `QueryExecution` does not match the current execution ID, it means the execution ID
-    // belongs to another (parent) query, and we should not call update UI in this query.
     Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
-      .map(_.toLong).filter(SQLExecution.getQueryExecution(_) eq context.qe)
+      .map(_.toLong)
+  }
+
+  private def isCurrentExecution(executionId: Option[Long]): Boolean = {
+    // If the `QueryExecution` does not match the current execution ID, it means the execution ID
+    // belongs to another (parent) query, and we should call update metrics instead of plan in
+    // this query.
+    executionId.exists(SQLExecution.getQueryExecution(_) eq context.qe)
+  }
+
+  private def shouldUpdateMetrics(executionId: Option[Long]): Boolean = {
+    isSubquery || !isCurrentExecution(executionId)
   }
 
   def finalPhysicalPlan: SparkPlan = withFinalPlanUpdate(identity)
@@ -235,6 +245,7 @@ case class AdaptiveSparkPlanExec(
     // created in the middle of the execution.
     context.session.withActive {
       val executionId = getExecutionId
+      val shouldUpdateSQLMetrics = shouldUpdateMetrics(executionId)
       // Use inputPlan logicalLink here in case some top level physical nodes may be removed
       // during `initialPlan`
       var currentLogicalPlan = inputPlan.logicalLink.get
@@ -246,7 +257,8 @@ case class AdaptiveSparkPlanExec(
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
           stagesToReplace = result.newStages ++ stagesToReplace
-          executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
+          executionId.foreach(onUpdatePlanAndMetrics(
+            _, result.newStages.map(_.plan), shouldUpdateSQLMetrics))
 
           // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
           // for tasks to be scheduled and leading to broadcast timeout.
@@ -334,18 +346,34 @@ case class AdaptiveSparkPlanExec(
         postStageCreationRules(supportsColumnar),
         Some((planChangeLogger, "AQE Post Stage Creation")))
       _isFinalPlan = true
-      executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
+      executionId.foreach(onUpdatePlanAndMetrics(
+        _, Seq(currentPhysicalPlan), shouldUpdateSQLMetrics))
       currentPhysicalPlan
+    }
+  }
+
+  private def shouldUpdateFinalPlan(executionId: Long): Boolean = {
+    // Update the final plan to avoid:
+    // 1. Subqueries that don't belong to any query stage of the main query will execute after the
+    //    last UI update in `getFinalPhysicalPlan`.
+    // 2. InMemoryTableScanExec may contain an another AdaptiveSparkPlanExec that changes query plan
+    //    after `getFinalPhysicalPlan`.
+    // So we need to update UI here again to make sure the newly generated nodes of those are
+    // updated.
+    !isSubquery && isCurrentExecution(Some(executionId)) && currentPhysicalPlan.exists {
+      case c: InMemoryTableScanExec
+          if c.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => true
+      case p if p.subqueries.nonEmpty => true
+      case _ => false
     }
   }
 
   // Use a lazy val to avoid this being called more than once.
   @transient private lazy val finalPlanUpdate: Unit = {
-    // Subqueries that don't belong to any query stage of the main query will execute after the
-    // last UI update in `getFinalPhysicalPlan`, so we need to update UI here again to make sure
-    // the newly generated nodes of those subqueries are updated.
-    if (!isSubquery && currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
-      getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
+    getExecutionId.foreach { executionId =>
+      if (shouldUpdateFinalPlan(executionId)) {
+        onUpdatePlanAndMetrics(executionId, Seq.empty)
+      }
     }
     logOnLevel(s"Final plan:\n$currentPhysicalPlan")
   }
@@ -703,10 +731,16 @@ case class AdaptiveSparkPlanExec(
   }
 
   /**
-   * Notify the listeners of the physical plan change.
+   * Notify the listeners of the physical plan change and metrics change.
    */
-  private def onUpdatePlan(executionId: Long, newSubPlans: Seq[SparkPlan]): Unit = {
-    if (isSubquery) {
+  private def onUpdatePlanAndMetrics(
+      executionId: Long,
+      newSubPlans: Seq[SparkPlan],
+      shouldUpdateSQLMetrics: Boolean = false): Unit = {
+    if (shouldUpdateSQLMetrics) {
+      // Update SQL metrics for two cases:
+      // 1. This is inside InMemoryTableScanExec
+      // 2. This is a subquery
       // When executing subqueries, we can't update the query plan in the UI as the
       // UI doesn't support partial update yet. However, the subquery may have been
       // optimized into a different plan and we must let the UI know the SQL metrics
