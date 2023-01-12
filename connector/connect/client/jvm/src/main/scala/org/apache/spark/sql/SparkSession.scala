@@ -16,19 +16,14 @@
  */
 package org.apache.spark.sql
 
-import scala.language.existentials
-import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 import org.apache.arrow.memory.RootAllocator
+
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.client.ClientSparkResult
+import org.apache.spark.sql.connect.client.{ClientSparkResult, SparkConnectClient}
 import org.apache.spark.sql.connect.client.util.Cleaner
 
-class SparkSession(
-    private val userContext: proto.UserContext,
-    private val channel: ManagedChannel,
-    private val cleaner: Cleaner)
+class SparkSession(private val client: SparkConnectClient, private val cleaner: Cleaner)
     extends AutoCloseable {
-  private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
   private[this] val allocator = new RootAllocator()
 
@@ -50,28 +45,14 @@ class SparkSession(
   }
 
   private[sql] def execute(plan: proto.Plan): ClientSparkResult = {
-    val request = proto.ExecutePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setUserContext(userContext)
-      .build()
-    val result = new ClientSparkResult(stub.executePlan(request), allocator)
+    val value = client.execute(plan)
+    val result = new ClientSparkResult(value, allocator)
     cleaner.register(result)
     result
   }
 
-  // What's this?
-  private[sql] def analyze(plan: proto.Plan): proto.AnalyzePlanResponse = {
-    val request = proto.AnalyzePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setUserContext(userContext)
-      .build()
-    stub.analyzePlan(request)
-  }
-
   override def close(): Unit = {
-    channel.shutdownNow()
+    client.shutdown()
     allocator.close()
   }
 }
@@ -86,29 +67,15 @@ object SparkSession {
   }
 
   class Builder() {
-    private val userContextBuilder = proto.UserContext.newBuilder()
-    private var _host: String = "localhost"
-    private var _port: Int = 15002
+    private var _client = SparkConnectClient.builder().build()
 
-    def host(host: String): Builder = {
-      require(host != null)
-      _host = host
-      this
-    }
-
-    def port(port: Int): Builder = {
-      _port = port
-      this
-    }
-
-    def userId(id: String): Builder = {
-      userContextBuilder.setUserId(id)
+    def client(client: SparkConnectClient): Builder = {
+      _client = client
       this
     }
 
     def build(): SparkSession = {
-      val channelBuilder = ManagedChannelBuilder.forAddress(_host, _port).usePlaintext()
-      new SparkSession(userContextBuilder.build(), channelBuilder.build(), cleaner)
+      new SparkSession(_client, cleaner)
     }
   }
 }

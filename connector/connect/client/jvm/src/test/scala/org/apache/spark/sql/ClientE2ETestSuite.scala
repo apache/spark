@@ -18,9 +18,32 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 
-class SparkSessionSuite extends RemoteSparkSession { // scalastyle:ignore funsuite
+class ClientE2ETestSuite extends RemoteSparkSession { // scalastyle:ignore funsuite
 
-  test("spark session test") {
+  // Spark Result
+  test("test spark result length") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
+    val result = df.collectResult()
+    assert(result.length == 2)
   }
+
+  test("test spark result schema") {
+    val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
+    val schema = df.collectResult().schema
+    assert(schema.length == 1)
+    assert(schema.fields.length == 1)
+    assert(schema.fields(0).name == "val")
+    assert(schema.fields(0).dataType.toString == "StringType")
+  }
+
+  test("test spark result array") {
+    val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
+    val array = df.collectResult().toArray
+    assert(array.length == 2)
+    assert(array(0).getString(0) == "Hello")
+    assert(array(1).getString(0) == "World")
+  }
+
+  // TODO test large result when we can create table or view
+  // test("test spark large result")
 }

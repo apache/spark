@@ -55,11 +55,8 @@ private[sql] class ClientSparkResult(
         try {
           val root = reader.getVectorSchemaRoot
           if (batches.isEmpty) {
-            // TODO(hvanhovell) check the if this conversion is
-            //  completely reversable (is a bijection).
             structType = ArrowUtils.fromArrowSchema(root.getSchema)
-            // TODO(hvanhovell) later when we grow up we should create
-            //  encoders that directly operate on arrow vectors.
+            // TODO: create encoders that directly operate on arrow vectors.
             encoder = RowEncoder(structType).resolveAndBind(structType.toAttributes)
           }
           while (reader.loadNextBatch()) {
