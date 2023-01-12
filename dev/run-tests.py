@@ -289,7 +289,7 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    if not os.environ.get("AMPLAB_JENKINS") and not os.environ.get("SKIP_UNIDOC"):
+    if not os.environ.get("JENKINS") and not os.environ.get("SKIP_UNIDOC"):
         build_spark_unidoc_sbt(extra_profiles)
 
 
@@ -396,7 +396,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
 
 
 def run_python_packaging_tests():
-    if not os.environ.get("AMPLAB_JENKINS"):
+    if not os.environ.get("JENKINS"):
         set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
         command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
         run_cmd(command)
@@ -500,12 +500,12 @@ def main():
         else:
             print("Cannot install SparkR as R was not found in PATH")
 
-    if os.environ.get("AMPLAB_JENKINS"):
+    if os.environ.get("JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
-        build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3")
+        build_tool = os.environ.get("JENKINS_BUILD_TOOL", "sbt")
+        scala_version = os.environ.get("JENKINS_BUILD_SCALA_PROFILE")
+        hadoop_version = os.environ.get("JENKINS_BUILD_PROFILE", "hadoop3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
