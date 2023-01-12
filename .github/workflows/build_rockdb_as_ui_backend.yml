@@ -21,7 +21,7 @@ name: "Build / RocksDB as UI Backend (master, Hadoop 3, JDK 8, Scala 2.12)"
 
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '0 6 * * *'
 
 jobs:
   run-build:

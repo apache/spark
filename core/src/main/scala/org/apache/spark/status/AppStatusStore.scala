@@ -878,7 +878,6 @@ private[spark] object AppStatusStore extends Logging {
     val storePath =
       conf.get(LIVE_UI_LOCAL_STORE_DIR)
         .orElse(sys.env.get("LIVE_UI_LOCAL_STORE_DIR")) // the ENV variable is for testing purpose
-        .orElse(Some("/tmp/ui"))
         .flatMap(createStorePath)
     val kvStore = KVUtils.createKVStore(storePath, live = true, conf)
     val store = new ElementTrackingStore(kvStore, conf)
