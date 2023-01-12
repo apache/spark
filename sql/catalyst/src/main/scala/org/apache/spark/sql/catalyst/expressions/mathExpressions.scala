@@ -1644,8 +1644,6 @@ abstract class RoundBase(child: Expression, scale: Expression,
     Examples:
       > SELECT _FUNC_(2.5, 0);
        3
-      > SELECT _FUNC_(25, -1);
-       30
   """,
   since = "1.5.0",
   group = "math_funcs")

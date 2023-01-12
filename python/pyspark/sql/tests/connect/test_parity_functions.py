@@ -40,12 +40,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_function_parity(self):
         super().test_function_parity()
 
-    @unittest.skip(
-        "Spark Connect does not support Spark Context, _jdf but the test depends on that."
-    )
-    def test_functions_broadcast(self):
-        super().test_functions_broadcast()
-
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
