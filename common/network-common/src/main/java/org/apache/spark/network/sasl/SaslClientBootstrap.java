@@ -17,9 +17,7 @@
 
 package org.apache.spark.network.sasl;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.TimeoutException;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 

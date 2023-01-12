@@ -27,7 +27,6 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import java.util.concurrent.TimeoutException;
-import org.apache.spark.network.client.TransportClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -333,7 +333,7 @@ public class TransportConf {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
-  /** Whether to enable sasl retries or not. The number of retries is given by the config
+  /** Whether to enable sasl retries or not. The number of retries is dictated by the config
    * `spark.shuffle.io.maxRetries`.
    */
   public boolean enableSaslRetries() {
