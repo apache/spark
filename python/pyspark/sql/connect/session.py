@@ -192,9 +192,14 @@ class SparkSession:
         _schema: Optional[Union[AtomicType, StructType]] = None
         _schema_str: Optional[str] = None
         _cols: Optional[List[str]] = None
+        _num_cols: Optional[int] = None
 
         if isinstance(schema, (AtomicType, StructType)):
             _schema = schema
+            if isinstance(schema, StructType):
+                _num_cols = len(schema.fields)
+            else:
+                _num_cols = 1
 
         elif isinstance(schema, str):
             _schema_str = schema
@@ -202,6 +207,7 @@ class SparkSession:
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+            _num_cols = len(_cols)
 
         if isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
@@ -289,65 +295,48 @@ class SparkSession:
         else:
             _data = list(data)
 
-            if _schema is None and isinstance(_data[0], (Row, dict)):
-                if isinstance(_data[0], dict):
-                    # Sort the data to respect inferred schema.
-                    # For dictionaries, we sort the schema in alphabetical order.
-                    _data = [dict(sorted(d.items())) for d in _data]
+            if isinstance(_data[0], dict):
+                # Sort the data to respect inferred schema.
+                # For dictionaries, we sort the schema in alphabetical order.
+                _data = [dict(sorted(d.items())) for d in _data]
 
-                _inferred_schema = self._inferSchemaFromList(_data, _cols)
-                if _cols is not None:
-                    for i, name in enumerate(_cols):
-                        _inferred_schema.fields[i].name = name
-                        _inferred_schema.names[i] = name
-
-            if _cols is None:
-                if _schema is None and _inferred_schema is None:
-                    if isinstance(_data[0], (list, tuple)):
-                        _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
-                    else:
-                        _cols = ["_1"]
-                elif _schema is not None and isinstance(_schema, StructType):
-                    _cols = _schema.names
-                elif _inferred_schema is not None:
-                    _cols = _inferred_schema.names
-                else:
-                    _cols = ["value"]
-
-            if isinstance(_data[0], Row):
-                _table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
-            elif isinstance(_data[0], dict):
-                _table = pa.Table.from_pylist(_data)
-            elif isinstance(_data[0], (list, tuple)):
-                _table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in _data])
-            else:
+            elif not isinstance(_data[0], (Row, tuple, list, dict)):
                 # input data can be [1, 2, 3]
-                _table = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
+                # we need to convert it to [[1], [2], [3]] to be able to infer schema.
+                _data = [[d] for d in _data]
 
-        # Validate number of columns
-        num_cols = _table.shape[1]
-        if (
-            _schema is not None
-            and isinstance(_schema, StructType)
-            and len(_schema.fields) != num_cols
-        ):
-            raise ValueError(
-                f"Length mismatch: Expected axis has {num_cols} elements, "
-                f"new values have {len(_schema.fields)} elements"
-            )
+            try:
+                _inferred_schema = self._inferSchemaFromList(_data, _cols)
+            except Exception:
+                # For cases like createDataFrame([("Alice", None, 80.1)], schema)
+                # we can not infer the schema from the data itself.
+                warnings.warn("failed to infer the schema from data")
+                if _schema is None or not isinstance(_schema, StructType):
+                    raise ValueError(
+                        f"Some of types cannot be determined after inferring, "
+                        f"a StructType Schema is required in this case"
+                    )
+                _inferred_schema = _schema
 
-        if _cols is not None and len(_cols) != num_cols:
+            from pyspark.sql.connect.conversion import LocalDataToArrowConversion
+
+            # Spark Connect will try its best to build the Arrow table with the
+            # inferred schema in the client side, and then rename the columns and
+            # cast the datatypes in the server side.
+            _table = LocalDataToArrowConversion.convert(_data, _inferred_schema)
+
+        # TODO: Beside the validation on number of columns, we should also check
+        # whether the Arrow Schema is compatible with the user provided Schema.
+        if _num_cols is not None and _num_cols != _table.shape[1]:
             raise ValueError(
-                f"Length mismatch: Expected axis has {num_cols} elements, "
-                f"new values have {len(_cols)} elements"
+                f"Length mismatch: Expected axis has {_num_cols} elements, "
+                f"new values have {_table.shape[1]} elements"
             )
 
         if _schema is not None:
             return DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
         elif _schema_str is not None:
             return DataFrame.withPlan(LocalRelation(_table, schema=_schema_str), self)
-        elif _inferred_schema is not None:
-            return DataFrame.withPlan(LocalRelation(_table, schema=_inferred_schema.json()), self)
         elif _cols is not None and len(_cols) > 0:
             return DataFrame.withPlan(LocalRelation(_table), self).toDF(*_cols)
         else:
