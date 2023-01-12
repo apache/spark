@@ -19,6 +19,7 @@ package org.apache.spark.network.sasl;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeoutException;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 
@@ -66,9 +67,12 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
         msg.encode(buf);
         buf.writeBytes(msg.body().nioByteBuffer());
-
-        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
-        payload = saslClient.response(JavaUtils.bufferToArray(response));
+        try {
+          ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
+          payload = saslClient.response(JavaUtils.bufferToArray(response));
+        } catch (RuntimeException e) {
+          throw e.getCause();
+        }
       }
 
       client.setClientId(appId);
@@ -83,8 +87,8 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         saslClient = null;
         logger.debug("Channel {} configured for encryption.", client);
       }
-    } catch (IOException ioe) {
-      throw new RuntimeException(ioe);
+    } catch (Throwable e) {
+      throw new RuntimeException(e);
     } finally {
       if (saslClient != null) {
         try {

@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
+import java.util.concurrent.TimeoutException;
 import org.apache.spark.network.client.TransportClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -198,8 +199,8 @@ public class RetryingBlockTransferor {
     boolean isIOException = e instanceof IOException
       || e.getCause() instanceof IOException;
     boolean isSaslTimeout = enableSaslRetries &&
-        (e instanceof TransportClient.SaslTimeoutException ||
-            (e.getCause() != null && e.getCause() instanceof TransportClient.SaslTimeoutException));
+        (e instanceof TimeoutException ||
+            (e.getCause() != null && e.getCause() instanceof TimeoutException));
     boolean hasRemainingRetries = retryCount < maxRetries;
     return (isSaslTimeout || isIOException) &&
         hasRemainingRetries && errorHandler.shouldRetryError(e);

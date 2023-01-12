@@ -288,9 +288,6 @@ public class TransportClient implements Closeable {
 
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
-    } catch (TimeoutException e) {
-      logger.trace("RPC {} timed-out", rpcId);
-      throw Throwables.propagate(new SaslTimeoutException(e));
     } catch (ExecutionException e) {
       throw Throwables.propagate(e.getCause());
     } catch (Exception e) {
@@ -340,15 +337,6 @@ public class TransportClient implements Closeable {
       .append("clientId", clientId)
       .append("isActive", isActive())
       .toString();
-  }
-
-  /**
-   * Exception thrown when sasl request times out.
-   */
-  public static class SaslTimeoutException extends RuntimeException {
-    public SaslTimeoutException(Throwable cause) {
-      super((cause));
-    }
   }
 
   private static long requestId() {

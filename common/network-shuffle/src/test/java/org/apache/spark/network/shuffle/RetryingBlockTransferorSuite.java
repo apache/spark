@@ -21,6 +21,7 @@ package org.apache.spark.network.shuffle;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,7 @@ import java.util.Map;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import java.util.concurrent.TimeoutException;
-import org.apache.spark.network.client.TransportClient;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
@@ -51,6 +52,15 @@ public class RetryingBlockTransferorSuite {
   private final ManagedBuffer block0 = new NioManagedBuffer(ByteBuffer.wrap(new byte[13]));
   private final ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
   private final ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
+  private static Map<String, String> configMap;
+
+  @Before
+  public void initMap() {
+    configMap = new HashMap<String, String>() {{
+      put("spark.shuffle.io.maxRetries", "2");
+      put("spark.shuffle.io.retryWait", "0");
+    }};
+  }
 
   @Test
   public void testNoFailures() throws IOException, InterruptedException {
@@ -233,13 +243,12 @@ public class RetryingBlockTransferorSuite {
   }
 
   @Test
-  public void testRetryOnSaslTimeout() throws IOException, InterruptedException {
+  public void testSaslTimeoutFailure() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
-
+    TimeoutException timeoutException = new TimeoutException();
     List<? extends Map<String, Object>> interactions = Arrays.asList(
-        // SaslTimeout will cause a retry. Since b0 fails, we will retry both.
         ImmutableMap.<String, Object>builder()
-            .put("b0", new TransportClient.SaslTimeoutException(new TimeoutException()))
+            .put("b0", timeoutException)
             .build(),
         ImmutableMap.<String, Object>builder()
             .put("b0", block0)
@@ -248,10 +257,32 @@ public class RetryingBlockTransferorSuite {
 
     performInteractions(interactions, listener);
 
+    verify(listener, timeout(5000)).onBlockTransferFailure("b0", timeoutException);
+    verify(listener).getTransferType();
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
+  public void testRetryOnSaslTimeout() throws IOException, InterruptedException {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
+        // SaslTimeout will cause a retry. Since b0 fails, we will retry both.
+        ImmutableMap.<String, Object>builder()
+            .put("b0", new TimeoutException())
+            .build(),
+        ImmutableMap.<String, Object>builder()
+            .put("b0", block0)
+            .build()
+    );
+    configMap.put("spark.shuffle.sasl.enableRetries", "true");
+    performInteractions(interactions, listener);
+
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener).getTransferType();
     verifyNoMoreInteractions(listener);
   }
+
 
   /**
    * Performs a set of interactions in response to block requests from a RetryingBlockFetcher.
@@ -267,10 +298,7 @@ public class RetryingBlockTransferorSuite {
                                           BlockFetchingListener listener)
     throws IOException, InterruptedException {
 
-    MapConfigProvider provider = new MapConfigProvider(ImmutableMap.of(
-        "spark.shuffle.io.maxRetries", "2",
-        "spark.shuffle.io.retryWait", "0",
-        "spark.shuffle.sasl.enableRetries", "true"));
+    MapConfigProvider provider = new MapConfigProvider(configMap);
     TransportConf conf = new TransportConf("shuffle", provider);
     BlockTransferStarter fetchStarter = mock(BlockTransferStarter.class);
 
