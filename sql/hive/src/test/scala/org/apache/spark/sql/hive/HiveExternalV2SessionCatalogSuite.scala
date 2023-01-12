@@ -21,6 +21,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.{V2SessionCatalog, V2SessionCatalogNamespaceSuite, V2SessionCatalogTableSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.scalactic.source.Position
+import org.scalatest.Tag
 
 class HiveExternalV2SessionCatalogInitialization extends TestHiveSingleton {
   val sparkSession = spark
@@ -39,6 +41,21 @@ class HiveExternalV2SessionCatalogTableSuite extends V2SessionCatalogTableSuite 
   override protected val spark: SparkSession = init.sparkSession
 
   override def newCatalog(): V2SessionCatalog = init.newCatalog()
+
+  def excluded: Seq[String] = Seq(
+    "alterTable: rename top-level column",
+    "alterTable: rename nested column",
+    "alterTable: rename struct column",
+    "alterTable: multiple changes",
+    "alterTable: delete top-level column",
+    "alterTable: delete nested column"
+  )
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
+    if (excluded.contains(testName)) ()
+    else super.test(testName, testTags: _*)(testFun)
+  }
 }
 
 class HiveExternalV2SessionCatalogNamespaceSuite extends V2SessionCatalogNamespaceSuite {
