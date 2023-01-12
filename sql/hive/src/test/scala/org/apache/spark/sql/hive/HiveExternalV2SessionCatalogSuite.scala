@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.hive
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.{V2SessionCatalog, V2SessionCatalogNamespaceSuite, V2SessionCatalogTableSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.scalactic.source.Position
-import org.scalatest.Tag
 
 class HiveExternalV2SessionCatalogInitialization extends TestHiveSingleton {
   val sparkSession = spark
