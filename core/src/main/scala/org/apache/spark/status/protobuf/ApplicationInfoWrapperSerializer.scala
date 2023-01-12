@@ -26,14 +26,9 @@ import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
 
-class ApplicationInfoWrapperSerializer extends ProtobufSerDe {
+class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrapper] {
 
-  override val supportClass: Class[_] = classOf[ApplicationInfoWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[ApplicationInfoWrapper])
-
-  private def serialize(j: ApplicationInfoWrapper): Array[Byte] = {
+  override def serialize(j: ApplicationInfoWrapper): Array[Byte] = {
     val jobData = serializeApplicationInfo(j.info)
     val builder = StoreTypes.ApplicationInfoWrapper.newBuilder()
     builder.setInfo(jobData)
