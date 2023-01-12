@@ -467,6 +467,7 @@ pyspark_sql = Module(
         "pyspark.sql.observation",
         # unittests
         "pyspark.sql.tests.test_arrow",
+        "pyspark.sql.tests.test_arrow_python_udf",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
