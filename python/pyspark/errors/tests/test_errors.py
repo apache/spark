@@ -18,14 +18,13 @@
 
 import unittest
 
-from pyspark.errors.utils import ErrorClassesJsonReader, ERROR_CLASSES_PATH
+from pyspark.errors.utils import ErrorClassesReader
 
 
 class ErrorsTest(unittest.TestCase):
     def test_error_classes(self):
         # Test error classes is sorted alphabetically
-        json_path = ERROR_CLASSES_PATH
-        error_reader = ErrorClassesJsonReader(json_path)
+        error_reader = ErrorClassesReader()
         error_class_names = error_reader.error_info_map
         for i in range(len(error_class_names) - 1):
             self.assertTrue(

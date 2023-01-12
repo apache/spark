@@ -174,7 +174,7 @@ def lit(col: Any) -> Column:
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
             raise PySparkException(
-                error_class="COLUMN_IN_LIST", message_parameters={"funcName": "lit"}
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
     else:

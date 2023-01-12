@@ -15,36 +15,19 @@
 # limitations under the License.
 #
 
-import os
-import json
 import re
 from typing import Dict
 
-
-ERROR_CLASSES_JSON = "error-classes.json"
-ERROR_CLASSES_PATH = os.path.join(os.path.dirname(__file__), ERROR_CLASSES_JSON)
+from pyspark.errors.error_classes import ERROR_CLASSES
 
 
-class ErrorClassesJsonReader:
+class ErrorClassesReader:
     """
-    A reader to load error information from JSON file.
+    A reader to load error information from error_classes.py.
     """
 
-    def __init__(self, json_file_path: str):
-        try:
-            self.error_info_map = json.load(open(json_file_path))
-        except NotADirectoryError:
-            # In this case, PySpark is installed as zip file such as `pyspark.zip`.
-            # Thus, we use ZipFile to read the error-classes.json inside of zip.
-            from zipfile import ZipFile
-
-            # e.g. `/spark-3.3.1-bin-hadoop3/python/lib/pyspark.zip`
-            zip_path = os.path.abspath(os.path.join(json_file_path, "..", "..", ".."))
-            with ZipFile(zip_path) as z:
-                # e.g. `errors/error-classes.json`
-                error_classes_relative_path = os.path.join("pyspark/errors", ERROR_CLASSES_JSON)
-                with z.open(error_classes_relative_path) as f:
-                    self.error_info_map = json.loads(f.read())
+    def __init__(self):
+        self.error_info_map = ERROR_CLASSES
 
     def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
         """
@@ -63,13 +46,13 @@ class ErrorClassesJsonReader:
 
     def get_message_template(self, error_class: str) -> str:
         """
-        Returns the message template for corresponding error class from JSON file.
+        Returns the message template for corresponding error class from error_classes.py.
 
         For example,
         when given `error_class` is "EXAMPLE_ERROR_CLASS",
-        and corresponding error class in JSON file looks like the below:
+        and corresponding error class in error_classes.py looks like the below:
 
-        .. code-block:: json
+        .. code-block:: python
 
             "EXAMPLE_ERROR_CLASS" : {
               "message" : [
@@ -81,9 +64,9 @@ class ErrorClassesJsonReader:
         "Problem <A> because of <B>."
 
         For sub error class, when given `error_class` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
-        and corresponding error class in JSON file looks like the below:
+        and corresponding error class in error_classes.py looks like the below:
 
-        .. code-block:: json
+        .. code-block:: python
 
             "EXAMPLE_ERROR_CLASS" : {
               "message" : [

@@ -17,7 +17,7 @@
 
 from typing import Dict, Optional, cast
 
-from pyspark.errors.utils import ErrorClassesJsonReader, ERROR_CLASSES_PATH
+from pyspark.errors.utils import ErrorClassesReader
 
 
 class PySparkException(Exception):
@@ -36,8 +36,7 @@ class PySparkException(Exception):
             message is None and (error_class is not None and message_parameters is not None)
         )
 
-        self.json_path = ERROR_CLASSES_PATH
-        self.error_reader = ErrorClassesJsonReader(self.json_path)
+        self.error_reader = ErrorClassesReader()
 
         if message is None:
             self.message = self.error_reader.get_error_message(
@@ -50,10 +49,28 @@ class PySparkException(Exception):
         self.message_parameters = message_parameters
 
     def getErrorClass(self) -> Optional[str]:
+        """
+        Returns an error class as a string.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getMessageParameters`
+        """
         return self.error_class
 
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
+        """
+        Returns a message parameters as a dictionary.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        """
         return self.message_parameters
 
     def __str__(self) -> str:
-        return self.message
+        return f"[{self.getErrorClass()}] {self.message}"
