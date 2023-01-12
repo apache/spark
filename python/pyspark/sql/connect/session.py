@@ -186,8 +186,8 @@ class SparkSession:
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
     ) -> "DataFrame":
-        def convert_to_arrow_data(cols: List[str], data: Iterable[Any]):
-            def convert(data: Iterable[Any]):
+        def convert_to_arrow_data(cols: List[str], data: Iterable[Any]) -> Any:
+            def convert(data: Iterable[Any]) -> Any:
                 if isinstance(data, list):
                     return [convert(item) for item in data]
                 elif isinstance(data, tuple):

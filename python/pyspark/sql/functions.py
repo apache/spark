@@ -4608,11 +4608,9 @@ def hour(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import datetime
-    >>> df = spark.createDataFrame(
-    ...     [(datetime.datetime(2015, 4, 8, 13, 8, 15, tzinfo=datetime.timezone.utc),)], ['ts']
-    ... )
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(hour('ts').alias('hour')).collect()
-    [Row(hour=21)]
+    [Row(hour=13)]
     """
     return _invoke_function_over_columns("hour", col)
 
@@ -5446,12 +5444,12 @@ def window(
     --------
     >>> import datetime
     >>> df = spark.createDataFrame(
-    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7, tzinfo=datetime.timezone.utc), 1)],
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
     ... ).toDF("date", "val")
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string").alias("start"),
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
-    [Row(start='2016-03-11 17:00:05', end='2016-03-11 17:00:10', sum=1)]
+    [Row(start='2016-03-11 09:00:05', end='2016-03-11 09:00:10', sum=1)]
     """
 
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
@@ -5501,7 +5499,7 @@ def window_time(
     --------
     >>> import datetime
     >>> df = spark.createDataFrame(
-    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7, tzinfo=datetime.timezone.utc), 1)],
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
     ... ).toDF("date", "val")
 
     Group the data into 5 second time windows and aggregate as sum.
@@ -5515,7 +5513,7 @@ def window_time(
     ...     window_time(w.window).cast("string").alias("window_time"),
     ...     "sum"
     ... ).collect()
-    [Row(end='2016-03-11 17:00:10', window_time='2016-03-11 17:00:09.999999', sum=1)]
+    [Row(end='2016-03-11 09:00:10', window_time='2016-03-11 09:00:09.999999', sum=1)]
     """
     window_col = _to_java_column(windowColumn)
     return _invoke_function("window_time", window_col)
