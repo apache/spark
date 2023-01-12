@@ -393,11 +393,6 @@ public class LevelDB implements KVStore {
     TypeAliases(Map<String, byte[]> aliases) {
       this.aliases = aliases;
     }
-
-    TypeAliases() {
-      this(null);
-    }
-
   }
 
   private static class PrefixCache {

@@ -426,11 +426,6 @@ public class RocksDB implements KVStore {
     TypeAliases(Map<String, byte[]> aliases) {
       this.aliases = aliases;
     }
-
-    TypeAliases() {
-      this(null);
-    }
-
   }
 
   private static class PrefixCache {
