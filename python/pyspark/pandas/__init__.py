@@ -44,9 +44,7 @@ if (
     LooseVersion(pyarrow.__version__) >= LooseVersion("2.0.0")
     and "PYARROW_IGNORE_TIMEZONE" not in os.environ
 ):
-    import logging
-
-    logging.warning(
+    warnings.warn(
         "'PYARROW_IGNORE_TIMEZONE' environment variable was not set. It is required to "
         "set this environment variable to '1' in both driver and executor sides if you use "
         "pyarrow>=2.0.0. "
