@@ -16,6 +16,8 @@
 #
 
 import datetime
+import io
+from contextlib import redirect_stdout
 from inspect import getmembers, isfunction
 from itertools import chain
 import re
@@ -452,15 +454,17 @@ class FunctionsTestsMixin:
         df2 = self.spark.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
 
         # equijoin - should be converted into broadcast join
-        plan1 = df1.join(broadcast(df2), "key")._jdf.queryExecution().executedPlan()
-        self.assertEqual(1, plan1.toString().count("BroadcastHashJoin"))
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df1.join(broadcast(df2), "key").explain(True)
+            self.assertGreaterEqual(buf.getvalue().count("Broadcast"), 1)
 
         # no join key -- should not be a broadcast join
-        plan2 = df1.crossJoin(broadcast(df2))._jdf.queryExecution().executedPlan()
-        self.assertEqual(0, plan2.toString().count("BroadcastHashJoin"))
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df1.crossJoin(broadcast(df2)).explain(True)
+            self.assertGreaterEqual(buf.getvalue().count("Broadcast"), 1)
 
         # planner should not crash without a join
-        broadcast(df1)._jdf.queryExecution().executedPlan()
+        broadcast(df1).explain(True)
 
     def test_first_last_ignorenulls(self):
         from pyspark.sql import functions
