@@ -2761,6 +2761,15 @@ object SQLConf {
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
 
+  val PYTHON_UDF_ARROW_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
+      .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
+        "can only be enabled for atomic output types and input types except struct and map types " +
+        "when the given function takes at least one argument.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
       .internal()

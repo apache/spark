@@ -19,11 +19,9 @@ package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.StreamBlockData
 
-class StreamBlockDataSerializer extends ProtobufSerDe {
-  override val supportClass: Class[_] = classOf[StreamBlockData]
+class StreamBlockDataSerializer extends ProtobufSerDe[StreamBlockData] {
 
-  override def serialize(input: Any): Array[Byte] = {
-    val data = input.asInstanceOf[StreamBlockData]
+  override def serialize(data: StreamBlockData): Array[Byte] = {
     val builder = StoreTypes.StreamBlockData.newBuilder()
       .setName(data.name)
       .setExecutorId(data.executorId)

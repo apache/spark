@@ -1071,6 +1071,35 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).toPandas(),
         )
 
+    def test_create_dataframe_from_pandas_with_ns_timestamp(self):
+        """Truncate the timestamps for nanoseconds."""
+        from datetime import datetime, timezone, timedelta
+        from pandas import Timestamp
+        import pandas as pd
+
+        pdf = pd.DataFrame(
+            {
+                "naive": [datetime(2019, 1, 1, 0)],
+                "aware": [
+                    Timestamp(
+                        year=2019, month=1, day=1, nanosecond=500, tz=timezone(timedelta(hours=-8))
+                    )
+                ],
+            }
+        )
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            self.assertEqual(
+                self.connect.createDataFrame(pdf).collect(),
+                self.spark.createDataFrame(pdf).collect(),
+            )
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+            self.assertEqual(
+                self.connect.createDataFrame(pdf).collect(),
+                self.spark.createDataFrame(pdf).collect(),
+            )
+
     def test_select_expr(self):
         # SPARK-41201: test selectExpr API.
         self.assert_eq(

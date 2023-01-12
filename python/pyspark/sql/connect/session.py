@@ -215,7 +215,47 @@ class SparkSession:
         _inferred_schema: Optional[StructType] = None
 
         if isinstance(data, pd.DataFrame):
-            _table = pa.Table.from_pandas(data)
+            from pandas.api.types import (  # type: ignore[attr-defined]
+                is_datetime64_dtype,
+                is_datetime64tz_dtype,
+            )
+            from pyspark.sql.pandas.types import (
+                _check_series_convert_timestamps_internal,
+                _get_local_timezone,
+            )
+
+            # First, check if we need to create a copy of the input data to adjust
+            # the timestamps.
+            input_data = data
+            has_timestamp_data = any(
+                [is_datetime64_dtype(data[c]) or is_datetime64tz_dtype(data[c]) for c in data]
+            )
+            if has_timestamp_data:
+                input_data = data.copy()
+                # We need double conversions for the truncation, first truncate to microseconds.
+                for col in input_data:
+                    if is_datetime64tz_dtype(input_data[col].dtype):
+                        input_data[col] = _check_series_convert_timestamps_internal(
+                            input_data[col], _get_local_timezone()
+                        ).astype("datetime64[us, UTC]")
+                    elif is_datetime64_dtype(input_data[col].dtype):
+                        input_data[col] = input_data[col].astype("datetime64[us]")
+
+                # Create a new schema and change the types to the truncated microseconds.
+                pd_schema = pa.Schema.from_pandas(input_data)
+                new_schema = pa.schema([])
+                for x in range(len(pd_schema.types)):
+                    f = pd_schema.field(x)
+                    # TODO(SPARK-42027) Add support for struct types.
+                    if isinstance(f.type, pa.TimestampType) and f.type.unit == "ns":
+                        tmp = f.with_type(pa.timestamp("us"))
+                        new_schema = new_schema.append(tmp)
+                    else:
+                        new_schema = new_schema.append(f)
+                new_schema = new_schema.with_metadata(pd_schema.metadata)
+                _table = pa.Table.from_pandas(input_data, schema=new_schema)
+            else:
+                _table = pa.Table.from_pandas(data)
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
@@ -333,8 +373,14 @@ class SparkSession:
         else:
             actual_end = end
 
+        if numPartitions is not None:
+            numPartitions = int(numPartitions)
+
         return DataFrame.withPlan(
-            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
+            Range(
+                start=int(start), end=int(actual_end), step=int(step), num_partitions=numPartitions
+            ),
+            self,
         )
 
     range.__doc__ = PySparkSession.range.__doc__
