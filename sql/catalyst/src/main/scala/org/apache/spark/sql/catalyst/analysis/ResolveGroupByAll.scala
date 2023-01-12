@@ -93,8 +93,9 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
    * end of analysis, so we can tell users that we fail to infer the grouping columns.
    */
   def checkAnalysis(operator: LogicalPlan): Unit = operator match {
-    case a: Aggregate if matchToken(a) =>
-      if (a.aggregateExpressions.exists(_.exists(_.isInstanceOf[Attribute]))) {
+    case a: Aggregate if a.aggregateExpressions.forall(_.resolved) && matchToken(a) =>
+      val noAgg = a.aggregateExpressions.filter(!_.exists(AggregateExpression.isAggregate))
+      if (noAgg.isEmpty && a.aggregateExpressions.exists(containsAttribute)) {
         operator.failAnalysis(
           errorClass = "UNRESOLVED_ALL_IN_GROUP_BY",
           messageParameters = Map.empty)
