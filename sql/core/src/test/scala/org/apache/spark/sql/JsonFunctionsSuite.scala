@@ -583,13 +583,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row("STRUCT<a: BIGINT>")))
   }
 
-  test("schema_of_json works on non-foldable columns") {
+  test("SPARK-41995: schema_of_json works on non-foldable columns") {
     val in = Seq("""{"a": [1, 2, 3]}""").toDS()
     val out = in.select(schema_of_json($"value") as "parsed_schema")
     checkAnswer(out, Row("STRUCT<a: ARRAY<BIGINT>>"))
   }
 
-  test("schema_of_json returns null on null input") {
+  test("SPARK-41995: schema_of_json returns null on null input") {
     val out = spark.range(1).select(schema_of_json(lit(null)))
     checkAnswer(out, Row(null))
   }

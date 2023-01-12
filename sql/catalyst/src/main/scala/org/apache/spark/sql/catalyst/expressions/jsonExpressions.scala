@@ -796,16 +796,8 @@ case class SchemaOfJson(
   @transient
   private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
 
-  override def eval(v: InternalRow): Any = {
-    val json: UTF8String = if (child.foldable) {
-      child.eval().asInstanceOf[UTF8String]
-    } else {
-      v.getUTF8String(0)
-    }
-
-    if (json == null) {
-      return null
-    }
+  override def nullSafeEval(input: Any): Any = {
+    val json = input.asInstanceOf[UTF8String]
 
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
