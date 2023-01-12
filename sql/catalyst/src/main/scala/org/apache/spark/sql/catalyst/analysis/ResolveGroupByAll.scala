@@ -53,7 +53,7 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
    * Otherwise, it contains all the non-aggregate expressions from the project list of the input
    * Aggregate.
    */
-  private def getGroupingExprs(a: Aggregate): Option[Seq[Expression]] = {
+  private def getGroupingExpressions(a: Aggregate): Option[Seq[Expression]] = {
     val groupingExprs = a.aggregateExpressions.filter(!_.exists(AggregateExpression.isAggregate))
     // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
     // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
@@ -72,7 +72,7 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
       // Only makes sense to do the rewrite once all the aggregate expressions have been resolved.
       // Otherwise, we might incorrectly pull an actual aggregate expression over to the grouping
       // expression list (because we don't know they would be aggregate expressions until resolved).
-      val groupingExprs = getGroupingExprs(a)
+      val groupingExprs = getGroupingExpressions(a)
 
       if (groupingExprs.isEmpty) {
         // Don't replace the ALL when we fail to infer the grouping columns. We will eventually
@@ -109,7 +109,7 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
    */
   def checkAnalysis(operator: LogicalPlan): Unit = operator match {
     case a: Aggregate if a.aggregateExpressions.forall(_.resolved) && matchToken(a) =>
-      if (getGroupingExprs(a).isEmpty) {
+      if (getGroupingExpressions(a).isEmpty) {
         operator.failAnalysis(
           errorClass = "UNRESOLVED_ALL_IN_GROUP_BY",
           messageParameters = Map.empty)
