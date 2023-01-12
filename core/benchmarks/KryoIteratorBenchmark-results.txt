@@ -1,0 +1,22 @@
+================================================================================================
+Benchmark of kryo asIterator on deserialization stream
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Benchmark of kryo asIterator on deserialization stream:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+Colletion of int with 1 elements, useIterator: true                   84             85           1          0.1        8353.1       1.0X
+Colletion of int with 10 elements, useIterator: true                 101            102           1          0.1       10107.5       0.8X
+Colletion of int with 100 elements, useIterator: true                243            244           1          0.0       24297.7       0.3X
+Colletion of string with 1 elements, useIterator: true                85             85           1          0.1        8476.6       1.0X
+Colletion of string with 10 elements, useIterator: true              111            112           1          0.1       11070.8       0.8X
+Colletion of string with 100 elements, useIterator: true             338            339           1          0.0       33820.9       0.2X
+Colletion of int with 1 elements, useIterator: false                  11             11           1          0.9        1082.5       7.7X
+Colletion of int with 10 elements, useIterator: false                 22             23           1          0.4        2229.2       3.7X
+Colletion of int with 100 elements, useIterator: false               119            120           1          0.1       11935.5       0.7X
+Colletion of string with 1 elements, useIterator: false               12             12           1          0.8        1198.8       7.0X
+Colletion of string with 10 elements, useIterator: false              31             32           1          0.3        3149.1       2.7X
+Colletion of string with 100 elements, useIterator: false            210            211           1          0.0       21042.6       0.4X
+
+
