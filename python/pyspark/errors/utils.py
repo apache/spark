@@ -26,7 +26,7 @@ class ErrorClassesReader:
     A reader to load error information from error_classes.py.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.error_info_map = ERROR_CLASSES
 
     def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
