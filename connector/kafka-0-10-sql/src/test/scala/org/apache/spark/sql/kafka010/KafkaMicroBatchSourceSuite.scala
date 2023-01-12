@@ -358,10 +358,13 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
         .start()
     }
 
+    // SPARK-41996 - Increase query termination timeout to ensure that
+    // Kafka operations can be completed
+    val queryTimeout = 300.seconds
     val exc = intercept[Exception] {
       val query = startTriggerAvailableNowQuery()
       try {
-        assert(query.awaitTermination(streamingTimeout.toMillis))
+        assert(query.awaitTermination(queryTimeout.toMillis))
       } finally {
         query.stop()
       }
@@ -409,10 +412,13 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
         .start()
     }
 
+    // SPARK-41996 - Increase query termination timeout to ensure that
+    // Kafka operations can be completed
+    val queryTimeout = 300.seconds
     val exc = intercept[StreamingQueryException] {
       val query = startTriggerAvailableNowQuery()
       try {
-        assert(query.awaitTermination(streamingTimeout.toMillis))
+        assert(query.awaitTermination(queryTimeout.toMillis))
       } finally {
         query.stop()
       }
