@@ -20,12 +20,10 @@
 Errors
 ======
 
-Core Classes
-------------
-
 .. currentmodule:: pyspark.errors
 
 .. autosummary::
     :toctree: api/
 
-    PySparkException
+    PySparkException.getErrorClass
+    PySparkException.getMessageParameters
