@@ -41,7 +41,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "sourceType" -> "\"TIMESTAMP\"",
         "targetType" -> "\"INT\"",
         "ansiConfig" -> ansiConf),
-      sqlState = "22005")
+      sqlState = "22003")
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {

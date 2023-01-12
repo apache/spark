@@ -329,7 +329,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
@@ -368,7 +368,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"

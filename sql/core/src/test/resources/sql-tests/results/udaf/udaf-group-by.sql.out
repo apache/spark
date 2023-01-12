@@ -145,6 +145,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlstate" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -354,6 +355,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlstate" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -368,6 +370,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlstate" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -382,6 +385,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlstate" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -396,6 +400,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlstate" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }

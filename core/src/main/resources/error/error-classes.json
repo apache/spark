@@ -3,18 +3,19 @@
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42702"
   },
   "AMBIGUOUS_LATERAL_COLUMN_ALIAS" : {
     "message" : [
       "Lateral column alias <name> is ambiguous and has <n> matches."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42702"
   },
   "AMBIGUOUS_REFERENCE" : {
     "message" : [
       "Reference <name> is ambiguous, could be: <referenceNames>."
-    ]
+    ],
+    "sqlState" : "42704"
   },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
@@ -26,7 +27,7 @@
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
     ],
-    "sqlState" : "22005"
+    "sqlState" : "42846"
   },
   "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
     "message" : [
@@ -57,7 +58,7 @@
     "message" : [
       "Cannot decode url : <url>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "22546"
   },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
@@ -73,12 +74,13 @@
     "message" : [
       "Cannot parse decimal"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "22018"
   },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
-      "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>"
-    ]
+      "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>."
+    ],
+    "sqlState" : "2203G"
   },
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
     "message" : [
@@ -89,7 +91,7 @@
     "message" : [
       "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "22007"
   },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
@@ -101,29 +103,31 @@
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "22018"
   },
   "CAST_OVERFLOW" : {
     "message" : [
       "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
-    "sqlState" : "22005"
+    "sqlState" : "22003"
   },
   "CAST_OVERFLOW_IN_TABLE_INSERT" : {
     "message" : [
       "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
-    "sqlState" : "22005"
+    "sqlState" : "22003"
   },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
-    ]
+    ],
+    "sqlState" : "42711"
   },
   "COLUMN_NOT_FOUND" : {
     "message" : [
       "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
-    ]
+    ],
+    "sqlState" : "42703"
   },
   "CONCURRENT_QUERY" : {
     "message" : [
@@ -160,12 +164,14 @@
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
-    ]
+    ],
+    "sqlState" : "22018"
   },
   "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
     "message" : [
       "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid"
-    ]
+    ],
+    "sqlState" : "47710"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [
@@ -439,12 +445,13 @@
     "message" : [
       "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42K01"
   },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
       "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
-    ]
+    ],
+    "sqlState" : "42K02"
   },
   "DATETIME_OVERFLOW" : {
     "message" : [
@@ -455,12 +462,14 @@
   "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION" : {
     "message" : [
       "Decimal precision <precision> exceeds max precision <maxPrecision>."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "DEFAULT_DATABASE_NOT_EXISTS" : {
     "message" : [
-      "Default database <defaultDatabase> does not exist, please create it first or change default database to 'default'."
-    ]
+      "Default database <defaultDatabase> does not exist, please create it first or change default database to `<defaultDatabase>`."
+    ],
+    "sqlState" : "42704"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
@@ -472,12 +481,13 @@
     "message" : [
       "Found duplicate keys <keyColumn>"
     ],
-    "sqlState" : "23000"
+    "sqlState" : "23505"
   },
   "ELEMENT_AT_BY_INDEX_ZERO" : {
     "message" : [
       "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "ENCODER_NOT_FOUND" : {
     "message" : [
@@ -487,28 +497,32 @@
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)"
-    ]
+    ],
+    "sqlState" : "39000"
   },
   "FAILED_FUNCTION_CALL" : {
     "message" : [
       "Failed preparing of the function <funcName> for call. Please, double check function's arguments."
-    ]
+    ],
+    "sqlState" : "38000"
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"
     ],
-    "sqlState" : "22023"
+    "sqlState" : "42K04"
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
       "No such struct field <fieldName> in <fields>."
-    ]
+    ],
+    "sqlState" : "42704"
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [
-      "The operation <statement> is not allowed on the <objectType>: <objectName>"
-    ]
+      "The operation <statement> is not allowed on the <objectType>: <objectName>."
+    ],
+    "sqlState" : "42809"
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
@@ -524,41 +538,43 @@
     "message" : [
       "Column of grouping (<grouping>) can't be found in grouping columns <groupingColumns>"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42803"
   },
   "GROUPING_ID_COLUMN_MISMATCH" : {
     "message" : [
       "Columns of grouping_id (<groupingIdColumn>) does not match grouping columns (<groupByColumns>)"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42803"
   },
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Grouping sets size cannot be greater than <maxSize>"
-    ]
+    ],
+    "sqlState" : "54000"
   },
   "GROUP_BY_AGGREGATE" : {
     "message" : [
       "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
-    ]
+    ],
+    "sqlState" : "42903"
   },
   "GROUP_BY_POS_AGGREGATE" : {
     "message" : [
       "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42903"
   },
   "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42805"
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42818"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
@@ -614,35 +630,38 @@
   "INCORRECT_END_OFFSET" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the index because it already exists. <message>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42710"
   },
   "INDEX_NOT_FOUND" : {
     "message" : [
       "Cannot find the index. <message>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42704"
   },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
-    ]
+    ],
+    "sqlState" : "XX000"
   },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
     ],
-    "sqlState" : "22003"
+    "sqlState" : "22015"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
     "message" : [
@@ -653,12 +672,14 @@
   "INVALID_ARRAY_INDEX" : {
     "message" : [
       "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [
       "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "INVALID_BUCKET_FILE" : {
     "message" : [
@@ -679,12 +700,14 @@
   "INVALID_EMPTY_LOCATION" : {
     "message" : [
       "The location name cannot be empty string, but `<location>` was given."
-    ]
+    ],
+    "sqlState" : "42K05"
   },
   "INVALID_EXTRACT_FIELD" : {
     "message" : [
       "Cannot extract <field> from <expr>."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_FIELD_NAME" : {
     "message" : [
@@ -696,6 +719,7 @@
     "message" : [
       "The format is invalid: <format>."
     ],
+    "sqlState" : "42601",
     "subClass" : {
       "CONT_THOUSANDS_SEPS" : {
         "message" : [
@@ -758,27 +782,32 @@
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
-    ]
+    ],
+    "sqlState" : "22602"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
-    ]
+    ],
+    "sqlState" : "22032"
   },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
     "message" : [
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
-    ]
+    ],
+    "sqlState" : "22032"
   },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
-    ]
+    ],
+    "sqlState" : "42613"
   },
   "INVALID_OPTIONS" : {
     "message" : [
       "Invalid options:"
     ],
+    "sqlState" : "42K06",
     "subClass" : {
       "NON_MAP_FUNCTION" : {
         "message" : [
@@ -795,7 +824,8 @@
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [
@@ -828,12 +858,14 @@
   "INVALID_PROPERTY_KEY" : {
     "message" : [
       "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>"
-    ]
+    ],
+    "sqlState" : "22602"
   },
   "INVALID_PROPERTY_VALUE" : {
     "message" : [
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
-    ]
+    ],
+    "sqlState" : "22602"
   },
   "INVALID_SCHEMA" : {
     "message" : [
@@ -856,7 +888,8 @@
           "<reason>"
         ]
       }
-    }
+    },
+    "sqlState" : "24607"
   },
   "INVALID_SQL_ARG" : {
     "message" : [
@@ -879,24 +912,27 @@
           "Scalar subquery must return only one column, but got <number>"
         ]
       }
-    }
+    },
+    "sqlState" : "42823"
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42604"
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
       "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
-    ]
+    ],
+    "sqlState" : "42903"
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
-    ]
+    ],
+    "sqlState" : "42710"
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [

@@ -548,6 +548,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`i`",
     "referenceNames" : "[`spark_catalog`.`default`.`j1_tbl`.`i`, `spark_catalog`.`default`.`j2_tbl`.`i`]"
@@ -3278,6 +3279,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`f1`",
     "referenceNames" : "[`j`.`f1`, `j`.`f1`]"

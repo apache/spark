@@ -23,7 +23,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2020-01-01中文'",
     "valueType" : "\"DATE\""
@@ -84,7 +84,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'015'",
     "valueType" : "\"DATE\""
@@ -107,7 +107,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2021-4294967297-11'",
     "valueType" : "\"DATE\""
@@ -306,7 +306,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'xx'",
@@ -462,7 +462,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.2'",
@@ -634,7 +634,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.2'",

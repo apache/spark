@@ -518,7 +518,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
-  "sqlState" : "42000",
+  "sqlState" : "42818",
   "messageParameters" : {
     "columnName" : "`__auto_generated_subquery_name`.`m`"
   }
@@ -541,7 +541,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
-  "sqlState" : "42000",
+  "sqlState" : "42818",
   "messageParameters" : {
     "columnName" : "`named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`"
   }

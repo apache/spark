@@ -232,7 +232,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
-        assert(e.getSqlState == "42000")
+        assert(e.getSqlState == "22018")
       case _: Throwable =>
         // Should not end up here
         assert(false)

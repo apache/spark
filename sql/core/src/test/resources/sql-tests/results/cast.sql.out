@@ -489,7 +489,8 @@ NULL
 select cast('\t\t true \n\r ' as boolean)
 -- !query schema
 struct<CAST(		 true 
-  AS BOOLEAN):boolean>
+
+  AS BOOLEAN):boolean>
 -- !query output
 true
 
@@ -498,7 +499,8 @@ true
 select cast('\t\n false \t\r' as boolean)
 -- !query schema
 struct<CAST(	
- false 	 AS BOOLEAN):boolean>
+ false 	
+ AS BOOLEAN):boolean>
 -- !query output
 false
 
@@ -507,7 +509,8 @@ false
 select cast('\t\n xyz \t\r' as boolean)
 -- !query schema
 struct<CAST(	
- xyz 	 AS BOOLEAN):boolean>
+ xyz 	
+ AS BOOLEAN):boolean>
 -- !query output
 NULL
 
@@ -640,7 +643,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
@@ -674,7 +677,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL MONTH\"",
@@ -692,7 +695,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL SECOND\"",
@@ -782,7 +785,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
@@ -800,7 +803,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
