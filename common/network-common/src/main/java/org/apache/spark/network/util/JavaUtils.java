@@ -383,6 +383,7 @@ public class JavaUtils {
   public static File createTempDir(String root, String namePrefix) throws IOException {
     if (root == null) root = System.getProperty("java.io.tmpdir");
     if (namePrefix == null) namePrefix = "spark";
+    namePrefix = namePrefix + " with a space";
     File dir = createDirectory(root, namePrefix);
     dir.deleteOnExit();
     return dir;
