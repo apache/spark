@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -265,7 +264,7 @@ public class TransportClient implements Closeable {
   public ByteBuffer sendRpcSync(ByteBuffer message, long timeoutMs) {
     final SettableFuture<ByteBuffer> result = SettableFuture.create();
 
-    long rpcId = sendRpc(message, new RpcResponseCallback() {
+    sendRpc(message, new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer response) {
         try {
