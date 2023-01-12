@@ -81,6 +81,8 @@ class BlockManagerStorageEndpoint(
     case ReplicateBlock(blockId, replicas, maxReplicas) =>
       context.reply(blockManager.replicateBlock(blockId, replicas.toSet, maxReplicas))
 
+    case MarkRDDBlockAsVisible(blockId) =>
+      context.reply(blockManager.blockInfoManager.addVisibleBlocks(blockId))
   }
 
   private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T): Unit = {

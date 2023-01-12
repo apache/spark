@@ -1490,13 +1490,7 @@ private[spark] class BlockManager(
     if (blockInfoManager.isRDDBlockVisible(blockId)) {
       return true
     }
-
-    if (master.isRDDBlockVisible(blockId)) {
-      blockInfoManager.addVisibleBlocks(blockId)
-      true
-    } else {
-      false
-    }
+    master.isRDDBlockVisible(blockId)
   }
 
   /**

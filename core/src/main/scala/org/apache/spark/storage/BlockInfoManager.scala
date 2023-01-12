@@ -189,7 +189,7 @@ private[storage] class BlockInfoManager extends Logging {
     blockInfoWrappers.contains(blockId) && visibleRDDBlocks.contains(blockId)
   }
 
-  def addVisibleBlocks(blockId: RDDBlockId): Boolean = {
+  def addVisibleBlocks(blockId: RDDBlockId): Unit = {
     visibleRDDBlocks.add(blockId)
   }
 

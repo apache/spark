@@ -229,7 +229,14 @@ class BlockManagerMasterEndpoint(
   private def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
     if (visible) {
       tidToRddBlockIds.get(taskId).foreach { blockIds =>
-        blockIds.foreach(visibleRDDBlocks.add)
+        blockIds.foreach { blockId =>
+          visibleRDDBlocks.add(blockId)
+          // Ask block managers to update the visibility status.
+          val msg = MarkRDDBlockAsVisible(blockId)
+          getLocations(blockId).flatMap(blockManagerInfo.get).foreach { managerInfo =>
+            managerInfo.storageEndpoint.ask[Unit](msg)
+          }
+        }
       }
     }
 
@@ -741,6 +748,11 @@ class BlockManagerMasterEndpoint(
 
     if (storageLevel.isValid) {
       locations.add(blockManagerId)
+      // If the rdd block is already visible, ask storage manager to update the visibility status.
+      blockId.asRDDId.foreach(rddBlockId =>
+        blockManagerInfo(blockManagerId).storageEndpoint
+          .ask[Unit](MarkRDDBlockAsVisible(rddBlockId))
+      )
     } else {
       locations.remove(blockManagerId)
     }
