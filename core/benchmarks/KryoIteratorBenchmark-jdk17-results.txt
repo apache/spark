@@ -1,0 +1,22 @@
+================================================================================================
+Benchmark of kryo asIterator on deserialization stream
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1030-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Benchmark of kryo asIterator on deserialization stream:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+Colletion of int with 1 elements, useIterator: true                   23             25           2          0.4        2260.0       1.0X
+Colletion of int with 10 elements, useIterator: true                  42             45           2          0.2        4178.2       0.5X
+Colletion of int with 100 elements, useIterator: true                231            241           8          0.0       23114.4       0.1X
+Colletion of string with 1 elements, useIterator: true                25             27           2          0.4        2514.1       0.9X
+Colletion of string with 10 elements, useIterator: true               59             64           4          0.2        5862.3       0.4X
+Colletion of string with 100 elements, useIterator: true             394            404          10          0.0       39353.0       0.1X
+Colletion of int with 1 elements, useIterator: false                  23             25           1          0.4        2289.3       1.0X
+Colletion of int with 10 elements, useIterator: false                 39             42           3          0.3        3887.0       0.6X
+Colletion of int with 100 elements, useIterator: false               189            197           5          0.1       18899.6       0.1X
+Colletion of string with 1 elements, useIterator: false               24             27           3          0.4        2415.1       0.9X
+Colletion of string with 10 elements, useIterator: false              53             56           3          0.2        5329.9       0.4X
+Colletion of string with 100 elements, useIterator: false            330            340           6          0.0       32998.7       0.1X
+
+
