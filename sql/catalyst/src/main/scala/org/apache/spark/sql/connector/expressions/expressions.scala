@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, quoteV2IfNeeded}
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 /**
@@ -366,11 +366,11 @@ private[sql] final case class FieldReference(parts: Seq[String]) extends NamedRe
 
 private[sql] object FieldReference {
   def apply(column: String): NamedReference = {
-    LogicalExpressions.parseReference(quoteIfNeeded(column))
+    LogicalExpressions.parseReference(quoteV2IfNeeded(column))
   }
 
   def column(name: String) : NamedReference = {
-    FieldReference(Seq(quoteIfNeeded(name)))
+    FieldReference(Seq(quoteV2IfNeeded(name)))
   }
 }
 
