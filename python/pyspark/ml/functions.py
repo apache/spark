@@ -226,7 +226,7 @@ def _validate_and_transform_single_input(
         else:
             raise ValueError(
                 "Multiple input columns found, but model expected a single "
-                "input, use `array` or `struct` to combine columns into tensors."
+                "input, use `array` to combine columns into tensors."
             )
     else:
         # scalar columns
@@ -236,14 +236,14 @@ def _validate_and_transform_single_input(
             if input_shapes and input_shapes[0] not in [None, [], [1]]:
                 raise ValueError("Invalid input_tensor_shape for scalar column.")
         elif not has_tuple:
-            # columns grouped via struct/array, convert to single tensor
+            # columns grouped via `array`, convert to single tensor
             single_input = batch.to_numpy()
             if input_shapes and input_shapes[0] != [len(batch.columns)]:
                 raise ValueError("Input data does not match expected shape.")
         else:
             raise ValueError(
                 "Multiple input columns found, but model expected a single "
-                "input, use `array` or `struct` to combine columns into tensors."
+                "input, use `array` to combine columns into tensors."
             )
 
     # if input_tensor_shapes provided, try to reshape input
@@ -373,8 +373,8 @@ def predict_batch_udf(
     - tensor column + tensor shape -> np.ndarray
 
     Note that tensor columns in the Spark DataFrame must be represented as a flattened 1-D array,
-    and multiple scalar columns can be combined into a single tensor column using standard PySpark
-    SQL functions like `array()` or `struct()`.
+    and multiple scalar columns can be combined into a single tensor column using the standard
+    `array()` PySpark SQL function.
 
     Example (tensor column):
 
@@ -476,7 +476,7 @@ def predict_batch_udf(
 
     Input DataFrame has muliple columns of scalar values.  If the user-provided `predict` function
     expects a single input, then the user must combine the multiple columns into a single tensor
-    using `pyspark.sql.functions.array` or `pyspark.sql.functions.struct`.
+    using `pyspark.sql.functions.array`.
     ```
     import numpy as np
     import pandas as pd
