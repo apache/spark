@@ -77,11 +77,11 @@ case class EnsureRequirements(
     }.map(_._2)
 
     // Special case: if all sides of the join are single partition and it's physical size less than
-    // or equal advisoryPartitionSizeInBytes.
+    // or equal spark.sql.maxSinglePartitionBytes.
     val preferSinglePartition = childrenIndexes.forall { i =>
       children(i).outputPartitioning == SinglePartition &&
         children(i).logicalLink
-          .forall(_.stats.sizeInBytes <= conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES))
+          .forall(_.stats.sizeInBytes <= conf.getConf(SQLConf.MAX_SINGLE_PARTITION_BYTES))
     }
 
     // If there are more than one children, we'll need to check partitioning & distribution of them

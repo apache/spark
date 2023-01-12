@@ -733,8 +733,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-41986: Introduce shuffle on SinglePartition") {
-    val advisoryPartitionSizeInBytes = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    Seq(advisoryPartitionSizeInBytes, advisoryPartitionSizeInBytes + 1).foreach { size =>
+    val maxSinglePartitionBytes = conf.getConf(SQLConf.MAX_SINGLE_PARTITION_BYTES)
+    Seq(maxSinglePartitionBytes, maxSinglePartitionBytes + 1).foreach { size =>
       val logicalPlan = StatsTestPlan(Nil, 1L, AttributeMap.empty, Some(size))
       val left = DummySparkPlan(outputPartitioning = SinglePartition)
       left.setLogicalLink(logicalPlan)
@@ -742,7 +742,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       right.setLogicalLink(logicalPlan)
       val smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, left, right)
 
-      if (size == advisoryPartitionSizeInBytes) {
+      if (size <= maxSinglePartitionBytes) {
         EnsureRequirements.apply(smjExec) match {
           case SortMergeJoinExec(leftKeys, rightKeys, _, _,
             SortExec(_, _, _: DummySparkPlan, _),
