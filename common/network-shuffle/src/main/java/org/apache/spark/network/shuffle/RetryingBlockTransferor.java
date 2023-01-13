@@ -195,7 +195,8 @@ public class RetryingBlockTransferor {
 
   /**
    * Returns true if we should retry due a block transfer failure. We will retry if and only if
-   * the exception was an IOException and we haven't retried 'maxRetries' times already.
+   * the exception was an IOException or SaslTimeoutException and we haven't retried
+   * 'maxRetries' times already.
    */
   private synchronized boolean shouldRetry(Throwable e) {
     boolean isIOException = e instanceof IOException

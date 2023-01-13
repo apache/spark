@@ -26,11 +26,11 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import java.util.concurrent.TimeoutException;
-import org.apache.spark.network.sasl.SaslTimeoutException;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.stubbing.Answer;
@@ -43,6 +43,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.sasl.SaslTimeoutException;
 import static org.apache.spark.network.shuffle.RetryingBlockTransferor.BlockTransferStarter;
 
 /**
