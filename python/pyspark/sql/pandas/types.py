@@ -181,7 +181,11 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = DecimalType(precision=at.precision, scale=at.scale)
     elif types.is_string(at):
         spark_type = StringType()
+    elif types.is_large_string(at):
+        spark_type = StringType()
     elif types.is_binary(at):
+        spark_type = BinaryType()
+    elif types.is_large_binary(at):
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
