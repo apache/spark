@@ -286,7 +286,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           filter.transform {
             // Replace references to the _metadata column. This will affect references to the column
             // itself but also where fields from the metadata struct are used.
-            case attr @ MetadataStructColumn(AttributeReference(_, fields @ StructType(_), _, _)) =>
+            case MetadataStructColumn(AttributeReference(_, fields @ StructType(_), _, _)) =>
               CreateStruct(fields.map(
                 field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get))
           }.transform {
