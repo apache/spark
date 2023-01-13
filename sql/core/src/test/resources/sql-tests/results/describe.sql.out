@@ -572,6 +572,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
+  "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`v`",
     "objectType" : "VIEW",

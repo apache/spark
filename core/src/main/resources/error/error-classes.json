@@ -807,7 +807,7 @@
     "message" : [
       "Invalid options:"
     ],
-     "subClass" : {
+    "subClass" : {
       "NON_MAP_FUNCTION" : {
         "message" : [
           "Must use the `map()` function for options."

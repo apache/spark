@@ -117,8 +117,8 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
-   "sqlState" : "42704",
- "messageParameters" : {
+  "sqlState" : "42704",
+  "messageParameters" : {
     "name" : "`mydb1`.`t1`.`i1`",
     "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb1`.`t1`.`i1`]"
   },
@@ -163,8 +163,8 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
-   "sqlState" : "42704",
-   "messageParameters" : {
+  "sqlState" : "42704",
+  "messageParameters" : {
     "name" : "`t1`.`i1`",
     "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
   },
@@ -263,8 +263,8 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
-   "sqlState" : "42704",
-   "messageParameters" : {
+  "sqlState" : "42704",
+  "messageParameters" : {
     "name" : "`t1`.`i1`",
     "referenceNames" : "[`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
   },

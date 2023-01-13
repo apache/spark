@@ -398,7 +398,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
-  "sqlState" :"32903",
+  "sqlState" :"42903",
   "messageParameters" : {
     "condition" : "\"(max(id) > 0)\"",
     "expressionList" : "max(id)"
@@ -803,7 +803,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
-  "sqlState" :"32903",
+  "sqlState" :"42903",
   "messageParameters" : {
     "condition" : "\"(count(1) > 1)\"",
     "expressionList" : "count(1)"
@@ -826,7 +826,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
-  "sqlState" :"32903",
+  "sqlState" :"42903",
   "messageParameters" : {
     "condition" : "\"((count(1) + 1) > 1)\"",
     "expressionList" : "count(1)"
@@ -849,7 +849,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
-  "sqlState" :"32903",
+  "sqlState" :"42903",
   "messageParameters" : {
     "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",
     "expressionList" : "count(1), max(test_agg.k)"

@@ -1084,8 +1084,7 @@ org.apache.spark.SparkNumberFormatException
 select cast('\t\t true \n\r ' as boolean)
 -- !query schema
 struct<CAST(		 true 
-
-  AS BOOLEAN):boolean>
+  AS BOOLEAN):boolean>
 -- !query output
 true
 
@@ -1094,8 +1093,7 @@ true
 select cast('\t\n false \t\r' as boolean)
 -- !query schema
 struct<CAST(	
- false 	
- AS BOOLEAN):boolean>
+ false 	 AS BOOLEAN):boolean>
 -- !query output
 false
 

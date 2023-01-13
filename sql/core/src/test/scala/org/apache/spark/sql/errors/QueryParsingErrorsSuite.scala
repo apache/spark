@@ -322,7 +322,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'"),
       errorClass = "DUPLICATE_KEY",
-      sqlState = "23000",
+      sqlState = "23505",
       parameters = Map("keyColumn" -> "`p1`"),
       context = ExpectedContext(
         fragment = "PARTITION(p1='1', p1='1')",
@@ -334,7 +334,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')"),
       errorClass = "DUPLICATE_KEY",
-      sqlState = "23000",
+      sqlState = "23505",
       parameters = Map("keyColumn" -> "`key1`"),
       context = ExpectedContext(
         fragment = "('key1' = '1', 'key1' = '2')",
@@ -371,7 +371,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select 1 1"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'1'", "hint" -> ": extra input '1'"))
 
     checkError(
@@ -435,7 +435,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)"),
       errorClass = "INVALID_SQL_SYNTAX",
-      sqlState = "4242601000",
+      sqlState = "42601",
       parameters = Map("inputString" -> "Partition key `grade` must set value (can't be empty)."),
       context = ExpectedContext(
         fragment = "PARTITION (grade)",
