@@ -514,12 +514,11 @@ object SQLConf {
       .createWithDefault(false)
 
   val MAX_SINGLE_PARTITION_BYTES = buildConf("spark.sql.maxSinglePartitionBytes")
-    .internal()
     .doc("The maximum number of bytes allowed for a single partition. Otherwise, The planner " +
       "will introduce shuffle to improve parallelism.")
     .version("3.4.0")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefaultString("128MB")
+    .createWithDefault(Long.MaxValue)
 
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
