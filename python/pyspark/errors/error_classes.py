@@ -14,12 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
 
 
-ERROR_CLASSES = {
-    "COLUMN_IN_LIST": {
-        "message": [
-            "<func_name> does not allow a column in a list."
-        ]
-    },
+ERROR_CLASSES_JSON = """
+{
+  "COLUMN_IN_LIST": {
+    "message": [
+      "<func_name> does not allow a column in a list."
+    ]
+  }
 }
+"""
+
+ERROR_CLASSES_MAP = json.loads(ERROR_CLASSES_JSON)

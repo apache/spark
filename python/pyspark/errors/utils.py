@@ -18,7 +18,7 @@
 import re
 from typing import Dict
 
-from pyspark.errors.error_classes import ERROR_CLASSES
+from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
 
 class ErrorClassesReader:
@@ -27,7 +27,7 @@ class ErrorClassesReader:
     """
 
     def __init__(self) -> None:
-        self.error_info_map = ERROR_CLASSES
+        self.error_info_map = ERROR_CLASSES_MAP
 
     def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
         """
