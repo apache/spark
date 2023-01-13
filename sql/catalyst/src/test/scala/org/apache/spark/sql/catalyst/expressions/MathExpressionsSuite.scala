@@ -23,7 +23,7 @@ import java.time.temporal.ChronoUnit
 
 import com.google.common.math.LongMath
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -836,6 +836,19 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(5), Literal(0))), Decimal(5))
     checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.1411), Literal(-3))), Decimal(1000))
     checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(135.135), Literal(-2))), Decimal(200))
+  }
+
+  test("SPARK-42045: integer overflow in round/bround") {
+    val input = 2147483647
+    val scale = -1
+    Seq(Round(input, scale, ansiEnabled = true),
+      BRound(input, scale, ansiEnabled = true)).foreach { expr =>
+      checkExceptionInExpression[SparkArithmeticException](expr, "Overflow")
+    }
+    Seq(Round(input, scale, ansiEnabled = false),
+      BRound(input, scale, ansiEnabled = false)).foreach { expr =>
+      checkEvaluation(expr, -2147483646)
+    }
   }
 
   test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
