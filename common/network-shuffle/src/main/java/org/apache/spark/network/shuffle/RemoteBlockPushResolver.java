@@ -425,14 +425,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       boolean deleteCurrentMergedShuffle =
           msg.shuffleMergeId == DELETE_ALL_MERGED_SHUFFLE ||
               msg.shuffleMergeId == mergePartitionsInfo.shuffleMergeId;
-      int shuffleMergeId = msg.shuffleMergeId != DELETE_ALL_MERGED_SHUFFLE ?
+      int shuffleMergeIdToDelete = msg.shuffleMergeId != DELETE_ALL_MERGED_SHUFFLE ?
           msg.shuffleMergeId : mergePartitionsInfo.shuffleMergeId;
-      AppAttemptShuffleMergeId currentAppAttemptShuffleMergeId =
-          new AppAttemptShuffleMergeId(
-              msg.appId, msg.appAttemptId, msg.shuffleId, mergePartitionsInfo.shuffleMergeId);
-      AppAttemptShuffleMergeId appAttemptShuffleMergeId = new AppAttemptShuffleMergeId(
-          msg.appId, msg.appAttemptId, msg.shuffleId, shuffleMergeId);
-      if(deleteCurrentMergedShuffle || shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
+      if (deleteCurrentMergedShuffle ||
+          shuffleMergeIdToDelete > mergePartitionsInfo.shuffleMergeId) {
+        AppAttemptShuffleMergeId currentAppAttemptShuffleMergeId =
+            new AppAttemptShuffleMergeId(
+                msg.appId, msg.appAttemptId, msg.shuffleId, mergePartitionsInfo.shuffleMergeId);
         if (!mergePartitionsInfo.isFinalized()) {
           // Clean up shuffle data before the shuffle was finalized. Close and delete all the open
           // files.
@@ -446,13 +445,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
               deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
                   mergePartitionsInfo.getReduceIds(), false));
         }
-      } else if(shuffleMergeId < mergePartitionsInfo.shuffleMergeId) {
+      } else {
         throw new RuntimeException(String.format("Asked to remove old shuffle merged data for " +
                 "application %s shuffleId %s shuffleMergeId %s, but current shuffleMergeId %s ",
-            msg.appId, msg.shuffleId, shuffleMergeId, mergePartitionsInfo.shuffleMergeId));
+            msg.appId, msg.shuffleId, shuffleMergeIdToDelete, mergePartitionsInfo.shuffleMergeId));
       }
-      writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
-      return new AppShuffleMergePartitionsInfo(shuffleMergeId, true);
+      writeAppAttemptShuffleMergeInfoToDB(new AppAttemptShuffleMergeId(
+          msg.appId, msg.appAttemptId, msg.shuffleId, shuffleMergeIdToDelete));
+      return new AppShuffleMergePartitionsInfo(shuffleMergeIdToDelete, true);
     });
   }
 
