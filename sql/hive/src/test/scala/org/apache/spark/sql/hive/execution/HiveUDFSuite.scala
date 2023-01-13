@@ -35,6 +35,7 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 import org.apache.spark.{SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -709,6 +710,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         assert(fileList2.contains(json2.getName))
         assert(fileList2.contains(csv2.getName))
       }
+    }
+  }
+
+  test("SPARK-42051: HiveGenericUDF Codegen Support") {
+    withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFMaskHash].getName}'")
+      val df = sql("SELECT CodeGenHiveGenericUDF('Spark SQL')")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
     }
   }
 }
