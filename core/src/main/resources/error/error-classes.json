@@ -865,7 +865,7 @@
     "message" : [
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ],
-    "sqlState" : "22602"
+    "sqlState" : "42602"
   },
   "INVALID_SCHEMA" : {
     "message" : [
