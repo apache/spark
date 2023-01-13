@@ -57,12 +57,27 @@ class MapInArrowTestsMixin(object):
         def func(iterator):
             for batch in iterator:
                 assert isinstance(batch, pa.RecordBatch)
-                assert batch.schema.types == [pa.int32(), pa.string()]
+                assert batch.schema.types == [pa.int32(), pa.large_string()]
                 yield batch
 
         actual = df.mapInArrow(func, df.schema).collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
+
+    def test_large_variable_width_types(self):
+        with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": True}):
+            data = [("foo", b"foo"), (None, None), ("bar", b"bar")]
+            df = self.spark.createDataFrame(data, "a string, b binary")
+
+            def func(iterator):
+                for batch in iterator:
+                    assert isinstance(batch, pa.RecordBatch)
+                    assert batch.schema.types == [pa.large_string(), pa.large_binary()]
+                    yield batch
+
+            actual = df.mapInArrow(func, df.schema).collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
 
     def test_different_output_length(self):
         def func(iterator):

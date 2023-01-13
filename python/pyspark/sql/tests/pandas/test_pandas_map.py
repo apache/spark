@@ -70,13 +70,15 @@ class MapInPandasTestsMixin:
 
     def test_large_variable_types(self):
         with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": True}):
+
             def func(iterator):
                 for pdf in iterator:
                     assert isinstance(pdf, pd.DataFrame)
                     # assert pdf.columns == ["str", "bin"]
                     yield pdf
 
-            df = (self.spark.range(10, numPartitions=3)
+            df = (
+                self.spark.range(10, numPartitions=3)
                 .select(col("id").cast("string").alias("str"))
                 .withColumn("bin", encode(col("str"), "utf8"))
             )
