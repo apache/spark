@@ -18,19 +18,22 @@ package org.apache.spark.sql.connect.client.util
 
 import java.io.File
 
+import org.scalatest.BeforeAndAfterAll
+import sys.process._
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
-
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-import org.scalatest.BeforeAndAfterAll
-import scala.sys.process._
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
  * It is designed to start the server once but shared by all tests. It is equivalent to use the
- * following command to start the connect server via command line: bin/spark-shell \
+ * following command to start the connect server via command line:
+ *
+ * {{{
+ * bin/spark-shell \
  * --jars `ls connector/connect/server/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
  * --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+ * }}}
  *
  * Set env variable `SPARK_HOME` if the test is not executed from the Spark project top folder.
  * Set env variable `DEBUG_SC_JVM_CLIENT=true` to print the server process output in the console
@@ -118,7 +121,9 @@ object SparkConnectServerUtils {
   }
 }
 
-trait RemoteSparkSession extends AnyFunSuite with BeforeAndAfterAll { // scalastyle:ignore funsuite
+trait RemoteSparkSession
+    extends org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll {
   import SparkConnectServerUtils._
   var spark: SparkSession = _
 

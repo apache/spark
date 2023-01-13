@@ -22,6 +22,26 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{ClientSparkResult, SparkConnectClient}
 import org.apache.spark.sql.connect.client.util.Cleaner
 
+/**
+ * The entry point to programming Spark with the Dataset and DataFrame API.
+ *
+ * In environments that this has been created upfront (e.g. REPL, notebooks), use the builder to
+ * get an existing session:
+ *
+ * {{{
+ *   SparkSession.builder().getOrCreate()
+ * }}}
+ *
+ * The builder can also be used to create a new session:
+ *
+ * {{{
+ *   SparkSession.builder
+ *     .master("local")
+ *     .appName("Word Count")
+ *     .config("spark.some.config.option", "some-value")
+ *     .getOrCreate()
+ * }}}
+ */
 class SparkSession(private val client: SparkConnectClient, private val cleaner: Cleaner)
     extends AutoCloseable {
 
@@ -31,7 +51,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
    * runs DDL/DML commands, but not for SELECT queries.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def sql(query: String): Dataset = newDataset { builder =>
     builder.setSql(proto.SQL.newBuilder().setQuery(query))
@@ -57,6 +77,8 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   }
 }
 
+// The minimal builder needed to create a spark session.
+// TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
 object SparkSession {
   def builder(): Builder = new Builder()
 

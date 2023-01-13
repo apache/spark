@@ -82,13 +82,9 @@ private[sql] class ClientSparkResult(
   }
 
   private def transferToNewVector(in: FieldVector): FieldVector = {
-    // Work around for ARROW-17269. If we create the transfer pair without creating the vector
-    // explicitly, MapVectors will be 'converted' into ListVectors which causes all sorts of fun
-    // bugs down the line. We need to wait until Arrow 10 is released, or until the fix is back
-    // ported to the 9.x line.
-    val target = in.getField.createVector(allocator)
-    in.makeTransferPair(target).transfer()
-    target
+    val pair = in.getTransferPair(allocator)
+    pair.transfer()
+    pair.getTo.asInstanceOf[FieldVector]
   }
 
   /**
@@ -170,5 +166,5 @@ private[sql] class ClientSparkResult(
     batches.foreach(_.close())
   }
 
-  override def cleaner: AutoCloseable = AutoCloseables(batches)
+  override def cleaner: AutoCloseable = AutoCloseables(batches.toSeq)
 }
