@@ -266,7 +266,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               .toByteBuffer());
       // TODO(SPARK-42025): Add some error logs for RemoveShuffleMerge RPC.
     } catch (Exception e) {
-      logger.error("Exception while sending RemoveShuffleMerge request to {}:{}",
+      logger.debug("Exception while sending RemoveShuffleMerge request to {}:{}",
           host, port, e);
       return false;
     }
