@@ -15,37 +15,39 @@
 # limitations under the License.
 #
 
-from pyspark.sql import Row
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+import unittest
+
+from pyspark.testing.connectutils import should_test_connect
+
+if should_test_connect:
+    from pyspark import sql
+    from pyspark.sql.connect.column import Column
+
+    # This is a hack to make the Column instance comparison works in `ColumnTestsMixin`.
+    # e.g., `isinstance(col, pyspark.sql.Column)`.
+    sql.Column = Column
+
+from pyspark.sql.tests.test_column import ColumnTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class GroupTestsMixin:
-    def test_aggregator(self):
-        df = self.df
-        g = df.groupBy()
-        self.assertEqual([99, 100], sorted(g.agg({"key": "max", "value": "count"}).collect()[0]))
-        self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
+class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
+    # TODO(SPARK-42017): Different error type AnalysisException vs SparkConnectAnalysisException
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_access_column(self):
+        super().test_access_column()
 
-        from pyspark.sql import functions
-
-        self.assertEqual(
-            (0, "99"), tuple(g.agg(functions.first(df.key), functions.last(df.value)).first())
-        )
-        self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
-        # test deprecated countDistinct
-        self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
-
-
-class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
-    pass
+    @unittest.skip("Requires JVM access.")
+    def test_validate_column_types(self):
+        super().test_validate_column_types()
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_group import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_column import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

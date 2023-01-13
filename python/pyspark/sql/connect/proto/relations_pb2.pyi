@@ -557,7 +557,10 @@ class Read(google.protobuf.message.Message):
         format: builtins.str
         """(Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro."""
         schema: builtins.str
-        """(Optional) If not set, Spark will infer the schema."""
+        """(Optional) If not set, Spark will infer the schema.
+
+        This schema string should be either DDL-formatted or JSON-formatted.
+        """
         @property
         def options(
             self,

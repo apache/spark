@@ -17,29 +17,22 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.status.AppSummary
 
-/**
- * :: DeveloperApi ::
- * `ProtobufSerDe` used to represent the API for serialize and deserialize of
- * Protobuf data related to UI. The subclass should implement this trait and
- * register itself to `org.apache.spark.status.protobuf.ProtobufSerDe` so that
- * `KVStoreProtobufSerializer` can use `ServiceLoader` to load and use them.
- *
- * @since 3.4.0
- */
-@DeveloperApi
-@Unstable
-trait ProtobufSerDe[T] {
+class AppSummarySerializer extends ProtobufSerDe[AppSummary] {
 
-  /**
-   * Serialize the input data of the type `T` to `Array[Byte]`.
-   */
-  def serialize(input: T): Array[Byte]
+  override def serialize(input: AppSummary): Array[Byte] = {
+    val builder = StoreTypes.AppSummary.newBuilder()
+      .setNumCompletedJobs(input.numCompletedJobs)
+      .setNumCompletedStages(input.numCompletedStages)
+    builder.build().toByteArray
+  }
 
-  /**
-   * Deserialize the input `Array[Byte]` to an object of the
-   * type `T`.
-   */
-  def deserialize(bytes: Array[Byte]): T
+  override def deserialize(bytes: Array[Byte]): AppSummary = {
+    val summary = StoreTypes.AppSummary.parseFrom(bytes)
+    new AppSummary(
+      numCompletedJobs = summary.getNumCompletedJobs,
+      numCompletedStages = summary.getNumCompletedStages
+    )
+  }
 }

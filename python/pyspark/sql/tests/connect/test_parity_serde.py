@@ -15,37 +15,32 @@
 # limitations under the License.
 #
 
-from pyspark.sql import Row
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+import unittest
+
+from pyspark.sql.tests.test_serde import SerdeTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class GroupTestsMixin:
-    def test_aggregator(self):
-        df = self.df
-        g = df.groupBy()
-        self.assertEqual([99, 100], sorted(g.agg({"key": "max", "value": "count"}).collect()[0]))
-        self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
+class SerdeParityTests(SerdeTestsMixin, ReusedConnectTestCase):
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_int_array_serialization(self):
+        super().test_int_array_serialization()
 
-        from pyspark.sql import functions
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_serialize_nested_array_and_map(self):
+        super().test_serialize_nested_array_and_map()
 
-        self.assertEqual(
-            (0, "99"), tuple(g.agg(functions.first(df.key), functions.last(df.value)).first())
-        )
-        self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
-        # test deprecated countDistinct
-        self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
-
-
-class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
-    pass
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_struct_in_map(self):
+        super().test_struct_in_map()
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_group import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_serde import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

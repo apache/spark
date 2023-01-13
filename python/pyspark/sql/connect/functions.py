@@ -2365,19 +2365,11 @@ def _test() -> None:
         # TODO(SPARK-41757): Fix String representation for Column class
         del pyspark.sql.connect.functions.col.__doc__
 
-        # TODO(SPARK-41838): fix dataset.show
-        del pyspark.sql.connect.functions.posexplode_outer.__doc__
-        del pyspark.sql.connect.functions.explode_outer.__doc__
-
-        # TODO(SPARK-41837): createDataFrame datatype conversion error
-        del pyspark.sql.connect.functions.to_csv.__doc__
-        del pyspark.sql.connect.functions.to_json.__doc__
-
-        # TODO(SPARK-41835): Fix `transform_keys` function
+        # TODO(SPARK-42032): different key order in DF.show
         del pyspark.sql.connect.functions.transform_keys.__doc__
-
-        # TODO(SPARK-41836): Implement `transform_values` function
         del pyspark.sql.connect.functions.transform_values.__doc__
+        del pyspark.sql.connect.functions.map_filter.__doc__
+        del pyspark.sql.connect.functions.map_zip_with.__doc__
 
         # TODO(SPARK-41812): Proper column names after join
         del pyspark.sql.connect.functions.count_distinct.__doc__
@@ -2387,13 +2379,6 @@ def _test() -> None:
 
         # TODO(SPARK-41845): Fix count bug
         del pyspark.sql.connect.functions.count.__doc__
-
-        # TODO(SPARK-41847): mapfield,structlist invalid type
-        del pyspark.sql.connect.functions.element_at.__doc__
-        del pyspark.sql.connect.functions.explode.__doc__
-        del pyspark.sql.connect.functions.map_filter.__doc__
-        del pyspark.sql.connect.functions.map_zip_with.__doc__
-        del pyspark.sql.connect.functions.posexplode.__doc__
 
         globs["spark"] = (
             PySparkSession.builder.appName("sql.connect.functions tests")

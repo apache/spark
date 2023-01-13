@@ -119,6 +119,8 @@ message Read {
     string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
+    //
+    // This schema string should be either DDL-formatted or JSON-formatted.
     optional string schema = 2;
 
     // Options for the data source. The context of this map varies based on the

@@ -17,29 +17,25 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import scala.collection.JavaConverters._
 
-/**
- * :: DeveloperApi ::
- * `ProtobufSerDe` used to represent the API for serialize and deserialize of
- * Protobuf data related to UI. The subclass should implement this trait and
- * register itself to `org.apache.spark.status.protobuf.ProtobufSerDe` so that
- * `KVStoreProtobufSerializer` can use `ServiceLoader` to load and use them.
- *
- * @since 3.4.0
- */
-@DeveloperApi
-@Unstable
-trait ProtobufSerDe[T] {
+import org.apache.spark.status.PoolData
+import org.apache.spark.util.Utils.weakIntern
 
-  /**
-   * Serialize the input data of the type `T` to `Array[Byte]`.
-   */
-  def serialize(input: T): Array[Byte]
+class PoolDataSerializer extends ProtobufSerDe[PoolData] {
 
-  /**
-   * Deserialize the input `Array[Byte]` to an object of the
-   * type `T`.
-   */
-  def deserialize(bytes: Array[Byte]): T
+  override def serialize(input: PoolData): Array[Byte] = {
+    val builder = StoreTypes.PoolData.newBuilder()
+    builder.setName(input.name)
+    input.stageIds.foreach(id => builder.addStageIds(id.toLong))
+    builder.build().toByteArray
+  }
+
+  override def deserialize(bytes: Array[Byte]): PoolData = {
+    val poolData = StoreTypes.PoolData.parseFrom(bytes)
+    new PoolData(
+      name = weakIntern(poolData.getName),
+      stageIds = poolData.getStageIdsList.asScala.map(_.toInt).toSet
+    )
+  }
 }
