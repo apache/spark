@@ -16,34 +16,10 @@
 #
 import os
 import warnings
-from distutils.version import LooseVersion
-from threading import RLock
 from collections.abc import Sized
+from distutils.version import LooseVersion
 from functools import reduce
-
-import numpy as np
-import pandas as pd
-import pyarrow as pa
-
-from pyspark import SparkContext, SparkConf, __version__
-from pyspark.java_gateway import launch_gateway
-from pyspark.sql.session import classproperty, SparkSession as PySparkSession
-from pyspark.sql.types import (
-    _infer_schema,
-    _has_nulltype,
-    _merge_type,
-    Row,
-    DataType,
-    StructType,
-    AtomicType,
-)
-from pyspark.sql.utils import to_str
-
-from pyspark.sql.connect.client import SparkConnectClient
-from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation
-from pyspark.sql.connect.readwriter import DataFrameReader
-
+from threading import RLock
 from typing import (
     Optional,
     Any,
@@ -57,6 +33,34 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import numpy as np
+import pandas as pd
+import pyarrow as pa
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_datetime64_dtype,
+    is_datetime64tz_dtype,
+)
+
+from pyspark import SparkContext, SparkConf, __version__
+from pyspark.java_gateway import launch_gateway
+from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation
+from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
+from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
+from pyspark.sql.session import classproperty, SparkSession as PySparkSession
+from pyspark.sql.types import (
+    _infer_schema,
+    _has_nulltype,
+    _merge_type,
+    Row,
+    DataType,
+    StructType,
+    AtomicType,
+    TimestampType,
+)
+from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -221,47 +225,37 @@ class SparkSession:
         _inferred_schema: Optional[StructType] = None
 
         if isinstance(data, pd.DataFrame):
-            from pandas.api.types import (  # type: ignore[attr-defined]
-                is_datetime64_dtype,
-                is_datetime64tz_dtype,
-            )
-            from pyspark.sql.pandas.types import (
-                _check_series_convert_timestamps_internal,
-                _get_local_timezone,
-            )
+            # Logic was borrowed from `_create_from_pandas_with_arrow` in
+            # `pyspark.sql.pandas.conversion.py`. Should ideally deduplicate the logics.
 
-            # First, check if we need to create a copy of the input data to adjust
-            # the timestamps.
-            input_data = data
-            has_timestamp_data = any(
-                [is_datetime64_dtype(data[c]) or is_datetime64tz_dtype(data[c]) for c in data]
-            )
-            if has_timestamp_data:
-                input_data = data.copy()
-                # We need double conversions for the truncation, first truncate to microseconds.
-                for col in input_data:
-                    if is_datetime64tz_dtype(input_data[col].dtype):
-                        input_data[col] = _check_series_convert_timestamps_internal(
-                            input_data[col], _get_local_timezone()
-                        ).astype("datetime64[us, UTC]")
-                    elif is_datetime64_dtype(input_data[col].dtype):
-                        input_data[col] = input_data[col].astype("datetime64[us]")
+            # If no schema supplied by user then get the names of columns only
+            if schema is None:
+                _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
 
-                # Create a new schema and change the types to the truncated microseconds.
-                pd_schema = pa.Schema.from_pandas(input_data)
-                new_schema = pa.schema([])
-                for x in range(len(pd_schema.types)):
-                    f = pd_schema.field(x)
-                    # TODO(SPARK-42027) Add support for struct types.
-                    if isinstance(f.type, pa.TimestampType) and f.type.unit == "ns":
-                        tmp = f.with_type(pa.timestamp("us"))
-                        new_schema = new_schema.append(tmp)
-                    else:
-                        new_schema = new_schema.append(f)
-                new_schema = new_schema.with_metadata(pd_schema.metadata)
-                _table = pa.Table.from_pandas(input_data, schema=new_schema)
+            # Determine arrow types to coerce data when creating batches
+            if isinstance(schema, StructType):
+                arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+                _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
+            elif isinstance(schema, DataType):
+                raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
             else:
-                _table = pa.Table.from_pandas(data)
+                # Any timestamps must be coerced to be compatible with Spark
+                arrow_types = [
+                    to_arrow_type(TimestampType())
+                    if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
+                    else None
+                    for t in data.dtypes
+                ]
+
+            ser = ArrowStreamPandasSerializer(
+                _get_local_timezone(),  # 'spark.session.timezone' should be respected
+                False,  # 'spark.sql.execution.pandas.convertToArrowArraySafely' should be respected
+                True,
+            )
+
+            _table = pa.Table.from_batches(
+                [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
+            )
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
