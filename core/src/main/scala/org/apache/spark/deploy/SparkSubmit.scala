@@ -226,12 +226,13 @@ private[spark] class SparkSubmit extends Logging {
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
+    if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
     var childMainClass = ""
 
     // Set the cluster manager
     val clusterManager: Int = args.maybeMaster match {
       case Some(v) =>
-        assert(args.maybeRemote.isEmpty)
+        assert(args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect"))
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
@@ -305,6 +306,10 @@ private[spark] class SparkSubmit extends Logging {
     val isKubernetesClient = clusterManager == KUBERNETES && deployMode == CLIENT
     val isKubernetesClusterModeDriver = isKubernetesClient &&
       sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
+    val isCustomClasspathInClusterModeDisallowed =
+      !sparkConf.get(ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE) &&
+      args.proxyUser != null &&
+      (isYarnCluster || isMesosCluster || isStandAloneCluster || isKubernetesCluster)
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -605,10 +610,15 @@ private[spark] class SparkSubmit extends Logging {
 
       // All cluster managers
       OptionAssigner(
-        if (args.maybeRemote.isDefined) args.maybeMaster.orNull else args.master,
+        // If remote is not set, sets the master,
+        // In local remote mode, starts the default master to to start the server.
+        if (args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect")) args.master
+        else args.maybeMaster.orNull,
         ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(
-        args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
+        // In local remote mode, do not set remote.
+        if (sparkConf.contains("spark.local.connect")) null
+        else args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
@@ -883,6 +893,13 @@ private[spark] class SparkSubmit extends Logging {
 
     sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
 
+    if (childClasspath.nonEmpty && isCustomClasspathInClusterModeDisallowed) {
+      childClasspath.clear()
+      logWarning(s"Ignore classpath ${childClasspath.mkString(", ")} with proxy user specified " +
+        s"in Cluster mode when ${ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key} is " +
+        s"disabled")
+    }
+
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
@@ -936,6 +953,10 @@ private[spark] class SparkSubmit extends Logging {
       logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       logInfo("\n")
     }
+    assert(!(args.deployMode == "cluster" && args.proxyUser != null && childClasspath.nonEmpty) ||
+      sparkConf.get(ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE),
+      s"Classpath of spark-submit should not change in cluster mode if proxy user is specified " +
+        s"when ${ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key} is disabled")
     val loader = getSubmitClassLoader(sparkConf)
     for (jar <- childClasspath) {
       addJarToClasspath(jar, loader)

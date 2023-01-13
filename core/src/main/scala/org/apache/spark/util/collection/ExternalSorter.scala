@@ -66,7 +66,7 @@ import org.apache.spark.util.{CompletionIterator, Utils => TryUtils}
  *
  * 3. Request an iterator() back to traverse sorted/aggregated records.
  *     - or -
- *    Invoke writePartitionedFile() to create a file containing sorted/aggregated outputs
+ *    Invoke writePartitionedMapOutput() to create a file containing sorted/aggregated outputs
  *    that can be used in Spark's sort shuffle.
  *
  * At a high level, this class works internally as follows:
@@ -685,53 +685,6 @@ private[spark] class ExternalSorter[K, V, C](
     // Use completion callback to stop sorter if task was finished/cancelled.
     context.addTaskCompletionListener[Unit](_ => stop())
     CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](iterator, stop())
-  }
-
-  /**
-   * TODO(SPARK-28764): remove this, as this is only used by UnsafeRowSerializerSuite in the SQL
-   * project. We should figure out an alternative way to test that so that we can remove this
-   * otherwise unused code path.
-   */
-  def writePartitionedFile(
-      blockId: BlockId,
-      outputFile: File): Array[Long] = {
-
-    // Track location of each range in the output file
-    val lengths = new Array[Long](numPartitions)
-    val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-      context.taskMetrics().shuffleWriteMetrics)
-
-    if (spills.isEmpty) {
-      // Case where we only have in-memory data
-      val collection = if (aggregator.isDefined) map else buffer
-      val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
-      while (it.hasNext) {
-        val partitionId = it.nextPartition()
-        while (it.hasNext && it.nextPartition() == partitionId) {
-          it.writeNext(writer)
-        }
-        val segment = writer.commitAndGet()
-        lengths(partitionId) = segment.length
-      }
-    } else {
-      // We must perform merge-sort; get an iterator by partition and write everything directly.
-      for ((id, elements) <- this.partitionedIterator) {
-        if (elements.hasNext) {
-          for (elem <- elements) {
-            writer.write(elem._1, elem._2)
-          }
-          val segment = writer.commitAndGet()
-          lengths(id) = segment.length
-        }
-      }
-    }
-
-    writer.close()
-    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
-    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
-    context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
-
-    lengths
   }
 
   /**

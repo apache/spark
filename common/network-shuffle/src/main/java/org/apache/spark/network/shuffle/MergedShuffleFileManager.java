@@ -18,6 +18,9 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.util.Collections;
+
+import com.codahale.metrics.MetricSet;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -126,4 +129,14 @@ public interface MergedShuffleFileManager {
    * leveldb for state persistence.
    */
   default void close() {}
+
+  /**
+   * Get the metrics associated with the MergedShuffleFileManager. E.g., this is used to collect
+   * the push merged metrics within RemoteBlockPushResolver.
+   *
+   * @return the map contains the metrics
+   */
+  default MetricSet getMetrics() {
+    return Collections::emptyMap;
+  }
 }

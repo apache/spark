@@ -557,7 +557,10 @@ class Read(google.protobuf.message.Message):
         format: builtins.str
         """(Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro."""
         schema: builtins.str
-        """(Optional) If not set, Spark will infer the schema."""
+        """(Optional) If not set, Spark will infer the schema.
+
+        This schema string should be either DDL-formatted or JSON-formatted.
+        """
         @property
         def options(
             self,
@@ -2375,7 +2378,7 @@ class Hint(google.protobuf.message.Message):
     def parameters(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Hint parameters."""
     def __init__(
@@ -2383,9 +2386,7 @@ class Hint(google.protobuf.message.Message):
         *,
         input: global___Relation | None = ...,
         name: builtins.str = ...,
-        parameters: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
+        parameters: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
         | None = ...,
     ) -> None: ...
     def HasField(

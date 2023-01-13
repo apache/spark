@@ -799,8 +799,30 @@
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [
-      "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>"
+      "The value of parameter(s) <parameter> in <functionName> is invalid:"
     ],
+    "subClass" : {
+      "AES_KEY" : {
+        "message" : [
+          "detail message: <detailMessage>"
+        ]
+      },
+      "AES_KEY_LENGTH" : {
+        "message" : [
+          "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
+        ]
+      },
+      "PATTERN" : {
+        "message" : [
+          "<value>"
+        ]
+      },
+      "ZERO_INDEX" : {
+        "message" : [
+          "expects %1$, %2$ and so on, but got %0$."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "INVALID_PROPERTY_KEY" : {
@@ -1164,6 +1186,11 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "TASK_WRITE_FAILED" : {
+    "message" : [
+      "Task failed while writing rows to <path>."
+    ]
   },
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -2922,11 +2949,6 @@
       "<decimalType> can only support precision up to <precision>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1230" : {
-    "message" : [
-      "Negative scale is not allowed: <scale>. You can use <config>=true to enable legacy mode to allow it."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1231" : {
     "message" : [
       "<key> is not a valid partition column in table <tblName>."
@@ -3709,11 +3731,6 @@
   "_LEGACY_ERROR_TEMP_2053" : {
     "message" : [
       "buildReader is not supported for <format>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2054" : {
-    "message" : [
-      "Task failed while writing rows. <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2055" : {

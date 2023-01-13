@@ -19,7 +19,7 @@ from pyspark.sql import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class GroupTests(ReusedSQLTestCase):
+class GroupTestsMixin:
     def test_aggregator(self):
         df = self.df
         g = df.groupBy()
@@ -34,6 +34,10 @@ class GroupTests(ReusedSQLTestCase):
         self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
         # test deprecated countDistinct
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
+
+
+class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

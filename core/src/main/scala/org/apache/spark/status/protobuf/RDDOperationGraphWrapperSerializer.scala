@@ -24,12 +24,9 @@ import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWra
 import org.apache.spark.status.protobuf.StoreTypes.{DeterministicLevel => GDeterministicLevel}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
-class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
+class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraphWrapper] {
 
-  override val supportClass: Class[_] = classOf[RDDOperationGraphWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val op = input.asInstanceOf[RDDOperationGraphWrapper]
+  override def serialize(op: RDDOperationGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.RDDOperationGraphWrapper.newBuilder()
     builder.setStageId(op.stageId.toLong)
     op.edges.foreach { e =>

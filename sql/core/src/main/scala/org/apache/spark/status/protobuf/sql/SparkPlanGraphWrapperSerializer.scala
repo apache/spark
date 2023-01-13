@@ -23,12 +23,9 @@ import org.apache.spark.sql.execution.ui.{SparkPlanGraphClusterWrapper, SparkPla
 import org.apache.spark.status.protobuf.ProtobufSerDe
 import org.apache.spark.status.protobuf.StoreTypes
 
-class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
+class SparkPlanGraphWrapperSerializer extends ProtobufSerDe[SparkPlanGraphWrapper] {
 
-  override val supportClass: Class[_] = classOf[SparkPlanGraphWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val plan = input.asInstanceOf[SparkPlanGraphWrapper]
+  override def serialize(plan: SparkPlanGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.SparkPlanGraphWrapper.newBuilder()
     builder.setExecutionId(plan.executionId)
     plan.nodes.foreach { node =>
@@ -53,19 +50,27 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     StoreTypes.SparkPlanGraphNodeWrapper = {
 
     val builder = StoreTypes.SparkPlanGraphNodeWrapper.newBuilder()
-    Option(input.node).foreach(node => builder.setNode(serializeSparkPlanGraphNode(node)))
-    Option(input.cluster)
-      .foreach(cluster => builder.setCluster(serializeSparkPlanGraphClusterWrapper(cluster)))
+    if (input.node != null) {
+      builder.setNode(serializeSparkPlanGraphNode(input.node))
+    } else {
+      builder.setCluster(serializeSparkPlanGraphClusterWrapper(input.cluster))
+    }
     builder.build()
   }
 
   private def deserializeSparkPlanGraphNodeWrapper(input: StoreTypes.SparkPlanGraphNodeWrapper):
     SparkPlanGraphNodeWrapper = {
-
-    new SparkPlanGraphNodeWrapper(
-      node = deserializeSparkPlanGraphNode(input.getNode),
-      cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster)
-    )
+    if (input.hasNode) {
+      new SparkPlanGraphNodeWrapper(
+        node = deserializeSparkPlanGraphNode(input.getNode),
+        cluster = null
+      )
+    } else {
+      new SparkPlanGraphNodeWrapper(
+        node = null,
+        cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster)
+      )
+    }
   }
 
   private def serializeSparkPlanGraphEdge(edge: SparkPlanGraphEdge):

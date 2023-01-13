@@ -18,7 +18,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark._
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.ByteType
@@ -184,6 +184,22 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         CheckOverflowInTableInsert(
           Cast(Literal.apply(12345678901234567890D), ByteType), "col").eval(null)
+      }.asInstanceOf[SparkThrowable],
+      errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+      parameters = Map(
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> ("\"TINYINT\""),
+        "columnName" -> "`col`")
+    )
+  }
+
+  test("SPARK-41991: interpreted CheckOverflowInTableInsert with ExpressionProxy should " +
+    "throw an exception") {
+    val runtime = new SubExprEvaluationRuntime(1)
+    val proxy = ExpressionProxy(Cast(Literal.apply(12345678901234567890D), ByteType), 0, runtime)
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        CheckOverflowInTableInsert(proxy, "col").eval(null)
       }.asInstanceOf[SparkThrowable],
       errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
       parameters = Map(
