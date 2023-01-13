@@ -22,11 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class SerdeParityTests(SerdeTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-42014): Support aware datetimes for createDataFrame
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_filter_with_datetime_timezone(self):
-        super().test_filter_with_datetime_timezone()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_int_array_serialization(self):
         super().test_int_array_serialization()
@@ -38,11 +33,6 @@ class SerdeParityTests(SerdeTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_struct_in_map(self):
         super().test_struct_in_map()
-
-    # TODO(SPARK-42014): Support aware datetimes for createDataFrame
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_time_with_timezone(self):
-        super().test_time_with_timezone()
 
 
 if __name__ == "__main__":
