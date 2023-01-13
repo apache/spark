@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
-
 private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url: String): Boolean =
@@ -44,6 +43,10 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
+
+  override def quoteFieldAttribute(attribute: String): String = {
+    s"`$attribute`"
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

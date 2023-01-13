@@ -136,6 +136,14 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Quotes the field attribute. This is used to put quotes around the field in case
+   * the attribute contains characters that require quotes (e.g. space).
+   */
+  def quoteFieldAttribute(attribute: String): String = {
+    attribute
+  }
+
+  /**
    * Get the SQL query that should be used to find if the given table exists. Dialects can
    * override this method to return a query that works best in a particular database.
    * @param table  The name of the table.

@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -256,6 +256,27 @@ private[sql] object JDBCRelation extends Logging {
     val schema = JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
     JDBCRelation(schema, parts, jdbcOptions)(sparkSession)
   }
+
+  private def quoteFilter(dialect: JdbcDialect, filter: Filter): Filter = {
+    filter match {
+      case f: EqualTo => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: EqualNullSafe => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: GreaterThan => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: GreaterThanOrEqual => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: LessThan => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: LessThanOrEqual => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: In => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: IsNull => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: IsNotNull => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f @ And(l, r) => f.copy(left = quoteFilter(dialect, l), right = quoteFilter(dialect, r))
+      case f @ Or(l, r) => f.copy(left = quoteFilter(dialect, l), right = quoteFilter(dialect, r))
+      case f @ Not(child) => f.copy(child = quoteFilter(dialect, child))
+      case f: StringStartsWith => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: StringEndsWith => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case f: StringContains => f.copy(attribute = dialect.quoteFieldAttribute(f.attribute))
+      case _ => filter
+    }
+  }
 }
 
 private[sql] case class JDBCRelation(
@@ -270,11 +291,13 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
+  private val dialect = JdbcDialects.get(jdbcOptions.url)
+
   // Check if JdbcDialect can compile input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
-      val dialect = JdbcDialects.get(jdbcOptions.url)
-      filters.filter(f => dialect.compileExpression(f.toV2).isEmpty)
+      filters.map(f => JDBCRelation.quoteFilter(dialect, f)).filter(
+        f => dialect.compileExpression(f.toV2).isEmpty)
     } else {
       filters
     }
@@ -283,7 +306,7 @@ private[sql] case class JDBCRelation(
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
     val pushedPredicates = if (jdbcOptions.pushDownPredicate) {
-      filters.map(_.toV2)
+      filters.map(f => JDBCRelation.quoteFilter(dialect, f)).map(_.toV2)
     } else {
       Array.empty[Predicate]
     }
