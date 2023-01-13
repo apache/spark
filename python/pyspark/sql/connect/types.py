@@ -18,6 +18,8 @@
 import datetime
 import json
 
+import pyarrow as pa
+
 from typing import Any, Optional, Callable
 
 from pyspark.sql.types import (
@@ -186,6 +188,68 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         )
     else:
         raise Exception(f"Unsupported data type {schema}")
+
+
+def to_arrow_type(dt: DataType) -> "pa.DataType":
+    """
+    Convert Spark data type to pyarrow type.
+
+    This function refers to 'pyspark.sql.pandas.types.to_arrow_type' but relax the restriction,
+    e.g. it supports nested StructType.
+    """
+    if type(dt) == BooleanType:
+        arrow_type = pa.bool_()
+    elif type(dt) == ByteType:
+        arrow_type = pa.int8()
+    elif type(dt) == ShortType:
+        arrow_type = pa.int16()
+    elif type(dt) == IntegerType:
+        arrow_type = pa.int32()
+    elif type(dt) == LongType:
+        arrow_type = pa.int64()
+    elif type(dt) == FloatType:
+        arrow_type = pa.float32()
+    elif type(dt) == DoubleType:
+        arrow_type = pa.float64()
+    elif type(dt) == DecimalType:
+        arrow_type = pa.decimal128(dt.precision, dt.scale)
+    elif type(dt) == StringType:
+        arrow_type = pa.string()
+    elif type(dt) == BinaryType:
+        arrow_type = pa.binary()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp("us", tz="UTC")
+    elif type(dt) == TimestampNTZType:
+        arrow_type = pa.timestamp("us", tz=None)
+    elif type(dt) == DayTimeIntervalType:
+        arrow_type = pa.duration("us")
+    elif type(dt) == ArrayType:
+        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+    elif type(dt) == MapType:
+        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
+    elif type(dt) == StructType:
+        fields = [
+            pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+            for field in dt
+        ]
+        arrow_type = pa.struct(fields)
+    elif type(dt) == NullType:
+        arrow_type = pa.null()
+    else:
+        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+    return arrow_type
+
+
+def to_arrow_schema(schema: StructType) -> "pa.Schema":
+    """Convert a schema from Spark to Arrow"""
+    fields = [
+        pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+        for field in schema
+    ]
+    return pa.schema(fields)
 
 
 def _need_converter(dataType: DataType) -> bool:

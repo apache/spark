@@ -439,7 +439,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
+            "Length mismatch: Expected axis has 5 elements, new values have 4 elements",
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
@@ -600,9 +600,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 ]
             ),
         ]:
-            print(schema)
-            print(schema)
-            print(schema)
             cdf = self.connect.createDataFrame(data=[], schema=schema)
             sdf = self.spark.createDataFrame(data=[], schema=schema)
 
@@ -614,6 +611,135 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "can not infer schema from empty dataset",
         ):
             self.connect.createDataFrame(data=[])
+
+    def test_timestampe_create_from_rows(self):
+        data = [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)]
+
+        cdf = self.connect.createDataFrame(data, ["date", "val"])
+        sdf = self.spark.createDataFrame(data, ["date", "val"])
+
+        self.assertEqual(cdf.schema, sdf.schema)
+        self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_nested_type_create_from_rows(self):
+        data1 = [Row(a=1, b=Row(c=2, d=Row(e=3, f=Row(g=4, h=Row(i=5)))))]
+        # root
+        # |-- a: long (nullable = true)
+        # |-- b: struct (nullable = true)
+        # |    |-- c: long (nullable = true)
+        # |    |-- d: struct (nullable = true)
+        # |    |    |-- e: long (nullable = true)
+        # |    |    |-- f: struct (nullable = true)
+        # |    |    |    |-- g: long (nullable = true)
+        # |    |    |    |-- h: struct (nullable = true)
+        # |    |    |    |    |-- i: long (nullable = true)
+
+        data2 = [
+            (
+                1,
+                "a",
+                Row(
+                    a=1,
+                    b=[1, 2, 3],
+                    c={"a": "b"},
+                    d=Row(x=1, y="y", z=Row(o=1, p=2, q=Row(g=1.5))),
+                ),
+            )
+        ]
+        # root
+        # |-- _1: long (nullable = true)
+        # |-- _2: string (nullable = true)
+        # |-- _3: struct (nullable = true)
+        # |    |-- a: long (nullable = true)
+        # |    |-- b: array (nullable = true)
+        # |    |    |-- element: long (containsNull = true)
+        # |    |-- c: map (nullable = true)
+        # |    |    |-- key: string
+        # |    |    |-- value: string (valueContainsNull = true)
+        # |    |-- d: struct (nullable = true)
+        # |    |    |-- x: long (nullable = true)
+        # |    |    |-- y: string (nullable = true)
+        # |    |    |-- z: struct (nullable = true)
+        # |    |    |    |-- o: long (nullable = true)
+        # |    |    |    |-- p: long (nullable = true)
+        # |    |    |    |-- q: struct (nullable = true)
+        # |    |    |    |    |-- g: double (nullable = true)
+
+        data3 = [
+            Row(
+                a=1,
+                b=[1, 2, 3],
+                c={"a": "b"},
+                d=Row(x=1, y="y", z=Row(1, 2, 3)),
+                e=list("hello connect"),
+            )
+        ]
+        # root
+        # |-- a: long (nullable = true)
+        # |-- b: array (nullable = true)
+        # |    |-- element: long (containsNull = true)
+        # |-- c: map (nullable = true)
+        # |    |-- key: string
+        # |    |-- value: string (valueContainsNull = true)
+        # |-- d: struct (nullable = true)
+        # |    |-- x: long (nullable = true)
+        # |    |-- y: string (nullable = true)
+        # |    |-- z: struct (nullable = true)
+        # |    |    |-- _1: long (nullable = true)
+        # |    |    |-- _2: long (nullable = true)
+        # |    |    |-- _3: long (nullable = true)
+        # |-- e: array (nullable = true)
+        # |    |-- element: string (containsNull = true)
+
+        data4 = [
+            {
+                "a": 1,
+                "b": Row(x=1, y=Row(z=2)),
+                "c": {"x": -1, "y": 2},
+                "d": [1, 2, 3, 4, 5],
+            }
+        ]
+        # root
+        # |-- a: long (nullable = true)
+        # |-- b: struct (nullable = true)
+        # |    |-- x: long (nullable = true)
+        # |    |-- y: struct (nullable = true)
+        # |    |    |-- z: long (nullable = true)
+        # |-- c: map (nullable = true)
+        # |    |-- key: string
+        # |    |-- value: long (valueContainsNull = true)
+        # |-- d: array (nullable = true)
+        # |    |-- element: long (containsNull = true)
+
+        data5 = [
+            {
+                "a": [Row(x=1, y="2"), Row(x=-1, y="-2")],
+                "b": [[1, 2, 3], [4, 5], [6]],
+                "c": {3: {4: {5: 6}}, 7: {8: {9: 0}}},
+            }
+        ]
+        # root
+        # |-- a: array (nullable = true)
+        # |    |-- element: struct (containsNull = true)
+        # |    |    |-- x: long (nullable = true)
+        # |    |    |-- y: string (nullable = true)
+        # |-- b: array (nullable = true)
+        # |    |-- element: array (containsNull = true)
+        # |    |    |-- element: long (containsNull = true)
+        # |-- c: map (nullable = true)
+        # |    |-- key: long
+        # |    |-- value: map (valueContainsNull = true)
+        # |    |    |-- key: long
+        # |    |    |-- value: map (valueContainsNull = true)
+        # |    |    |    |-- key: long
+        # |    |    |    |-- value: long (valueContainsNull = true)
+
+        for data in [data1, data2, data3, data4, data5]:
+            cdf = self.connect.createDataFrame(data)
+            sdf = self.spark.createDataFrame(data)
+
+            self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
