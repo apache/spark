@@ -36,7 +36,8 @@ object functions {
    * @param messageName
    *   the protobuf message name to look for in descriptorFile.
    * @param descFilePath
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   *   the protobuf descriptor file.
+   * @param options
    * @since 3.4.0
    */
   @Experimental
@@ -61,7 +62,7 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptorFile.
    * @param descFilePath
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   *   the protobuf descriptor file.
    * @since 3.4.0
    */
   @Experimental
@@ -80,14 +81,37 @@ object functions {
    *
    * @param data
    *   the binary column.
-   * @param shadedMessageClassName
+   * @param messageClassName
    *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
    *   The jar with these classes needs to be shaded as described above.
    * @since 3.4.0
    */
   @Experimental
-  def from_protobuf(data: Column, shadedMessageClassName: String): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, shadedMessageClassName))
+  def from_protobuf(data: Column, messageClassName: String): Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, messageClassName))
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
+   * specified Protobuf class must match the data, otherwise the behavior is
+   * undefined: it may fail or return arbitrary result. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark-protobuf.protobuf.*`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageClassName
+   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
+   * @param options
+   * @since 3.4.0
+   */
+  @Experimental
+  def from_protobuf(
+    data: Column,
+    messageClassName: String,
+    options: java.util.Map[String, String]): Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, messageClassName, None, options.asScala.toMap))
   }
 
   /**
@@ -98,12 +122,35 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptorFile.
    * @param descFilePath
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   *   the protobuf descriptor file.
    * @since 3.4.0
    */
   @Experimental
   def to_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
     new Column(CatalystDataToProtobuf(data.expr, messageName, Some(descFilePath)))
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.
+   *
+   * @param data
+   *   the data column.
+   * @param messageName
+   *   the protobuf MessageName to look for in descriptor file.
+   * @param descFilePath
+   *   the protobuf descriptor file.
+   * @param options
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_protobuf(
+    data: Column,
+    messageName: String,
+    descFilePath: String,
+    options: java.util.Map[String, String]): Column = {
+    new Column(
+      CatalystDataToProtobuf(data.expr, messageName, Some(descFilePath), options.asScala.toMap)
+    )
   }
 
   /**
@@ -118,5 +165,21 @@ object functions {
   @Experimental
   def to_protobuf(data: Column, messageClassName: String): Column = {
     new Column(CatalystDataToProtobuf(data.expr, messageClassName))
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.
+   *
+   * @param data
+   *   the data column.
+   * @param messageClassName
+   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   * @param options
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_protobuf(data: Column, messageClassName: String, options: java.util.Map[String, String])
+  : Column = {
+    new Column(CatalystDataToProtobuf(data.expr, messageClassName, None, options.asScala.toMap))
   }
 }

@@ -57,7 +57,7 @@ def from_protobuf(
         without descFilePath parameter.
         Using the spark-submit option --jars, add a messageClassName specific jar.
     descFilePath : str
-        the protobuf descriptor in Message GeneratedMessageV3 format.
+        The protobuf descriptor file.
     options : dict, optional
         options to control how the protobuf record is parsed.
 
@@ -125,7 +125,7 @@ def from_protobuf(
             )
         else:
             jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
-                _to_java_column(data), messageName
+                _to_java_column(data), messageName, options or {}
             )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
@@ -135,7 +135,10 @@ def from_protobuf(
 
 
 def to_protobuf(
-    data: "ColumnOrName", messageName: str, descFilePath: Optional[str] = None
+    data: "ColumnOrName",
+    messageName: str,
+    descFilePath: Optional[str] = None,
+    options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
     Converts a column into binary of protobuf format. The specified Protobuf class must match the
@@ -155,11 +158,11 @@ def to_protobuf(
         without descFilePath parameter.
         Using the spark-submit option --jars, add a messageClassName specific jar.
     descFilePath : str
-        the protobuf descriptor in Message GeneratedMessageV3 format.
+        the Protobuf descriptor file.
 
     Notes
     -----
-    Protobuf functionality is provided as an pluggable external module
+    Protobuf functionality is provided as a pluggable external module
 
     Examples
     --------
@@ -207,11 +210,11 @@ def to_protobuf(
     try:
         if descFilePath is not None:
             jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
-                _to_java_column(data), messageName, descFilePath
+                _to_java_column(data), messageName, descFilePath, options or {}
             )
         else:
             jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
-                _to_java_column(data), messageName
+                _to_java_column(data), messageName, options or {}
             )
 
     except TypeError as e:
