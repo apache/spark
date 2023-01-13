@@ -1141,7 +1141,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "4",
@@ -1606,7 +1606,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "1",

@@ -345,7 +345,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
-  "sqlState" : "42000",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "pivotType" : "struct<course:string,year:int>",
     "value" : "dotNET",
@@ -393,7 +393,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NON_LITERAL_PIVOT_VALUES",
-  "sqlState" : "42000",
+  "sqlState" : "42K07",
   "messageParameters" : {
     "expression" : "\"course\""
   }

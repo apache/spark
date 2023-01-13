@@ -110,7 +110,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val sqlTableRows = sqlTable.split("\n").filter(_.startsWith("|")).drop(2)
     val validSqlStates = sqlTableRows.map(_.slice(1, 6)).toSet
     // Sanity check
-    assert(Set("07000", "42000", "HZ000").subsetOf(validSqlStates))
+    assert(Set("22012", "20003", "XX000").subsetOf(validSqlStates))
     assert(validSqlStates.forall(_.length == 5), validSqlStates)
     checkCondition(sqlStates, s => validSqlStates.contains(s))
   }
@@ -249,7 +249,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.isInternalError)
-        assert(e.getSqlState == null)
+        assert(e.getSqlState.startsWith("XX"))
       case _: Throwable =>
         // Should not end up here
         assert(false)

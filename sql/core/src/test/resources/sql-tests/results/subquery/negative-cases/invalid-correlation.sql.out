@@ -45,6 +45,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

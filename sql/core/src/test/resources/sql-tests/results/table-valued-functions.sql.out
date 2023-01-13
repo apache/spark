@@ -154,7 +154,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FAILED_FUNCTION_CALL",
-  "sqlstate" : "38000",
+  "sqlState" : "38000",
   "messageParameters" : {
     "funcName" : "`range`"
   },

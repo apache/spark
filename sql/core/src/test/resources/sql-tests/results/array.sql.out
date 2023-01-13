@@ -215,7 +215,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
-  "sqlstate" : "22003"
+  "sqlState" : "22003"
 }
 
 

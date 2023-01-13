@@ -63,7 +63,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-  "sqlstate" : "42823",
+  "sqlState" : "42823",
   "messageParameters" : {
     "number" : "2"
   },
@@ -91,7 +91,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-  "sqlstate" : "42823",
+  "sqlState" : "42823",
   "messageParameters" : {
     "number" : "2"
   },

@@ -485,7 +485,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
-  "sqlstate" : "42809",
+  "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`temp_v`",
     "objectType" : "TEMPORARY VIEW",

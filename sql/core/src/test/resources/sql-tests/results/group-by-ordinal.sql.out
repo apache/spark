@@ -163,7 +163,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_AGGREGATE",
-  "sqlstate" : "42903",
+  "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "sum(data.b) AS `sum(b)`",
     "index" : "3"

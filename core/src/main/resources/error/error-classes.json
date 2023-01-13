@@ -719,7 +719,6 @@
     "message" : [
       "The format is invalid: <format>."
     ],
-    "sqlState" : "42601",
     "subClass" : {
       "CONT_THOUSANDS_SEPS" : {
         "message" : [
@@ -771,7 +770,8 @@
           "At most one <token> is allowed in the number format."
         ]
       }
-    }
+    },
+    "sqlState" : "42601"
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
@@ -807,8 +807,7 @@
     "message" : [
       "Invalid options:"
     ],
-    "sqlState" : "42K06",
-    "subClass" : {
+     "subClass" : {
       "NON_MAP_FUNCTION" : {
         "message" : [
           "Must use the `map()` function for options."
@@ -819,7 +818,8 @@
           "A type of keys and values in `map()` must be string, but got <mapType>."
         ]
       }
-    }
+    },
+    "sqlState" : "42K06"
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
@@ -944,12 +944,13 @@
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
       "Add the columns or the expression to the GROUP BY, aggregate the expression, or use <expressionAnyValue> if you do not care which of the values within a group is returned."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42803"
   },
   "MISSING_GROUP_BY" : {
     "message" : [
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
-    ]
+    ],
+    "sqlState" : "42803"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
@@ -965,31 +966,32 @@
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
-    ]
+    ],
+    "sqlState" : "42607"
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42613"
   },
   "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one NOT MATCHED BY SOURCE clauses in a MERGE statement, only the last NOT MATCHED BY SOURCE clause can omit the condition."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42613"
   },
   "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one NOT MATCHED [BY TARGET] clauses in a MERGE statement, only the last NOT MATCHED [BY TARGET] clause can omit the condition."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42613"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [
       "Literal expressions required for pivot values, found <expression>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42K07"
   },
   "NON_PARTITION_COLUMN" : {
     "message" : [
@@ -1027,46 +1029,50 @@
   "NULL_COMPARISON_RESULT" : {
     "message" : [
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
-    ]
+    ],
+    "sqlState" : "560A9"
   },
   "NULL_MAP_KEY" : {
     "message" : [
       "Cannot use null as map key."
-    ]
+    ],
+    "sqlState" : "2200E"
   },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
     "message" : [
       "The value <value> cannot be interpreted as a numeric since it has more than 38 digits."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
     ],
-    "sqlState" : "22005"
+    "sqlState" : "22003"
   },
   "NUM_COLUMNS_MISMATCH" : {
     "message" : [
       "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
-    ]
+    ],
+    "sqlState" : "42826"
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42805"
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
       "Syntax error, unexpected empty statement"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42617"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42601"
   },
   "PARTITIONS_ALREADY_EXIST" : {
     "message" : [
@@ -1086,13 +1092,14 @@
   "PATH_NOT_FOUND" : {
     "message" : [
       "Path does not exist: <path>."
-    ]
+    ],
+    "sqlState" : "42K03"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42K09"
   },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
@@ -1138,7 +1145,7 @@
     "message" : [
       "Failed to rename as <sourcePath> was not found"
     ],
-    "sqlState" : "22023"
+    "sqlState" : "42K03"
   },
   "RESET_PERMISSION_TO_ORIGINAL" : {
     "message" : [
@@ -1150,7 +1157,7 @@
       "Cannot create the function <routineName> because it already exists.",
       "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42723"
   },
   "ROUTINE_NOT_FOUND" : {
     "message" : [
@@ -1291,7 +1298,7 @@
     "message" : [
       "Unpivot value columns must share a least common type, some types do not: [<types>]"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42K09"
   },
   "UNPIVOT_VALUE_SIZE_MISMATCH" : {
     "message" : [

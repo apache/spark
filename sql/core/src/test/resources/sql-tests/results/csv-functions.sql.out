@@ -44,7 +44,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'InvalidType'",
     "hint" : ": extra input 'InvalidType'"
@@ -89,7 +89,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
-  "sqlstate" : "42K06",
+  "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -108,7 +108,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
-  "sqlstate" : "42K06",
+  "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
   },
@@ -247,7 +247,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
-  "sqlstate" : "42K06",
+  "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -266,7 +266,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
-  "sqlstate" : "42K06",
+  "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
   },

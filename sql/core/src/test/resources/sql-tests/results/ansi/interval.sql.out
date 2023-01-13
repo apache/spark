@@ -874,7 +874,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "18",
@@ -1501,7 +1501,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'fake_unit'",
     "hint" : ""
@@ -1729,7 +1729,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'day'",
     "hint" : ": extra input 'day'"
@@ -1791,7 +1791,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'days'",
     "hint" : ": extra input 'days'"

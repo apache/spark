@@ -4713,7 +4713,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
-  "sqlstate" : "42601",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'99G999G999D999G999'"
   },
@@ -4775,7 +4775,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
-  "sqlstate" : "42601",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'999G'"
   },

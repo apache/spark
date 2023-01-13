@@ -7,7 +7,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"not_exist\"'",
     "hint" : ""
@@ -23,7 +23,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"not_exist\"'",
     "hint" : ""
@@ -39,7 +39,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"not_exist\"'",
     "hint" : ""
@@ -55,7 +55,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"not_exist\"'",
     "hint" : ""
@@ -71,7 +71,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"not_exist\"'",
     "hint" : ""
@@ -87,7 +87,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"hello\"'",
     "hint" : ""
@@ -103,7 +103,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"not_exist\"'",
     "hint" : ""
@@ -119,7 +119,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"not_exist\"'",
     "hint" : ""
