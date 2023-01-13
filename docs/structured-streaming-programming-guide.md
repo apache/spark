@@ -3570,16 +3570,15 @@ the effect of the change is not well-defined. For all of them:
     if you save your state as Avro-encoded bytes, then you are free to change the Avro-state-schema between query
     restarts as the binary state will always be restored successfully.
 # Asynchronous Progress Tracking
-  
 ## What is it?
 
-Asynchronous progress tracking allows Structured Streaming pipelines to checkpoint progress asynchronously and in parallel to the actual data processing within a micro-batch, reducing latency associated with maintaining the offsetLog and commitLog.
+Asynchronous progress tracking allows streaming queries to checkpoint progress asynchronously and in parallel to the actual data processing within a micro-batch, reducing latency associated with maintaining the offset log and commit log.
 
 ![Async Progress Tracking](img/async-progress.png)
 
 ## How does it work?
 
-Structured Streaming relies on persisting and managing offsets as progress indicators for query processing. Offset management operation directly impacts processing latency, because no data processing can occur until these operations are complete. Asynchronous progress tracking enables Structured Streaming pipelines to checkpoint progress without being impacted by these offset management operations.
+Structured Streaming relies on persisting and managing offsets as progress indicators for query processing. Offset management operation directly impacts processing latency, because no data processing can occur until these operations are complete. Asynchronous progress tracking enables streaming queries to checkpoint progress without being impacted by these offset management operations.
 
 ## How to use it?
 
@@ -3608,11 +3607,11 @@ The table below describes the configurations for this feature and default values
 ## Limitations
 The initial version of the feature has the following limitations:
 
-* Asynchronous progress tracking is only supported in  stateless pipelines using Kafka Sink
-* Exactly once end-to-end processing will not be supported with this asynchronous progress tracking  because offset ranges for batch can be changed in case of failure. Though many sinks, such as Kafka sink, do not support writing exactly once anyways.
+* Asynchronous progress tracking is only supported in stateless queries using Kafka Sink
+* Exactly once end-to-end processing will not be supported with this asynchronous progress tracking because offset ranges for batch can be changed in case of failure. Though many sinks, such as Kafka sink, do not support writing exactly once anyways.
 
 ## Switching the setting off
-Turning the async progress tracking off my cause the following exception to be thrown
+Turning the async progress tracking off may cause the following exception to be thrown
 
 ```scala
 java.lang.IllegalStateException: batch x doesn't exist
@@ -3625,7 +3624,7 @@ Also the following error message may be printed in the driver logs:
 The offset log for batch x doesn't exist, which is required to restart the query from the latest batch x from the offset log. Please ensure there are two subsequent offset logs available for the latest batch via manually deleting the offset file(s). Please also ensure the latest batch for commit log is equal or one batch earlier than the latest batch for offset log.
 ```
 
-This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used.  To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressCheckpointingInterval” to 0 and run the streaming query until at least two micro-batches have been processed.  Async progress tracking can be now safely disabled and restarting query should proceed normally.
+This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used. To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressCheckpointingInterval” to 0 and run the streaming query until at least two micro-batches have been processed. Async progress tracking can be now safely disabled and restarting query should proceed normally.
 # Continuous Processing
 ## [Experimental]
 {:.no_toc}
