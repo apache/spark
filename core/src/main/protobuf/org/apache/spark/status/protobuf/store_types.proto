@@ -750,3 +750,13 @@ message ExecutorPeakMetricsDistributions {
   repeated double quantiles = 1;
   repeated ExecutorMetrics executor_metrics = 2;
 }
+
+message AppSummary {
+  int32 num_completed_jobs = 1;
+  int32 num_completed_stages = 2;
+}
+
+message PoolData {
+  string name = 1;
+  repeated int64 stage_ids = 2;
+}
