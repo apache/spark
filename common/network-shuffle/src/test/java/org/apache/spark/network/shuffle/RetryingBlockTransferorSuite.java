@@ -29,7 +29,7 @@ import java.util.Map;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import java.util.concurrent.TimeoutException;
-import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.sasl.SaslTimeoutException;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.stubbing.Answer;
@@ -247,8 +247,8 @@ public class RetryingBlockTransferorSuite {
   public void testSaslTimeoutFailure() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
     TimeoutException timeoutException = new TimeoutException();
-    TransportClient.SaslTimeoutException saslTimeoutException =
-        new TransportClient.SaslTimeoutException(timeoutException);
+    SaslTimeoutException saslTimeoutException =
+        new SaslTimeoutException(timeoutException);
     List<? extends Map<String, Object>> interactions = Arrays.asList(
         ImmutableMap.<String, Object>builder()
             .put("b0", saslTimeoutException)
@@ -272,7 +272,7 @@ public class RetryingBlockTransferorSuite {
     List<? extends Map<String, Object>> interactions = Arrays.asList(
         // SaslTimeout will cause a retry. Since b0 fails, we will retry both.
         ImmutableMap.<String, Object>builder()
-            .put("b0", new TransportClient.SaslTimeoutException(new TimeoutException()))
+            .put("b0", new SaslTimeoutException(new TimeoutException()))
             .build(),
         ImmutableMap.<String, Object>builder()
             .put("b0", block0)

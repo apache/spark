@@ -295,15 +295,6 @@ public class TransportClient implements Closeable {
   }
 
   /**
-   * Exception thrown when sasl request times out.
-   */
-  public static class SaslTimeoutException extends RuntimeException {
-    public SaslTimeoutException(Throwable cause) {
-      super((cause));
-    }
-  }
-
-  /**
    * Sends an opaque message to the RpcHandler on the server-side. No reply is expected for the
    * message, and no delivery guarantees are made.
    *

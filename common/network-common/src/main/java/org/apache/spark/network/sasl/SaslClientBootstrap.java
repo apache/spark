@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.sasl;
 
-import com.google.common.base.Throwables;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeoutException;
@@ -74,7 +73,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         } catch (RuntimeException ex) {
           // We know it is a Sasl timeout here if it is a TimeoutException.
           if (ex.getCause() instanceof TimeoutException) {
-            throw Throwables.propagate(new TransportClient.SaslTimeoutException(ex.getCause()));
+            throw new SaslTimeoutException(ex.getCause());
           } else {
             throw ex;
           }
