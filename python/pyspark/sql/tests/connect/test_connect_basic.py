@@ -256,6 +256,28 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             # Read the text file as a DataFrame.
             self.assert_eq(self.connect.read.text(d).toPandas(), self.spark.read.text(d).toPandas())
 
+    def test_multi_paths(self):
+        # SPARK-42041: DataFrameReader should support list of paths
+
+        text_files = [
+            "python/test_support/sql/text-test.txt",
+            "python/test_support/sql/text-test.txt",
+        ]
+        self.assertEqual(
+            self.connect.read.text(text_files).collect(),
+            self.spark.read.text(text_files).collect(),
+        )
+
+        json_files = [
+            "python/test_support/sql/people.json",
+            "python/test_support/sql/people.json",
+            "python/test_support/sql/people.json",
+        ]
+        self.assertEqual(
+            self.connect.read.json(json_files).collect(),
+            self.spark.read.json(json_files).collect(),
+        )
+
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
         right_connect_df = self.connect.read.table(self.tbl_name2)

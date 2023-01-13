@@ -46,11 +46,6 @@ class DataSourcesParityTests(DataSourcesTestsMixin, ReusedConnectTestCase):
     def test_read_multiple_orc_file(self):
         super().test_read_multiple_orc_file()
 
-    # TODO(SPARK-42013): Implement DataFrameReader.text to take multiple paths
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_read_text_file_list(self):
-        super().test_read_text_file_list()
-
 
 if __name__ == "__main__":
     import unittest

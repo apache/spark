@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
 
+__all__ = ["DataFrameReader", "DataFrameWriter"]
 
 PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
@@ -62,6 +63,7 @@ class DataFrameReader(OptionUtils):
         self._format = ""
         self._schema = ""
         self._options: Dict[str, str] = {}
+        self._paths: List[str] = []
 
     def format(self, source: str) -> "DataFrameReader":
         self._format = source
@@ -95,7 +97,7 @@ class DataFrameReader(OptionUtils):
 
     def load(
         self,
-        path: Optional[str] = None,
+        path: Optional[PathOrPaths] = None,
         format: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         **options: "OptionalPrimitiveType",
@@ -106,9 +108,14 @@ class DataFrameReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            self.option("path", path)
+            if isinstance(path, str):
+                self._paths = [str]
+            else:
+                self._paths = path
 
-        plan = DataSource(format=self._format, schema=self._schema, options=self._options)
+        plan = DataSource(
+            format=self._format, schema=self._schema, options=self._options, paths=self._paths
+        )
         return self._df(plan)
 
     load.__doc__ = PySparkDataFrameReader.load.__doc__
@@ -125,7 +132,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: str,
+        path: PathOrPaths,
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -176,11 +183,13 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             allowNonNumericNumbers=allowNonNumericNumbers,
         )
+        if isinstance(path, str):
+            path = [path]
         return self.load(path=path, format="json", schema=schema)
 
     json.__doc__ = PySparkDataFrameReader.json.__doc__
 
-    def parquet(self, path: str, **options: "OptionalPrimitiveType") -> "DataFrame":
+    def parquet(self, *paths: str, **options: "OptionalPrimitiveType") -> "DataFrame":
         mergeSchema = options.get("mergeSchema", None)
         pathGlobFilter = options.get("pathGlobFilter", None)
         modifiedBefore = options.get("modifiedBefore", None)
@@ -198,13 +207,13 @@ class DataFrameReader(OptionUtils):
             int96RebaseMode=int96RebaseMode,
         )
 
-        return self.load(path=path, format="parquet")
+        return self.load(path=list(paths), format="parquet")
 
     parquet.__doc__ = PySparkDataFrameReader.parquet.__doc__
 
     def text(
         self,
-        path: str,
+        paths: PathOrPaths,
         wholetext: Optional[bool] = None,
         lineSep: Optional[str] = None,
         pathGlobFilter: Optional[Union[bool, str]] = None,
@@ -221,7 +230,9 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
         )
 
-        return self.load(path=path, format="text")
+        if isinstance(paths, str):
+            paths = [paths]
+        return self.load(path=paths, format="text")
 
     text.__doc__ = PySparkDataFrameReader.text.__doc__
 
