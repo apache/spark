@@ -486,7 +486,7 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
-  test("SPARK-35084: includes jars passed in through --packages in k8s client driver mode") {
+  test("SPARK-35084: include jars of the --packages in k8s client mode & driver runs inside a POD") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
