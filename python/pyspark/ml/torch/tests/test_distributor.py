@@ -24,7 +24,7 @@ import sys
 import time
 import tempfile
 import threading
-from typing import Callable
+from typing import Callable, Dict
 import unittest
 from unittest.mock import patch
 
@@ -56,11 +56,11 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.spark.stop()
 
-    def setup_env_vars(self, input_map: dict[str, str]) -> None:
+    def setup_env_vars(self, input_map: Dict[str, str]) -> None:
         for key, value in input_map.items():
             os.environ[key] = value
 
-    def delete_env_vars(self, input_map: dict[str, str]) -> None:
+    def delete_env_vars(self, input_map: Dict[str, str]) -> None:
         for key in input_map.keys():
             del os.environ[key]
 
@@ -196,11 +196,11 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
         os.unlink(self.tempFile.name)
         self.spark.stop()
 
-    def setup_env_vars(self, input_map: dict[str, str]) -> None:
+    def setup_env_vars(self, input_map: Dict[str, str]) -> None:
         for key, value in input_map.items():
             os.environ[key] = value
 
-    def delete_env_vars(self, input_map: dict[str, str]) -> None:
+    def delete_env_vars(self, input_map: Dict[str, str]) -> None:
         for key in input_map.keys():
             del os.environ[key]
 
