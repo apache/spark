@@ -250,6 +250,8 @@ private[spark] class DiskBlockManager(
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
+        // SPARK-41946: to clearup remained dir.
+        ShutdownHookManager.registerShutdownDeleteDir(localDir)
         logInfo(s"Created local directory at $localDir")
         Some(localDir)
       } catch {
