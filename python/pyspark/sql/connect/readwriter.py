@@ -69,9 +69,13 @@ class DataFrameReader(OptionUtils):
 
     format.__doc__ = PySparkDataFrameReader.format.__doc__
 
-    # TODO(SPARK-40539): support StructType in python client and support schema as StructType.
-    def schema(self, schema: str) -> "DataFrameReader":
-        self._schema = schema
+    def schema(self, schema: Union[StructType, str]) -> "DataFrameReader":
+        if isinstance(schema, StructType):
+            self._schema = schema.json()
+        elif isinstance(schema, str):
+            self._schema = schema
+        else:
+            raise TypeError(f"schema must be a StructType or str, but got {schema}")
         return self
 
     schema.__doc__ = PySparkDataFrameReader.schema.__doc__
@@ -93,7 +97,7 @@ class DataFrameReader(OptionUtils):
         self,
         path: Optional[str] = None,
         format: Optional[str] = None,
-        schema: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
         **options: "OptionalPrimitiveType",
     ) -> "DataFrame":
         if format is not None:
@@ -122,7 +126,7 @@ class DataFrameReader(OptionUtils):
     def json(
         self,
         path: str,
-        schema: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
         allowComments: Optional[Union[bool, str]] = None,
