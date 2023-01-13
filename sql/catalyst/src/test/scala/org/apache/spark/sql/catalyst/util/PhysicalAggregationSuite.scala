@@ -48,7 +48,7 @@ class PhysicalAggregationSuite extends PlanTest {
 
     // Verify that Round's scale parameter is a Literal.
     resultExpressions(1) match {
-      case Alias(Round(_, _: Literal), _) =>
+      case Alias(Round(_, _: Literal, _), _) =>
       case other => fail("unexpected result expression: " + other)
     }
   }

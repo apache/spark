@@ -26,8 +26,10 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1447,10 +1449,12 @@ case class Logarithm(left: Expression, right: Expression)
  */
 abstract class RoundBase(child: Expression, scale: Expression,
     mode: BigDecimal.RoundingMode.Value, modeStr: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes with SupportQueryContext {
 
   override def left: Expression = child
   override def right: Expression = scale
+
+  protected def ansiEnabled: Boolean = false
 
   // round of Decimal would eval to null if it fails to `changePrecision`
   override def nullable: Boolean = true
@@ -1501,6 +1505,14 @@ abstract class RoundBase(child: Expression, scale: Expression,
   private lazy val scaleV: Any = scale.eval(EmptyRow)
   protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
 
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (ansiEnabled) {
+      Some(origin.context)
+    } else {
+      None
+    }
+  }
+
   override def eval(input: InternalRow): Any = {
     if (scaleV == null) { // if scale is null, no need to eval its child at all
       null
@@ -1529,6 +1541,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
         BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
+      case IntegerType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toIntExact,
+          context = getContextOrNull)
       case IntegerType =>
         BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
       case LongType =>
@@ -1584,9 +1600,17 @@ abstract class RoundBase(child: Expression, scale: Expression,
         }
       case IntegerType =>
         if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
+          if (ansiEnabled) {
+            val errorContext = getContextOrNullCode(ctx)
+            val evalCode = s"""
+            ${ev.value} = new java.math.BigDecimal(${ce.value}).
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValueExact();"""
+            MathUtils.withOverflowCode(evalCode, errorContext)
+          } else {
+            s"""
+            ${ev.value} = new java.math.BigDecimal(${ce.value}).
             setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();"""
+          }
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -1648,9 +1672,15 @@ abstract class RoundBase(child: Expression, scale: Expression,
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Round(child: Expression, scale: Expression)
+case class Round(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP") {
-  def this(child: Expression) = this(child, Literal(0))
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
     copy(child = newLeft, scale = newRight)
 }
@@ -1673,9 +1703,15 @@ case class Round(child: Expression, scale: Expression)
   since = "2.0.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class BRound(child: Expression, scale: Expression)
+case class BRound(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN") {
-  def this(child: Expression) = this(child, Literal(0))
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
