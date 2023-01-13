@@ -247,7 +247,8 @@ public class RetryingBlockTransferorSuite {
   public void testSaslTimeoutFailure() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
     TimeoutException timeoutException = new TimeoutException();
-    TransportClient.SaslTimeoutException saslTimeoutException = new TransportClient.SaslTimeoutException(timeoutException);
+    TransportClient.SaslTimeoutException saslTimeoutException =
+        new TransportClient.SaslTimeoutException(timeoutException);
     List<? extends Map<String, Object>> interactions = Arrays.asList(
         ImmutableMap.<String, Object>builder()
             .put("b0", saslTimeoutException)
