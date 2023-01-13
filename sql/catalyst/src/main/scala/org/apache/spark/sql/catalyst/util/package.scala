@@ -142,14 +142,6 @@ package object util extends Logging {
     }
   }
 
-  def quoteV2IfNeeded(part: String): String = {
-    if (part.contains(" ")) {
-      s"`$part`"
-    } else {
-      part
-    }
-  }
-
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
