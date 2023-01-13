@@ -535,7 +535,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       AppShuffleInfo appShuffleInfo,
       int[] reduceIds,
       boolean deleteFromDB) {
-    if(deleteFromDB) {
+    if (deleteFromDB) {
       removeAppShufflePartitionInfoFromDB(appAttemptShuffleMergeId);
     }
     int shuffleId = appAttemptShuffleMergeId.shuffleId;
