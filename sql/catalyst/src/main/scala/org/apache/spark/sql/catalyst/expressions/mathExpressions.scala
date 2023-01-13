@@ -1683,6 +1683,8 @@ case class Round(
 
   def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
 
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
+
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
     copy(child = newLeft, scale = newRight)
 }
