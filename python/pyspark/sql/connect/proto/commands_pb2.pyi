@@ -40,6 +40,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -62,6 +63,7 @@ class Command(google.protobuf.message.Message):
     CREATE_FUNCTION_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
     CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
+    WRITE_OPERATION_V2_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def create_function(self) -> global___CreateScalarFunction: ...
@@ -69,6 +71,8 @@ class Command(google.protobuf.message.Message):
     def write_operation(self) -> global___WriteOperation: ...
     @property
     def create_dataframe_view(self) -> global___CreateDataFrameViewCommand: ...
+    @property
+    def write_operation_v2(self) -> global___WriteOperationV2: ...
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
@@ -80,6 +84,7 @@ class Command(google.protobuf.message.Message):
         create_function: global___CreateScalarFunction | None = ...,
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
+        write_operation_v2: global___WriteOperationV2 | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -95,6 +100,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "write_operation",
             b"write_operation",
+            "write_operation_v2",
+            b"write_operation_v2",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -110,12 +117,18 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "write_operation",
             b"write_operation",
+            "write_operation_v2",
+            b"write_operation_v2",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
     ) -> typing_extensions.Literal[
-        "create_function", "write_operation", "create_dataframe_view", "extension"
+        "create_function",
+        "write_operation",
+        "create_dataframe_view",
+        "write_operation_v2",
+        "extension",
     ] | None: ...
 
 global___Command = Command
@@ -441,3 +454,153 @@ class WriteOperation(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["path", "table_name"] | None: ...
 
 global___WriteOperation = WriteOperation
+
+class WriteOperationV2(google.protobuf.message.Message):
+    """As writes are not directly handled during analysis and planning, they are modeled as commands."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _Mode:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _ModeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            WriteOperationV2._Mode.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        MODE_UNSPECIFIED: WriteOperationV2._Mode.ValueType  # 0
+        MODE_CREATE: WriteOperationV2._Mode.ValueType  # 1
+        MODE_OVERWRITE: WriteOperationV2._Mode.ValueType  # 2
+        MODE_OVERWRITE_PARTITIONS: WriteOperationV2._Mode.ValueType  # 3
+        MODE_APPEND: WriteOperationV2._Mode.ValueType  # 4
+        MODE_REPLACE: WriteOperationV2._Mode.ValueType  # 5
+        MODE_CREATE_OR_REPLACE: WriteOperationV2._Mode.ValueType  # 6
+
+    class Mode(_Mode, metaclass=_ModeEnumTypeWrapper): ...
+    MODE_UNSPECIFIED: WriteOperationV2.Mode.ValueType  # 0
+    MODE_CREATE: WriteOperationV2.Mode.ValueType  # 1
+    MODE_OVERWRITE: WriteOperationV2.Mode.ValueType  # 2
+    MODE_OVERWRITE_PARTITIONS: WriteOperationV2.Mode.ValueType  # 3
+    MODE_APPEND: WriteOperationV2.Mode.ValueType  # 4
+    MODE_REPLACE: WriteOperationV2.Mode.ValueType  # 5
+    MODE_CREATE_OR_REPLACE: WriteOperationV2.Mode.ValueType  # 6
+
+    class OptionsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    class TablePropertiesEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    PROVIDER_FIELD_NUMBER: builtins.int
+    PARTITIONING_COLUMNS_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
+    TABLE_PROPERTIES_FIELD_NUMBER: builtins.int
+    MODE_FIELD_NUMBER: builtins.int
+    OVERWRITE_CONDITION_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Required) The output of the `input` relation will be persisted according to the options."""
+    table_name: builtins.str
+    """The destination of the write operation must be either a path or a table."""
+    provider: builtins.str
+    """A provider for the underlying output data source. Spark's default catalog supports
+    "parquet", "json", etc.
+    """
+    @property
+    def partitioning_columns(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) List of columns for partitioning for output table created by `create`,
+        `createOrReplace`, or `replace`
+        """
+    @property
+    def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """(Optional) A list of configuration options."""
+    @property
+    def table_properties(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """(Optional) A list of table properties."""
+    mode: global___WriteOperationV2.Mode.ValueType
+    @property
+    def overwrite_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Optional) A condition for overwrite saving mode"""
+    def __init__(
+        self,
+        *,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        table_name: builtins.str = ...,
+        provider: builtins.str = ...,
+        partitioning_columns: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        table_properties: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        mode: global___WriteOperationV2.Mode.ValueType = ...,
+        overwrite_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "overwrite_condition", b"overwrite_condition"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input",
+            b"input",
+            "mode",
+            b"mode",
+            "options",
+            b"options",
+            "overwrite_condition",
+            b"overwrite_condition",
+            "partitioning_columns",
+            b"partitioning_columns",
+            "provider",
+            b"provider",
+            "table_name",
+            b"table_name",
+            "table_properties",
+            b"table_properties",
+        ],
+    ) -> None: ...
+
+global___WriteOperationV2 = WriteOperationV2
