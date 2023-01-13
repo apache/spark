@@ -313,8 +313,8 @@ class SparkSession:
                 warnings.warn("failed to infer the schema from data")
                 if _schema is None or not isinstance(_schema, StructType):
                     raise ValueError(
-                        f"Some of types cannot be determined after inferring, "
-                        f"a StructType Schema is required in this case"
+                        "Some of types cannot be determined after inferring, "
+                        "a StructType Schema is required in this case"
                     )
                 _inferred_schema = _schema
 
