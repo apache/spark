@@ -166,10 +166,9 @@ case class HiveGenericUDF(
 
   // Visible for codegen
   @transient
-  lazy val deferredObjects =
-    argumentInspectors.zip(children).map { case (inspect, child) =>
-      new DeferredObjectAdapter(inspect, child.dataType)
-    }.toArray[DeferredObject]
+  lazy val deferredObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
+    new DeferredObjectAdapter(inspect, child.dataType)
+  }.toArray[DeferredObject]
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
