@@ -37,11 +37,6 @@ class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
     def test_access_column(self):
         super().test_access_column()
 
-    # TODO(SPARK-42016): Type inconsistency of struct and map when accessing the nested column
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_field_accessor(self):
-        super().test_field_accessor()
-
     @unittest.skip("Requires JVM access.")
     def test_validate_column_types(self):
         super().test_validate_column_types()

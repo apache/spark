@@ -22,11 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
-    # TODO(42016): Type inconsistency of struct and map when accessing the nested column
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_access_nested_types(self):
-        super().test_access_nested_types()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema(self):
         super().test_apply_schema()
