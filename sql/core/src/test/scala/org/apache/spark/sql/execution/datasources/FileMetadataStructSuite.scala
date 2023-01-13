@@ -722,13 +722,18 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       val randomTableFilePath = spark.read.load(dir.getAbsolutePath)
         .select(METADATA_FILE_PATH).collect().head.getString(0)
 
+      // Select half the rows from one file.
       val halfTheNumberOfRowsPerFile = totalNumRows / (numFiles * 2)
       val collectedRows = spark.read.load(dir.getAbsolutePath)
+        .select(METADATA_FILE_PATH, METADATA_ROW_INDEX)
         .where(col(METADATA_FILE_PATH).equalTo(lit(randomTableFilePath)))
         .where(col(METADATA_ROW_INDEX).leq(lit(halfTheNumberOfRowsPerFile)))
         .collect()
 
-      // The query will match half the rows in one of the files.
+      // Assert we only select rows from one file.
+      assert(collectedRows.map(_.getString(0)).distinct.length === 1)
+      // Assert we filtered by row index.
+      assert(collectedRows.forall(row => row.getLong(1) < halfTheNumberOfRowsPerFile))
       assert(collectedRows.length === halfTheNumberOfRowsPerFile)
     }
   }
@@ -751,16 +756,21 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       val testFilePartition = testFileData.getLong(0)
       val testFilePath = testFileData.getString(1)
 
-      // Create and use a filter using the file path.
-      spark.udf.register("isTestFile",
-        (metadata: Row) => { metadata.getAs[String]("file_path") == testFilePath })
-      val udfFilterResult = spark.read.load(dir.getAbsolutePath)
-        .select(idColumnName, METADATA_FILE_PATH)
-        .where("isTestFile(_metadata)")
-        .collect().head
+      val filterFunctionName = "isTestFile"
+      withUserDefinedFunction(filterFunctionName -> true) {
+        // Create and use a filter using the file path.
+        spark.udf.register(filterFunctionName,
+          (metadata: Row) => {
+            metadata.getAs[String]("file_path") == testFilePath
+          })
+        val udfFilterResult = spark.read.load(dir.getAbsolutePath)
+          .select(idColumnName, METADATA_FILE_PATH)
+          .where(s"$filterFunctionName(_metadata)")
+          .collect().head
 
-      assert(testFilePartition === udfFilterResult.getLong(0))
-      assert(testFilePath === udfFilterResult.getString(1))
+        assert(testFilePartition === udfFilterResult.getLong(0))
+        assert(testFilePath === udfFilterResult.getString(1))
+      }
     }
   }
 }

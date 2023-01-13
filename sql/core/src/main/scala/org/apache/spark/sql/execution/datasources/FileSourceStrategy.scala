@@ -264,20 +264,29 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // [[FileSourceConstantMetadataAttribute]] or [[FileSourceGeneratedMetadataAttribute]] after
       // the flattening from the metadata struct.
       def rebindFileSourceMetadataAttributesInFilters(
-          filters: Seq[Expression]): Seq[Expression] =
+          filters: Seq[Expression]): Seq[Expression] = {
+        // The row index field attribute got renamed.
+        def newFieldName(name: String) = name match {
+          case FileFormat.ROW_INDEX => FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+          case other => other
+        }
+
         filters.map { filter =>
           filter.transform {
-            case fieldGetter @ GetStructField(FileSourceMetadataAttribute(_), _, _) =>
-              val fieldName = fieldGetter.extractFieldName
-              // The row_index column has been renamed.
-              val columnName = if (fieldName == FileFormat.ROW_INDEX) {
-                FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
-              } else {
-                fieldName
-              }
-              metadataColumns.find(_.name == columnName).get
+            // Replace references to the _metadata column. This will affect references to the column
+            // itself but also where fields from the metadata struct are used.
+            case FileSourceMetadataAttribute(
+                AttributeReference("_metadata", fields @ StructType(_), _, _)) =>
+              CreateStruct(fields.map(
+                field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get))
+          }.transform {
+            // Replace references to struct fields with the field values. This is to avoid creating
+            // temporaries to improve performance.
+            case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
+              createNamedStruct.valExprs(ordinal)
           }
         }
+      }
 
       val scan =
         FileSourceScanExec(
