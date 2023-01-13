@@ -42,7 +42,13 @@ import org.apache.spark.sql.types.LongType
  * Estimation Algorithm
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
- * @param child the HLL++ sketch to be aggregated and evaluated.
+ * @param child the serialized HLL++ sketch, in a binary column with format
+ *
+ *            | int    | double     | long * numWords          |
+ *            | format | relativeSD | HLL[0] ... HLL[numWords] |
+ *
+ * @param relativeSD the maximum relative standard deviation allowed; should be less than or equal
+ *                   to the relativeSD used when writing the HLL++ sketch.
  */
 // scalastyle:on
 @ExpressionDescription(
@@ -58,12 +64,17 @@ import org.apache.spark.sql.types.LongType
   since = "3.3.1")
 case class HyperLogLogPlusPlusAggSketch(
     child: Expression,
-    var relativeSD: Double = 0.05,
+    var relativeSD: Double = HyperLogLogPlusPlus.defaultRelativeSD,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HyperLogLogPlusPlusTrait {
 
   def this(child: Expression) = {
-    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+    this(
+      child = child,
+      relativeSD = HyperLogLogPlusPlus.defaultRelativeSD,
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0
+    )
   }
 
   def this(child: Expression, relativeSD: Expression) = {
@@ -95,10 +106,9 @@ case class HyperLogLogPlusPlusAggSketch(
   /**
    * This aggregate merges the HLL++ sketches that were written by a previous
    * HyperLogLogPlusPlusSketch instance, which utilized a HLL++ helper that may have been
-   * configured differently than the one provided by our super class. Because we can't
-   * re-instantiate the super class's HLL++ helper, let's maintain the first instance that
-   * we deserialize, and ensure that our instance is able to fit within the words
-   * allocated in the aggregation buffer by the super class's HLL++ helper instance.
+   * configured differently than the one provided by our super class. We'll maintain the
+   * relativeSD and create a new helper for the first sketch that we deserialize, ensuring
+   * that every following sketch is aggregateable and can fit within the original agg buffer.
    */
   private var relativeSDUpdated: Boolean = false
 
@@ -115,9 +125,9 @@ case class HyperLogLogPlusPlusAggSketch(
       relativeSDUpdated match {
         case true =>
           if (newRelativeSD != relativeSD) {
-            throw new IllegalStateException("One or more of the HyperLogLogPlusPlusSketch " +
-              "sketches were configured with different relativeSD values, " +
-              "and cannot be aggregated")
+            throw new IllegalStateException(s"""One or more of the HyperLogLogPlusPlusSketch
+              sketches were configured with different relativeSD values, and cannot be
+              aggregated: new SD ($newRelativeSD) previous SD($relativeSD)""")
           }
 
           // When merging into our agg buffer, skip the first long; the
@@ -128,9 +138,10 @@ case class HyperLogLogPlusPlusAggSketch(
 
         case false =>
           if (newRelativeSD < relativeSD) {
-            throw new IllegalStateException("The HyperLogLogPlusPlusAggSketch function " +
-              "must be configured with a relativeSD value that is equal or greater than the" +
-              "sketches written by a previous instance of the HyperLogLogPlusPlusSketch function")
+            throw new IllegalStateException(s"""The HyperLogLogPlusPlusAggSketch function
+              must be configured with a relativeSD value that is equal or greater than the
+              sketches written by a previous instance of the HyperLogLogPlusPlusSketch
+              function: new SD ($newRelativeSD) configured SD ($relativeSD)""")
           }
 
           // Update our hllppHelper to reflect the sketch's configuration
@@ -153,9 +164,9 @@ case class HyperLogLogPlusPlusAggSketch(
     val numWords1 = buffer1.getLong(mutableAggBufferOffset)
     val numWords2 = buffer2.getLong(inputAggBufferOffset)
     if (numWords1 != 0 && numWords2 != 0 && numWords1 != numWords2) {
-      throw new IllegalStateException("One or more of the HyperLogLogPlusPlusSketch " +
-        "sketches were configured with different relativeSD values, " +
-        "and cannot be aggregated")
+      throw new IllegalStateException(s"""One or more of the HyperLogLogPlusPlusSketch
+        sketches were configured with different relativeSD values and cannot
+        be aggregated: new numWords ($numWords2) current numWords ($numWords1)""")
     }
 
     // we need to explicitly set numWords so that the buffer retains it between merges

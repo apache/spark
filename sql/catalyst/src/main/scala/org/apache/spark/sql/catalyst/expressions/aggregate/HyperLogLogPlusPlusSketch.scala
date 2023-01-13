@@ -44,6 +44,10 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
  *
  * @param child to estimate the cardinality of.
  * @param relativeSD the maximum relative standard deviation allowed.
+ * @return the serialized HLL++ sketch, in a binary column with format
+ *
+ *            | int    | double     | long * numWords          |
+ *            | format | relativeSD | HLL[0] ... HLL[numWords] |
  */
 // scalastyle:on
 @ExpressionDescription(
@@ -59,16 +63,27 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
   since = "3.3.1")
 case class HyperLogLogPlusPlusSketch(
     child: Expression,
-    relativeSD: Double = 0.05,
+    relativeSD: Double = HyperLogLogPlusPlus.defaultRelativeSD,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HyperLogLogPlusPlusTrait {
 
   import HyperLogLogPlusPlusSketch._
 
+  def this(child: Expression) = {
+    this(
+      child = child,
+      relativeSD = HyperLogLogPlusPlus.defaultRelativeSD,
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0
+    )
+  }
+
   def this(child: Expression, relativeSD: Expression) = {
     this(
       child = child,
-      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD)
+      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD),
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0
     )
   }
 
@@ -109,6 +124,12 @@ object HyperLogLogPlusPlusSketch {
     // is specific to the fields accessible to us via the HyperLogLogPlusPlusTrait,
     // and use the first int to store a format value of 1 such that we can revisit
     // and add support for interoperable formats in the future
+    //
+    // Binary format representation:
+    //
+    //            | int    | double     | long * numWords          |
+    //            | format | relativeSD | HLL[0] ... HLL[numWords] |
+    //
     val byteBuffer = ByteBuffer.allocate(
       Integer.BYTES + java.lang.Double.BYTES + (numWords * java.lang.Double.BYTES))
     byteBuffer.putInt(1)
@@ -120,22 +141,30 @@ object HyperLogLogPlusPlusSketch {
     byteBuffer.array()
   }
 
-  def deserializeSketch(sketch: Array[Byte]):
-    (Double, InternalRow) = {
-
+  def deserializeSketch(sketch: Array[Byte]): (Double, InternalRow) = {
     val byteBuffer = ByteBuffer.wrap(sketch)
-    byteBuffer.getInt() match {
+    val sketchFormat = byteBuffer.getInt()
+    sketchFormat match {
       case 1 =>
+
         val relativeSD = byteBuffer.getDouble()
+
+        // Here we're wrapping our bytebuffer with a minimally defined GenericInternalRow
+        // instance that just forwards getLong calls to the bytebuffer's getLong method;
+        // getLong should be the only method called on this GenericInternalRow. This allows
+        // the calling function to not have to deal with the bytebuffer directly
         val row = new GenericInternalRow() {
           override def getLong(ordinal: Int): Long = {
             byteBuffer.getLong(
+              // skip over the int + double at the beginning of the bytebuffer
               Integer.BYTES + java.lang.Double.BYTES + (ordinal * java.lang.Double.BYTES))
           }
         }
 
         (relativeSD, row)
-      case _ => throw new UnsupportedOperationException()
+
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported HLL++ sketch format: $sketchFormat")
     }
 
 

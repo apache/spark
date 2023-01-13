@@ -55,12 +55,17 @@ import org.apache.spark.sql.types._
   since = "1.6.0")
 case class HyperLogLogPlusPlus(
     child: Expression,
-    relativeSD: Double = 0.05,
+    relativeSD: Double = HyperLogLogPlusPlus.defaultRelativeSD,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HyperLogLogPlusPlusTrait {
 
   def this(child: Expression) = {
-    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+    this(
+      child = child,
+      relativeSD = HyperLogLogPlusPlus.defaultRelativeSD,
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0
+    )
   }
 
   def this(child: Expression, relativeSD: Expression) = {
@@ -84,6 +89,7 @@ case class HyperLogLogPlusPlus(
 }
 
 object HyperLogLogPlusPlus {
+  val defaultRelativeSD: Double = 0.05
   def validateDoubleLiteral(exp: Expression): Double = exp match {
     case Literal(d: Double, DoubleType) => d
     case Literal(dec: Decimal, _) => dec.toDouble

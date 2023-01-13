@@ -453,7 +453,11 @@ case class HyperLogLogPlusPlusEvalSketch(child: Expression) extends UnaryExpress
    * This function parses a Binary column, assuming the format defined by
    * {@link org.apache.spark.sql.catalyst.expressions.aggregate.HyperLogLogPlusPlusSketch},
    * and returns the estimated distinct count associated with that HLL++ sketch
-   * @param input an array of bytes, representing a HyperLogLogPlusPlus sketch
+   * @param input the serialized HLL++ sketch in a binary column with format
+   *
+   *            | int    | double     | long * numWords          |
+   *            | format | relativeSD | HLL[0] ... HLL[numWords] |
+   *
    * @return Long the estimated distinct count derived from the HyperLogLogPlusPlus sketch
    */
   override def nullSafeEval(input: Any): Any = {
