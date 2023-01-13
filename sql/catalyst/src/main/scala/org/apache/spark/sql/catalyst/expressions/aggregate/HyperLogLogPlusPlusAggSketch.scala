@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.LongType
  * Estimation Algorithm
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
- * @param child the serialized HLL++ sketch, in a binary column with format
+ * @param child the serialized HLL++ sketch, in a binary column with format:
  *
  *            | int    | double     | long * numWords          |
  *            | format | relativeSD | HLL[0] ... HLL[numWords] |
@@ -90,7 +90,9 @@ case class HyperLogLogPlusPlusAggSketch(
 
   /**
    * Allocate enough words to store all registers, plus one extra long
-   * allowing us to check buffer compatibility during merge.
+   * allowing us to check buffer compatibility during merge. This is mildly
+   * different from the HyperLogLogPlusPlus trait which doesn't store numWords
+   * at the head of the aggregation buffer.
    */
   override val aggBufferAttributes: Seq[AttributeReference] = {
     Seq.tabulate(hllppHelper.numWords + 1) { i =>
@@ -113,7 +115,8 @@ case class HyperLogLogPlusPlusAggSketch(
   private var relativeSDUpdated: Boolean = false
 
   /**
-   * Update the HLL++ buffer.
+   * Update the HLL++ buffer; input is expected to be the serialized
+   * HLL++ sketch, which we'll merge into the shared agg buffer.
    */
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val v = child.eval(input)
@@ -130,9 +133,9 @@ case class HyperLogLogPlusPlusAggSketch(
               aggregated: new SD ($newRelativeSD) previous SD($relativeSD)""")
           }
 
-          // When merging into our agg buffer, skip the first long; the
-          // deserialized row is formatted without the leading long so no
-          // skipping is necessary
+          // When merging into our agg buffer, skip the first long as that's the
+          // numWords value which shouldn't be overwritten; the deserialized row
+          // is formatted without the leading long so no skipping is necessary.
           hllppHelper.merge(buffer1 = buffer, buffer2 = newInternalRow,
               offset1 = mutableAggBufferOffset + 1, offset2 = 0)
 
@@ -144,15 +147,15 @@ case class HyperLogLogPlusPlusAggSketch(
               function: new SD ($newRelativeSD) configured SD ($relativeSD)""")
           }
 
-          // Update our hllppHelper to reflect the sketch's configuration
+          // Update our hllppHelper to reflect the first sketch's configuration.
           relativeSD = newRelativeSD
           hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
           relativeSDUpdated = true
 
-          // First store the numWords value into the agg buffer
+          // First store the numWords value into the agg buffer.
           buffer.setLong(mutableAggBufferOffset, hllppHelper.numWords)
 
-          // Then fill the rest of the agg buffer with the words from the sketch
+          // Then fill the rest of the agg buffer with the words from the sketch.
           (0 until hllppHelper.numWords).foreach(i => {
             buffer.setLong(mutableAggBufferOffset + 1 + i, newInternalRow.getLong(i))
           })
@@ -160,6 +163,11 @@ case class HyperLogLogPlusPlusAggSketch(
     }
   }
 
+  /**
+   * Merges two aggregation buffers; the format of the aggregation buffers is the same as the
+   * HyperLogLogPlusPlus implementation with the minor difference that the numWords associated
+   * with the HLL instance is stored at the head of the buffer to support compatibility checks.
+   */
   override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
     val numWords1 = buffer1.getLong(mutableAggBufferOffset)
     val numWords2 = buffer2.getLong(inputAggBufferOffset)
@@ -169,16 +177,16 @@ case class HyperLogLogPlusPlusAggSketch(
         be aggregated: new numWords ($numWords2) current numWords ($numWords1)""")
     }
 
-    // we need to explicitly set numWords so that the buffer retains it between merges
+    // We need to explicitly set numWords so that the buffer retains it between merges.
     buffer1.setLong(mutableAggBufferOffset, if (numWords1 == 0) numWords2 else numWords1)
 
-    // When merging agg buffers, skip the first long of both
+    // When merging agg buffers, skip the first long of both as they're the same numWords value.
     hllppHelper.merge(buffer1 = buffer1, buffer2 = buffer2,
       offset1 = mutableAggBufferOffset + 1, offset2 = inputAggBufferOffset + 1)
   }
 
   override def eval(buffer: InternalRow): Any = {
-    // When evaling agg buffer, skip the first long
+    // When evaling agg buffer, skip the first long containing the numWords value.
     hllppHelper.query(buffer, mutableAggBufferOffset + 1)
   }
 

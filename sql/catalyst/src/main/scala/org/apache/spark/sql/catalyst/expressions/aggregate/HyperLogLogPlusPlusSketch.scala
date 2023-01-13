@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
  *
  * @param child to estimate the cardinality of.
  * @param relativeSD the maximum relative standard deviation allowed.
- * @return the serialized HLL++ sketch, in a binary column with format
+ * @return the serialized HLL++ sketch, in a binary column with format:
  *
  *            | int    | double     | long * numWords          |
  *            | format | relativeSD | HLL[0] ... HLL[numWords] |
@@ -123,7 +123,7 @@ object HyperLogLogPlusPlusSketch {
     // For the Spark implementation, we'll store the HLL sketch in a format that
     // is specific to the fields accessible to us via the HyperLogLogPlusPlusTrait,
     // and use the first int to store a format value of 1 such that we can revisit
-    // and add support for interoperable formats in the future
+    // and add support for interoperable formats in the future.
     //
     // Binary format representation:
     //
@@ -152,11 +152,12 @@ object HyperLogLogPlusPlusSketch {
         // Here we're wrapping our bytebuffer with a minimally defined GenericInternalRow
         // instance that just forwards getLong calls to the bytebuffer's getLong method;
         // getLong should be the only method called on this GenericInternalRow. This allows
-        // the calling function to not have to deal with the bytebuffer directly
+        // the calling function to not have to deal with the bytebuffer directly.
         val row = new GenericInternalRow() {
           override def getLong(ordinal: Int): Long = {
             byteBuffer.getLong(
-              // skip over the int + double at the beginning of the bytebuffer
+              // Skip over the int + double at the beginning of the bytebuffer
+              // as those are metadata about the sketch not required for merging sketches.
               Integer.BYTES + java.lang.Double.BYTES + (ordinal * java.lang.Double.BYTES))
           }
         }
