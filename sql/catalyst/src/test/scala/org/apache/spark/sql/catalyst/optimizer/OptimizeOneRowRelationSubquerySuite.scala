@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Explode, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
@@ -187,8 +187,9 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
     // SELECT * FROM t3 JOIN LATERAL EXPLODE(arr) t(v)
     val query2 = t3.lateralJoin(
-      UnresolvedTVFAliases("explode" :: Nil,
-        UnresolvedTableValuedFunction("explode", $"arr" :: Nil), "v" :: Nil))
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("explode" :: Nil,
+          UnresolvedTableValuedFunction("explode", $"arr" :: Nil), "v" :: Nil)))
     comparePlans(
       Optimize.execute(query2.analyze),
       t3.generate(Explode($"arr")).select($"a", $"b", $"arr", $"col".as("v")).analyze)
