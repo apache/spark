@@ -68,6 +68,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA.NON_STRUCT_TYPE",
+  "sqlState" : "24607",
   "messageParameters" : {
     "dataType" : "\"ARRAY<INT>\"",
     "inputSchema" : "\"Array<int>\""

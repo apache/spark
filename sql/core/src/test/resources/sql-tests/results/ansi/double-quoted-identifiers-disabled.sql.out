@@ -387,7 +387,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"myview\"'",
     "hint" : ""
@@ -403,7 +403,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"a2\"'",
     "hint" : ""
@@ -419,7 +419,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"myview\"'",
     "hint" : ""
@@ -435,7 +435,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"myschema\"'",
     "hint" : ""

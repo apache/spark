@@ -435,7 +435,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)"),
       errorClass = "INVALID_SQL_SYNTAX",
-      sqlState = "42601",
+      sqlState = "42000",
       parameters = Map("inputString" -> "Partition key `grade` must set value (can't be empty)."),
       context = ExpectedContext(
         fragment = "PARTITION (grade)",
