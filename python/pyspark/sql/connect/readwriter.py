@@ -63,7 +63,6 @@ class DataFrameReader(OptionUtils):
         self._format = ""
         self._schema = ""
         self._options: Dict[str, str] = {}
-        self._paths: List[str] = []
 
     def format(self, source: str) -> "DataFrameReader":
         self._format = source
@@ -107,14 +106,16 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if path is not None:
-            if isinstance(path, str):
-                self._paths = [str]
-            else:
-                self._paths = path
+
+        if path is None:
+            paths = None
+        elif isinstance(path, str):
+            paths = [path]
+        else:
+            paths = path
 
         plan = DataSource(
-            format=self._format, schema=self._schema, options=self._options, paths=self._paths
+            format=self._format, schema=self._schema, options=self._options, paths=paths
         )
         return self._df(plan)
 
