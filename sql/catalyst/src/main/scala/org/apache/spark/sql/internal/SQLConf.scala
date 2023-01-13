@@ -2827,12 +2827,13 @@ object SQLConf {
 
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES =
     buildConf("spark.sql.execution.arrow.useLargeVarTypes")
-      .doc("When using Apache Arrow, string and binary types have a 2GiB limit for a column in " +
-        "a single record batch. Large variable types remove this limitation at the cost of " +
-        "higher memory usage.")
+      .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
+        "types. Regular string and binary types have a 2GiB limit for a column in a single " +
+        "record batch. Large variable types remove this limitation at the cost of higher memory " +
+        "usage per value.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.pandas.udf.buffer.size")

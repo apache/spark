@@ -74,7 +74,6 @@ class MapInPandasTestsMixin:
             def func(iterator):
                 for pdf in iterator:
                     assert isinstance(pdf, pd.DataFrame)
-                    # assert pdf.columns == ["str", "bin"]
                     yield pdf
 
             df = (
