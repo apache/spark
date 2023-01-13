@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GetStructField, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[Aggregate]]. It's only used by the real
@@ -56,11 +56,7 @@ object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionH
       case _ => a
     }
 
-    val resolvedAggExprsNoOuter = a.aggregateExpressions
-      .map(resolveExpressionByPlanChildren(_, planForResolve, allowOuter = false)
-        .asInstanceOf[NamedExpression])
-
-    val resolvedGroupingExprs = a.groupingExpressions
+    val resolvedGroupExprsNoOuter = a.groupingExpressions
       .map(resolveExpressionByPlanChildren(_, planForResolve, allowOuter = false))
       // SPARK-31670: Resolve Struct field in groupByExpressions and aggregateExpressions
       // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
@@ -68,25 +64,32 @@ object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionH
       // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
       // unnecessary alias of GetStructField here.
       .map(trimTopLevelGetStructFieldAlias)
-
-    // Only makes sense to do the rewrite once all the aggregate expressions have been resolved.
-    // Otherwise, we might incorrectly pull an actual aggregate expression over to the grouping
-    // expression list (because we don't know they would be aggregate expressions until resolved).
-    if (resolvedAggExprsNoOuter.forall(_.resolved)) {
-      val finalGroupExprs = resolveGroupByAll(
-        resolvedAggExprsNoOuter,
-        resolveGroupByAlias(resolvedAggExprsNoOuter, resolvedGroupingExprs)
-      ).map(resolveOuterRef)
-      a.copy(finalGroupExprs, resolvedAggExprsNoOuter, a.child)
+    val resolvedAggExprsNoOuter = a.aggregateExpressions.map(
+      resolveExpressionByPlanChildren(_, planForResolve, allowOuter = false))
+    val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsNoOuter)
+    val resolvedAggExprsWithOuter = resolvedAggExprsWithLCA.map(resolveOuterRef)
+      .map(_.asInstanceOf[NamedExpression])
+    // `groupingExpressions` may rely on `aggregateExpressions`, due to features like GROUP BY alias
+    // and GROUP BY ALL. We only do basic resolution for `groupingExpressions`, and will further
+    // resolve it after `aggregateExpressions` are all resolved. Note: the basic resolution is
+    // needed as `aggregateExpressions` may rely on `groupingExpressions` as well, for the session
+    // window feature. See the rule `SessionWindowing` for more details.
+    if (resolvedAggExprsWithOuter.forall(_.resolved)) {
+      // TODO: currently we don't support LCA in `groupingExpressions` yet.
+      if (resolvedAggExprsWithOuter.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
+        a.copy(resolvedGroupExprsNoOuter.map(resolveOuterRef), resolvedAggExprsWithOuter, a.child)
+      } else {
+        val finalGroupExprs = resolveGroupByAll(
+          resolvedAggExprsWithOuter,
+          resolveGroupByAlias(
+            resolvedAggExprsWithOuter, resolvedGroupExprsNoOuter)
+        ).map(resolveOuterRef)
+        a.copy(finalGroupExprs, resolvedAggExprsWithOuter, a.child)
+      }
     } else {
-      // If the SELECT list is not full resolved at this point, we need to apply lateral column
-      // alias and outer reference resolution, which are not supported in GROUP BY. We can't
-      // resolve group by alias and group by all here.
-      // Aggregate supports Lateral column alias, which has higher priority than outer reference.
-      val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsNoOuter)
-      val resolvedAggExprsWithOuter = resolvedAggExprsWithLCA.map(resolveOuterRef)
-        .map(_.asInstanceOf[NamedExpression])
-      a.copy(resolvedGroupingExprs.map(resolveOuterRef), resolvedAggExprsWithOuter, a.child)
+      a.copy(
+        groupingExpressions = resolvedGroupExprsNoOuter,
+        aggregateExpressions = resolvedAggExprsWithOuter)
     }
   }
 

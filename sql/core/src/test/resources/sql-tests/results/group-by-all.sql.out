@@ -227,6 +227,22 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select country as all, id from data group by all
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"id\"",
+    "expressionAnyValue" : "\"any_value(id)\""
+  }
+}
+
+
+-- !query
 select country, (select count(*) from data) as cnt, count(id) as cnt_id from data group by all
 -- !query schema
 struct<country:string,cnt:bigint,cnt_id:bigint>

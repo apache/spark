@@ -183,6 +183,50 @@ struct<k:int,count(b):bigint>
 
 
 -- !query
+SELECT 1 AS x, x + 1 AS k FROM testData GROUP BY k
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 50,
+    "fragment" : "k"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM testData WHERE a = 1 AND EXISTS (SELECT a AS k GROUP BY k)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "messageParameters" : {
+    "sqlExprs" : "\"a\",\"a AS k\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 71,
+    "fragment" : "GROUP BY k"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM testData WHERE a = 1 AND EXISTS (SELECT 1 AS a GROUP BY a)
 -- !query schema
 struct<a:int,b:int>
