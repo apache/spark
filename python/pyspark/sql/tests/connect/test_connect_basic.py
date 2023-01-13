@@ -2503,7 +2503,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         for f in ("jdbc",):
             with self.assertRaises(NotImplementedError):
-                getattr(self.connect.read, f)()
+                getattr(self.df_text.write, f)()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
