@@ -363,7 +363,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Convert a constants list into a String sequence.
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
-    ctx.constant.asScala.map(v => visitStringConstant(v, legacyNullAsString = false)).toSeq
+    ctx.constant.asScala.map(v => visitStringConstant(v,
+      legacyNullAsString = false, keepPartitionTypeAsString = false))
   }
 
   /**
