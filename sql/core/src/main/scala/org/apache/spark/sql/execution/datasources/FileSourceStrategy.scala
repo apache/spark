@@ -214,9 +214,20 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         .filterNot(partitionColumns.contains)
 
       // Metadata attributes are part of a column of type struct up to this point. Here we extract
-      // this column from the schema.
+      // this column from the schema and specify a matcher for that.
+      object MetadataStructColumn {
+        def unapply(attributeReference: AttributeReference): Option[AttributeReference] = {
+          attributeReference match {
+            case attr @ FileSourceMetadataAttribute(
+                AttributeReference("_metadata", StructType(_), _, _)) =>
+              Some(attr)
+            case _ => None
+          }
+        }
+      }
+
       val metadataStructOpt = l.output.collectFirst {
-        case FileSourceMetadataAttribute(attr) => attr
+        case MetadataStructColumn(attr) => attr
       }
 
       val constantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
@@ -275,8 +286,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           filter.transform {
             // Replace references to the _metadata column. This will affect references to the column
             // itself but also where fields from the metadata struct are used.
-            case FileSourceMetadataAttribute(
-                AttributeReference("_metadata", fields @ StructType(_), _, _)) =>
+            case attr @ MetadataStructColumn(AttributeReference(_, fields @ StructType(_), _, _)) =>
               CreateStruct(fields.map(
                 field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get))
           }.transform {
