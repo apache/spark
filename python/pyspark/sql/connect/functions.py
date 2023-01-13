@@ -31,7 +31,6 @@ from typing import (
     cast,
 )
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -2354,20 +2353,9 @@ def _test() -> None:
         import pyspark.sql.connect.functions
 
         globs = pyspark.sql.connect.functions.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.functions tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.functions tests"}
-        )
+
         # Spark Connect does not support Spark Context but the test depends on that.
         del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
-
-        # TODO(SPARK-41880): Function `from_json` should support non-literal expression
-        # TODO(SPARK-41879): `DataFrame.collect` should support nested types
-        del pyspark.sql.connect.functions.struct.__doc__
-        del pyspark.sql.connect.functions.create_map.__doc__
-        del pyspark.sql.connect.functions.from_csv.__doc__
-        del pyspark.sql.connect.functions.from_json.__doc__
 
         # TODO(SPARK-41834): implement Dataframe.conf
         del pyspark.sql.connect.functions.from_unixtime.__doc__
@@ -2377,19 +2365,11 @@ def _test() -> None:
         # TODO(SPARK-41757): Fix String representation for Column class
         del pyspark.sql.connect.functions.col.__doc__
 
-        # TODO(SPARK-41838): fix dataset.show
-        del pyspark.sql.connect.functions.posexplode_outer.__doc__
-        del pyspark.sql.connect.functions.explode_outer.__doc__
-
-        # TODO(SPARK-41837): createDataFrame datatype conversion error
-        del pyspark.sql.connect.functions.to_csv.__doc__
-        del pyspark.sql.connect.functions.to_json.__doc__
-
-        # TODO(SPARK-41835): Fix `transform_keys` function
+        # TODO(SPARK-42032): different key order in DF.show
         del pyspark.sql.connect.functions.transform_keys.__doc__
-
-        # TODO(SPARK-41836): Implement `transform_values` function
         del pyspark.sql.connect.functions.transform_values.__doc__
+        del pyspark.sql.connect.functions.map_filter.__doc__
+        del pyspark.sql.connect.functions.map_zip_with.__doc__
 
         # TODO(SPARK-41812): Proper column names after join
         del pyspark.sql.connect.functions.count_distinct.__doc__
@@ -2400,16 +2380,11 @@ def _test() -> None:
         # TODO(SPARK-41845): Fix count bug
         del pyspark.sql.connect.functions.count.__doc__
 
-        # TODO(SPARK-41847): mapfield,structlist invalid type
-        del pyspark.sql.connect.functions.element_at.__doc__
-        del pyspark.sql.connect.functions.explode.__doc__
-        del pyspark.sql.connect.functions.map_filter.__doc__
-        del pyspark.sql.connect.functions.map_zip_with.__doc__
-        del pyspark.sql.connect.functions.posexplode.__doc__
-
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.functions tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.functions,
@@ -2420,7 +2395,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

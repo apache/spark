@@ -238,17 +238,18 @@ USA	7	3
 
 
 -- !query
-select (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
+select country, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
 -- !query schema
-struct<scalarsubquery(country):bigint,count(id):bigint>
+struct<country:string,scalarsubquery(country):bigint,count(id):bigint>
 -- !query output
-1	2
-2	2
-3	3
+China	2	2
+Korea	1	1
+UK	1	1
+USA	3	3
 
 
 -- !query
-select coutnry, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
+select (select count(*) from data d1 where d1.country = d2.country) + count(id) from data d2 group by all
 -- !query schema
 struct<>
 -- !query output
@@ -259,8 +260,31 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 102,
-    "stopIndex" : 113,
+    "startIndex" : 94,
+    "stopIndex" : 105,
     "fragment" : "group by all"
+  } ]
+}
+
+
+-- !query
+select non_exist from data group by all
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`non_exist`",
+    "proposal" : "`data`.`city`, `data`.`id`, `data`.`name`, `data`.`power`, `data`.`country`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "non_exist"
   } ]
 }

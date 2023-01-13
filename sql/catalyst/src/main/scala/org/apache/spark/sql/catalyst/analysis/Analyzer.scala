@@ -2431,7 +2431,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
@@ -2453,7 +2453,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
-          val resolvedFunc = try {
+          try {
             resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
@@ -2470,26 +2470,25 @@ class Analyzer(override val catalogManager: CatalogManager)
                 errorClass = "_LEGACY_ERROR_TEMP_2308",
                 messageParameters = Map("name" -> u.name.quoted))
           }
-          // If alias names assigned, add `Project` with the aliases
-          if (u.outputNames.nonEmpty) {
-            val outputAttrs = resolvedFunc.output
-            // Checks if the number of the aliases is equal to expected one
-            if (u.outputNames.size != outputAttrs.size) {
-              u.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2307",
-                messageParameters = Map(
-                  "funcName" -> u.name.quoted,
-                  "aliasesNum" -> u.outputNames.size.toString,
-                  "outColsNum" -> outputAttrs.size.toString))
-            }
-            val aliases = outputAttrs.zip(u.outputNames).map {
-              case (attr, name) => Alias(attr, name)()
-            }
-            Project(aliases, resolvedFunc)
-          } else {
-            resolvedFunc
-          }
         }
+
+      // Resolve table-valued functions' output column aliases.
+      case u: UnresolvedTVFAliases if u.child.resolved =>
+        // Add `Project` with the aliases.
+        val outputAttrs = u.child.output
+        // Checks if the number of the aliases is equal to expected one
+        if (u.outputNames.size != outputAttrs.size) {
+          u.failAnalysis(
+            errorClass = "_LEGACY_ERROR_TEMP_2307",
+            messageParameters = Map(
+              "funcName" -> u.name.quoted,
+              "aliasesNum" -> u.outputNames.size.toString,
+              "outColsNum" -> outputAttrs.size.toString))
+        }
+        val aliases = outputAttrs.zip(u.outputNames).map {
+          case (attr, name) => Alias(attr, name)()
+        }
+        Project(aliases, u.child)
 
       case q: LogicalPlan =>
         q.transformExpressionsWithPruning(
@@ -3028,7 +3027,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    *    e.g. `SELECT * FROM tbl SORT BY explode(list)`
    */
   object ExtractGenerator extends Rule[LogicalPlan] {
-    private def hasGenerator(expr: Expression): Boolean = {
+    def hasGenerator(expr: Expression): Boolean = {
       expr.exists(_.isInstanceOf[Generator])
     }
 
@@ -3185,6 +3184,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case g: Generate => g
 
+      case u: UnresolvedTableValuedFunction => u
+
       case p if p.expressions.exists(hasGenerator) =>
         throw QueryCompilationErrors.generatorOutsideSelectError(p)
     }
@@ -3203,8 +3204,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(GENERATE), ruleId) {
       case g: Generate if !g.child.resolved || !g.generator.resolved => g
-      case g: Generate if !g.resolved =>
+      case g: Generate if !g.resolved => withPosition(g) {
+        // Check nested generators.
+        if (g.generator.children.exists(ExtractGenerator.hasGenerator)) {
+          throw QueryCompilationErrors.nestedGeneratorError(g.generator)
+        }
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+      }
     }
 
     /**
@@ -3290,15 +3296,15 @@ class Analyzer(override val catalogManager: CatalogManager)
       // For example, when we have col1 - Sum(col2 + col3) OVER (PARTITION BY col4 ORDER BY col5),
       // we need to make sure that col1 to col5 are all projected from the child of the Window
       // operator.
-      val extractedExprBuffer = new ArrayBuffer[NamedExpression]()
+      val extractedExprMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
       def extractExpr(expr: Expression): Expression = expr match {
         case ne: NamedExpression =>
           // If a named expression is not in regularExpressions, add it to
-          // extractedExprBuffer and replace it with an AttributeReference.
+          // extractedExprMap and replace it with an AttributeReference.
           val missingExpr =
-            AttributeSet(Seq(expr)) -- (regularExpressions ++ extractedExprBuffer)
+            AttributeSet(Seq(expr)) -- (regularExpressions ++ extractedExprMap.values)
           if (missingExpr.nonEmpty) {
-            extractedExprBuffer += ne
+            extractedExprMap += ne.canonicalized -> ne
           }
           // alias will be cleaned in the rule CleanupAliases
           ne
@@ -3307,9 +3313,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         case e: Expression =>
           // For other expressions, we extract it and replace it with an AttributeReference (with
           // an internal column name, e.g. "_w0").
-          val withName = Alias(e, s"_w${extractedExprBuffer.length}")()
-          extractedExprBuffer += withName
-          withName.toAttribute
+          extractedExprMap.getOrElseUpdate(e.canonicalized,
+            Alias(e, s"_w${extractedExprMap.size}")()).toAttribute
       }
 
       // Now, we extract regular expressions from expressionsWithWindowFunctions
@@ -3351,9 +3356,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
           case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
-            val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
-            extractedExprBuffer += withName
-            withName.toAttribute
+            extractedExprMap.getOrElseUpdate(agg.canonicalized,
+              Alias(agg, s"_w${extractedExprMap.size}")()).toAttribute
 
           // Extracts other attributes
           case attr: Attribute => extractExpr(attr)
@@ -3361,7 +3365,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }.asInstanceOf[NamedExpression]
       }
 
-      (newExpressionsWithWindowFunctions, regularExpressions ++ extractedExprBuffer)
+      (newExpressionsWithWindowFunctions, regularExpressions ++ extractedExprMap.values)
     } // end of extract
 
     /**

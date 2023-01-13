@@ -54,7 +54,9 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val master = sparkConf.getOption("spark.master")
   private val isYarn = master.isDefined && master.get.equals("yarn")
   private val isK8s = master.isDefined && master.get.startsWith("k8s://")
-  private val isStandalone = master.isDefined && master.get.startsWith("spark://")
+  private val isStandaloneOrLocalCluster = master.isDefined && (
+      master.get.startsWith("spark://") || master.get.startsWith("local-cluster")
+    )
   private val notRunningUnitTests = !isTesting
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
@@ -65,16 +67,16 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
    */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
     if (rp.isInstanceOf[TaskResourceProfile] && !dynamicEnabled) {
-      if ((notRunningUnitTests || testExceptionThrown) && !isStandalone) {
+      if ((notRunningUnitTests || testExceptionThrown) && !isStandaloneOrLocalCluster) {
         throw new SparkException("TaskResourceProfiles are only supported for Standalone " +
           "cluster for now when dynamic allocation is disabled.")
       }
     } else {
       val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
       val notYarnOrK8sOrStandaloneAndNotDefaultProfile =
-        isNotDefaultProfile && !(isYarn || isK8s || isStandalone)
+        isNotDefaultProfile && !(isYarn || isK8s || isStandaloneOrLocalCluster)
       val YarnOrK8sOrStandaloneNotDynAllocAndNotDefaultProfile =
-        isNotDefaultProfile && (isYarn || isK8s || isStandalone) && !dynamicEnabled
+        isNotDefaultProfile && (isYarn || isK8s || isStandaloneOrLocalCluster) && !dynamicEnabled
 
       // We want the exception to be thrown only when we are specifically testing for the
       // exception or in a real application. Otherwise in all other testing scenarios we want
@@ -86,7 +88,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
           "and Standalone with dynamic allocation enabled.")
       }
 
-      if (isStandalone && dynamicEnabled && rp.getExecutorCores.isEmpty &&
+      if (isStandaloneOrLocalCluster && dynamicEnabled && rp.getExecutorCores.isEmpty &&
         sparkConf.getOption(config.EXECUTOR_CORES.key).isEmpty) {
         logWarning("Neither executor cores is set for resource profile, nor spark.executor.cores " +
           "is explicitly set, you may get more executors allocated than expected. " +

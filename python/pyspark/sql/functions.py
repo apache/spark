@@ -44,7 +44,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
+from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -7776,6 +7776,36 @@ def array_compact(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Collection function: returns an array of the elements in col1 along
+    with the added element in col2 at the last of the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing element
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values from first array along with the element.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
+    >>> df.select(array_append(df.c1, df.c2)).collect()
+    [Row(array_append(c1, c2)=['b', 'a', 'c', 'c'])]
+    """
+    return _invoke_function_over_columns("array_append", col1, col2)
+
+
+@try_remote_functions
 def explode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -9950,7 +9980,10 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 @overload
 def udf(
-    f: Callable[..., Any], returnType: "DataTypeOrString" = StringType()
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString" = StringType(),
+    *,
+    useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     ...
 
@@ -9958,6 +9991,8 @@ def udf(
 @overload
 def udf(
     f: Optional["DataTypeOrString"] = None,
+    *,
+    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -9966,6 +10001,7 @@ def udf(
 def udf(
     *,
     returnType: "DataTypeOrString" = StringType(),
+    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -9973,6 +10009,8 @@ def udf(
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
+    *,
+    useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 
@@ -9985,6 +10023,9 @@ def udf(
     returnType : :class:`pyspark.sql.types.DataType` or str
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+    useArrow : bool or None
+        whether to use Arrow to optimize the (de)serialization. When it is None, the
+        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
 
     Examples
     --------
@@ -10063,10 +10104,15 @@ def udf(
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(
-            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+            _create_py_udf,
+            returnType=return_type,
+            evalType=PythonEvalType.SQL_BATCHED_UDF,
+            useArrow=useArrow,
         )
     else:
-        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+        return _create_py_udf(
+            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
+        )
 
 
 def _test() -> None:

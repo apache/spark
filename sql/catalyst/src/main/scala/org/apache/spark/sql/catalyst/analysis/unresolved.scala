@@ -95,20 +95,14 @@ case class UnresolvedInlineTable(
  * A table-valued function, e.g.
  * {{{
  *   select id from range(10);
- *
- *   // Assign alias names
- *   select t.a from range(10) t(a);
  * }}}
  *
- * @param name qualified name of this table-value function
+ * @param name user-specified name of this table-value function
  * @param functionArgs list of function arguments
- * @param outputNames alias names of function output columns. If these names given, an analyzer
- *                    adds [[Project]] to rename the output columns.
  */
 case class UnresolvedTableValuedFunction(
     name: Seq[String],
-    functionArgs: Seq[Expression],
-    outputNames: Seq[String])
+    functionArgs: Seq[Expression])
   extends LeafNode {
 
   override def output: Seq[Attribute] = Nil
@@ -123,16 +117,59 @@ object UnresolvedTableValuedFunction {
 
   def apply(
       name: String,
-      functionArgs: Seq[Expression],
-      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(Seq(name), functionArgs, outputNames)
+      functionArgs: Seq[Expression]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(Seq(name), functionArgs)
   }
 
   def apply(
       name: FunctionIdentifier,
-      functionArgs: Seq[Expression],
-      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(name.asMultipart, functionArgs, outputNames)
+      functionArgs: Seq[Expression]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(name.asMultipart, functionArgs)
+  }
+}
+
+/**
+ * A table-valued function with output column aliases, e.g.
+ * {{{
+ *   // Assign alias names
+ *   select t.a from range(10) t(a);
+ * }}}
+ *
+ * @param name user-specified name of the table-valued function
+ * @param child logical plan of the table-valued function
+ * @param outputNames alias names of function output columns. The analyzer adds [[Project]]
+ *                    to rename the output columns.
+ */
+case class UnresolvedTVFAliases(
+    name: Seq[String],
+    child: LogicalPlan,
+    outputNames: Seq[String]) extends UnaryNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TVF_ALIASES)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+}
+
+object UnresolvedTVFAliases {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  def apply(
+      name: String,
+      child: LogicalPlan,
+      outputNames: Seq[String]): UnresolvedTVFAliases = {
+    UnresolvedTVFAliases(Seq(name), child, outputNames)
+  }
+
+  def apply(
+      name: FunctionIdentifier,
+      child: LogicalPlan,
+      outputNames: Seq[String]): UnresolvedTVFAliases = {
+    UnresolvedTVFAliases(name.asMultipart, child, outputNames)
   }
 }
 
