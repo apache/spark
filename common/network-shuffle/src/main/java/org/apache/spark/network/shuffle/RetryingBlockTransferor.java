@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -87,12 +86,8 @@ public class RetryingBlockTransferor {
   // while inside a synchronized block.
   /** Number of times we've attempted to retry so far. */
   private int retryCount = 0;
-  /**
-   * Map to track blockId to exception that the block is being retried for.
-   * This is mainly used in the case of SASL retries, because we need to set
-   * `retryCount` back to 0 in those cases.
-   */
-  private Map<String, Throwable> blockIdToException;
+
+  private boolean isCurrentSaslTimeout;
 
   /**
    * Set of all block ids which have not been transferred successfully or with a non-IO Exception.
@@ -128,7 +123,7 @@ public class RetryingBlockTransferor {
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
     this.enableSaslRetries = conf.enableSaslRetries();
-    this.blockIdToException = new HashMap<String, Throwable>();
+    this.isCurrentSaslTimeout = false;
   }
 
   public RetryingBlockTransferor(
@@ -208,8 +203,12 @@ public class RetryingBlockTransferor {
       || e.getCause() instanceof IOException;
     boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return (isSaslTimeout || isIOException) &&
+    boolean shouldRetry =  (isSaslTimeout || isIOException) &&
         hasRemainingRetries && errorHandler.shouldRetryError(e);
+    if (shouldRetry && isSaslTimeout) {
+      this.isCurrentSaslTimeout = true;
+    }
+    return shouldRetry;
   }
 
   /**
@@ -227,9 +226,9 @@ public class RetryingBlockTransferor {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           outstandingBlocksIds.remove(blockId);
           shouldForwardSuccess = true;
-          if (blockIdToException.containsKey(blockId) &&
-              blockIdToException.get(blockId) instanceof SaslTimeoutException) {
+          if (isCurrentSaslTimeout) {
             retryCount = 0;
+            isCurrentSaslTimeout = false;
           }
         }
       }
@@ -247,7 +246,6 @@ public class RetryingBlockTransferor {
       synchronized (RetryingBlockTransferor.this) {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           if (shouldRetry(exception)) {
-            blockIdToException.putIfAbsent(blockId, exception);
             initiateRetry();
           } else {
             if (errorHandler.shouldLogError(exception)) {
