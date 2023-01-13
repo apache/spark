@@ -1603,13 +1603,15 @@ abstract class RoundBase(child: Expression, scale: Expression,
           if (ansiEnabled) {
             val errorContext = getContextOrNullCode(ctx)
             val evalCode = s"""
-            ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValueExact();"""
+              |${ev.value} = new java.math.BigDecimal(${ce.value}).
+              |setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValueExact();
+              |""".stripMargin
             MathUtils.withOverflowCode(evalCode, errorContext)
           } else {
             s"""
-            ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();"""
+               |${ev.value} = new java.math.BigDecimal(${ce.value}).
+               |setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();
+               |""".stripMargin
           }
         } else {
           s"${ev.value} = ${ce.value};"
