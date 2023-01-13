@@ -838,7 +838,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(135.135), Literal(-2))), Decimal(200))
   }
 
-  test("round/bround: integer overflow") {
+  test("SPARK-42045: integer overflow in round/bround") {
     val input = 2147483647
     val scale = -1
     Seq(Round(input, scale, ansiEnabled = true),
