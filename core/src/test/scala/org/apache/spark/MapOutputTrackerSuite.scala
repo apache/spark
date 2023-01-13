@@ -21,7 +21,6 @@ import java.util.{Collections => JCollections, HashSet => JHashSet}
 import java.util.concurrent.atomic.LongAdder
 
 import scala.collection.JavaConverters._
-import scala.collection.concurrent
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.ArgumentMatchers.any
@@ -35,10 +34,10 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MAX_SIZE}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, BlockManagerInfo, BlockManagerMaster, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
+import org.apache.spark.storage.{BlockManagerId, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new SparkConf
@@ -918,6 +917,21 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     slaveRpcEnv.shutdown()
   }
 
+  private def fetchDeclaredField(value: AnyRef, fieldName: String): AnyRef = {
+    val field = value.getClass.getDeclaredField(fieldName)
+    field.setAccessible(true)
+    field.get(value)
+  }
+
+  private def lookupBlockManagerMasterEndpoint(sc: SparkContext): BlockManagerMasterEndpoint = {
+    val rpcEnv = sc.env.rpcEnv
+    val dispatcher = fetchDeclaredField(rpcEnv, "dispatcher")
+    fetchDeclaredField(dispatcher, "endpointRefs").
+      asInstanceOf[java.util.Map[RpcEndpoint, RpcEndpointRef]].asScala.
+      filter(_._1.isInstanceOf[BlockManagerMasterEndpoint]).
+      head._1.asInstanceOf[BlockManagerMasterEndpoint]
+  }
+
   test("SPARK-40480: shuffle remove should cleanup merged files as well") {
     val newConf = new SparkConf
     newConf.set("spark.shuffle.push.enabled", "true")
@@ -926,28 +940,14 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     newConf.set(IS_TESTING, true)
 
     val SHUFFLE_ID = 10
-    // needs TorrentBroadcast so need a SparkContext
     withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
-      val rpcEnv = sc.env.rpcEnv
       val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
       val blockStoreClient = mock(classOf[ExternalBlockStoreClient])
-      val blockManagerMasterEndpoint = new BlockManagerMasterEndpoint(
-        rpcEnv,
-        sc.isLocal,
-        sc.conf,
-        sc.listenerBus,
-        Some(blockStoreClient),
-        // We dont care about this ...
-        new concurrent.TrieMap[BlockManagerId, BlockManagerInfo](),
-        masterTracker,
-        sc.env.shuffleManager,
-        true
-      )
-      rpcEnv.stop(sc.env.blockManager.master.driverEndpoint)
-      sc.env.blockManager.master.driverEndpoint =
-        rpcEnv.setupEndpoint(BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-          blockManagerMasterEndpoint)
+      val bmMaster = lookupBlockManagerMasterEndpoint(sc)
+      val field = bmMaster.getClass.getDeclaredField("externalBlockStoreClient")
+      field.setAccessible(true)
+      field.set(bmMaster, Some(blockStoreClient))
 
       masterTracker.registerShuffle(SHUFFLE_ID, 10, 10)
       val mergerLocs = (1 to 10).map(x => BlockManagerId(s"exec-$x", s"host-$x", x))
@@ -973,7 +973,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
   test("SPARK-34826: Adaptive shuffle mergers") {
     val newConf = new SparkConf
-    newConf.set("spark.shuffle.push.based.enabled", "true")
+    newConf.set("spark.shuffle.push.enabled", "true")
     newConf.set("spark.shuffle.service.enabled", "true")
 
     // needs TorrentBroadcast so need a SparkContext
