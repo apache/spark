@@ -507,10 +507,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         data_source = plan.root.read.data_source
         self.assertEqual(data_source.format, "text")
         self.assertEqual(data_source.schema, "id INT")
-        self.assertEqual(len(data_source.options), 3)
-        self.assertEqual(data_source.options.get("path"), "test_path")
+        self.assertEqual(len(data_source.options), 2)
         self.assertEqual(data_source.options.get("op1"), "opv")
         self.assertEqual(data_source.options.get("op2"), "opv2")
+        self.assertEqual(len(data_source.paths), 1)
+        self.assertEqual(data_source.paths[0], "test_path")
 
     def test_simple_udf(self):
         u = udf(lambda x: "Martin", StringType())
