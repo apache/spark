@@ -90,9 +90,11 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
     sparkContext.listenerBus.waitUntilEmpty()
 
     assert(optimizedPlan != null)
-    // Check whether a logical sort node is at the top of the logical plan of the write query.
-    assert(optimizedPlan.isInstanceOf[Sort] == hasLogicalSort,
-      s"Expect hasLogicalSort: $hasLogicalSort, Actual: ${optimizedPlan.isInstanceOf[Sort]}")
+    // Check whether exists a logical sort node of the write query.
+    // If user specified sort matches required ordering, the sort node may not at the top of query.
+    assert(optimizedPlan.exists(_.isInstanceOf[Sort]) == hasLogicalSort,
+      s"Expect hasLogicalSort: $hasLogicalSort," +
+        s"Actual: ${optimizedPlan.exists(_.isInstanceOf[Sort])}")
 
     // Check empty2null conversion.
     val empty2nullExpr = optimizedPlan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
@@ -223,8 +225,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             case s: SortExec => s
           }.exists {
             case SortExec(Seq(
-            SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
-            SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
+              SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
+              SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
             ), false, _, _) => true
             case _ => false
           }, plan)
@@ -268,16 +270,11 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
         // assert the outer most sort in the executed plan
         assert(plan.collectFirst {
           case s: SortExec => s
-        }.map(s => (enabled, s)).exists {
-          case (false, SortExec(Seq(
-          SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
-          SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _)
-          ), false, _, _)) => true
-
-          // SPARK-40885: this bug removes the in-partition sort, which manifests here
-          case (true, SortExec(Seq(
-          SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
-          ), false, _, _)) => true
+        }.exists {
+          case SortExec(Seq(
+            SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
+            SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _)
+          ), false, _, _) => true
           case _ => false
         }, plan)
       }

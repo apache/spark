@@ -16,38 +16,35 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
-
-/**
- * A trait that provides functionality to handle aliases in the `outputExpressions`.
- */
-trait AliasAwareOutputExpression extends UnaryExecNode {
-  protected def outputExpressions: Seq[NamedExpression]
-
-  private lazy val aliasMap = outputExpressions.collect {
-    case a @ Alias(child, _) => child.canonicalized -> a.toAttribute
-  }.toMap
-
-  protected def hasAlias: Boolean = aliasMap.nonEmpty
-
-  protected def normalizeExpression(exp: Expression): Expression = {
-    exp.transformDown {
-      case e: Expression => aliasMap.getOrElse(e.canonicalized, e)
-    }
-  }
-}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 
 /**
  * A trait that handles aliases in the `outputExpressions` to produce `outputPartitioning` that
  * satisfies distribution requirements.
  */
-trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
+trait AliasAwareOutputPartitioning extends UnaryExecNode
+  with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
     val normalizedOutputPartitioning = if (hasAlias) {
       child.outputPartitioning match {
         case e: Expression =>
-          normalizeExpression(e).asInstanceOf[Partitioning]
+          val normalized = normalizeExpression(e, (replacedExpr, outputExpressionSet) => {
+            assert(replacedExpr.isInstanceOf[Partitioning])
+            // It's hard to deduplicate partitioning inside `PartitioningCollection` at
+            // `AliasAwareOutputExpression`, so here we should do distinct.
+            val pruned = flattenPartitioning(replacedExpr.asInstanceOf[Partitioning]).filter {
+              case e: Expression => e.references.subsetOf(outputExpressionSet)
+              case _ => true
+            }.distinct
+            if (pruned.isEmpty) {
+              None
+            } else {
+              Some(PartitioningCollection(pruned))
+            }
+          })
+          PartitioningCollection(normalized.asInstanceOf[Seq[Partitioning]])
         case other => other
       }
     } else {
@@ -55,9 +52,9 @@ trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
     }
 
     flattenPartitioning(normalizedOutputPartitioning).filter {
-      case hashPartitioning: HashPartitioning => hashPartitioning.references.subsetOf(outputSet)
+      case e: Expression => e.references.subsetOf(outputSet)
       case _ => true
-    } match {
+    }.distinct match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
       case Seq(singlePartitioning) => singlePartitioning
       case seqWithMultiplePartitionings => PartitioningCollection(seqWithMultiplePartitionings)
@@ -74,18 +71,4 @@ trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
   }
 }
 
-/**
- * A trait that handles aliases in the `orderingExpressions` to produce `outputOrdering` that
- * satisfies ordering requirements.
- */
-trait AliasAwareOutputOrdering extends AliasAwareOutputExpression {
-  protected def orderingExpressions: Seq[SortOrder]
-
-  final override def outputOrdering: Seq[SortOrder] = {
-    if (hasAlias) {
-      orderingExpressions.map(normalizeExpression(_).asInstanceOf[SortOrder])
-    } else {
-      orderingExpressions
-    }
-  }
-}
+trait AliasAwareOutputOrdering extends UnaryExecNode with AliasAwareQueryOutputOrdering[SparkPlan]
