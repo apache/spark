@@ -2496,6 +2496,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_unsupported_io_functions(self):
         # SPARK-41964: Disable unsupported functions.
         # DataFrameWriterV2 is also not implemented yet
+        df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
 
         for f in ("csv", "orc", "jdbc"):
             with self.assertRaises(NotImplementedError):
@@ -2503,7 +2504,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         for f in ("jdbc",):
             with self.assertRaises(NotImplementedError):
-                getattr(self.connect.read, f)()
+                getattr(df.write, f)()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
