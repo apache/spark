@@ -57,7 +57,7 @@ class MapInArrowTestsMixin(object):
         def func(iterator):
             for batch in iterator:
                 assert isinstance(batch, pa.RecordBatch)
-                assert batch.schema.types == [pa.int32(), pa.large_string()]
+                assert batch.schema.types == [pa.int32(), pa.string()]
                 yield batch
 
         actual = df.mapInArrow(func, df.schema).collect()
