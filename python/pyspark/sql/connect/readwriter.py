@@ -240,8 +240,27 @@ class DataFrameReader(OptionUtils):
     def csv(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("csv() is not implemented.")
 
-    def orc(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("orc() is not implemented.")
+    def orc(
+        self,
+        path: PathOrPaths,
+        mergeSchema: Optional[bool] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+            recursiveFileLookup=recursiveFileLookup,
+        )
+        if isinstance(path, str):
+            path = [path]
+        return self.load(path=path, format="orc")
+
+    orc.__doc__ = PySparkDataFrameReader.orc.__doc__
 
     def jdbc(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("jdbc() not supported for DataFrameWriter")

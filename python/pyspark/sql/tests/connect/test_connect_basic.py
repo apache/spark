@@ -283,6 +283,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.spark.read.json(json_files).collect(),
             )
 
+    def test_orc(self):
+        # SPARK-42011: Implement DataFrameReader.csv
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a text file
+            self.spark.createDataFrame(
+                [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
+            ).write.mode("overwrite").format("orc").save(d)
+            # Read the text file as a DataFrame.
+            self.assert_eq(self.connect.read.orc(d).toPandas(), self.spark.read.orc(d).toPandas())
+
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
         right_connect_df = self.connect.read.table(self.tbl_name2)
@@ -2525,7 +2535,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # DataFrameWriterV2 is also not implemented yet
         df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
 
-        for f in ("csv", "orc", "jdbc"):
+        for f in ("csv", "jdbc"):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.read, f)()
 
