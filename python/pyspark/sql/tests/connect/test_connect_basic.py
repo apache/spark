@@ -284,7 +284,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             )
 
     def test_orc(self):
-        # SPARK-42011: Implement DataFrameReader.csv
+        # SPARK-42012: Implement DataFrameReader.orc
         with tempfile.TemporaryDirectory() as d:
             # Write a DataFrame into a text file
             self.spark.createDataFrame(
