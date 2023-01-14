@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileFormat, BasicWriteJobStatsTracker, V1WriteCommand, V1WritesUtils}
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl

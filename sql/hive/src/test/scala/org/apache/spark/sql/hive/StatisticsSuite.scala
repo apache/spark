@@ -581,6 +581,24 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze not found column") {
+    val tableName = "analyzeTable"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`fakeColumn`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
+    }
+  }
+
   test("analyze non-existent partition") {
 
     def assertAnalysisException(analyzeCommand: String, errorMessage: String): Unit = {
