@@ -1537,8 +1537,16 @@ abstract class RoundBase(child: Expression, scale: Expression,
         } else {
           Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
+      case ByteType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
+          context = getContextOrNull)
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
+      case ShortType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShortExact,
+          context = getContextOrNull)
       case ShortType =>
         BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
       case IntegerType if ansiEnabled =>
@@ -1547,6 +1555,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
           context = getContextOrNull)
       case IntegerType =>
         BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
+      case LongType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLongExact,
+          context = getContextOrNull)
       case LongType =>
         BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
       case FloatType =>
@@ -1569,6 +1581,26 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
+    def codegenForIntegralType(dt: String): String = {
+      if (_scale < 0) {
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          val evalCode = s"""
+            |${ev.value} = new java.math.BigDecimal(${ce.value}).
+            |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}ValueExact();
+            |""".stripMargin
+          MathUtils.withOverflowCode(evalCode, errorContext)
+        } else {
+          s"""
+             |${ev.value} = new java.math.BigDecimal(${ce.value}).
+             |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}Value();
+             |""".stripMargin
+        }
+      } else {
+        s"${ev.value} = ${ce.value};"
+      }
+    }
+
     val evaluationCode = dataType match {
       case DecimalType.Fixed(p, s) =>
         if (_scale >= 0) {
@@ -1583,47 +1615,13 @@ abstract class RoundBase(child: Expression, scale: Expression,
             ${ev.isNull} = ${ev.value} == null;"""
         }
       case ByteType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).byteValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("byte")
       case ShortType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).shortValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("short")
       case IntegerType =>
-        if (_scale < 0) {
-          if (ansiEnabled) {
-            val errorContext = getContextOrNullCode(ctx)
-            val evalCode = s"""
-              |${ev.value} = new java.math.BigDecimal(${ce.value}).
-              |setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValueExact();
-              |""".stripMargin
-            MathUtils.withOverflowCode(evalCode, errorContext)
-          } else {
-            s"""
-               |${ev.value} = new java.math.BigDecimal(${ce.value}).
-               |setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();
-               |""".stripMargin
-          }
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("int")
       case LongType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).longValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("long")
       case FloatType => // if child eval to NaN or Infinity, just return it.
         s"""
           if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {

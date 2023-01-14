@@ -839,15 +839,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-42045: integer overflow in round/bround") {
-    val input = 2147483647
-    val scale = -1
-    Seq(Round(input, scale, ansiEnabled = true),
-      BRound(input, scale, ansiEnabled = true)).foreach { expr =>
-      checkExceptionInExpression[SparkArithmeticException](expr, "Overflow")
-    }
-    Seq(Round(input, scale, ansiEnabled = false),
-      BRound(input, scale, ansiEnabled = false)).foreach { expr =>
-      checkEvaluation(expr, -2147483646)
+    Seq(
+      (Byte.MaxValue, ByteType, -1, -126.toByte),
+      (Short.MaxValue, ShortType, -1, -32766.toShort),
+      (Int.MaxValue, IntegerType, -1, -2147483646),
+      (Long.MaxValue, LongType, -1, -9223372036854775806L)
+    ).foreach { case (input, dt, scale, expected) =>
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = true),
+        BRound(Literal(input, dt), scale, ansiEnabled = true)).foreach { expr =>
+        checkExceptionInExpression[SparkArithmeticException](expr, "Overflow")
+      }
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = false),
+        BRound(Literal(input, dt), scale, ansiEnabled = false)).foreach { expr =>
+        checkEvaluation(expr, expected)
+      }
     }
   }
 
