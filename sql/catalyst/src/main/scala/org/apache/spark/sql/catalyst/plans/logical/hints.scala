@@ -127,7 +127,8 @@ object JoinStrategyHint {
     BROADCAST,
     SHUFFLE_MERGE,
     SHUFFLE_HASH,
-    SHUFFLE_REPLICATE_NL)
+    SHUFFLE_REPLICATE_NL,
+    BLOOM_FILTER_JOIN)
 }
 
 /**
@@ -169,6 +170,15 @@ case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
   override def displayName: String = "shuffle_replicate_nl"
   override def hintAliases: Set[String] = Set(
     "SHUFFLE_REPLICATE_NL")
+}
+
+/**
+ * The hint for bloom filter join.
+ */
+case object BLOOM_FILTER_JOIN extends JoinStrategyHint {
+  override def displayName: String = "bloom_filter_join"
+  override def hintAliases: Set[String] = Set(
+    "BLOOM_FILTER_JOIN")
 }
 
 /**

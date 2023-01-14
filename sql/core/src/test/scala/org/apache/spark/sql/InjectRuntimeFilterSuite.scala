@@ -607,4 +607,13 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
+
+  test("SPARK-42064: bloom filter join hint") {
+    assertDidNotRewriteWithBloomFilter(
+      "SELECT * FROM bf1 JOIN bf2 ON bf1.c1 = bf2.c2")
+    assertRewroteWithBloomFilter(
+      "SELECT /*+ BLOOM_FILTER_JOIN(bf1) */ * FROM bf1 JOIN bf2 ON bf1.c1 = bf2.c2")
+    assertRewroteWithBloomFilter(
+      "SELECT /*+ BLOOM_FILTER_JOIN(bf2) */ * FROM bf1 JOIN bf2 ON bf1.c1 = bf2.c2")
+  }
 }

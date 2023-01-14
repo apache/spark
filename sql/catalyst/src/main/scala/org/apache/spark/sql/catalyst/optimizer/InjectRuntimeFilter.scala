@@ -44,6 +44,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
+  private def hintToBuildBloomFilterLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(BLOOM_FILTER_JOIN))
+  }
+
+  private def hintToBuildBloomFilterRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(BLOOM_FILTER_JOIN))
+  }
+
+  private def hintToBuildBloomFilter(hint: JoinHint): Boolean = {
+    hintToBuildBloomFilterLeft(hint) || hintToBuildBloomFilterRight(hint)
+  }
+
   private def injectFilter(
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
@@ -287,21 +299,24 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         var newRight = right
         (leftKeys, rightKeys).zipped.foreach((l, r) => {
           // Check if:
-          // 1. There is already a DPP filter on the key
-          // 2. There is already a runtime filter (Bloom filter or IN subquery) on the key
-          // 3. The keys are simple cheap expressions
-          if (filterCounter < numFilterThreshold &&
-            !hasDynamicPruningSubquery(left, right, l, r) &&
-            !hasRuntimeFilter(newLeft, newRight, l, r) &&
-            isSimpleExpression(l) && isSimpleExpression(r)) {
+          // 1. hint to build bloom filter
+          // 2. There is already a DPP filter on the key
+          // 3. There is already a runtime filter (Bloom filter or IN subquery) on the key
+          // 4. The keys are simple cheap expressions
+          if (hintToBuildBloomFilter(hint) ||
+            (filterCounter < numFilterThreshold &&
+              !hasDynamicPruningSubquery(left, right, l, r) &&
+              !hasRuntimeFilter(newLeft, newRight, l, r) &&
+              isSimpleExpression(l) && isSimpleExpression(r))) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
+            if (canPruneLeft(joinType) &&
+              (hintToBuildBloomFilterRight(hint) || filteringHasBenefit(left, right, l, hint))) {
               newLeft = injectFilter(l, newLeft, r, right)
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
-              filteringHasBenefit(right, left, r, hint)) {
+              (hintToBuildBloomFilterLeft(hint) || filteringHasBenefit(right, left, r, hint))) {
               newRight = injectFilter(r, newRight, l, left)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
