@@ -2912,8 +2912,8 @@ object SQLConf {
     .stringConf
     .createWithDefault("avro,csv,json,kafka,orc,parquet,text")
 
-  val ALLOW_EMPTY_SCHEMAS_FOR_WRITES =
-    buildConf("spark.sql.legacy.allowEmptySchemaWrite")
+  val ALLOW_EMPTY_SCHEMAS_FOR_WRITES = buildConf("spark.sql.legacy.allowEmptySchemaWrite")
+    .internal()
     .doc("When this option is set to true, validation of empty or empty nested schemas that " +
       "occurs when writing into a FileFormat based data source does not happen.")
     .version("3.4.0")
