@@ -2501,9 +2501,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.read, f)()
 
-        for f in ("jdbc",):
-            with self.assertRaises(NotImplementedError):
-                getattr(self.df_text.write, f)()
+        with self.assertRaises(NotImplementedError):
+            self.df_text.write.jdbc("url", "table")
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
