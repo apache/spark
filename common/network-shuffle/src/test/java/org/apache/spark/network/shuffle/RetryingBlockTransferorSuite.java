@@ -337,7 +337,6 @@ public class RetryingBlockTransferorSuite {
     assert(_retryingBlockTransferor.getRetryCount() == 0);
   }
 
-
   /**
    * Performs a set of interactions in response to block requests from a RetryingBlockFetcher.
    * Each interaction is a Map from BlockId to either ManagedBuffer or Exception. This interaction
