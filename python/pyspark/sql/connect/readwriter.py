@@ -586,7 +586,6 @@ def _test() -> None:
         del pyspark.sql.connect.readwriter.DataFrameReader.load.__doc__
         del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
         del pyspark.sql.connect.readwriter.DataFrameReader.text.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameReader.csv.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.csv.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.text.__doc__
