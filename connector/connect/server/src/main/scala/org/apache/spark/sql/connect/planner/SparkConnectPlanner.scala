@@ -674,7 +674,7 @@ class SparkConnectPlanner(session: SparkSession) {
         } else if (rel.getDataSource.getPathsCount == 1) {
           reader.load(rel.getDataSource.getPaths(0)).queryExecution.analyzed
         } else {
-          reader.load(rel.getDataSource.getPathsList.asScala: _*).queryExecution.analyzed
+          reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
         }
 
       case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
