@@ -50,7 +50,7 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  * (spark.deploy.*).
  */
 private[spark]
-class CoarseGrainedSchedulerBackend(var scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
+class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
   extends ExecutorAllocationClient with SchedulerBackend with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -1034,9 +1034,6 @@ class CoarseGrainedSchedulerBackend(var scheduler: TaskSchedulerImpl, val rpcEnv
     CoarseGrainedSchedulerBackend.this.synchronized { fn }
   }
 
-  override def setTaskScheduler(scheduler: TaskScheduler): Unit = {
-    this.scheduler = scheduler.asInstanceOf[TaskSchedulerImpl]
-  }
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

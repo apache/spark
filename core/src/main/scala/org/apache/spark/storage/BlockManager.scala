@@ -1338,50 +1338,22 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
-    var getIterator = makeIterator
-
-    // Attempt to read the block from local or remote storage. If it's present, then we don't need
-    // to go through the local-get-or-put path.
-    if (isRDDBlockVisible(blockId)) { // Read from cache only when the block is visible.
-      get[T](blockId)(classTag) match {
-        case Some(block) =>
-          return Left(block)
-        case _ =>
-        // Need to compute the block.
-      }
-      // Initially we hold no locks on this block.
-    } else {
+    val isCacheVisible = isRDDBlockVisible(blockId)
+    val getIterator = if (!isCacheVisible) {
       // Need to compute the block. Since if the block already exists, `doPutIterator` will skip
-      // computing the partition, force to compute the block here.
+      // computing the partition, force to compute the block here to update accumulators.
       val iterator = makeIterator()
-      getIterator = () => iterator
+      () => iterator
+    } else {
+      makeIterator
     }
 
-    doPutIterator(blockId, getIterator, level, classTag,
-      keepReadLock = true, checkExistingReplicas = true) match {
-      case None =>
-        // Report taskId -> blockId relationship to master.
-        master.updateRDDBlockTaskInfo(blockId, taskId)
-
-        // doPut() didn't hand work back to us, so the block already existed or was successfully
-        // stored. Therefore, we now hold a read lock on the block.
-        val blockResult = getLocalValues(blockId).getOrElse {
-          // Since we held a read lock between the doPut() and get() calls, the block should not
-          // have been evicted, so get() not returning the block indicates some internal error.
-          releaseLock(blockId)
-          throw SparkCoreErrors.failToGetBlockWithLockError(blockId)
-        }
-        // We already hold a read lock on the block from the doPut() call and getLocalValues()
-        // acquires the lock again, so we need to call releaseLock() here so that the net number
-        // of lock acquisitions is 1 (since the caller will only call release() once).
-        releaseLock(blockId)
-        Left(blockResult)
-      case Some(iter) =>
-        // The put failed, likely because the data was too large to fit in memory and could not be
-        // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
-        // that they can decide what to do with the values (e.g. process them without caching).
-        Right(iter)
+    val res = getOrElseUpdate(blockId, level, classTag, getIterator)
+    if (res.isLeft && !isCacheVisible) { // Report taskId to blockId relationship to master.
+      master.updateRDDBlockTaskInfo(blockId, taskId)
     }
+
+    res
   }
 
   /**
@@ -1391,7 +1363,7 @@ private[spark] class BlockManager(
    * @return either a BlockResult if the block was successfully cached, or an iterator if the block
    *         could not be cached.
    */
-  def getOrElseUpdate[T](
+  private[spark] def getOrElseUpdate[T](
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[T],
@@ -1591,8 +1563,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       tellMaster: Boolean = true,
-      keepReadLock: Boolean = false,
-      checkExistingReplicas: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
+      keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
@@ -1666,14 +1637,8 @@ private[spark] class BlockManager(
           } else {
             classTag
           }
-          val existingReplicas = if (checkExistingReplicas) {
-            master.getLocations(blockId).toSet
-          } else {
-            Set.empty[BlockManagerId]
-          }
-
           try {
-            replicate(blockId, bytesToReplicate, level, remoteClassTag, existingReplicas)
+            replicate(blockId, bytesToReplicate, level, remoteClassTag)
           } finally {
             bytesToReplicate.dispose()
           }

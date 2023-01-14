@@ -106,5 +106,4 @@ private[spark] trait SchedulerBackend {
       numPartitions: Int,
       resourceProfileId: Int): Seq[BlockManagerId] = Nil
 
-  def setTaskScheduler(scheduler: TaskScheduler): Unit = {}
 }
