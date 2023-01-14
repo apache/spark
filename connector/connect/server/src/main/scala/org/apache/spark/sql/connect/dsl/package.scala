@@ -752,7 +752,11 @@ package object dsl {
             createSetOperation(logicalPlan, otherPlan, SetOpType.SET_OP_TYPE_INTERSECT, isAll))
           .build()
 
-      def union(otherPlan: Relation, isAll: Boolean = true, byName: Boolean = false): Relation =
+      def union(
+          otherPlan: Relation,
+          isAll: Boolean = true,
+          byName: Boolean = false,
+          allowMissingColumns: Boolean = false): Relation =
         Relation
           .newBuilder()
           .setSetOp(
@@ -761,7 +765,8 @@ package object dsl {
               otherPlan,
               SetOpType.SET_OP_TYPE_UNION,
               isAll,
-              byName))
+              byName,
+              allowMissingColumns))
           .build()
 
       def coalesce(num: Integer): Relation =
@@ -1020,7 +1025,8 @@ package object dsl {
           right: Relation,
           t: SetOpType,
           isAll: Boolean = true,
-          byName: Boolean = false): SetOperation.Builder = {
+          byName: Boolean = false,
+          allowMissingColumns: Boolean = false): SetOperation.Builder = {
         val setOp = SetOperation
           .newBuilder()
           .setLeftInput(left)
@@ -1028,6 +1034,7 @@ package object dsl {
           .setSetOpType(t)
           .setIsAll(isAll)
           .setByName(byName)
+          .setAllowMissingColumns(allowMissingColumns)
         setOp
       }
     }
