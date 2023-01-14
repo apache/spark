@@ -269,9 +269,7 @@ case class IsNull(attribute: String) extends Filter {
 @Stable
 case class IsNotNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Predicate = {
-    new Predicate("IS_NOT_NULL", Array(toV2Column(attribute)))
-  }
+  override def toV2: Predicate = new Predicate("IS_NOT_NULL", Array(toV2Column(attribute)))
 }
 
 /**
