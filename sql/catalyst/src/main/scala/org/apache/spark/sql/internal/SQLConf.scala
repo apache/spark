@@ -2914,7 +2914,7 @@ object SQLConf {
 
   val ALLOW_EMPTY_SCHEMAS_FOR_WRITES =
     buildConf("spark.sql.legacy.allowEmptySchemaWrite")
-    .doc("When this option is set to true, validation of empty or empty nested schemas that" +
+    .doc("When this option is set to true, validation of empty or empty nested schemas that " +
       "occurs when writing into a FileFormat based data source does not happen.")
     .version("3.4.0")
     .booleanConf
