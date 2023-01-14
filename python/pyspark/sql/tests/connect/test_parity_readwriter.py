@@ -31,12 +31,12 @@ class ReadwriterParityTests(ReadwriterTestsMixin, ReusedConnectTestCase):
     def test_insert_into(self):
         super().test_insert_into()
 
-    # TODO(SPARK-42001): Unexpected schema set to DefaultSource plan
+    # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_save_and_load(self):
         super().test_save_and_load()
 
-    # TODO(SPARK-42001): Unexpected schema set to DefaultSource plan
+    # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_save_and_load_builder(self):
         super().test_save_and_load_builder()

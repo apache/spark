@@ -554,6 +554,7 @@ class Read(google.protobuf.message.Message):
         FORMAT_FIELD_NUMBER: builtins.int
         SCHEMA_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
+        PATHS_FIELD_NUMBER: builtins.int
         format: builtins.str
         """(Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro."""
         schema: builtins.str
@@ -569,12 +570,18 @@ class Read(google.protobuf.message.Message):
             data source format. This options could be empty for valid data source format.
             The map key is case insensitive.
             """
+        @property
+        def paths(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Optional) A list of path for file-system backed data sources."""
         def __init__(
             self,
             *,
             format: builtins.str = ...,
             schema: builtins.str | None = ...,
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            paths: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["_schema", b"_schema", "schema", b"schema"]
@@ -588,6 +595,8 @@ class Read(google.protobuf.message.Message):
                 b"format",
                 "options",
                 b"options",
+                "paths",
+                b"paths",
                 "schema",
                 b"schema",
             ],

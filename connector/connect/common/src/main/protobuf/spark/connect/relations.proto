@@ -127,6 +127,9 @@ message Read {
     // data source format. This options could be empty for valid data source format.
     // The map key is case insensitive.
     map<string, string> options = 3;
+
+    // (Optional) A list of path for file-system backed data sources.
+    repeated string paths = 4;
   }
 }
 
