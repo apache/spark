@@ -394,7 +394,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NON_LITERAL_PIVOT_VALUES",
-  "sqlState" : "42K07",
+  "sqlState" : "42K08",
   "messageParameters" : {
     "expression" : "\"course\""
   }

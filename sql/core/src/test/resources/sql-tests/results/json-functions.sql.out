@@ -151,7 +151,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
-  "sqlState" : "24607",
+  "sqlState" : "42K07",
   "messageParameters" : {
     "inputSchema" : "\"1\""
   },

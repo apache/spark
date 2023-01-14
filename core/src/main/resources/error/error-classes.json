@@ -171,7 +171,7 @@
     "message" : [
       "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid"
     ],
-    "sqlState" : "47710"
+    "sqlState" : "42710"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [
@@ -889,7 +889,7 @@
         ]
       }
     },
-    "sqlState" : "24607"
+    "sqlState" : "42K07"
   },
   "INVALID_SQL_ARG" : {
     "message" : [
@@ -991,7 +991,7 @@
     "message" : [
       "Literal expressions required for pivot values, found <expression>."
     ],
-    "sqlState" : "42K07"
+    "sqlState" : "42K08"
   },
   "NON_PARTITION_COLUMN" : {
     "message" : [

@@ -23,7 +23,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
-  "sqlState" : "24607",
+  "sqlState" : "42K07",
   "messageParameters" : {
     "inputSchema" : "\"1\""
   },
@@ -68,7 +68,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA.NON_STRUCT_TYPE",
-  "sqlState" : "24607",
+  "sqlState" : "42K07",
   "messageParameters" : {
     "dataType" : "\"ARRAY<INT>\"",
     "inputSchema" : "\"Array<int>\""
