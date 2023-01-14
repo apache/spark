@@ -403,7 +403,8 @@ public class RetryingBlockTransferorSuite {
     assertNotNull(stub);
     stub.when(fetchStarter).createAndStart(any(), any());
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
-    _retryingBlockTransferor = new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener);
+    _retryingBlockTransferor =
+        new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener);
     _retryingBlockTransferor.start();
   }
 }
