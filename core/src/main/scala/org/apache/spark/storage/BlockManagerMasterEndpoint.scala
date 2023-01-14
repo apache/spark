@@ -750,8 +750,10 @@ class BlockManagerMasterEndpoint(
       locations.add(blockManagerId)
       // If the rdd block is already visible, ask storage manager to update the visibility status.
       blockId.asRDDId.foreach(rddBlockId =>
-        blockManagerInfo(blockManagerId).storageEndpoint
-          .ask[Unit](MarkRDDBlockAsVisible(rddBlockId))
+        if (visibleRDDBlocks.contains(rddBlockId)) {
+          blockManagerInfo(blockManagerId).storageEndpoint
+            .ask[Unit](MarkRDDBlockAsVisible(rddBlockId))
+        }
       )
     } else {
       locations.remove(blockManagerId)

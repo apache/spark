@@ -1349,7 +1349,8 @@ private[spark] class BlockManager(
     }
 
     val res = getOrElseUpdate(blockId, level, classTag, getIterator)
-    if (res.isLeft && !isCacheVisible) { // Report taskId to blockId relationship to master.
+    if (res.isLeft && !isCacheVisible) {
+      // Block exists and not visible, report taskId -> blockId info to master.
       master.updateRDDBlockTaskInfo(blockId, taskId)
     }
 
@@ -1456,7 +1457,7 @@ private[spark] class BlockManager(
   }
 
   // Check whether a rdd block is visible or not.
-  private def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+  private[spark] def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
     // If the rdd block visibility information not available in the block manager,
     // asking master for the information.
     if (blockInfoManager.isRDDBlockVisible(blockId)) {

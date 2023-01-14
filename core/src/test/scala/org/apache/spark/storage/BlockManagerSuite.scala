@@ -28,6 +28,7 @@ import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.reflect.classTag
 
 import com.esotericsoftware.kryo.KryoException
 import org.apache.commons.lang3.RandomUtils
@@ -2263,6 +2264,79 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       verify(master, times(0))
         .registerBlockManager(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
       server.close()
+    }
+  }
+
+  test("SPARK-41497: getOrElseUpdateRDDBlock do compute based on cache visibility statue") {
+    val store = makeBlockManager(8000, "executor1")
+    val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
+    var computed: Boolean = false
+    val data = Seq(1, 2, 3)
+    val makeIterator = () => {
+      computed = true
+      data.iterator
+    }
+
+    // Cache doesn't exist and is not visible.
+    assert(store.getStatus(blockId).isEmpty && !store.isRDDBlockVisible(blockId))
+    val res1 = store.getOrElseUpdateRDDBlock(
+      1, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
+    // Put cache successfully and reported block task info.
+    assert(res1.isLeft && computed)
+    verify(master, times(1)).updateRDDBlockTaskInfo(blockId, 1)
+
+    // Cache exists but not visible.
+    computed = false
+    assert(store.getStatus(blockId).nonEmpty && !store.isRDDBlockVisible(blockId))
+    val res2 = store.getOrElseUpdateRDDBlock(
+      1, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
+    // Load cache successfully and reported block task info.
+    assert(res2.isLeft && computed)
+    verify(master, times(2)).updateRDDBlockTaskInfo(blockId, 1)
+
+    // Cache exists and visible.
+    store.blockInfoManager.addVisibleBlocks(blockId)
+    computed = false
+    assert(store.getStatus(blockId).nonEmpty && store.isRDDBlockVisible(blockId))
+    val res3 = store.getOrElseUpdateRDDBlock(
+      1, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
+    // Load cache successfully but not report block task info.
+    assert(res3.isLeft && !computed)
+    verify(master, times(2)).updateRDDBlockTaskInfo(blockId, 1)
+  }
+
+  test("clean up visibility status once a rdd block is removed") {
+    val store = makeBlockManager(8000, "executor1")
+    val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
+    val data = Seq(1, 2, 3)
+    store.putIterator(blockId, data.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.blockInfoManager.addVisibleBlocks(blockId)
+
+    assert(store.getStatus(blockId).nonEmpty && store.blockInfoManager.isRDDBlockVisible(blockId))
+
+    store.removeBlock(blockId)
+    assert(!store.blockInfoManager.isRDDBlockVisible(blockId))
+    assert(!store.blockInfoManager.visibleRDDBlocks.contains(blockId))
+  }
+
+  test("master & manager interaction about rdd block visibility information") {
+    val store = makeBlockManager(8000, "executor1")
+    val taskId = 0L
+    val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
+    val data = Seq(1, 2, 3)
+
+    store.getOrElseUpdateRDDBlock(
+      taskId, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], () => data.iterator)
+    // Block information is reported and block is not visible.
+    assert(master.getLocations(blockId).nonEmpty)
+    assert(!master.isRDDBlockVisible(blockId))
+    assert(!store.blockInfoManager.visibleRDDBlocks.contains(blockId))
+
+    // Report rdd block visibility as true.
+    master.updateRDDBlockVisibility(taskId, visible = true)
+    assert(master.isRDDBlockVisible(blockId))
+    eventually(timeout(5.seconds)) {
+      assert(store.blockInfoManager.isRDDBlockVisible(blockId))
     }
   }
 
