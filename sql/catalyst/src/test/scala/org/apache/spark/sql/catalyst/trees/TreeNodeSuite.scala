@@ -1088,4 +1088,17 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     } yield Add(ab, cd)
     assert(transformed == expected)
   }
+
+  test("multiTransformDown can prune") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") => Seq.empty
+    }
+    assert(transformed.isEmpty)
+
+    val transformed2 = e.multiTransformDown {
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq.empty
+    }
+    assert(transformed2.isEmpty)
+  }
 }

@@ -678,8 +678,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * To indicate that the original node without any transformation is a valid alternative the rule
    * can either:
    * - not apply or
-   * - return an empty `Seq` or
    * - a `Seq` that contains a node that is equal to the original node.
+   *
+   * The rule can return `Seq.empty` to indicate that the original node should be pruned from the
+   * alternatives.
    *
    * Please note that this function always consider the original node as a valid alternative (even
    * if the original node is not included in the returned `Seq`) if the rule can transform any of
@@ -716,38 +718,43 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
 
     val afterRules = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, (_: BaseType) => Seq.empty)
+      rule.applyOrElse(this, (t: BaseType) => Seq(t))
     }
     // A stream of a tuple that contains:
     // - a node that is either the transformed alternative of the current node or the current node,
     // - a boolean flag if the node was actually transformed,
     // - a boolean flag if a node's children needs to be transformed to add the node to the valid
     // alternatives
-    val afterRulesStream = if (afterRules.isEmpty) {
-      // If the rule is not applied or returns with empty alternatives keep the original node
-      Stream((this, false, false))
-    } else {
-      // If the rule is applied then use the returned alternatives. The alternatives can include the
-      // current node and we need to keep track of that
-      var foundEqual = false
-      afterRules.toStream.map { afterRule =>
-        (if (this fastEquals afterRule) {
-          foundEqual = true
-          this
-        } else {
-          afterRule.copyTagsFrom(this)
-          afterRule
-        }, true, false)
-      }.append(
-        // If the current node is not a leaf node and the alternatives returned by the rule doesn't
-        // contain it then we need to add the current node to the stream, but require any of its
-        // child nodes to be transformed to keep it as a valid alternative
-        if (containsChild.nonEmpty && !foundEqual) {
-          Stream((this, false, true))
-        } else {
-          Stream.empty
-        }
-      )
+    val afterRulesStream = afterRules match {
+      // If the rule returns with empty alternatives then prune
+      case Nil => Stream.empty
+
+      // If the rule returns with a node equal to the original (or not applied) then keep the
+      // original node
+      case afterRule :: Nil if this fastEquals afterRule => Stream((this, false, false))
+
+      // If the rule is applied then use the returned alternatives
+      case _ =>
+        // The alternatives can include the current node and we need to keep track of that
+        var foundEqual = false
+        afterRules.toStream.map { afterRule =>
+          (if (this fastEquals afterRule) {
+            foundEqual = true
+            this
+          } else {
+            afterRule.copyTagsFrom(this)
+            afterRule
+          }, true, false)
+        }.append(
+          // If the current node is not a leaf node and the alternatives returned by the rule
+          // doesn't contain it then we need to add the current node to the stream, but require any
+          // of its child nodes to be transformed to keep it as a valid alternative
+          if (containsChild.nonEmpty && !foundEqual) {
+            Stream((this, false, true))
+          } else {
+            Stream.empty
+          }
+        )
     }
 
     def generateChildrenSeq(children: Seq[BaseType]): Stream[(Seq[BaseType], Boolean)] = {
