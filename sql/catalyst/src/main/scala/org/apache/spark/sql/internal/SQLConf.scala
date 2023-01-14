@@ -4063,7 +4063,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.keepPartitionSpecAsStringLiteral")
       .internal()
       .doc("If it is set to true and the type of the partition is string, " +
-        "partition value will be parsed as string value but not numeric value")
+        "partition value will be treated as string value but not numeric value")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
