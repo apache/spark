@@ -273,7 +273,7 @@ class DataFrameReader(OptionUtils):
         modifiedBefore: Optional[Union[bool, str]] = None,
         modifiedAfter: Optional[Union[bool, str]] = None,
         unescapedQuoteHandling: Optional[str] = None,
-    ) -> None:
+    ) -> "DataFrame":
         self._set_opts(
             sep=sep,
             encoding=encoding,
