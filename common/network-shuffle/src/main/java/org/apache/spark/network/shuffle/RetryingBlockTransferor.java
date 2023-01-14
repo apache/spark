@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -86,7 +87,7 @@ public class RetryingBlockTransferor {
   /** Number of times we've attempted to retry so far. */
   private int retryCount = 0;
 
-  private boolean isCurrentSaslTimeout;
+  private boolean saslTimeoutSeen;
 
   /**
    * Set of all block ids which have not been transferred successfully or with a non-IO Exception.
@@ -122,7 +123,7 @@ public class RetryingBlockTransferor {
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
     this.enableSaslRetries = conf.enableSaslRetries();
-    this.isCurrentSaslTimeout = false;
+    this.saslTimeoutSeen = false;
   }
 
   public RetryingBlockTransferor(
@@ -202,13 +203,22 @@ public class RetryingBlockTransferor {
     boolean isIOException = e instanceof IOException
       || e.getCause() instanceof IOException;
     boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
+    if (!isSaslTimeout && saslTimeoutSeen) {
+      retryCount = 0;
+      saslTimeoutSeen = false;
+    }
     boolean hasRemainingRetries = retryCount < maxRetries;
     boolean shouldRetry =  (isSaslTimeout || isIOException) &&
         hasRemainingRetries && errorHandler.shouldRetryError(e);
     if (shouldRetry && isSaslTimeout) {
-      this.isCurrentSaslTimeout = true;
+      this.saslTimeoutSeen = true;
     }
     return shouldRetry;
+  }
+
+  @VisibleForTesting
+  public int getRetryCount() {
+    return retryCount;
   }
 
   /**
@@ -226,9 +236,9 @@ public class RetryingBlockTransferor {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           outstandingBlocksIds.remove(blockId);
           shouldForwardSuccess = true;
-          if (isCurrentSaslTimeout) {
+          if (saslTimeoutSeen) {
             retryCount = 0;
-            isCurrentSaslTimeout = false;
+            saslTimeoutSeen = false;
           }
         }
       }

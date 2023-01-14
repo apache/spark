@@ -56,6 +56,7 @@ public class RetryingBlockTransferorSuite {
   private final ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
   private final ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
   private static Map<String, String> configMap;
+  private static RetryingBlockTransferor _retryingBlockTransferor;
 
   @Before
   public void initMap() {
@@ -286,6 +287,7 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener).getTransferType();
     verifyNoMoreInteractions(listener);
+    assert(_retryingBlockTransferor.getRetryCount() == 0);
   }
 
   @Test
@@ -307,6 +309,32 @@ public class RetryingBlockTransferorSuite {
     verify(listener, times(3)).getTransferType();
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslTimeoutException);
     verifyNoMoreInteractions(listener);
+    assert(_retryingBlockTransferor.getRetryCount() == 2);
+  }
+
+  @Test
+  public void testBlockTransferFailureAfterSasl() throws IOException, InterruptedException {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    IOException ioe = new IOException();
+    TimeoutException timeoutException = new TimeoutException();
+    SaslTimeoutException saslTimeoutException =
+        new SaslTimeoutException(timeoutException);
+
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
+        ImmutableMap.<String, Object>builder()
+            .put("b0", saslTimeoutException)
+            .put("b1", ioe)
+            .build(),
+        ImmutableMap.<String, Object>builder()
+            .put("b0", block0)
+            .put("b1", block1)
+            .build()
+    );
+    configMap.put("spark.shuffle.sasl.enableRetries", "true");
+    performInteractions(interactions, listener);
+    verify(listener).getTransferType();
+    verify(listener).onBlockTransferSuccess("b1", block1);
+    assert(_retryingBlockTransferor.getRetryCount() == 0);
   }
 
 
@@ -376,6 +404,7 @@ public class RetryingBlockTransferorSuite {
     assertNotNull(stub);
     stub.when(fetchStarter).createAndStart(any(), any());
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
-    new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener).start();
+    _retryingBlockTransferor = new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener);
+    _retryingBlockTransferor.start();
   }
 }
