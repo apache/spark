@@ -308,6 +308,8 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             unescapedQuoteHandling=unescapedQuoteHandling,
         )
+        if isinstance(path, str):
+            path = [path]
         return self.load(path=path, format="csv", schema=schema)
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__
