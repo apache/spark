@@ -24,7 +24,6 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
@@ -98,7 +97,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     ExecutorPodsSnapshot.setShouldCheckAllContainers(
       sc.conf.get(KUBERNETES_EXECUTOR_CHECK_ALL_CONTAINERS))
     val sparkContainerName = sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME)
-      .getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME)
+      .getOrElse(EXECUTOR_CONTAINER_NAME)
     ExecutorPodsSnapshot.setSparkContainerName(sparkContainerName)
     val subscribersExecutor = ThreadUtils
       .newDaemonThreadPoolScheduledExecutor(

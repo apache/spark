@@ -146,6 +146,20 @@ private[spark] object Config extends Logging {
       .checkValues(Set("Always", "Never", "IfNotPresent"))
       .createWithDefault("IfNotPresent")
 
+  val DRIVER_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.driver.container.name")
+      .doc("Name of the driver container.")
+      .version("3.4.0")
+      .stringConf
+      .createWithDefault(DEFAULT_DRIVER_CONTAINER_NAME)
+
+  val EXECUTOR_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.container.name")
+      .doc("Name of the executors containers.")
+      .version("3.4.0")
+      .stringConf
+      .createWithDefault(DEFAULT_EXECUTOR_CONTAINER_NAME)
+
   val IMAGE_PULL_SECRETS =
     ConfigBuilder("spark.kubernetes.container.image.pullSecrets")
       .doc("Comma separated list of the Kubernetes secrets used " +

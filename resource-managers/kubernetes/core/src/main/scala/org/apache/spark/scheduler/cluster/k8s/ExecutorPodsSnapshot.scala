@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 import io.fabric8.kubernetes.api.model.Pod
 
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 
@@ -43,7 +44,7 @@ private[spark] case class ExecutorPodsSnapshot(
 
 object ExecutorPodsSnapshot extends Logging {
   private var shouldCheckAllContainers: Boolean = _
-  private var sparkContainerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME
+  private var sparkContainerName: String = EXECUTOR_CONTAINER_NAME
 
   def apply(executorPods: Seq[Pod], fullSnapshotTs: Long): ExecutorPodsSnapshot = {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods), fullSnapshotTs)

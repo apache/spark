@@ -19,13 +19,13 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.Pod
 import scala.collection.mutable
 
-import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.util.ManualClock
 
 class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore {
 
   ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
-  ExecutorPodsSnapshot.setSparkContainerName(DEFAULT_EXECUTOR_CONTAINER_NAME)
+  ExecutorPodsSnapshot.setSparkContainerName(EXECUTOR_CONTAINER_NAME)
 
   val clock = new ManualClock()
 
