@@ -285,9 +285,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
     sql(
       s"""
-         |CREATE OR REPLACE TEMPORARY VIEW composite_name
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$url', dbtable 'TEST.COMPOSITE_NAME', user 'testUser', password 'testPass')
+        |CREATE OR REPLACE TEMPORARY VIEW composite_name
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.COMPOSITE_NAME', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
@@ -1978,7 +1978,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-41990: Filter with composite name doesn't work") {
+  test("SPARK-41990: Filter with composite name") {
     val df = sql("SELECT * FROM composite_name WHERE `last name` = 'smith'")
     assert(df.collect.toSet === Set(Row("smith", 1)))
   }
