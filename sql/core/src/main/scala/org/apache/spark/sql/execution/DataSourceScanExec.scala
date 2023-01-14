@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
@@ -206,8 +206,10 @@ trait FileSourceScanLike extends DataSourceScanExec {
   def tableIdentifier: Option[TableIdentifier]
 
 
-  lazy val metadataColumns: Seq[AttributeReference] =
-    output.collect { case FileSourceMetadataAttribute(attr) => attr }
+  lazy val fileConstantMetadataColumns: Seq[AttributeReference] = output.collect {
+    // Collect metadata columns to be handled outside of the scan by appending constant columns.
+    case FileSourceConstantMetadataAttribute(attr) => attr
+  }
 
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(
@@ -216,15 +218,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
       relation.sparkSession.sessionState.conf).map { vectorTypes =>
         vectorTypes ++
           // for column-based file format, append metadata column's vector type classes if any
-          metadataColumns.map { metadataCol =>
-            if (FileFormat.isConstantMetadataAttr(metadataCol.name)) {
-              classOf[ConstantColumnVector].getName
-            } else if (relation.sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
-              classOf[OffHeapColumnVector].getName
-            } else {
-              classOf[OnHeapColumnVector].getName
-            }
-          }
+          fileConstantMetadataColumns.map { _ => classOf[ConstantColumnVector].getName }
       }
 
   lazy val driverMetrics = Map(
@@ -379,11 +373,12 @@ trait FileSourceScanLike extends DataSourceScanExec {
   @transient
   protected lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // `dataFilters` should not include any metadata col filters
+    // `dataFilters` should not include any constant metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy
-    // and thus metadata col filters are invalid to be pushed down
+    // and thus metadata col filters are invalid to be pushed down. Metadata that is generated
+    // during the scan can be used for filters.
     dataFilters.filterNot(_.references.exists {
-      case FileSourceMetadataAttribute(_) => true
+      case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
@@ -666,9 +661,8 @@ case class FileSourceScanExec(
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns,
-      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
-
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields),
+      fileConstantMetadataColumns, new FileSourceOptions(CaseInsensitiveMap(relation.options)))
   }
 
   /**
@@ -728,8 +722,8 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns,
-      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields),
+      fileConstantMetadataColumns, new FileSourceOptions(CaseInsensitiveMap(relation.options)))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced

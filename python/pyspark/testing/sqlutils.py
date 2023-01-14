@@ -202,7 +202,7 @@ class SQLTestUtils:
             yield
         finally:
             for db in databases:
-                self.spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db)
+                self.spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db).collect()
             self.spark.catalog.setCurrentDatabase("default")
 
     @contextmanager
@@ -217,7 +217,7 @@ class SQLTestUtils:
             yield
         finally:
             for t in tables:
-                self.spark.sql("DROP TABLE IF EXISTS %s" % t)
+                self.spark.sql("DROP TABLE IF EXISTS %s" % t).collect()
 
     @contextmanager
     def tempView(self, *views):
@@ -245,7 +245,7 @@ class SQLTestUtils:
             yield
         finally:
             for f in functions:
-                self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
+                self.spark.sql("DROP FUNCTION IF EXISTS %s" % f).collect()
 
     @staticmethod
     def assert_close(a, b):

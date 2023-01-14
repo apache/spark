@@ -77,7 +77,7 @@ def _to_seq(
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
-    Convert a list of Column (or names) into a JVM Seq of Column.
+    Convert a list of Columns (or names) into a JVM Seq of Column.
 
     An optional `converter` could be used to convert items in `cols`
     into JVM Column objects.
@@ -94,7 +94,7 @@ def _to_list(
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
-    Convert a list of Column (or names) into a JVM (Scala) List of Column.
+    Convert a list of Columns (or names) into a JVM (Scala) List of Columns.
 
     An optional `converter` could be used to convert items in `cols`
     into JVM Column objects.
@@ -182,12 +182,18 @@ def _reverse_op(
     return _
 
 
+# TODO(SPARK-41757): Compatibility of string representation for Column
+
+
 class Column:
 
     """
     A column in a DataFrame.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -197,17 +203,16 @@ class Column:
     ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
     Select a column out of a DataFrame
-
-    >>> df.name
+    >>> df.name   # doctest: +SKIP
     Column<'name'>
-    >>> df["name"]
+    >>> df["name"]  # doctest: +SKIP
     Column<'name'>
 
     Create from an expression
 
-    >>> df.age + 1
+    >>> df.age + 1  # doctest: +SKIP
     Column<'(age + 1)'>
-    >>> 1 / df.age
+    >>> 1 / df.age  # doctest: +SKIP
     Column<'(1 / age)'>
     """
 
@@ -277,10 +282,14 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
+    # TODO(SPARK-41812): DataFrame.join: ambiguous column
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -309,9 +318,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
@@ -358,6 +367,9 @@ class Column:
     _bitwiseOR_doc = """
     Compute bitwise OR of this expression with another expression.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -374,6 +386,9 @@ class Column:
     _bitwiseAND_doc = """
     Compute bitwise AND of this expression with another expression.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -389,6 +404,9 @@ class Column:
     """
     _bitwiseXOR_doc = """
     Compute bitwise XOR of this expression with another expression.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -415,11 +433,14 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         key
             a literal value, or a :class:`Column` expression.
-            The result will only be true at a location if item matches in the column.
+            The result will only be true at a location if the item matches in the column.
 
              .. deprecated:: 3.0.0
                  :class:`Column` as a parameter is deprecated.
@@ -454,18 +475,21 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         name
             a literal value, or a :class:`Column` expression.
-            The result will only be true at a location if field matches in the Column.
+            The result will only be true at a location if the field matches in the Column.
 
              .. deprecated:: 3.0.0
                  :class:`Column` as a parameter is deprecated.
         Returns
         -------
         :class:`Column`
-            Column representing whether each element of Column gotten by name.
+            Column representing whether each element of Column got by name.
 
         Examples
         --------
@@ -499,6 +523,9 @@ class Column:
 
         .. versionadded:: 3.1.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         fieldName : str
@@ -511,7 +538,7 @@ class Column:
         -------
         :class:`Column`
             Column representing whether each element of Column
-            which field added/replaced by fieldName.
+            which field was added/replaced by fieldName.
 
         Examples
         --------
@@ -542,9 +569,12 @@ class Column:
     def dropFields(self, *fieldNames: str) -> "Column":
         """
         An expression that drops fields in :class:`StructType` by name.
-        This is a no-op if schema doesn't contain field name(s).
+        This is a no-op if the schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -625,6 +655,9 @@ class Column:
     _contains_doc = """
     Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -645,6 +678,9 @@ class Column:
     other : :class:`Column` or str
         string at start of line (do not use a regex `^`)
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> df = spark.createDataFrame(
@@ -656,6 +692,9 @@ class Column:
     """
     _endswith_doc = """
     String ends with. Returns a boolean :class:`Column` based on a string match.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -679,6 +718,9 @@ class Column:
     def like(self: "Column", other: str) -> "Column":
         """
         SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -710,6 +752,9 @@ class Column:
         SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
         match.
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         other : str
@@ -737,6 +782,9 @@ class Column:
         based on a case insensitive match.
 
         .. versionadded:: 3.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -776,6 +824,9 @@ class Column:
         Return a :class:`Column` which is a substring of the column.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -819,6 +870,9 @@ class Column:
 
         .. versionadded:: 1.5.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         cols
@@ -851,7 +905,7 @@ class Column:
 
     # order
     _asc_doc = """
-    Returns a sort expression based on ascending order of the column.
+    Returns a sort expression based on the ascending order of the column.
 
     Examples
     --------
@@ -938,6 +992,9 @@ class Column:
     _isNull_doc = """
     True if the current expression is null.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -947,6 +1004,9 @@ class Column:
     """
     _isNotNull_doc = """
     True if the current expression is NOT null.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -965,6 +1025,9 @@ class Column:
         return more than one column, such as explode).
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1020,6 +1083,9 @@ class Column:
         Casts the column into type ``dataType``.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1100,6 +1166,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         condition : :class:`Column`
@@ -1142,6 +1211,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         value
@@ -1179,6 +1251,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         window : :class:`WindowSpec`
@@ -1192,8 +1267,7 @@ class Column:
         >>> from pyspark.sql import Window
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
+        >>> from pyspark.sql.functions import rank, min, desc
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.withColumn("rank", rank().over(window)) \

@@ -3875,7 +3875,7 @@ class Dataset[T] private[sql](
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2310",
+        errorClass = "WRITE_STREAM_NOT_ALLOWED",
         messageParameters = Map.empty)
     }
     new DataStreamWriter[T](this)

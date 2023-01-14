@@ -24,10 +24,11 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, Dataset}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -148,17 +149,17 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Sort") {
     val sort = proto.Sort.newBuilder
-      .addAllSortFields(Seq(proto.Sort.SortField.newBuilder().build()).asJava)
+      .addAllOrder(Seq(proto.Expression.SortOrder.newBuilder().build()).asJava)
       .build()
     intercept[IndexOutOfBoundsException](
       transform(proto.Relation.newBuilder().setSort(sort).build()),
       "No Input set.")
 
-    val f = proto.Sort.SortField
+    val f = proto.Expression.SortOrder
       .newBuilder()
-      .setNulls(proto.Sort.SortNulls.SORT_NULLS_LAST)
-      .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
-      .setExpression(
+      .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_LAST)
+      .setDirection(proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_DESCENDING)
+      .setChild(
         proto.Expression.newBuilder
           .setUnresolvedAttribute(
             proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier("col").build())
@@ -169,7 +170,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder
         .setSort(
           proto.Sort.newBuilder
-            .addAllSortFields(Seq(f).asJava)
+            .addAllOrder(Seq(f).asJava)
             .setInput(readRel)
             .setIsGlobal(true))
         .build())
@@ -180,7 +181,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder
         .setSort(
           proto.Sort.newBuilder
-            .addAllSortFields(Seq(f).asJava)
+            .addAllOrder(Seq(f).asJava)
             .setInput(readRel)
             .setIsGlobal(false))
         .build())
@@ -211,6 +212,25 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .build())
         .build())
     assert(res.nodeName == "Union")
+  }
+
+  test("Union By Name") {
+    val union = proto.Relation.newBuilder
+      .setSetOp(
+        proto.SetOperation.newBuilder
+          .setLeftInput(readRel)
+          .setRightInput(readRel)
+          .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_UNION)
+          .setByName(false)
+          .setAllowMissingColumns(true)
+          .build())
+      .build()
+    val msg = intercept[InvalidPlanInput] {
+      transform(union)
+    }
+    assert(
+      msg.getMessage.contains(
+        "UnionByName `allowMissingCol` can be true only if `byName` is true."))
   }
 
   test("Simple Join") {
@@ -302,8 +322,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addResultExpressions(sum)
+      .addAggregateExpressions(sum)
       .addGroupingExpressions(unresolvedAttribute)
+      .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
@@ -434,12 +455,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             proto.WithColumns
               .newBuilder()
               .setInput(readRel)
-              .addNameExprList(proto.Expression.Alias
+              .addAliases(proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
                   .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
-              .addNameExprList(proto.Expression.Alias
+              .addAliases(proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
@@ -457,7 +478,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             proto.WithColumns
               .newBuilder()
               .setInput(readRel)
-              .addNameExprList(
+              .addAliases(
                 proto.Expression.Alias
                   .newBuilder()
                   .addName("part1")
@@ -570,5 +591,247 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val df =
       Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
     assert(df.schema.fields.toSeq.map(_.name) == Seq("id"))
+  }
+
+  test("Hint") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("REPARTITION")
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(10000)).build()))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 10000)
+  }
+
+  test("Hint with illegal name will be ignored") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("illegal"))
+        .build())
+    assert(10 === Dataset.ofRows(spark, logical).count())
+  }
+
+  test("Hint with string attribute parameters") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("REPARTITION")
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue("id")).build()))
+        .build())
+    assert(10 === Dataset.ofRows(spark, logical).count())
+  }
+
+  test("Hint with wrong parameters") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("REPARTITION")
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(true)).build()))
+        .build())
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
+  }
+
+  test("transform SortOrder") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("SELECT id FROM VALUES (5),(1),(2),(6),(4),(3),(7),(9),(8),(null) AS tab(id)")
+          .build())
+
+    val relation = proto.Relation
+      .newBuilder()
+      .setSort(
+        proto.Sort
+          .newBuilder()
+          .setInput(input)
+          .setIsGlobal(false)
+          .addOrder(
+            proto.Expression.SortOrder
+              .newBuilder()
+              .setDirectionValue(
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+              .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+              .setChild(proto.Expression
+                .newBuilder()
+                .setExpressionString(
+                  proto.Expression.ExpressionString.newBuilder().setExpression("id")))))
+      .build()
+    val df = Dataset.ofRows(spark, transform(relation))
+    df.foreachPartition { p: Iterator[Row] =>
+      var previousValue: Int = -1
+      p.foreach { r =>
+        val v = r.getAs[Int](0)
+        // null will be converted to 0
+        if (v == 0) {
+          assert(previousValue == -1, "null should be first")
+        }
+        if (previousValue != -1) {
+          assert(v > previousValue, "Partition is not ordered.")
+        }
+        previousValue = v
+      }
+    }
+  }
+
+  test("RepartitionByExpression") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .setNumPartitions(3)
+            .addPartitionExprs(proto.Expression.newBuilder
+              .setExpressionString(proto.Expression.ExpressionString.newBuilder
+                .setExpression("id % 2"))))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 3)
+    val valueToPartition = df
+      .selectExpr("id", "spark_partition_id()")
+      .rdd
+      .map(row => (row.getLong(0), row.getInt(1)))
+      .collectAsMap()
+    for ((value, partition) <- valueToPartition) {
+      if (value % 2 == 0) {
+        assert(partition == valueToPartition(0), "dataframe is not partitioned by `id % 2`")
+      } else {
+        assert(partition == valueToPartition(1), "dataframe is not partitioned by `id % 2`")
+      }
+    }
+  }
+
+  test("Repartition by range") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .setNumPartitions(3)
+            .addPartitionExprs(
+              proto.Expression.newBuilder
+                .setSortOrder(
+                  proto.Expression.SortOrder.newBuilder
+                    .setDirectionValue(
+                      proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+                    .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+                    .setChild(proto.Expression
+                      .newBuilder()
+                      .setExpressionString(
+                        proto.Expression.ExpressionString.newBuilder().setExpression("id"))))))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 3)
+    df.rdd.foreachPartition { p =>
+      var previousValue = -1L
+      p.foreach { r =>
+        val v = r.getLong(0)
+        if (previousValue != -1L) {
+          assert(previousValue < v, "partition is not ordered.")
+        }
+        previousValue = v
+      }
+    }
+  }
+
+  test("RepartitionByExpression with wrong parameters") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .addPartitionExprs(proto.Expression.newBuilder
+              .setExpressionString(proto.Expression.ExpressionString.newBuilder
+                .setExpression("illegal"))))
+        .build())
+
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
 }

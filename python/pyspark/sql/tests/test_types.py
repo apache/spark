@@ -68,7 +68,7 @@ from pyspark.testing.sqlutils import (
 )
 
 
-class TypesTests(ReusedSQLTestCase):
+class TypesTestsMixin:
     def test_apply_schema_to_row(self):
         df = self.spark.read.json(self.sc.parallelize(["""{"a":2}"""]))
         df2 = self.spark.createDataFrame(df.rdd.map(lambda x: x), df.schema)
@@ -343,6 +343,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(Row(f1=[1]), rows[2])
 
         df = self.spark.createDataFrame(data)
+        rows = df.collect()
         self.assertEqual(Row(f1=[]), rows[0])
         self.assertEqual(Row(f1=[None]), rows[1])
         self.assertEqual(Row(f1=[1]), rows[2])
@@ -791,7 +792,7 @@ class TypesTests(ReusedSQLTestCase):
         self.spark.createDataFrame(rdd, schema)
 
     def test_access_nested_types(self):
-        df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
+        df = self.spark.createDataFrame([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})])
         self.assertEqual(1, df.select(df.l[0]).first()[0])
         self.assertEqual(1, df.select(df.l.getItem(0)).first()[0])
         self.assertEqual(1, df.select(df.r.a).first()[0])
@@ -1401,11 +1402,15 @@ class DataTypeVerificationTests(unittest.TestCase):
         self.assertEqual(repr(r), "Row(b=1, a=2)")
 
 
+class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_types import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

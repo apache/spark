@@ -92,7 +92,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -118,7 +118,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -144,7 +144,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -170,7 +170,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -268,7 +268,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -294,7 +294,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -320,7 +320,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -346,7 +346,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -444,7 +444,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -470,7 +470,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -496,7 +496,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -522,7 +522,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -620,7 +620,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -646,7 +646,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -672,7 +672,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -698,7 +698,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -796,7 +796,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -822,7 +822,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -848,7 +848,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -874,7 +874,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -972,7 +972,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -998,7 +998,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1024,7 +1024,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1050,7 +1050,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1148,7 +1148,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1174,7 +1174,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1200,7 +1200,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1226,7 +1226,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1324,7 +1324,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "string",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1350,7 +1350,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "string",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1394,7 +1394,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1420,7 +1420,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1446,7 +1446,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1472,7 +1472,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1498,7 +1498,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1524,7 +1524,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1550,7 +1550,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1576,7 +1576,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "string",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1611,7 +1611,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1637,7 +1637,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1663,7 +1663,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1689,7 +1689,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1715,7 +1715,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1741,7 +1741,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1767,7 +1767,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1793,7 +1793,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1819,7 +1819,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1845,7 +1845,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1871,7 +1871,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "string",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1897,7 +1897,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1931,7 +1931,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1957,7 +1957,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -1983,7 +1983,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2009,7 +2009,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2035,7 +2035,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2061,7 +2061,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2087,7 +2087,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2113,7 +2113,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2139,7 +2139,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2174,7 +2174,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2200,7 +2200,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2244,7 +2244,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2270,7 +2270,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2296,7 +2296,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2322,7 +2322,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2348,7 +2348,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2374,7 +2374,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2400,7 +2400,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2435,7 +2435,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -2461,7 +2461,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
   },
   "queryContext" : [ {

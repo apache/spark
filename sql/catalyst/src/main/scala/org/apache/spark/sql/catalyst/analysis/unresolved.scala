@@ -95,20 +95,14 @@ case class UnresolvedInlineTable(
  * A table-valued function, e.g.
  * {{{
  *   select id from range(10);
- *
- *   // Assign alias names
- *   select t.a from range(10) t(a);
  * }}}
  *
- * @param name qualified name of this table-value function
+ * @param name user-specified name of this table-value function
  * @param functionArgs list of function arguments
- * @param outputNames alias names of function output columns. If these names given, an analyzer
- *                    adds [[Project]] to rename the output columns.
  */
 case class UnresolvedTableValuedFunction(
     name: Seq[String],
-    functionArgs: Seq[Expression],
-    outputNames: Seq[String])
+    functionArgs: Seq[Expression])
   extends LeafNode {
 
   override def output: Seq[Attribute] = Nil
@@ -123,16 +117,59 @@ object UnresolvedTableValuedFunction {
 
   def apply(
       name: String,
-      functionArgs: Seq[Expression],
-      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(Seq(name), functionArgs, outputNames)
+      functionArgs: Seq[Expression]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(Seq(name), functionArgs)
   }
 
   def apply(
       name: FunctionIdentifier,
-      functionArgs: Seq[Expression],
-      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(name.asMultipart, functionArgs, outputNames)
+      functionArgs: Seq[Expression]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(name.asMultipart, functionArgs)
+  }
+}
+
+/**
+ * A table-valued function with output column aliases, e.g.
+ * {{{
+ *   // Assign alias names
+ *   select t.a from range(10) t(a);
+ * }}}
+ *
+ * @param name user-specified name of the table-valued function
+ * @param child logical plan of the table-valued function
+ * @param outputNames alias names of function output columns. The analyzer adds [[Project]]
+ *                    to rename the output columns.
+ */
+case class UnresolvedTVFAliases(
+    name: Seq[String],
+    child: LogicalPlan,
+    outputNames: Seq[String]) extends UnaryNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TVF_ALIASES)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+}
+
+object UnresolvedTVFAliases {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  def apply(
+      name: String,
+      child: LogicalPlan,
+      outputNames: Seq[String]): UnresolvedTVFAliases = {
+    UnresolvedTVFAliases(Seq(name), child, outputNames)
+  }
+
+  def apply(
+      name: FunctionIdentifier,
+      child: LogicalPlan,
+      outputNames: Seq[String]): UnresolvedTVFAliases = {
+    UnresolvedTVFAliases(name.asMultipart, child, outputNames)
   }
 }
 
@@ -162,6 +199,14 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def toString: String = s"'$name"
 
   override def sql: String = nameParts.map(quoteIfNeeded(_)).mkString(".")
+
+  /**
+   * Returns true if this matches the token. This requires the attribute to only have one part in
+   * its name and that matches the given token in a case insensitive way.
+   */
+  def equalsIgnoreCase(token: String): Boolean = {
+    nameParts.length == 1 && nameParts.head.equalsIgnoreCase(token)
+  }
 }
 
 object UnresolvedAttribute {
@@ -261,6 +306,11 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
     newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
+/**
+ * Represents an unresolved function that is being invoked. The analyzer will resolve the function
+ * arguments first, then look up the function by name and arguments, and return an expression that
+ * can be evaluated to get the result of this function invocation.
+ */
 case class UnresolvedFunction(
     nameParts: Seq[String],
     arguments: Seq[Expression],
@@ -648,13 +698,26 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
 
 /**
  * An intermediate expression to hold a resolved (nested) column. Some rules may need to undo the
- * column resolution and use this expression to keep the original column name.
+ * column resolution and use this expression to keep the original column name, or redo the column
+ * resolution with a different priority if the analyzer has tried to resolve it with the default
+ * priority before but failed (i.e. `hasTried` is true).
  */
-case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
+case class TempResolvedColumn(
+    child: Expression,
+    nameParts: Seq[String],
+    hasTried: Boolean = false) extends UnaryExpression
   with Unevaluable {
+  // If it has been tried to be resolved but failed, mark it as unresolved so that other rules can
+  // try to resolve it again.
+  override lazy val resolved = child.resolved && !hasTried
   override lazy val canonicalized = child.canonicalized
   override def dataType: DataType = child.dataType
+  override def nullable: Boolean = child.nullable
+  // `TempResolvedColumn` is logically a leaf node. We should not count it as a missing reference
+  // when resolving Filter/Sort/RepartitionByExpression. However, we should not make it a real
+  // leaf node, as rules that update expr IDs should update `TempResolvedColumn.child` as well.
+  override def references: AttributeSet = AttributeSet.empty
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
-  override def sql: String = child.sql
+  final override val nodePatterns: Seq[TreePattern] = Seq(TEMP_RESOLVED_COLUMN)
 }

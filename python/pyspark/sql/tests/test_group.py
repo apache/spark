@@ -19,7 +19,7 @@ from pyspark.sql import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class GroupTests(ReusedSQLTestCase):
+class GroupTestsMixin:
     def test_aggregator(self):
         df = self.df
         g = df.groupBy()
@@ -36,12 +36,16 @@ class GroupTests(ReusedSQLTestCase):
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
 
+class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_group import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

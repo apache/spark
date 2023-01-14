@@ -195,6 +195,16 @@ two
 
 
 -- !query
+SELECT nt2.k AS key FROM nt1 natural join nt2 ORDER BY key
+-- !query schema
+struct<key:string>
+-- !query output
+one
+one
+two
+
+
+-- !query
 SELECT nt1.k, nt2.k FROM nt1 natural join nt2 where k = "one"
 -- !query schema
 struct<k:string,k:string>

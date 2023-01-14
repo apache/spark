@@ -34,7 +34,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
-import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.storage._
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
@@ -53,7 +52,8 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     .set(ASYNC_TRACKING_ENABLED, false)
 
-  protected def createKVStore: KVStore = KVUtils.open(testDir, getClass().getName(), conf)
+  protected def createKVStore: KVStore =
+    KVUtils.open(testDir, getClass().getName(), conf, live = false)
 
   before {
     time = 0L
@@ -1849,6 +1849,68 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     checkInfoPopulated(listener, logUrlMap, processId)
   }
 
+  test("SPARK-41187: Stage should be removed from liveStages to avoid deadExecutors accumulated") {
+
+    val listener = new AppStatusListener(store, conf, true)
+
+    listener.onExecutorAdded(createExecutorAddedEvent(1))
+    listener.onExecutorAdded(createExecutorAddedEvent(2))
+    val stage = new StageInfo(1, 0, "stage", 4, Nil, Nil, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    listener.onJobStart(SparkListenerJobStart(1, time, Seq(stage), null))
+
+    time += 1
+    stage.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
+
+    val tasks = createTasks(2, Array("1", "2"))
+    tasks.foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(stage.stageId, stage.attemptNumber, task))
+    }
+
+    time += 1
+    tasks(0).markFinished(TaskState.FINISHED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
+      Success, tasks(0), new ExecutorMetrics, null))
+
+    // executor lost, success task will be resubmitted
+    time += 1
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
+      Resubmitted, tasks(0), new ExecutorMetrics, null))
+
+    // executor lost, running task will be failed and rerun
+    time += 1
+    tasks(1).markFinished(TaskState.FAILED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
+      ExecutorLostFailure("1", true, Some("Lost executor")), tasks(1), new ExecutorMetrics,
+      null))
+
+    tasks.foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(stage.stageId, stage.attemptNumber, task))
+    }
+
+    time += 1
+    tasks(0).markFinished(TaskState.FINISHED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
+      Success, tasks(0), new ExecutorMetrics, null))
+
+    time += 1
+    tasks(1).markFinished(TaskState.FINISHED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
+      Success, tasks(1), new ExecutorMetrics, null))
+
+    listener.onStageCompleted(SparkListenerStageCompleted(stage))
+    time += 1
+    listener.onJobEnd(SparkListenerJobEnd(1, time, JobSucceeded ))
+
+    time += 1
+    listener.onExecutorRemoved(SparkListenerExecutorRemoved(time, "1", "Test"))
+    time += 1
+    listener.onExecutorRemoved(SparkListenerExecutorRemoved(time, "2", "Test"))
+
+    assert(listener.deadExecutors.size === 0)
+  }
+
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {
@@ -1911,6 +1973,5 @@ class AppStatusListenerWithProtobufSerializerSuite extends AppStatusListenerSuit
       testDir,
       getClass().getName(),
       conf,
-      Some(HybridStoreDiskBackend.ROCKSDB),
-      Some(new KVStoreProtobufSerializer()))
+      live = true)
 }

@@ -49,7 +49,7 @@ class QueryCompilationErrorsSuite
         "details" -> (
         s"""
            |The type path of the target object is:
-           |- field (class: "scala.Int", name: "b")
+           |- field (class: "int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
            |You can either add an explicit cast to the input data or choose a higher precision type
          """.stripMargin.trim + " of the field in the target object")))
@@ -67,7 +67,7 @@ class QueryCompilationErrorsSuite
         "details" -> (
         s"""
            |The type path of the target object is:
-           |- field (class: "scala.Long", name: "b")
+           |- field (class: "long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
            |- root class: "org.apache.spark.sql.errors.ComplexClass"
            |You can either add an explicit cast to the input data or choose a higher precision type
@@ -110,17 +110,16 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
+  test("INVALID_PARAMETER_VALUE.ZERO_INDEX: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
           sql("select format_string('%0$s', 'Hello')")
         },
-        errorClass = "INVALID_PARAMETER_VALUE",
+        errorClass = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
         parameters = Map(
-          "parameter" -> "strfmt",
-          "functionName" -> "`format_string`",
-          "expected" -> "expects %1$, %2$ and so on, but got %0$."),
+          "parameter" -> "`strfmt`",
+          "functionName" -> "`format_string`"),
         context = ExpectedContext(
           fragment = "format_string('%0$s', 'Hello')", start = 7, stop = 36))
     }
@@ -666,6 +665,19 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+  }
+
+  test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT CAST(1)")
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`cast`"
+      ),
+      context = ExpectedContext("", "", 7, 13, "CAST(1)")
+    )
   }
 }
 

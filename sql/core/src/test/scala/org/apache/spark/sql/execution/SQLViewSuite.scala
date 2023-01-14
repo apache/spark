@@ -218,10 +218,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(e4.contains(
         s"$viewName is a temp view. 'ANALYZE TABLE' expects a table or permanent view."))
-      val e5 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(e5.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`testView`")
+      )
     }
   }
 

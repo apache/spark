@@ -24,7 +24,7 @@ import java.util.{Calendar, Locale, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -720,6 +720,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         assert(Cast.canUpCast(from, to))
       }
     }
+
+    {
+      assert(Cast.canUpCast(DateType, TimestampType))
+      assert(Cast.canUpCast(DateType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampNTZType, TimestampType))
+      assert(!Cast.canUpCast(TimestampType, DateType))
+      assert(!Cast.canUpCast(TimestampNTZType, DateType))
+    }
   }
 
   test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +
@@ -1381,5 +1390,31 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val expr = CheckOverflowInTableInsert(cast, "column_1")
     assert(expr.sql == cast.sql)
     assert(expr.toString == cast.toString)
+  }
+
+  test("SPARK-41991: CheckOverflowInTableInsert child must be Cast or ExpressionProxy of Cast") {
+    val runtime = new SubExprEvaluationRuntime(1)
+    val cast = Cast(Literal(1.0), IntegerType)
+    val expr = CheckOverflowInTableInsert(cast, "column_1")
+    val proxy = ExpressionProxy(Literal(1.0), 0, runtime)
+    checkError(
+      exception = intercept[SparkException] {
+        expr.withNewChildrenInternal(IndexedSeq(proxy))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "Child is not Cast or ExpressionProxy of Cast"
+      )
+    )
+
+    checkError(
+      exception = intercept[SparkException] {
+        expr.withNewChildrenInternal(IndexedSeq(Literal(1)))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "Child is not Cast or ExpressionProxy of Cast"
+      )
+    )
   }
 }
