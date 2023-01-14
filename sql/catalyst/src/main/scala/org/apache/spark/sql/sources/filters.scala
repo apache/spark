@@ -91,7 +91,7 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
   override def toV2: Predicate = {
     val literal = Literal(value)
     new Predicate("=",
-      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+      Array(FieldReference.column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
@@ -111,7 +111,7 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def toV2: Predicate = {
     val literal = Literal(value)
     new Predicate("<=>",
-      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+      Array(FieldReference.column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
@@ -130,7 +130,7 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def toV2: Predicate = {
     val literal = Literal(value)
     new Predicate(">",
-      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+      Array(FieldReference.column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
@@ -149,7 +149,7 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def toV2: Predicate = {
     val literal = Literal(value)
     new Predicate(">=",
-      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+      Array(FieldReference.column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
@@ -168,7 +168,7 @@ case class LessThan(attribute: String, value: Any) extends Filter {
   override def toV2: Predicate = {
     val literal = Literal(value)
     new Predicate("<",
-      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+      Array(FieldReference.column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
@@ -187,7 +187,7 @@ case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def toV2: Predicate = {
     val literal = Literal(value)
     new Predicate("<=",
-      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+      Array(FieldReference.column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
@@ -230,7 +230,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
       val literal = Literal(value)
       LiteralValue(literal.value, literal.dataType)
     }
-    new Predicate("IN", FieldReference(attribute) +: literals)
+    new Predicate("IN", FieldReference.column(attribute) +: literals)
   }
 }
 
@@ -245,7 +245,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 @Stable
 case class IsNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Predicate = new Predicate("IS_NULL", Array(FieldReference(attribute)))
+  override def toV2: Predicate = new Predicate("IS_NULL", Array(FieldReference.column(attribute)))
 }
 
 /**
@@ -259,7 +259,8 @@ case class IsNull(attribute: String) extends Filter {
 @Stable
 case class IsNotNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Predicate = new Predicate("IS_NOT_NULL", Array(FieldReference(attribute)))
+  override def toV2: Predicate =
+    new Predicate("IS_NOT_NULL", Array(FieldReference.column(attribute)))
 }
 
 /**
@@ -308,7 +309,7 @@ case class Not(child: Filter) extends Filter {
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
   override def toV2: Predicate = new Predicate("STARTS_WITH",
-    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
+    Array(FieldReference.column(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**
@@ -324,7 +325,7 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
   override def toV2: Predicate = new Predicate("ENDS_WITH",
-    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
+    Array(FieldReference.column(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**
@@ -340,7 +341,7 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
   override def toV2: Predicate = new Predicate("CONTAINS",
-    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
+    Array(FieldReference.column(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**
