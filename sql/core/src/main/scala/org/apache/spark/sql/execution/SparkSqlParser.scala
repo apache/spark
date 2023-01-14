@@ -364,7 +364,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
     ctx.constant.asScala.map(v => visitStringConstant(v,
-      legacyNullAsString = false, keepPartitionTypeAsString = false))
+      legacyNullAsString = false, keepPartitionTypeAsString = false)).toSeq
   }
 
   /**
