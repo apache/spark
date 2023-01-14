@@ -18,7 +18,6 @@
 import sys
 from typing import TYPE_CHECKING, Union, Sequence, List, Optional
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
@@ -240,13 +239,11 @@ def _test() -> None:
         import pyspark.sql.connect.window
 
         globs = pyspark.sql.connect.window.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.window tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.window tests"})
-
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.window tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.window,
@@ -257,7 +254,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

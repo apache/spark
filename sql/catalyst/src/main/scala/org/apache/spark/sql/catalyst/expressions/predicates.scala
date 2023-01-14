@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -124,6 +124,15 @@ trait PredicateHelper extends AliasHelper with Logging {
         findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
+      case u: Union =>
+        val index = u.output.indexWhere(_.semanticEquals(exp))
+        if (index > -1) {
+          u.children
+            .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
+            .headOption
+        } else {
+          None
+        }
       case other =>
         other.children.flatMap {
           child => if (exp.references.subsetOf(child.outputSet)) {

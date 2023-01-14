@@ -490,10 +490,22 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
-    val params = rel.getParametersList.asScala.map(toCatalystValue).toSeq.map {
-      case name: String => UnresolvedAttribute.quotedString(name)
-      case v => v
+
+    def extractValue(expr: Expression): Any = {
+      expr match {
+        case Literal(s, StringType) if s != null =>
+          UnresolvedAttribute.quotedString(s.toString)
+        case literal: Literal => literal.value
+        case UnresolvedFunction(Seq("array"), arguments, _, _, _) =>
+          arguments.map(extractValue).toArray
+        case other =>
+          throw InvalidPlanInput(
+            s"Expression should be a Literal or CreateMap or CreateArray, " +
+              s"but got ${other.getClass} $other")
+      }
     }
+
+    val params = rel.getParametersList.asScala.toSeq.map(transformExpression).map(extractValue)
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
@@ -646,8 +658,15 @@ class SparkConnectPlanner(session: SparkSession) {
         val reader = session.read
         reader.format(rel.getDataSource.getFormat)
         localMap.foreach { case (key, value) => reader.option(key, value) }
-        if (rel.getDataSource.getSchema != null && !rel.getDataSource.getSchema.isEmpty) {
-          reader.schema(rel.getDataSource.getSchema)
+        if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
+
+          DataType.parseTypeWithFallback(
+            rel.getDataSource.getSchema,
+            StructType.fromDDL,
+            fallbackParser = DataType.fromJson) match {
+            case s: StructType => reader.schema(s)
+            case other => throw InvalidPlanInput(s"Invalid schema $other")
+          }
         }
         reader.load().queryExecution.analyzed
       case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())

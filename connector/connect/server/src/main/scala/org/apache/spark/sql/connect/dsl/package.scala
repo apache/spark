@@ -925,6 +925,10 @@ package object dsl {
       }
 
       def hint(name: String, parameters: Any*): Relation = {
+        val expressions = parameters.map { parameter =>
+          proto.Expression.newBuilder().setLiteral(toConnectProtoValue(parameter)).build()
+        }
+
         Relation
           .newBuilder()
           .setHint(
@@ -932,7 +936,7 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .setName(name)
-              .addAllParameters(parameters.map(toConnectProtoValue).asJava))
+              .addAllParameters(expressions.asJava))
           .build()
       }
 

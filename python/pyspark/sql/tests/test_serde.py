@@ -26,7 +26,7 @@ from pyspark.sql.types import StructType, StructField, DecimalType, BinaryType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, UTCOffsetTimezone
 
 
-class SerdeTests(ReusedSQLTestCase):
+class SerdeTestsMixin:
     def test_serialize_nested_array_and_map(self):
         d = [Row(lst=[Row(a=1, b="s")], d={"key": Row(c=1.0, d="2")})]
         rdd = self.sc.parallelize(d)
@@ -138,6 +138,10 @@ class SerdeTests(ReusedSQLTestCase):
     def test_bytes_as_binary_type(self):
         df = self.spark.createDataFrame([[b"abcd"]], "col binary")
         self.assertEqual(df.first().col, bytearray(b"abcd"))
+
+
+class SerdeTests(SerdeTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

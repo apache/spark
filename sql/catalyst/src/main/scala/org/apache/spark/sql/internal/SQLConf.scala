@@ -513,6 +513,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MAX_SINGLE_PARTITION_BYTES = buildConf("spark.sql.maxSinglePartitionBytes")
+    .doc("The maximum number of bytes allowed for a single partition. Otherwise, The planner " +
+      "will introduce shuffle to improve parallelism.")
+    .version("3.4.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(Long.MaxValue)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -2760,6 +2767,15 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
+
+  val PYTHON_UDF_ARROW_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
+      .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
+        "can only be enabled for atomic output types and input types except struct and map types " +
+        "when the given function takes at least one argument.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")

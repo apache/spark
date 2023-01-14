@@ -16,31 +16,12 @@
 #
 
 import unittest
-import os
 
-from pyspark.sql import SparkSession
 from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(DataFrameParityTests, cls).setUpClass()
-        cls._spark = cls.spark  # Assign existing Spark session to run the server
-        # Sets the remote address. Now, we create a remote Spark Session.
-        # Note that this is only allowed in testing.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        cls.spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
-
-    @classmethod
-    def tearDownClass(cls):
-        super(DataFrameParityTests, cls).tearDownClass()
-        cls._spark.stop()
-        del os.environ["SPARK_REMOTE"]
-
+class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     # TODO(SPARK-41612): support Catalog.isCached
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_cache(self):
@@ -56,15 +37,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         super().test_create_dataframe_from_pandas_with_day_time_interval()
 
-    # TODO(SPARK-41842): Support data type Timestamp(NANOSECOND, null)
+    # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
-
-    # TODO(SPARK-41842): Support data type Timestamp(NANOSECOND, null)
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_timestamp(self):
-        super().test_create_dataframe_from_pandas_with_timestamp()
 
     # TODO(SPARK-41855): createDataFrame doesn't handle None/NaN properly
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -75,21 +51,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
         super().test_duplicated_column_names()
-
-    # TODO(SPARK-41871): DataFrame hint parameter can be a float
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_extended_hint_types(self):
-        super().test_extended_hint_types()
-
-    # TODO(SPARK-41872): Fix DataFrame createDataframe handling of None
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_fillna(self):
-        super().test_fillna()
-
-    # TODO: comparing types, need to expose connect types
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_generic_hints(self):
-        super().test_generic_hints()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
@@ -123,11 +84,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
-
-    # TODO(SPARK-41872): Fix DataFrame createDataframe handling of None
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_replace(self):
-        super().test_replace()
 
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -208,10 +164,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_to_pandas_with_duplicated_column_names(self):
         super().test_to_pandas_with_duplicated_column_names()
 
-    # TODO(SPARK-41877): createDataframe throw proper errors
+    # TODO(SPARK-41963): Different exception message in DataFrame.unpivot
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_unpivot(self):
-        super().test_unpivot()
+    def test_unpivot_negative(self):
+        super().test_unpivot_negative()
 
 
 if __name__ == "__main__":
