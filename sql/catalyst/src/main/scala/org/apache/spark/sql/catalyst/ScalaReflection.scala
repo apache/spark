@@ -245,34 +245,24 @@ object ScalaReflection extends ScalaReflection {
       WrapOption(deserializer, externalDataTypeFor(valueEnc))
 
     case ArrayEncoder(elementEnc: AgnosticEncoder[_], containsNull) =>
-      val newTypePath = walkedTypePath.recordArray(elementEnc.clsTag.runtimeClass.getName)
-      val mapFunction: Expression => Expression = element => {
-        // upcast the array element to the data type the encoder expects.
-        deserializerForWithNullSafetyAndUpcast(
-          element,
-          elementEnc.dataType,
-          nullable = containsNull,
-          newTypePath,
-          deserializerFor(elementEnc, _, newTypePath))
-      }
       Invoke(
-        UnresolvedMapObjects(mapFunction, path),
+        deserializeArray(
+          path,
+          elementEnc,
+          containsNull,
+          None,
+          walkedTypePath),
         toArrayMethodName(elementEnc),
         ObjectType(enc.clsTag.runtimeClass),
         returnNullable = false)
 
     case IterableEncoder(clsTag, elementEnc, containsNull, _) =>
-      val newTypePath = walkedTypePath.recordArray(elementEnc.clsTag.runtimeClass.getName)
-      val mapFunction: Expression => Expression = element => {
-        // upcast the array element to the data type the encoder expects.
-        deserializerForWithNullSafetyAndUpcast(
-          element,
-          elementEnc.dataType,
-          nullable = containsNull,
-          newTypePath,
-          deserializerFor(elementEnc, _, newTypePath))
-      }
-      UnresolvedMapObjects(mapFunction, path, Some(clsTag.runtimeClass))
+      deserializeArray(
+        path,
+        elementEnc,
+        containsNull,
+        Option(clsTag.runtimeClass),
+        walkedTypePath)
 
     case MapEncoder(tag, keyEncoder, valueEncoder, _) =>
       val newTypePath = walkedTypePath.recordMap(
@@ -322,6 +312,25 @@ object ScalaReflection extends ScalaReflection {
       exprs.If(IsNull(path),
         exprs.Literal.create(null, externalDataTypeFor(enc)),
         CreateExternalRow(convertedFields, enc.schema))
+  }
+
+  private def deserializeArray(
+      path: Expression,
+      elementEnc: AgnosticEncoder[_],
+      containsNull: Boolean,
+      cls: Option[Class[_]],
+      walkedTypePath: WalkedTypePath): Expression = {
+    val newTypePath = walkedTypePath.recordArray(elementEnc.clsTag.runtimeClass.getName)
+    val mapFunction: Expression => Expression = element => {
+      // upcast the array element to the data type the encoder expects.
+      deserializerForWithNullSafetyAndUpcast(
+        element,
+        elementEnc.dataType,
+        nullable = containsNull,
+        newTypePath,
+        deserializerFor(elementEnc, _, newTypePath))
+    }
+    UnresolvedMapObjects(mapFunction, path, cls)
   }
 
   /**

@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.expressions.objects
 import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.{Builder, WrappedArray}
 import scala.reflect.ClassTag
-import scala.util.{Properties, Try}
+import scala.util.Try
 
 import org.apache.commons.lang3.reflect.MethodUtils
 
@@ -885,10 +886,24 @@ case class MapObjects private(
       _.asInstanceOf[ArrayData].toSeq[Any](et)
   }
 
+  private def elementClassTag(): ClassTag[Any] = {
+    val clazz = lambdaFunction.dataType match {
+      case ObjectType(cls) => cls
+      case dt if lambdaFunction.nullable => ScalaReflection.javaBoxedType(dt)
+      case dt => ScalaReflection.dataTypeJavaClass(dt)
+    }
+    ClassTag(clazz).asInstanceOf[ClassTag[Any]]
+  }
+
   private lazy val mapElements: Seq[_] => Any = customCollectionCls match {
     case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
-      // Scala WrappedArray
-      inputCollection => WrappedArray.make(executeFuncOnCollection(inputCollection).toArray)
+      val tag = elementClassTag()
+      input => {
+        val builder = mutable.ArrayBuilder.make()(tag)
+        builder.sizeHint(input.size)
+        executeFuncOnCollection(input).foreach(builder += _)
+        mutable.WrappedArray.make(builder.result())
+      }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
       executeFuncOnCollection(_).toSeq
@@ -1046,44 +1061,20 @@ case class MapObjects private(
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
         case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
-          def doCodeGenForScala212 = {
-            // WrappedArray in Scala 2.12
-            val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
-            val builder = ctx.freshName("collectionBuilder")
-            (
-              s"""
+          val tag = ctx.addReferenceObj("tag", elementClassTag())
+          val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
+          val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            s"""
                  ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
                  $builder.sizeHint($dataLength);
                """,
-              (genValue: String) => s"$builder.$$plus$$eq($genValue);",
-              s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
-                s"MODULE$$.make(((${classOf[IndexedSeq[_]].getName})$builder" +
-                s".result()).toArray(scala.reflect.ClassTag$$.MODULE$$.Object()));"
-            )
-          }
+            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
+            s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
+              s"MODULE$$.make($builder.result());"
+          )
 
-          def doCodeGenForScala213 = {
-            // In Scala 2.13, WrappedArray is mutable.ArraySeq and newBuilder method need
-            // a ClassTag type construction parameter
-            val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder(" +
-              s"scala.reflect.ClassTag$$.MODULE$$.Object())"
-            val builder = ctx.freshName("collectionBuilder")
-            (
-              s"""
-                 ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
-                 $builder.sizeHint($dataLength);
-               """,
-              (genValue: String) => s"$builder.$$plus$$eq($genValue);",
-              s"(${cls.getName})$builder.result();"
-            )
-          }
-
-          val scalaVersion = Properties.versionNumberString
-          if (scalaVersion.startsWith("2.12")) {
-            doCodeGenForScala212
-          } else {
-            doCodeGenForScala213
-          }
         case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set

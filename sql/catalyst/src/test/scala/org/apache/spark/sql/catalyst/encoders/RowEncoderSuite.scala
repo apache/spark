@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.{RandomDataGenerator, Row}
@@ -125,7 +126,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     new StructType()
       .add("mapOfIntAndString", MapType(IntegerType, StringType))
       .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
-      .add("mapOfArrayAndInt", MapType(ArrayType(IntegerType), IntegerType))
+      .add("mapOfArrayAndInt", MapType(arrayOfString, IntegerType))
       .add("mapOfArray", MapType(arrayOfString, arrayOfString))
       .add("mapOfStringAndStruct", MapType(StringType, structOfString))
       .add("mapOfStructAndString", MapType(structOfString, StringType))
@@ -309,6 +310,19 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
   }
+
+  private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
+    val schema = new StructType().add("a", ArrayType(dt, nullable))
+    test(s"RowEncoder should return WrappedArray with properly typed array for $schema") {
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[mutable.WrappedArray[_]](0)
+      assert(result.array.getClass === data.getClass)
+      assert(result === data)
+    }
+  }
+
+  roundTripArray(IntegerType, nullable = false, Array(1, 2, 3).map(Int.box))
+  roundTripArray(StringType, nullable = true, Array("hello", "world", "!", null))
 
   test("SPARK-25791: Datatype of serializers should be accessible") {
     val udtSQLType = new StructType().add("a", IntegerType)
