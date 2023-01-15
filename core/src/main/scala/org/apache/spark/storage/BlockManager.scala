@@ -1339,17 +1339,18 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
     val isCacheVisible = isRDDBlockVisible(blockId)
-    val getIterator = if (!isCacheVisible) {
-      // Need to compute the block. Since if the block already exists, `doPutIterator` will skip
-      // computing the partition, force to compute the block here to update accumulators.
-      val iterator = makeIterator()
-      () => iterator
-    } else {
-      makeIterator
+    var computed: Boolean = false
+    val getIterator = () => {
+      computed = true
+      makeIterator()
     }
 
     val res = getOrElseUpdate(blockId, level, classTag, getIterator)
     if (res.isLeft && !isCacheVisible) {
+      if (!computed) {
+        // Loaded from cache, re-compute to update accumulators.
+        makeIterator()
+      }
       // Block exists and not visible, report taskId -> blockId info to master.
       master.updateRDDBlockTaskInfo(blockId, taskId)
     }
