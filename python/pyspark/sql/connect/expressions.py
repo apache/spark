@@ -29,7 +29,10 @@ import decimal
 import datetime
 import warnings
 
+import numpy as np
+
 from pyspark.sql.types import (
+    _from_numpy_type,
     DateType,
     NullType,
     BooleanType,
@@ -192,19 +195,30 @@ class LiteralExpression(Expression):
             if isinstance(dataType, BinaryType):
                 assert isinstance(value, (bytes, bytearray))
             elif isinstance(dataType, BooleanType):
-                assert isinstance(value, bool)
+                assert isinstance(value, (bool, np.bool_))
+                value = bool(value)
             elif isinstance(dataType, ByteType):
-                assert isinstance(value, int) and JVM_BYTE_MIN <= int(value) <= JVM_BYTE_MAX
+                assert isinstance(value, (int, np.int8))
+                assert JVM_BYTE_MIN <= int(value) <= JVM_BYTE_MAX
+                value = int(value)
             elif isinstance(dataType, ShortType):
-                assert isinstance(value, int) and JVM_SHORT_MIN <= int(value) <= JVM_SHORT_MAX
+                assert isinstance(value, (int, np.int8, np.int16))
+                assert JVM_SHORT_MIN <= int(value) <= JVM_SHORT_MAX
+                value = int(value)
             elif isinstance(dataType, IntegerType):
-                assert isinstance(value, int) and JVM_INT_MIN <= int(value) <= JVM_INT_MAX
+                assert isinstance(value, (int, np.int8, np.int16, np.int32))
+                assert JVM_INT_MIN <= int(value) <= JVM_INT_MAX
+                value = int(value)
             elif isinstance(dataType, LongType):
-                assert isinstance(value, int) and JVM_LONG_MIN <= int(value) <= JVM_LONG_MAX
+                assert isinstance(value, (int, np.int8, np.int16, np.int32, np.int64))
+                assert JVM_LONG_MIN <= int(value) <= JVM_LONG_MAX
+                value = int(value)
             elif isinstance(dataType, FloatType):
-                assert isinstance(value, float)
+                assert isinstance(value, (float, np.float32))
+                value = float(value)
             elif isinstance(dataType, DoubleType):
-                assert isinstance(value, float)
+                assert isinstance(value, (float, np.float32, np.float64))
+                value = float(value)
             elif isinstance(dataType, DecimalType):
                 assert isinstance(value, decimal.Decimal)
             elif isinstance(dataType, StringType):
@@ -259,6 +273,10 @@ class LiteralExpression(Expression):
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
         else:
+            if isinstance(value, np.generic):
+                dt = _from_numpy_type(value.dtype)
+                if dt is not None:
+                    return dt
             raise ValueError(f"Unsupported Data Type {type(value).__name__}")
 
     @classmethod

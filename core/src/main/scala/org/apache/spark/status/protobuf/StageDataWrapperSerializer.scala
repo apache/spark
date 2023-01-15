@@ -27,16 +27,13 @@ import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPea
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
-class StageDataWrapperSerializer extends ProtobufSerDe {
+class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
 
-  override val supportClass: Class[_] = classOf[StageDataWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val s = input.asInstanceOf[StageDataWrapper]
+  override def serialize(input: StageDataWrapper): Array[Byte] = {
     val builder = StoreTypes.StageDataWrapper.newBuilder()
-    builder.setInfo(serializeStageData(s.info))
-    s.jobIds.foreach(id => builder.addJobIds(id.toLong))
-    s.locality.foreach { entry =>
+    builder.setInfo(serializeStageData(input.info))
+    input.jobIds.foreach(id => builder.addJobIds(id.toLong))
+    input.locality.foreach { entry =>
       builder.putLocality(entry._1, entry._2)
     }
     builder.build().toByteArray

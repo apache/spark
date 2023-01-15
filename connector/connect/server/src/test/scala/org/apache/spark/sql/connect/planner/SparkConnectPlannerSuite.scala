@@ -214,6 +214,25 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Union")
   }
 
+  test("Union By Name") {
+    val union = proto.Relation.newBuilder
+      .setSetOp(
+        proto.SetOperation.newBuilder
+          .setLeftInput(readRel)
+          .setRightInput(readRel)
+          .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_UNION)
+          .setByName(false)
+          .setAllowMissingColumns(true)
+          .build())
+      .build()
+    val msg = intercept[InvalidPlanInput] {
+      transform(union)
+    }
+    assert(
+      msg.getMessage.contains(
+        "UnionByName `allowMissingCol` can be true only if `byName` is true."))
+  }
+
   test("Simple Join") {
     val incompleteJoin =
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()

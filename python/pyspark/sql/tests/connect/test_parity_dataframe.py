@@ -37,15 +37,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         super().test_create_dataframe_from_pandas_with_day_time_interval()
 
-    # TODO(SPARK-41842): Support data type Timestamp(NANOSECOND, null)
+    # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
-
-    # TODO(SPARK-41842): Support data type Timestamp(NANOSECOND, null)
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_timestamp(self):
-        super().test_create_dataframe_from_pandas_with_timestamp()
 
     # TODO(SPARK-41855): createDataFrame doesn't handle None/NaN properly
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -56,10 +51,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
         super().test_duplicated_column_names()
-
-    @unittest.skip("Spark Connect does not support JVM function _jdf but the tests depend on them")
-    def test_extended_hint_types(self):
-        super().test_extended_hint_types()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):

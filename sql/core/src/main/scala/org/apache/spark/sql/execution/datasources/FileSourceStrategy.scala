@@ -214,9 +214,20 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         .filterNot(partitionColumns.contains)
 
       // Metadata attributes are part of a column of type struct up to this point. Here we extract
-      // this column from the schema.
+      // this column from the schema and specify a matcher for that.
+      object MetadataStructColumn {
+        def unapply(attributeReference: AttributeReference): Option[AttributeReference] = {
+          attributeReference match {
+            case attr @ FileSourceMetadataAttribute(
+                AttributeReference("_metadata", StructType(_), _, _)) =>
+              Some(attr)
+            case _ => None
+          }
+        }
+      }
+
       val metadataStructOpt = l.output.collectFirst {
-        case FileSourceMetadataAttribute(attr) => attr
+        case MetadataStructColumn(attr) => attr
       }
 
       val constantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
@@ -258,6 +269,35 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputAttributes = readDataColumns ++ generatedMetadataColumns ++
         partitionColumns ++ constantMetadataColumns
 
+      // Rebind metadata attribute references in filters after the metadata attribute struct has
+      // been flattened. Only data filters can contain metadata references. After the rebinding
+      // all references will be bound to output attributes which are either
+      // [[FileSourceConstantMetadataAttribute]] or [[FileSourceGeneratedMetadataAttribute]] after
+      // the flattening from the metadata struct.
+      def rebindFileSourceMetadataAttributesInFilters(
+          filters: Seq[Expression]): Seq[Expression] = {
+        // The row index field attribute got renamed.
+        def newFieldName(name: String) = name match {
+          case FileFormat.ROW_INDEX => FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+          case other => other
+        }
+
+        filters.map { filter =>
+          filter.transform {
+            // Replace references to the _metadata column. This will affect references to the column
+            // itself but also where fields from the metadata struct are used.
+            case MetadataStructColumn(AttributeReference(_, fields @ StructType(_), _, _)) =>
+              CreateStruct(fields.map(
+                field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get))
+          }.transform {
+            // Replace references to struct fields with the field values. This is to avoid creating
+            // temporaries to improve performance.
+            case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
+              createNamedStruct.valExprs(ordinal)
+          }
+        }
+      }
+
       val scan =
         FileSourceScanExec(
           fsRelation,
@@ -266,7 +306,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          dataFilters,
+          rebindFileSourceMetadataAttributesInFilters(dataFilters),
           table.map(_.identifier))
 
       // extra Project node: wrap flat metadata columns to a metadata struct
