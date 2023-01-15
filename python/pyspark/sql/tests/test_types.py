@@ -480,7 +480,7 @@ class TypesTestsMixin:
     def test_convert_row_to_dict(self):
         row = Row(l=[Row(a=1, b="s")], d={"key": Row(c=1.0, d="2")})
         self.assertEqual(1, row.asDict()["l"][0].a)
-        df = self.sc.parallelize([row]).toDF()
+        df = self.spark.createDataFrame([row])
 
         with self.tempView("test"):
             df.createOrReplaceTempView("test")
@@ -788,8 +788,7 @@ class TypesTestsMixin:
                 StructField("f2", StringType(), True, {"a": None}),
             ]
         )
-        rdd = self.sc.parallelize([["a", "b"], ["c", "d"]])
-        self.spark.createDataFrame(rdd, schema)
+        self.spark.createDataFrame([["a", "b"], ["c", "d"]], schema)
 
     def test_access_nested_types(self):
         df = self.spark.createDataFrame([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})])
