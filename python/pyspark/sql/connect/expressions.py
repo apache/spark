@@ -480,6 +480,57 @@ class UnresolvedFunction(Expression):
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
 
 
+class PythonFunction:
+    def __init__(
+        self,
+        command: bytes,
+    ) -> None:
+        self._command = command
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression.PythonFunction":
+        func = proto.Expression().PythonFunction()
+        func.command = self._command
+        return func
+
+    def __repr__(self) -> str:
+        return f"{self._command}"  # type: ignore[str-bytes-safe]
+
+
+class PythonUDF(Expression):
+    def __init__(
+        self,
+        name: str,
+        func: PythonFunction,
+        dataType: str,
+        args: Sequence[Expression],
+        evalType: int,
+        udfDeterministic: bool,
+    ) -> None:
+        super().__init__()
+
+        self._name = name
+        self._func = func
+        self._dataType = dataType
+        self._args = args
+        self._evalType = evalType
+        self._udfDeterministic = udfDeterministic
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.python_udf.function_name = self._name
+        expr.python_udf.function.CopyFrom(self._func.to_plan(session))
+        expr.python_udf.output_type = self._dataType
+        if len(self._args) > 0:
+            expr.python_udf.arguments.extend([arg.to_plan(session) for arg in self._args])
+        expr.python_udf.eval_type = self._evalType
+        expr.python_udf.deterministic = self._udfDeterministic
+        return expr
+
+    def __repr__(self) -> str:
+        # to include all fields
+        return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
 class WithField(Expression):
     def __init__(
         self,

@@ -19,15 +19,13 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny}
-
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, expressions}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
@@ -742,6 +740,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformWindowExpression(exp.getWindow)
       case proto.Expression.ExprTypeCase.EXTENSION =>
         transformExpressionPlugin(exp.getExtension)
+      case proto.Expression.ExprTypeCase.PYTHON_UDF =>
+        transformPythonUDF(exp.getPythonUDF)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -814,6 +814,40 @@ class SparkConnectPlanner(val session: SparkSession) {
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     }
+  }
+
+  /**
+   * Translates a user-defined function from proto to the Catalyst expression.
+   *
+   * @param fun
+   *   Proto representation of the function call.
+   * @return
+   */
+  private def transformPythonUDF(fun: proto.Expression.PythonUDF): Expression = {
+    PythonUDF(
+      fun.getFunctionName,
+      transformPythonFunction(fun.getFunction),
+      DataType.parseTypeWithFallback(
+        schema = fun.getOutputType,
+        parser = DataType.fromDDL,
+        fallbackParser = DataType.fromJson) match {
+        case s: DataType => s
+        case other => throw InvalidPlanInput(s"Invalid return type $other")
+      },
+      fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+      fun.getEvalType,
+      fun.getDeterministic)
+  }
+
+  private def transformPythonFunction(fun: proto.Expression.PythonFunction): PythonFunction = {
+    SimplePythonFunction(
+      fun.getCommand.toByteArray,
+      Maps.newHashMap(),
+      Lists.newArrayList(),
+      pythonExec,
+      "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      Lists.newArrayList(),
+      null)
   }
 
   /**
