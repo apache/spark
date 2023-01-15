@@ -331,24 +331,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
         self.assertEqual(plan.root.freq_items.support, 0.01)
 
-    def test_freqItems(self):
-        df = self.connect.readTable(table_name=self.tbl_name)
-        plan = (
-            df.filter(df.col_name > 3).freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
-        )
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 1)
-        plan = df.filter(df.col_name > 3).freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 0.01)
-
-        plan = df.stat.freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 1)
-        plan = df.stat.freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 0.01)
-
     def test_limit(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         limit_plan = df.limit(10)._plan.to_proto(self.connect)
