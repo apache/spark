@@ -72,7 +72,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
           response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
         } catch (RuntimeException ex) {
           // We know it is a Sasl timeout here if it is a TimeoutException.
-          if (ex.getCause() instanceof TimeoutException) {
+          if (conf.enableSaslRetries() && ex.getCause() instanceof TimeoutException) {
             throw new SaslTimeoutException(ex.getCause());
           } else {
             throw ex;
