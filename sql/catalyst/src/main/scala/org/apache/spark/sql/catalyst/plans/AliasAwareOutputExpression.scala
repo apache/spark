@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
@@ -36,28 +35,25 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
    */
   protected def strip(expr: Expression): Expression = expr
 
-  private lazy val aliasMap: Map[Expression, ArrayBuffer[Attribute]] = {
-    if (aliasCandidateLimit < 1) {
-      Map.empty
-    } else {
-      val exprWithAliasMap = new mutable.HashMap[Expression, ArrayBuffer[Attribute]]()
-
-      def updateAttrWithAliasMap(key: Expression, target: Attribute): Unit = {
-        val aliasArray = exprWithAliasMap.getOrElseUpdate(
-          strip(key).canonicalized, new ArrayBuffer[Attribute]())
-        // pre-filter if the number of alias exceed candidate limit
-        if (aliasArray.size < aliasCandidateLimit) {
-          aliasArray.append(target)
-        }
-      }
-
-      outputExpressions.foreach {
-        case a @ Alias(child, _) =>
-          updateAttrWithAliasMap(child, a.toAttribute)
-        case _ =>
-      }
-      exprWithAliasMap.toMap
+  private lazy val aliasMap = {
+    val aliases = mutable.Map[Expression, mutable.ListBuffer[Attribute]]()
+    // Add aliases to the map. If multiple alias is defined for a source attribute then add all.
+    outputExpressions.foreach {
+      case a @ Alias(child, _) =>
+        // This prepend is needed to make the first element of the `ListBuffer` point to the last
+        // occurrence of an aliased child. This is to keep the previous behavior and give precedence
+        // the last Alias during `normalizeExpression()` to avoid any kinds of regression.
+        a.toAttribute +=:
+          aliases.getOrElseUpdate(strip(child.canonicalized), mutable.ListBuffer.empty)
+      case _ =>
     }
+    // Append identity mapping of an attribute to the map if both the attribute and its aliased
+    // version can be found in `outputExpressions`.
+    outputExpressions.foreach {
+      case a: Attribute if aliases.contains(a.canonicalized) => aliases(a.canonicalized) += a
+      case _ =>
+    }
+    aliases
   }
 
   protected def hasAlias: Boolean = aliasMap.nonEmpty
@@ -70,53 +66,16 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
   protected def normalizeExpression(
       expr: Expression,
       pruneFunc: (Expression, AttributeSet) => Option[Expression]): Seq[Expression] = {
-    val normalizedCandidates = new mutable.HashSet[Expression]()
-    normalizedCandidates.add(expr)
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
-
-    def pruneCandidate(candidate: Expression): Option[Expression] = {
+    expr.multiTransform {
+      case e: Expression if aliasMap.contains(e.canonicalized) => aliasMap(e.canonicalized).toSeq
+    }.flatMap { candidate =>
       if (candidate.references.subsetOf(outputSet)) {
         Some(candidate)
       } else {
         pruneFunc(candidate, outputSet)
       }
-    }
-
-    // Stop loop if the size of candidates exceed limit
-    for ((origin, aliases) <- aliasMap if normalizedCandidates.size <= aliasCandidateLimit) {
-      for (alias <- aliases if normalizedCandidates.size <= aliasCandidateLimit) {
-        val localCandidates = normalizedCandidates.toArray
-        for (candidate <- localCandidates if normalizedCandidates.size <= aliasCandidateLimit) {
-          var hasOtherAlias = false
-          val newCandidate = candidate.transformDown {
-            case e: Expression if e.canonicalized == origin => alias
-            case e if aliasMap.contains(e.canonicalized) =>
-              hasOtherAlias = true
-              e
-          }
-
-          if (!candidate.fastEquals(newCandidate)) {
-            if (!hasOtherAlias) {
-              // If there is no other alias, we can do eagerly pruning to speed up
-              pruneCandidate(newCandidate).foreach(e => normalizedCandidates.add(e))
-            } else {
-              // We can not do pruning at this branch because we may miss replace alias with
-              // other sub-expression. We can only prune after all alias replaced.
-              normalizedCandidates.add(newCandidate)
-            }
-          }
-        }
-      }
-    }
-
-    val pruned = normalizedCandidates.flatMap { candidate =>
-      pruneCandidate(candidate)
-    }
-    if (pruned.isEmpty) {
-      expr :: Nil
-    } else {
-      pruned.toSeq
-    }
+    }.take(aliasCandidateLimit)
   }
 }
 

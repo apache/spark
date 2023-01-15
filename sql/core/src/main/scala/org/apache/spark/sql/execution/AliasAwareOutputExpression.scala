@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
@@ -44,17 +46,31 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode
               Some(PartitioningCollection(pruned))
             }
           })
-          PartitioningCollection(normalized.asInstanceOf[Seq[Partitioning]])
+          normalized.asInstanceOf[Seq[Partitioning]] match {
+            case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+            case Seq(p) => p
+            case ps => PartitioningCollection(ps)
+          }
         case other => other
       }
     } else {
       child.outputPartitioning
     }
 
+    // We need unique `Partitioning`s but `normalizedOutputPartitioning` might not contain unique
+    // elements.
+    // E.g. if the input partitioning is `HashPartitioning(Seq(id + id))` and we have `id -> a` and
+    // `id -> b` as alias mappings in a projection node. After the mapping
+    // `normalizedOutputPartitioning` contains 4 elements:
+    // `HashPartitioning(Seq(a + a))`, `HashPartitioning(Seq(a + b))`,
+    // `HashPartitioning(Seq(b + a))`, `HashPartitioning(Seq(b + b))`, but
+    // `HashPartitioning(Seq(a + b))` is the same as `HashPartitioning(Seq(b + a))`.
+    val expressionPartitionings = mutable.Set.empty[Expression]
     flattenPartitioning(normalizedOutputPartitioning).filter {
-      case e: Expression => e.references.subsetOf(outputSet)
+      case e: Expression =>
+        e.references.subsetOf(outputSet) && expressionPartitionings.add(e.canonicalized)
       case _ => true
-    }.distinct match {
+    } match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
       case Seq(singlePartitioning) => singlePartitioning
       case seqWithMultiplePartitionings => PartitioningCollection(seqWithMultiplePartitionings)

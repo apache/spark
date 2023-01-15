@@ -1315,6 +1315,64 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(sorts.isEmpty)
   }
 
+  test("SPARK-40086: an attribute and its aliased version in aggregate expressions should not " +
+    "introduce extra shuffle") {
+    withTempView("df") {
+      spark.range(5).select(col("id"), col("id").as("value")).createTempView("df")
+      val df = sql("SELECT id, max(value) FROM df GROUP BY id")
+
+      val planned = df.queryExecution.executedPlan
+
+      assert(collect(planned) { case h: HashAggregateExec => h }.nonEmpty)
+
+      val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+      assert(exchanges.size == 0)
+    }
+  }
+
+  test("SPARK-40086: multiple aliases to the same attribute in aggregate expressions should not " +
+    "introduce extra shuffle") {
+    withTempView("df") {
+      spark.range(5).select(col("id").as("key"), col("id").as("value")).createTempView("df")
+      val df = sql("SELECT key, max(value) FROM df GROUP BY key")
+
+      val planned = df.queryExecution.executedPlan
+
+      assert(collect(planned) { case h: HashAggregateExec => h }.nonEmpty)
+
+      val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+      assert(exchanges.size == 0)
+    }
+  }
+
+  test("SPARK-40086: multiple aliases to the same attribute with complex required distribution " +
+    "should not introduce extra shuffle") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(5)
+      val df1 = df.repartition($"id" + $"id")
+        .select($"id".as("key1"), $"id".as("value1"), ($"id" + $"id").as("idPlusId1"))
+      val df2 = df.repartition($"id" + $"id")
+        .select($"id".as("key2"), $"id".as("value2"), ($"id" + $"id").as("idPlusId2"))
+      val df3 = df1.join(df2, $"key1" + $"value1" === $"idPlusId2")
+
+      val planned = df3.queryExecution.executedPlan
+
+      val numShuffles = collect(planned) {
+        case e: ShuffleExchangeExec => e
+      }
+      // before: numShuffles is 4
+      assert(numShuffles.size == 2)
+      val numOutputPartitioning = collectFirst(planned) {
+        case e: SortMergeJoinExec => e.outputPartitioning match {
+          case PartitioningCollection(Seq(PartitioningCollection(l), PartitioningCollection(r))) =>
+            l ++ r
+          case _ => Seq.empty
+        }
+      }.get
+      assert(numOutputPartitioning.size == 8)
+    }
+  }
+
   test("SPARK-42049: Improve AliasAwareOutputExpression - ordering - multi-alias") {
     Seq(0, 1, 5).foreach { limit =>
       withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> limit.toString) {
