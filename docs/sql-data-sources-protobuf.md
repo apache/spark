@@ -89,10 +89,11 @@ val query = output
 
 // Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
 // class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
-// it may fail or return arbitrary result. The jar containing Java class should be shaded.
-// Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
+// it may fail or return arbitrary result. To avoid conflicts, the jar file containing the
+// 'com.google.protobuf.*' classes should be shaded. An example of shading can be found at
+// https://github.com/rangadi/shaded-protobuf-classes.
 var output = df
-.select(from_protobuf($"value", "org.sparkproject.spark-protobuf.protobuf.AppEvent") as $"event")
+.select(from_protobuf($"value", "org.example.protos..AppEvent") as $"event")
 .where("event.name == \"alice\"")
 
 output.printSchema()
@@ -146,8 +147,9 @@ Dataset<Row> output = df
 
 // Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
 // class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
-// it may fail or return arbitrary result. The jar containing Java class should be shaded.
-// Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
+// it may fail or return arbitrary result. To avoid conflicts, the jar file containing the
+// 'com.google.protobuf.*' classes should be shaded. An example of shading can be found at
+// https://github.com/rangadi/shaded-protobuf-classes.
 Dataset<Row> output = df
 .select(
   from_protobuf(col("value"),
@@ -206,8 +208,9 @@ output = df\
 
 # Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
 # class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
-# it may fail or return arbitrary result. The jar containing Java class should be shaded.
-# Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
+# it may fail or return arbitrary result. To avoid conflicts, the jar file containing the
+# 'com.google.protobuf.*' classes should be shaded. An example of shading can be found at
+# https://github.com/rangadi/shaded-protobuf-classes.
 
 output = df\
 .select(from_protobuf("value", "org.sparkproject.spark-protobuf.protobuf.AppEvent").alias("event"))\
