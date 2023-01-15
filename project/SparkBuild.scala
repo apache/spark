@@ -618,6 +618,8 @@ object Core {
   def buildenv = Process(Seq("uname")).!!.trim.replaceFirst("[^A-Za-z0-9].*", "").toLowerCase
   def bashpath = Process(Seq("where", "bash")).!!.split("[\r\n]+").head.replace('\\', '/')
   lazy val settings = Seq(
+    excludeDependencies --= Seq(
+      ExclusionRule("javax.servlet", "javax.servlet-api")),
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
     // even if the project is not using it.
     PB.protocVersion := BuildCommons.protoVersion,
