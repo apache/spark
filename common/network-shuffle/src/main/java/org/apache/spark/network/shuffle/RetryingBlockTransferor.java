@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -27,13 +26,15 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
-import org.apache.spark.network.sasl.SaslTimeoutException;
+import com.google.common.annotations.VisibleForTesting;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.sasl.SaslTimeoutException;
 
 /**
  * Wraps another BlockFetcher or BlockPusher with the ability to automatically retry block
