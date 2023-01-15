@@ -219,6 +219,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
+    kryo.register(Utils.classForName("scala.math.Ordering$Reverse"))
     kryo.register(classOf[ArrayBuffer[Any]])
     kryo.register(classOf[Array[Array[Byte]]])
 
