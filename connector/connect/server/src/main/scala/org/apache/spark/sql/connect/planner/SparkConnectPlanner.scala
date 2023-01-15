@@ -1146,10 +1146,15 @@ class SparkConnectPlanner(session: SparkSession) {
           transformRelation(u.getRightInput),
           u.getIsAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_UNION =>
+        if (!u.getByName && u.getAllowMissingColumns) {
+          throw InvalidPlanInput(
+            "UnionByName `allowMissingCol` can be true only if `byName` is true.")
+        }
         val combinedUnion = CombineUnions(
           Union(
             Seq(transformRelation(u.getLeftInput), transformRelation(u.getRightInput)),
-            byName = u.getByName))
+            byName = u.getByName,
+            allowMissingCol = u.getAllowMissingColumns))
         if (u.getIsAll) {
           combinedUnion
         } else {

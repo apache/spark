@@ -293,6 +293,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.spark.read.json(json_files).collect(),
             )
 
+    def test_orc(self):
+        # SPARK-42012: Implement DataFrameReader.orc
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a text file
+            self.spark.createDataFrame(
+                [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
+            ).write.mode("overwrite").format("orc").save(d)
+            # Read the text file as a DataFrame.
+            self.assert_eq(self.connect.read.orc(d).toPandas(), self.spark.read.orc(d).toPandas())
+
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
         right_connect_df = self.connect.read.table(self.tbl_name2)
@@ -1431,6 +1441,28 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_union_by_name(self):
+        # SPARK-41832: Test unionByName
+        data1 = [(1, 2, 3)]
+        data2 = [(6, 2, 5)]
+        df1_connect = self.connect.createDataFrame(data1, ["a", "b", "c"])
+        df2_connect = self.connect.createDataFrame(data2, ["a", "b", "c"])
+        union_df_connect = df1_connect.unionByName(df2_connect)
+
+        df1_spark = self.spark.createDataFrame(data1, ["a", "b", "c"])
+        df2_spark = self.spark.createDataFrame(data2, ["a", "b", "c"])
+        union_df_spark = df1_spark.unionByName(df2_spark)
+
+        self.assert_eq(union_df_connect.toPandas(), union_df_spark.toPandas())
+
+        df2_connect = self.connect.createDataFrame(data2, ["a", "B", "C"])
+        union_df_connect = df1_connect.unionByName(df2_connect, allowMissingColumns=True)
+
+        df2_spark = self.spark.createDataFrame(data2, ["a", "B", "C"])
+        union_df_spark = df1_spark.unionByName(df2_spark, allowMissingColumns=True)
+
+        self.assert_eq(union_df_connect.toPandas(), union_df_spark.toPandas())
+
     def test_random_split(self):
         # SPARK-41440: test randomSplit(weights, seed).
         relations = (
@@ -2535,7 +2567,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # DataFrameWriterV2 is also not implemented yet
         df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
 
-        for f in ("orc", "jdbc"):
+        for f in ("jdbc",):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.read, f)()
 

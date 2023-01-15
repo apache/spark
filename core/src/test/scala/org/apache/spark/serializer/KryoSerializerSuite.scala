@@ -104,6 +104,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(java.lang.Long.MAX_VALUE)
     check(java.lang.Long.MIN_VALUE)
     check[String](null)
+    check(Array(1.toByte))
     check(Array(1, 2, 3))
     check(Array(1L, 2L, 3L))
     check(Array(1.0, 2.0, 3.0))
@@ -114,6 +115,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array('a', 'b', 'c'))
     check(Array.empty[Int])
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
+    check(Array(Array(1.toByte)))
   }
 
   test("pairs") {
