@@ -29,6 +29,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * A non implementation specific encoder. This encoder containers all the information needed
  * to generate an implementation specific encoder (e.g. InternalRow <=> Custom Object).
+ *
+ * The input of the serialization does not need to match the external type of the encoder. This is
+ * called lenient serialization. An example of this is lenient date serialization, in this case both
+ * [[java.sql.Date]] and [[java.time.LocalDate]] are allowed. Deserialization is never lenient; it
+ * will always produce instance of the external type.
  */
 trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
@@ -53,6 +58,12 @@ object AgnosticEncoders {
     override val clsTag: ClassTag[Array[E]] = element.clsTag.wrap
   }
 
+  /**
+   * Encoder for collections.
+   *
+   * This encoder can be lenient for [[Row]] encoders. In that case we allow [[Seq]], primitive
+   * array (if any), and generic arrays as input.
+   */
   case class IterableEncoder[C, E](
       override val clsTag: ClassTag[C],
       element: AgnosticEncoder[E],
