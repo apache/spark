@@ -54,7 +54,7 @@ class SerdeTestsMixin:
 
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
-        df = self.sc.parallelize(d).toDF()
+        df = self.spark.createDataFrame(d)
         k, v = list(df.head().m.items())[0]
         self.assertEqual(1, k.i)
         self.assertEqual("", v.s)

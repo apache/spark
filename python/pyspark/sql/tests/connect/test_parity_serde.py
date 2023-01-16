@@ -30,10 +30,6 @@ class SerdeParityTests(SerdeTestsMixin, ReusedConnectTestCase):
     def test_serialize_nested_array_and_map(self):
         super().test_serialize_nested_array_and_map()
 
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_struct_in_map(self):
-        super().test_struct_in_map()
-
 
 if __name__ == "__main__":
     import unittest
