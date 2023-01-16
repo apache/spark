@@ -934,8 +934,11 @@ class AnalysisErrorSuite extends AnalysisTest {
             t.as("t2")))
       ) :: Nil,
       sum($"c2").as("sum") :: Nil, t.as("t1"))
-    assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
-      "in the aggregate expressions" :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass =
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+      expectedMessageParameters = Map.empty)
   }
 
   test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {
