@@ -64,11 +64,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_map_functions(self):
         super().test_map_functions()
 
-    # TODO(SPARK-41903): Support data type ndarray
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ndarray_input(self):
-        super().test_ndarray_input()
-
     # TODO(SPARK-41902): Parity in String representation of higher_order_function's output
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_nested_higher_order_function(self):
