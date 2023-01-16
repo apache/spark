@@ -108,7 +108,7 @@ def _supports_symlinks():
     return hasattr(os, "symlink") and (
         (not hasattr(ctypes, "windll"))  # Non-Windows
         or (
-            # In some Windows, `os.symlink` works only for admins.
+            # In some Windows, `os.symlink` works but only for admins.
             hasattr(ctypes.windll, "shell32")
             and hasattr(ctypes.windll.shell32, "IsUserAnAdmin")
             and bool(ctypes.windll.shell32.IsUserAnAdmin())
