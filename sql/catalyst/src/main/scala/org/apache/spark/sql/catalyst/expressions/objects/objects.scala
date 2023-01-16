@@ -897,9 +897,11 @@ case class MapObjects private(
 
   private lazy val mapElements: Seq[_] => Any = customCollectionCls match {
     case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
-      val tag = elementClassTag()
+      // The implicit tag is a workaround to deal with a small change in the
+      // (scala) signature of ArrayBuilder.make between Scala 2.12 and 2.13.
+      implicit val tag: ClassTag[Any] = elementClassTag()
       input => {
-        val builder = mutable.ArrayBuilder.make()(tag)
+        val builder = mutable.ArrayBuilder.make[Any]
         builder.sizeHint(input.size)
         executeFuncOnCollection(input).foreach(builder += _)
         mutable.WrappedArray.make(builder.result())
