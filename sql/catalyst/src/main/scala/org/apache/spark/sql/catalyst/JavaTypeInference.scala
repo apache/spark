@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst
 
+
+
 import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.reflect.{ParameterizedType, Type}
 import java.util.{ArrayDeque, List => JList, Map => JMap}
 import javax.annotation.Nonnull
 
-import scala.language.existentials
+import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -35,99 +37,90 @@ import org.apache.spark.sql.types._
  */
 object JavaTypeInference {
   /**
-   * Infers the corresponding SQL data type of a JavaBean class.
-   * @param beanClass Java type
-   * @return (SQL data type, nullable)
-   */
-  def inferDataType(beanClass: Class[_]): (DataType, Boolean) = {
-    val encoder = encoderFor(beanClass)
-    (encoder.dataType, encoder.nullable)
-  }
-
-  /**
    * Infers the corresponding SQL data type of a Java type.
    * @param beanType Java type
    * @return (SQL data type, nullable)
    */
-  private[sql] def inferDataType(beanType: Type): (DataType, Boolean) = {
-    inferDataType(beanType.asInstanceOf[Class[_]])
+  def inferDataType(beanType: Type): (DataType, Boolean) = {
+    val encoder = encoderFor(beanType)
+    (encoder.dataType, encoder.nullable)
   }
 
-  def encoderFor[T](beanClass: Class[T]): AgnosticEncoder[T] = {
-    encoderFor(beanClass, Set.empty).asInstanceOf[AgnosticEncoder[T]]
+  /**
+   * Infer an [[AgnosticEncoder]] for the `beanType`.
+   */
+  def encoderFor[T](beanType: Type): AgnosticEncoder[T] = {
+    encoderFor(beanType, Set.empty).asInstanceOf[AgnosticEncoder[T]]
   }
 
-  def encoderFor(c: Class[_], seenTypeSet: Set[Class[_]]): AgnosticEncoder[_] = c match {
+  private def encoderFor(t: Type, seenTypeSet: Set[Class[_]]): AgnosticEncoder[_] = t match {
 
-    case _ if c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
-    case _ if c == java.lang.Byte.TYPE => PrimitiveByteEncoder
-    case _ if c == java.lang.Short.TYPE => PrimitiveShortEncoder
-    case _ if c == java.lang.Integer.TYPE => PrimitiveIntEncoder
-    case _ if c == java.lang.Long.TYPE => PrimitiveLongEncoder
-    case _ if c == java.lang.Float.TYPE => PrimitiveFloatEncoder
-    case _ if c == java.lang.Double.TYPE => PrimitiveDoubleEncoder
+    case c: Class[_] if c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
+    case c: Class[_] if c == java.lang.Byte.TYPE => PrimitiveByteEncoder
+    case c: Class[_] if c == java.lang.Short.TYPE => PrimitiveShortEncoder
+    case c: Class[_] if c == java.lang.Integer.TYPE => PrimitiveIntEncoder
+    case c: Class[_] if c == java.lang.Long.TYPE => PrimitiveLongEncoder
+    case c: Class[_] if c == java.lang.Float.TYPE => PrimitiveFloatEncoder
+    case c: Class[_] if c == java.lang.Double.TYPE => PrimitiveDoubleEncoder
 
-    case _ if c == classOf[java.lang.Boolean] => BoxedBooleanEncoder
-    case _ if c == classOf[java.lang.Byte] => BoxedByteEncoder
-    case _ if c == classOf[java.lang.Short] => BoxedShortEncoder
-    case _ if c == classOf[java.lang.Integer] => BoxedIntEncoder
-    case _ if c == classOf[java.lang.Long] => BoxedLongEncoder
-    case _ if c == classOf[java.lang.Float] => BoxedFloatEncoder
-    case _ if c == classOf[java.lang.Double] => BoxedDoubleEncoder
+    case c: Class[_] if c == classOf[java.lang.Boolean] => BoxedBooleanEncoder
+    case c: Class[_] if c == classOf[java.lang.Byte] => BoxedByteEncoder
+    case c: Class[_] if c == classOf[java.lang.Short] => BoxedShortEncoder
+    case c: Class[_] if c == classOf[java.lang.Integer] => BoxedIntEncoder
+    case c: Class[_] if c == classOf[java.lang.Long] => BoxedLongEncoder
+    case c: Class[_] if c == classOf[java.lang.Float] => BoxedFloatEncoder
+    case c: Class[_] if c == classOf[java.lang.Double] => BoxedDoubleEncoder
 
-    case _ if c == classOf[java.lang.String] => StringEncoder
-    case _ if c == classOf[Array[Byte]] => BinaryEncoder
-    case _ if c == classOf[java.math.BigDecimal] => DEFAULT_JAVA_DECIMAL_ENCODER
-    case _ if c == classOf[java.math.BigInteger] => JavaBigIntEncoder
-    case _ if c == classOf[java.time.LocalDate] => STRICT_LOCAL_DATE_ENCODER
-    case _ if c == classOf[java.sql.Date] => STRICT_DATE_ENCODER
-    case _ if c == classOf[java.time.Instant] => STRICT_INSTANT_ENCODER
-    case _ if c == classOf[java.sql.Timestamp] => STRICT_TIMESTAMP_ENCODER
-    case _ if c == classOf[java.time.LocalDateTime] => LocalDateTimeEncoder
-    case _ if c == classOf[java.time.Duration] => DayTimeIntervalEncoder
-    case _ if c == classOf[java.time.Period] => YearMonthIntervalEncoder
+    case c: Class[_] if c == classOf[java.lang.String] => StringEncoder
+    case c: Class[_] if c == classOf[Array[Byte]] => BinaryEncoder
+    case c: Class[_] if c == classOf[java.math.BigDecimal] => DEFAULT_JAVA_DECIMAL_ENCODER
+    case c: Class[_] if c == classOf[java.math.BigInteger] => JavaBigIntEncoder
+    case c: Class[_] if c == classOf[java.time.LocalDate] => STRICT_LOCAL_DATE_ENCODER
+    case c: Class[_] if c == classOf[java.sql.Date] => STRICT_DATE_ENCODER
+    case c: Class[_] if c == classOf[java.time.Instant] => STRICT_INSTANT_ENCODER
+    case c: Class[_] if c == classOf[java.sql.Timestamp] => STRICT_TIMESTAMP_ENCODER
+    case c: Class[_] if c == classOf[java.time.LocalDateTime] => LocalDateTimeEncoder
+    case c: Class[_] if c == classOf[java.time.Duration] => DayTimeIntervalEncoder
+    case c: Class[_] if c == classOf[java.time.Period] => YearMonthIntervalEncoder
 
-    case _ if c.isEnum => JavaEnumEncoder(ClassTag(c))
+    case c: Class[_] if c.isEnum => JavaEnumEncoder(ClassTag(c))
 
-    case _ if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+    case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
       val udt = c.getAnnotation(classOf[SQLUserDefinedType]).udt()
         .getConstructor().newInstance().asInstanceOf[UserDefinedType[Any]]
       val udtClass = udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()
       UDTEncoder(udt, udtClass)
 
-    case _ if UDTRegistration.exists(c.getName) =>
+    case c: Class[_] if UDTRegistration.exists(c.getName) =>
       val udt = UDTRegistration.getUDTFor(c.getName).get.getConstructor().
         newInstance().asInstanceOf[UserDefinedType[Any]]
       UDTEncoder(udt, udt.getClass)
 
-    case _ if c.isArray =>
+    case c: Class[_] if c.isArray =>
       val elementEncoder = encoderFor(c.getComponentType, seenTypeSet)
       ArrayEncoder(elementEncoder, elementEncoder.nullable)
 
-    case _ if classOf[JList[_]].isAssignableFrom(c) =>
-      // TODO this is probably too restrictive. Upperbounds for example would sort of work.
-      val Array(elementCls: Class[_]) = findTypeArgumentsForInterface(c, classOf[JList[_]])
-      val element = encoderFor(elementCls)
+    case ImplementsList(c, Array(elementCls)) =>
+      val element = encoderFor(elementCls, seenTypeSet)
       IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
 
-    case _ if classOf[JMap[_, _]].isAssignableFrom(c) =>
-      val Array(keyCls: Class[_], valueCls: Class[_]) =
-        findTypeArgumentsForInterface(c, classOf[JMap[_, _]])
-      val keyEncoder = encoderFor(keyCls)
-      val valueEncoder = encoderFor(valueCls)
+    case ImplementsMap(c, Array(keyCls, valueCls)) =>
+      val keyEncoder = encoderFor(keyCls, seenTypeSet)
+      val valueEncoder = encoderFor(valueCls, seenTypeSet)
       MapEncoder(ClassTag(c), keyEncoder, valueEncoder, valueEncoder.nullable)
 
-    case _ =>
+    case c: Class[_] =>
       if (seenTypeSet.contains(c)) {
         throw QueryExecutionErrors.cannotHaveCircularReferencesInBeanClassError(c)
       }
 
       // TODO: we should only collect properties that have getter and setter. However, some tests
-      // pass in scala case class as java bean class which doesn't have getter and setter.
+      //   pass in scala case class as java bean class which doesn't have getter and setter.
       val properties = getJavaBeanReadableProperties(c)
+      // Note that the fields are ordered by name.
       val fields = properties.map { property =>
         val readMethod = property.getReadMethod
-        val encoder = encoderFor(readMethod.getReturnType, seenTypeSet + c)
+        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c)
         // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
         val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
         EncoderField(
@@ -139,6 +132,9 @@ object JavaTypeInference {
           Option(property.getWriteMethod).map(_.getName))
       }
       JavaBeanEncoder(ClassTag(c), fields)
+
+    case _ =>
+      throw QueryExecutionErrors.cannotFindEncoderForTypeError(t.toString)
   }
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
@@ -148,22 +144,38 @@ object JavaTypeInference {
       .filter(_.getReadMethod != null)
   }
 
-  private def findTypeArgumentsForInterface(
-      cls: Class[_],
-      interfaceCls: Class[_]): Array[Type] = {
-    assert(interfaceCls.getTypeParameters.nonEmpty)
-    val queue = new ArrayDeque[Type]()
-    queue.add(cls)
-    while (!queue.isEmpty) {
-      queue.poll() match {
-        case pt: ParameterizedType if pt.getRawType == interfaceCls =>
-          return pt.getActualTypeArguments
-        case pt: ParameterizedType =>
-          queue.add(pt.getRawType)
-        case c: Class[_] =>
-          c.getGenericInterfaces.foreach(queue.add)
-      }
+  private class ImplementsGenericInterface(interface: Class[_]) {
+    assert(interface.isInterface)
+    assert(interface.getTypeParameters.nonEmpty)
+
+    def unapply(t: Type): Option[(Class[_], Array[Type])] = implementsInterface(t).map { cls =>
+      cls -> findTypeArgumentsForInterface(t)
     }
-    throw new RuntimeException(s"$cls does not implement generic interface $interfaceCls")
+
+    @tailrec
+    private def implementsInterface(t: Type): Option[Class[_]] = t match {
+      case pt: ParameterizedType => implementsInterface(pt.getRawType)
+      case c: Class[_] if interface.isAssignableFrom(c) => Option(c)
+      case _ => None
+    }
+
+    private def findTypeArgumentsForInterface(t: Type): Array[Type] = {
+      val queue = new ArrayDeque[Type]()
+      queue.add(t)
+      while (!queue.isEmpty) {
+        queue.poll() match {
+          case pt: ParameterizedType if pt.getRawType == interface =>
+            return pt.getActualTypeArguments
+          case pt: ParameterizedType =>
+            queue.add(pt.getRawType)
+          case c: Class[_] =>
+            c.getGenericInterfaces.foreach(queue.add)
+        }
+      }
+      throw QueryExecutionErrors.unreachableError()
+    }
   }
+
+  private object ImplementsList extends ImplementsGenericInterface(classOf[JList[_]])
+  private object ImplementsMap extends ImplementsGenericInterface(classOf[JMap[_, _]])
 }
