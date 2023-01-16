@@ -32,10 +32,11 @@ class DummyBean() {
 class JavaTypeInferenceSuite extends SparkFunSuite {
 
   test("SPARK-41007: JavaTypeInference returns the correct serializer for BigInteger") {
-    var serializer = JavaTypeInference.serializerFor(classOf[DummyBean])
-    var bigIntegerFieldName: Expression = serializer.children(0)
+    val encoder = JavaTypeInference.encoderFor(classOf[DummyBean])
+    val serializer = ScalaReflection.serializerFor(encoder)
+    val bigIntegerFieldName: Expression = serializer.children(0)
     assert(bigIntegerFieldName.asInstanceOf[Literal].value.toString == "bigInteger")
-    var bigIntegerFieldExpression: Expression = serializer.children(1)
+    val bigIntegerFieldExpression: Expression = serializer.children(1)
     assert(bigIntegerFieldExpression.asInstanceOf[CheckOverflow].dataType ==
       DecimalType.BigIntDecimal)
   }
