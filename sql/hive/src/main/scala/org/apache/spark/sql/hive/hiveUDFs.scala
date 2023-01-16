@@ -121,15 +121,15 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataTyp
   extends DeferredObject with HiveInspectors {
 
   private val wrapper = wrapperFor(oi, dataType)
-  private var func: () => Any = _
-  def set(func: () => Any): Unit = {
+  private var func: Any = _
+  def set(func: Any): Unit = {
     this.func = func
   }
   override def prepare(i: Int): Unit = {}
-  override def get(): AnyRef = wrapper(func()).asInstanceOf[AnyRef]
+  override def get(): AnyRef = wrapper(func).asInstanceOf[AnyRef]
 }
 
-case class HiveGenericUDF(
+private[hive] case class HiveGenericUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression
   with HiveInspectors
@@ -180,7 +180,7 @@ case class HiveGenericUDF(
     while (i < length) {
       val idx = i
       deferredObjects(i).asInstanceOf[DeferredObjectAdapter]
-        .set(() => children(idx).eval(input))
+        .set(children(idx).eval(input))
       i += 1
     }
     unwrapper(function.evaluate(deferredObjects))
@@ -200,17 +200,14 @@ case class HiveGenericUDF(
 
     val setDeferredObjects = childrenEvals.zipWithIndex.zip(children.map(_.dataType)).map {
       case ((eval, i), dt) =>
-        val funcTerm = ctx.freshName("func")
-        val ft = CodeGenerator.boxedType(dt)
         val deferredObjectAdapterClz = classOf[DeferredObjectAdapter].getCanonicalName
         s"""
-           |scala.Function0<$ft> $funcTerm = new scala.Function0() {
-           |  @Override
-           |  public $ft apply() {
-           |    return ${eval.isNull} ? null : ${eval.value};
-           |  }
-           |};
-           |(($deferredObjectAdapterClz) $refTerm.deferredObjects()[$i]).set($funcTerm);
+           |if (${eval.isNull}) {
+           |  (($deferredObjectAdapterClz) $refTerm.deferredObjects()[$i]).set(null);
+           |} else {
+           |  (($deferredObjectAdapterClz) $refTerm.deferredObjects()[$i]).set(${eval.value});
+           |}
+           |
            |""".stripMargin
     }
 
