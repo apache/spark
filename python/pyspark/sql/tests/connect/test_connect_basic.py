@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import array
 import datetime
 import unittest
 import shutil
@@ -669,6 +670,20 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "can not infer schema from empty dataset",
         ):
             self.connect.createDataFrame(data=[])
+
+    def test_create_dataframe_from_arrays(self):
+        # SPARK-42021: createDataFrame support array.array
+        data1 = [Row(a=1, b=array.array("i", [1, 2, 3]), c=array.array("d", [4, 5, 6]))]
+        data2 = [(array.array("d", [1, 2, 3]), 2, "3")]
+        data3 = [{"a": 1, "b": array.array("i", [1, 2, 3])}]
+
+        for data in [data1, data2, data3]:
+            cdf = self.connect.createDataFrame(data)
+            sdf = self.spark.createDataFrame(data)
+
+            # TODO: the nullability is different, need to fix
+            # self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_timestampe_create_from_rows(self):
         data = [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)]
