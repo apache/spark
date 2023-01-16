@@ -261,7 +261,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'.'",
     "hint" : ""
@@ -391,7 +391,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'mar 11 2016'",
     "valueType" : "\"DATE\""
@@ -422,7 +422,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2016-33-11 20:54:00.000'",
     "valueType" : "\"TIMESTAMP\""
@@ -504,7 +504,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'XuZ'",
     "valueType" : "\"X\""
