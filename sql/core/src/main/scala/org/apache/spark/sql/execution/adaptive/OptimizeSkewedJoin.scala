@@ -201,7 +201,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
         s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
-        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
+        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false, _) =>
       tryOptimizeJoinChildren(left, right, joinType).map {
         case (newLeft, newRight) =>
           smj.copy(
@@ -210,7 +210,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
     case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
         ShuffleStage(left: ShuffleQueryStageExec),
-        ShuffleStage(right: ShuffleQueryStageExec), false) =>
+        ShuffleStage(right: ShuffleQueryStageExec), false, _) =>
       tryOptimizeJoinChildren(left, right, joinType).map {
         case (newLeft, newRight) =>
           shj.copy(left = newLeft, right = newRight, isSkewJoin = true)

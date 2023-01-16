@@ -43,7 +43,8 @@ case class ShuffledHashJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false)
+    isSkewJoin: Boolean = false,
+    isStoragePartitionedJoin: Boolean = false)
   extends HashJoin with ShuffledJoin {
 
   override lazy val metrics = Map(
