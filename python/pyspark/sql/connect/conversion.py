@@ -20,6 +20,7 @@ import datetime
 import pyarrow as pa
 
 from pyspark.sql.types import (
+    _create_row,
     Row,
     DataType,
     TimestampType,
@@ -37,6 +38,7 @@ from typing import (
     Any,
     Callable,
     Sequence,
+    List,
 )
 
 
@@ -206,3 +208,146 @@ class LocalDataToArrowConversion:
             pylist.append(_dict)
 
         return pa.Table.from_pylist(pylist, schema=pa_schema)
+
+
+class ArrowTableToRowsConversion:
+    """
+    Conversion from Arrow Table to Rows.
+    Currently, only :class:`DataFrame` in Spark Connect can use this class.
+    """
+
+    @staticmethod
+    def _need_converter(dataType: DataType) -> bool:
+        if isinstance(dataType, NullType):
+            return True
+        elif isinstance(dataType, StructType):
+            return True
+        elif isinstance(dataType, ArrayType):
+            return ArrowTableToRowsConversion._need_converter(dataType.elementType)
+        elif isinstance(dataType, MapType):
+            # Different from PySpark, here always needs conversion,
+            # since the input from Arrow is a list of tuples.
+            return True
+        elif isinstance(dataType, BinaryType):
+            return True
+        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+            # Always remove the time zone info for now
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def _create_converter(dataType: DataType) -> Callable:
+        assert dataType is not None and isinstance(dataType, DataType)
+
+        if not ArrowTableToRowsConversion._need_converter(dataType):
+            return lambda value: value
+
+        if isinstance(dataType, NullType):
+            return lambda value: None
+
+        elif isinstance(dataType, StructType):
+
+            field_convs = {
+                f.name: ArrowTableToRowsConversion._create_converter(f.dataType)
+                for f in dataType.fields
+            }
+            need_conv = any(
+                ArrowTableToRowsConversion._need_converter(f.dataType) for f in dataType.fields
+            )
+
+            def convert_struct(value: Any) -> Row:
+                if value is None:
+                    return Row()
+                else:
+                    assert isinstance(value, dict)
+
+                    if need_conv:
+                        _dict = {}
+                        for k, v in value.items():
+                            assert isinstance(k, str)
+                            _dict[k] = field_convs[k](v)
+                        return Row(**_dict)
+                    else:
+                        return Row(**value)
+
+            return convert_struct
+
+        elif isinstance(dataType, ArrayType):
+
+            element_conv = ArrowTableToRowsConversion._create_converter(dataType.elementType)
+
+            def convert_array(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, list)
+                    return [element_conv(v) for v in value]
+
+            return convert_array
+
+        elif isinstance(dataType, MapType):
+
+            key_conv = ArrowTableToRowsConversion._create_converter(dataType.keyType)
+            value_conv = ArrowTableToRowsConversion._create_converter(dataType.valueType)
+
+            def convert_map(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, list)
+                    assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
+                    return dict((key_conv(t[0]), value_conv(t[1])) for t in value)
+
+            return convert_map
+
+        elif isinstance(dataType, BinaryType):
+
+            def convert_binary(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, bytes)
+                    return bytearray(value)
+
+            return convert_binary
+
+        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+
+            def convert_timestample(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, datetime.datetime)
+                    if value.tzinfo is not None:
+                        # always remove the time zone for now
+                        return value.replace(tzinfo=None)
+                    else:
+                        return value
+
+            return convert_timestample
+
+        else:
+
+            return lambda value: value
+
+    @staticmethod
+    def convert(table: "pa.Table", schema: StructType) -> List[Row]:
+        assert isinstance(table, pa.Table)
+
+        assert schema is not None and isinstance(schema, StructType)
+
+        field_converters = [
+            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+        ]
+
+        # table.to_pylist() automatically remove columns with duplicated names,
+        # to avoid this, use columnar lists here.
+        # TODO: support duplicated field names in the one struct. e.g. SF.struct("a", "a")
+        columnar_data = [column.to_pylist() for column in table.columns]
+
+        rows: List[Row] = []
+        for i in range(0, table.num_rows):
+            values = [field_converters[j](columnar_data[j][i]) for j in range(0, table.num_columns)]
+            rows.append(_create_row(fields=table.column_names, values=values))
+        return rows
