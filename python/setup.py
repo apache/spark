@@ -111,7 +111,7 @@ def _supports_symlinks():
             # In some Windows, `os.symlink` works only for admins.
             hasattr(ctypes.windll, "shell32")
             and hasattr(ctypes.windll.shell32, "IsUserAnAdmin")
-            and ctypes.windll.shell32.IsUserAnAdmin() != 0
+            and bool(ctypes.windll.shell32.IsUserAnAdmin())
         )
     )
 
