@@ -104,13 +104,6 @@ case class TableIdentifier(table: String, database: Option[String], catalog: Opt
 
   def this(table: String) = this(table, None, None)
   def this(table: String, database: Option[String]) = this(table, database, None)
-
-  override def equals(obj: Any): Boolean = obj match {
-    case t: TableIdentifier => table == t.table && database == t.database && catalog == t.catalog
-    case _ => false
-  }
-
-  override def hashCode(): Int = unquotedString.hashCode
 }
 
 /** A fully qualified identifier for a table (i.e., database.tableName) */
