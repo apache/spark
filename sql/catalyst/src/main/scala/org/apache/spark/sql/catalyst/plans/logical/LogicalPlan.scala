@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 abstract class LogicalPlan
@@ -275,8 +276,37 @@ object LogicalPlanIntegrity {
    * Some plan transformers (e.g., `RemoveNoopOperators`) rewrite logical
    * plans based on this assumption.
    */
-  def checkIfExprIdsAreGloballyUnique(plan: LogicalPlan): Boolean = {
-    checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
+  def validateExprIdUniqueness(plan: LogicalPlan): Unit = {
+    if (!LogicalPlanIntegrity.checkIfSameExprIdNotReused(plan)) {
+      throw SparkException.internalError("Cannot reuse the exprId in Alias")
+    }
+    if (!LogicalPlanIntegrity.hasUniqueExprIdsForOutput(plan)) {
+      throw SparkException.internalError(
+        "Some Attributes have the same exprId but different data types")
+    }
+  }
+
+  /**
+   * Validate the structural integrity of an optimized plan.
+   * Currently we check after the execution of each rule if a plan:
+   * - is still resolved
+   * - only host special expressions in supported operators
+   * - has globally-unique attribute IDs
+   * - optimized plan have same schema with previous plan.
+   */
+  def validateOptimizedPlan(
+      previousPlan: LogicalPlan,
+      currentPlan: LogicalPlan): Unit = {
+    if (!currentPlan.resolved) {
+      throw SparkException.internalError("The plan becomes unresolved")
+    }
+    if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
+      throw SparkException.internalError("Special expressions are placed in the wrong plan")
+    }
+    LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan)
+    if (!DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+      throw SparkException.internalError("The plan output schema has changed")
+    }
   }
 }
 

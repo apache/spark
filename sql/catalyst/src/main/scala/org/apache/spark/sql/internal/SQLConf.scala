@@ -304,6 +304,14 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val PLAN_CHANGE_VALIDATION = buildConf("spark.sql.planChangeValidation")
+    .internal()
+    .doc("If true, Spark will validate all the plan changes made by analyzer/optimizer and other " +
+      "catalyst rules, to make sure every rule returns a valid plan")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.rules
 
+import org.apache.spark.{SparkException, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -151,12 +152,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected val excludedOnceBatches: Set[String] = Set.empty
 
   /**
-   * Defines a check function that checks for structural integrity of the plan after the execution
-   * of each rule. For example, we can check whether a plan is still resolved after each rule in
-   * `Optimizer`, so we can catch rules that return invalid plans. The check function returns
-   * `false` if the given plan doesn't pass the structural integrity check.
+   * Defines a validate function that validates the plan after the execution of each rule, to make
+   * sure these rule still keep the structural integrity of the plan. For example, we can check
+   * whether a plan is still resolved after each rule in `Optimizer`, so we can catch rules that
+   * return invalid plans.
+   *
+   * Implementations should throw `SparkException.internalError`.
    */
-  protected def isPlanIntegral(previousPlan: TreeType, currentPlan: TreeType): Boolean = true
+  protected def validate(previousPlan: TreeType, currentPlan: TreeType): Unit = {}
 
   /**
    * Util method for checking whether a plan remains the same if re-optimized.
@@ -191,10 +194,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
     val beforeMetrics = RuleExecutor.getCurrentMetrics()
 
-    // Run the structural integrity checker against the initial input
-    if (!isPlanIntegral(plan, plan)) {
-      throw QueryExecutionErrors.structuralIntegrityOfInputPlanIsBrokenInClassError(
-        this.getClass.getName.stripSuffix("$"))
+    // Validate the initial input
+    try {
+      validate(plan, plan)
+    } catch {
+      case e: SparkException if SparkThrowableHelper.isInternalError(e.getErrorClass) =>
+        val ruleExecutorName = this.getClass.getName.stripSuffix("$")
+        throw SparkException.internalError(
+          "The structural integrity of the input plan is broken in " + ruleExecutorName, e)
     }
 
     batches.foreach { batch =>
@@ -224,9 +231,15 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
 
             // Run the structural integrity checker against the plan after each rule.
-            if (effective && !isPlanIntegral(plan, result)) {
-              throw QueryExecutionErrors.structuralIntegrityIsBrokenAfterApplyingRuleError(
-                rule.ruleName, batch.name)
+            if (effective) {
+              try {
+                validate(plan, result)
+              } catch {
+                case e: SparkException if SparkThrowableHelper.isInternalError(e.getErrorClass) =>
+                  throw SparkException.internalError(
+                  s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
+                    "the structural integrity of the plan is broken.", e)
+              }
             }
 
             result

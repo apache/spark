@@ -56,7 +56,6 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
@@ -191,13 +190,10 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
-  override protected def isPlanIntegral(
+  override protected def validate(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Boolean = {
-    import org.apache.spark.sql.catalyst.util._
-    !Utils.isTesting || (LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
-      (!LogicalPlanIntegrity.canGetOutputAttrs(currentPlan) ||
-        !currentPlan.output.exists(_.qualifiedAccessOnly)))
+      currentPlan: LogicalPlan): Unit = {
+    LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan)
   }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)

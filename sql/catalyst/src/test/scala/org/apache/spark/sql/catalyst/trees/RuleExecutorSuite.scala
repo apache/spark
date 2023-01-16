@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral, Literal}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 
@@ -71,43 +71,45 @@ class RuleExecutorSuite extends SparkFunSuite {
     assert(message.contains("Max iterations (10) reached for batch fixedPoint"))
   }
 
-  test("structural integrity checker - verify initial input") {
+  test("structural integrity validation - verify initial input") {
     object WithSIChecker extends RuleExecutor[Expression] {
-      override protected def isPlanIntegral(
+      override protected def validate(
           previousPlan: Expression,
-          currentPlan: Expression): Boolean = currentPlan match {
-        case IntegerLiteral(_) => true
-        case _ => false
+          currentPlan: Expression): Unit = currentPlan match {
+        case IntegerLiteral(_) =>
+        case _ => throw SparkException.internalError("not integer")
       }
       val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
 
     assert(WithSIChecker.execute(Literal(10)) === Literal(9))
 
-    val message = intercept[RuntimeException] {
+    val e = intercept[SparkException] {
       // The input is already invalid as determined by WithSIChecker.isPlanIntegral
       WithSIChecker.execute(Literal(10.1))
-    }.getMessage
-    assert(message.contains("The structural integrity of the input plan is broken"))
+    }
+    assert(e.getMessage.contains("The structural integrity of the input plan is broken"))
+    assert(e.getCause.getMessage.contains("not integer"))
   }
 
   test("structural integrity checker - verify rule execution result") {
     object WithSICheckerForPositiveLiteral extends RuleExecutor[Expression] {
-      override protected def isPlanIntegral(
+      override protected def validate(
           previousPlan: Expression,
-          currentPlan: Expression): Boolean = currentPlan match {
-        case IntegerLiteral(i) if i > 0 => true
-        case _ => false
+          currentPlan: Expression): Unit = currentPlan match {
+        case IntegerLiteral(i) if i > 0 =>
+        case _ => throw SparkException.internalError("not positive integer")
       }
       val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
 
     assert(WithSICheckerForPositiveLiteral.execute(Literal(2)) === Literal(1))
 
-    val message = intercept[RuntimeException] {
+    val e = intercept[SparkException] {
       WithSICheckerForPositiveLiteral.execute(Literal(1))
-    }.getMessage
-    assert(message.contains("the structural integrity of the plan is broken"))
+    }
+    assert(e.getMessage.contains("the structural integrity of the plan is broken"))
+    assert(e.getCause.getMessage.contains("not positive integer"))
   }
 
   test("SPARK-27243: dumpTimeSpent when no rule has run") {
