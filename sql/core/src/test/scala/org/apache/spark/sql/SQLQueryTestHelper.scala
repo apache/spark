@@ -47,7 +47,7 @@ trait SQLQueryTestHelper {
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
-      .replaceAll("@[0-9a-z]+,", "@x,") // remove hashCode
+      .replaceAll("@[0-9a-z]+,", ",") // remove hashCode
   }
 
 
