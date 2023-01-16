@@ -198,8 +198,8 @@ private[hive] case class HiveGenericUDF(
     val refTerm = ctx.addReferenceObj("this", this)
     val childrenEvals = children.map(_.genCode(ctx))
 
-    val setDeferredObjects = childrenEvals.zipWithIndex.zip(children.map(_.dataType)).map {
-      case ((eval, i), dt) =>
+    val setDeferredObjects = childrenEvals.zipWithIndex.map {
+      case (eval, i) =>
         val deferredObjectAdapterClz = classOf[DeferredObjectAdapter].getCanonicalName
         s"""
            |if (${eval.isNull}) {
