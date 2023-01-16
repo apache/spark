@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, EOFException}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
@@ -615,6 +615,9 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     assert(serialized.length > 2)
     val trucated = serialized.take(2).toArray
     val deserializationStream = serInstance.deserializeStream(new ByteArrayInputStream(trucated))
+    intercept[EOFException](
+      serInstance.deserializeStream(new ByteArrayInputStream(trucated)).readValue()
+    )
     assert(deserializationStream.asIterator.toSeq == Seq())
   }
 }
