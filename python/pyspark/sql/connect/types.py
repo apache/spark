@@ -248,3 +248,69 @@ def to_arrow_schema(schema: StructType) -> "pa.Schema":
         for field in schema
     ]
     return pa.schema(fields)
+
+
+def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
+    """Convert pyarrow type to Spark data type.
+
+    This function refers to 'pyspark.sql.pandas.types.from_arrow_type' but relax the restriction,
+    e.g. it supports nested StructType, Array of TimestampType. However, Arrow DictionaryType is
+    not allowed.
+    """
+    import pyarrow.types as types
+
+    spark_type: DataType
+    if types.is_boolean(at):
+        spark_type = BooleanType()
+    elif types.is_int8(at):
+        spark_type = ByteType()
+    elif types.is_int16(at):
+        spark_type = ShortType()
+    elif types.is_int32(at):
+        spark_type = IntegerType()
+    elif types.is_int64(at):
+        spark_type = LongType()
+    elif types.is_float32(at):
+        spark_type = FloatType()
+    elif types.is_float64(at):
+        spark_type = DoubleType()
+    elif types.is_decimal(at):
+        spark_type = DecimalType(precision=at.precision, scale=at.scale)
+    elif types.is_string(at):
+        spark_type = StringType()
+    elif types.is_binary(at):
+        spark_type = BinaryType()
+    elif types.is_date32(at):
+        spark_type = DateType()
+    elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
+        spark_type = TimestampNTZType()
+    elif types.is_timestamp(at):
+        spark_type = TimestampType()
+    elif types.is_duration(at):
+        spark_type = DayTimeIntervalType()
+    elif types.is_list(at):
+        spark_type = ArrayType(from_arrow_type(at.value_type))
+    elif types.is_map(at):
+        spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
+    elif types.is_struct(at):
+        return StructType(
+            [
+                StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+                for field in at
+            ]
+        )
+    elif types.is_null(at):
+        spark_type = NullType()
+    else:
+        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+    return spark_type
+
+
+def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
+    """Convert schema from Arrow to Spark."""
+    return StructType(
+        [
+            StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+            for field in arrow_schema
+        ]
+    )
