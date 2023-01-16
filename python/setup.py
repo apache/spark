@@ -20,6 +20,7 @@ import importlib.util
 import glob
 import os
 import sys
+import ctypes
 from setuptools import setup
 from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
@@ -104,7 +105,7 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
 
 def _supports_symlinks():
     """Check if the system supports symlinks (e.g. *nix) or not."""
-    return getattr(os, "symlink", None) is not None
+    return getattr(os, "symlink", None) is not None and ctypes.windll.shell32.IsUserAnAdmin() != 0 if sys.platform == "win32" else True
 
 
 if in_spark:
