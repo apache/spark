@@ -105,7 +105,16 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
 
 def _supports_symlinks():
     """Check if the system supports symlinks (e.g. *nix) or not."""
-    return getattr(os, "symlink", None) is not None and ctypes.windll.shell32.IsUserAnAdmin() != 0 if sys.platform == "win32" else True
+    return hasattr(os, "symlink") and (
+        (not hasattr(ctypes, "windll"))  # Non-Windows
+        or (
+            # In some Windows, `os.symlink` works only for admins.
+            hasattr(ctypes, "windll")
+            and hasattr(ctypes.windll, "shell32")
+            and hasattr(ctypes.windll.shell32, "IsUserAnAdmin")
+            and ctypes.windll.shell32.IsUserAnAdmin() != 0
+        )
+    )
 
 
 if in_spark:
