@@ -21,12 +21,14 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.trees.MultiTransformHelper
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A trait that provides functionality to handle aliases in the `outputExpressions`.
  */
-trait AliasAwareOutputExpression extends SQLConfHelper {
+trait AliasAwareOutputExpression extends SQLConfHelper with MultiTransformHelper {
   private val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
   protected def outputExpressions: Seq[NamedExpression]
   /**
@@ -65,25 +67,46 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
 
   /**
    * Return a set of Expression which normalize the original expression to the aliased.
-   * @param pruneFunc used to prune the alias-replaced expression whose references are not the
-   *                 subset of output
    */
-  protected def normalizeExpression(
-      expr: Expression,
-      pruneFunc: (Expression, AttributeSet) => Option[Expression]): Seq[Expression] = {
+  protected def normalizeExpression(expr: Expression): Seq[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
-    expr.multiTransformDown {
+
+    def f: PartialFunction[Expression, Stream[Expression]] = {
+      // Mapping with aliases
       case e: Expression if exprAliasMap.contains(e.canonicalized) =>
         (exprAliasMap(e.canonicalized) :+ e).toStream
       case e: Expression if attrAliasMap.contains(e.canonicalized) =>
         attrAliasMap(e.canonicalized).toStream
-    }.flatMap { candidate =>
-      if (candidate.references.subsetOf(outputSet)) {
-        Some(candidate)
-      } else {
-        pruneFunc(candidate, outputSet)
-      }
-    }.take(aliasCandidateLimit)
+
+      // Prune if we encounter an attribute that we can't map and it is not in output set.
+      // This prune will go up to the closest `multiTransformDown()` call and returns `Stream.empty`
+      // there.
+      case a: Attribute if !outputSet.contains(a) => Stream.empty
+
+      // Filter PartitioningCollection children
+      case p: PartitioningCollection =>
+        val childrenStreams = p.partitionings.map {
+          case e: Expression => e.multiTransformDown(f).asInstanceOf[Stream[Partitioning]]
+          case o => Stream(o)
+        }.filter(_.nonEmpty)
+        generateChildrenSeq(childrenStreams).flatMap {
+          case Nil => None
+          // We might have an expression type partitioning that doesn't need
+          // `PartitioningCollection`
+          case (p: Expression) :: Nil => Some(p)
+          case p :: Nil => Some(PartitioningCollection(Seq(p)))
+          case ps => Some(PartitioningCollection(ps))
+        }
+
+      // Filter SortOrder children
+      case s: SortOrder =>
+        val childrenStreams = s.children.map(_.multiTransformDown(f)).filter(_.nonEmpty)
+        generateChildrenSeq(childrenStreams)
+          .filter(_.nonEmpty)
+          .map(es => s.copy(child = es.head, sameOrderExpressions = es.tail))
+    }
+
+    expr.multiTransformDown(f).take(aliasCandidateLimit)
   }
 }
 
@@ -102,23 +125,15 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
 
   override final def outputOrdering: Seq[SortOrder] = {
     if (hasAlias) {
-      orderingExpressions.map { sortOrder =>
-        val normalized = normalizeExpression(sortOrder, (replacedExpr, outputExpressionSet) => {
-          assert(replacedExpr.isInstanceOf[SortOrder])
-          val sortOrder = replacedExpr.asInstanceOf[SortOrder]
-          val pruned = sortOrder.children.filter { child =>
-            child.references.subsetOf(outputExpressionSet)
-          }
-          if (pruned.isEmpty) {
-            None
-          } else {
-            // All expressions after pruned are semantics equality, so just use head to build a new
-            // SortOrder and use tail as the sameOrderExpressions.
-            Some(SortOrder(pruned.head, sortOrder.direction, sortOrder.nullOrdering, pruned.tail))
-          }
-        })
-        sortOrder.copy(sameOrderExpressions =
-          normalized.flatMap(_.asInstanceOf[SortOrder].children))
+      orderingExpressions.flatMap { sortOrder =>
+        val normalized = normalizeExpression(sortOrder)
+        val allOrderingExpressions = normalized.flatMap(_.asInstanceOf[SortOrder].children)
+        if (allOrderingExpressions.isEmpty) {
+          None
+        } else {
+          Some(sortOrder.copy(child = allOrderingExpressions.head,
+            sameOrderExpressions = allOrderingExpressions.tail))
+        }
       }
     } else {
       orderingExpressions

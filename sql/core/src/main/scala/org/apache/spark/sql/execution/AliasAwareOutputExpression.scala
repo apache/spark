@@ -32,20 +32,7 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode
     val normalizedOutputPartitioning = if (hasAlias) {
       child.outputPartitioning match {
         case e: Expression =>
-          val normalized = normalizeExpression(e, (replacedExpr, outputExpressionSet) => {
-            assert(replacedExpr.isInstanceOf[Partitioning])
-            // It's hard to deduplicate partitioning inside `PartitioningCollection` at
-            // `AliasAwareOutputExpression`, so here we should do distinct.
-            val pruned = flattenPartitioning(replacedExpr.asInstanceOf[Partitioning]).filter {
-              case e: Expression => e.references.subsetOf(outputExpressionSet)
-              case _ => true
-            }.distinct
-            if (pruned.isEmpty) {
-              None
-            } else {
-              Some(PartitioningCollection(pruned))
-            }
-          })
+          val normalized = normalizeExpression(e)
           normalized.asInstanceOf[Seq[Partitioning]] match {
             case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
             case Seq(p) => p
@@ -67,8 +54,7 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode
     // `HashPartitioning(Seq(a + b))` is the same as `HashPartitioning(Seq(b + a))`.
     val expressionPartitionings = mutable.Set.empty[Expression]
     flattenPartitioning(normalizedOutputPartitioning).filter {
-      case e: Expression =>
-        e.references.subsetOf(outputSet) && expressionPartitionings.add(e.canonicalized)
+      case e: Expression => expressionPartitionings.add(e.canonicalized)
       case _ => true
     } match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
