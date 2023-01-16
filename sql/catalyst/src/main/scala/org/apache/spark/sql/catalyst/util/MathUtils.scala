@@ -75,7 +75,7 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  private def withOverflow[A](
+  def withOverflow[A](
       f: => A,
       hint: String = "",
       context: SQLQueryContext = null): A = {
@@ -85,5 +85,15 @@ object MathUtils {
       case e: ArithmeticException =>
         throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage, hint, context)
     }
+  }
+
+  def withOverflowCode(evalCode: String, context: String): String = {
+    s"""
+       |try {
+       |  $evalCode
+       |} catch (ArithmeticException e) {
+       |  throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", $context);
+       |}
+       |""".stripMargin
   }
 }

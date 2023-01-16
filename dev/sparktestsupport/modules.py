@@ -279,6 +279,7 @@ connect = Module(
     ],
     sbt_test_goals=[
         "connect/test",
+        "connect-client-jvm/test",
     ],
 )
 
@@ -752,6 +753,16 @@ pyspark_pandas_slow = Module(
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
         # they aren't available there
+    ],
+)
+
+pyspark_errors = Module(
+    name="pyspark-errors",
+    dependencies=[],
+    source_file_regexes=["python/pyspark/errors"],
+    python_test_goals=[
+        # unittests
+        "pyspark.errors.tests.test_errors",
     ],
 )
 

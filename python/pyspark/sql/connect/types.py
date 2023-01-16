@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-import datetime
 import json
 
-from typing import Any, Optional, Callable
+import pyarrow as pa
+
+from typing import Optional
 
 from pyspark.sql.types import (
-    Row,
     DataType,
     ByteType,
     ShortType,
@@ -188,111 +188,63 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         raise Exception(f"Unsupported data type {schema}")
 
 
-def _need_converter(dataType: DataType) -> bool:
-    if isinstance(dataType, NullType):
-        return True
-    elif isinstance(dataType, StructType):
-        return True
-    elif isinstance(dataType, ArrayType):
-        return _need_converter(dataType.elementType)
-    elif isinstance(dataType, MapType):
-        # Different from PySpark, here always needs conversion,
-        # since the input from Arrow is a list of tuples.
-        return True
-    elif isinstance(dataType, BinaryType):
-        return True
-    elif isinstance(dataType, (TimestampType, TimestampNTZType)):
-        # Always remove the time zone info for now
-        return True
+def to_arrow_type(dt: DataType) -> "pa.DataType":
+    """
+    Convert Spark data type to pyarrow type.
+
+    This function refers to 'pyspark.sql.pandas.types.to_arrow_type' but relax the restriction,
+    e.g. it supports nested StructType.
+    """
+    if type(dt) == BooleanType:
+        arrow_type = pa.bool_()
+    elif type(dt) == ByteType:
+        arrow_type = pa.int8()
+    elif type(dt) == ShortType:
+        arrow_type = pa.int16()
+    elif type(dt) == IntegerType:
+        arrow_type = pa.int32()
+    elif type(dt) == LongType:
+        arrow_type = pa.int64()
+    elif type(dt) == FloatType:
+        arrow_type = pa.float32()
+    elif type(dt) == DoubleType:
+        arrow_type = pa.float64()
+    elif type(dt) == DecimalType:
+        arrow_type = pa.decimal128(dt.precision, dt.scale)
+    elif type(dt) == StringType:
+        arrow_type = pa.string()
+    elif type(dt) == BinaryType:
+        arrow_type = pa.binary()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp("us", tz="UTC")
+    elif type(dt) == TimestampNTZType:
+        arrow_type = pa.timestamp("us", tz=None)
+    elif type(dt) == DayTimeIntervalType:
+        arrow_type = pa.duration("us")
+    elif type(dt) == ArrayType:
+        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+    elif type(dt) == MapType:
+        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
+    elif type(dt) == StructType:
+        fields = [
+            pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+            for field in dt
+        ]
+        arrow_type = pa.struct(fields)
+    elif type(dt) == NullType:
+        arrow_type = pa.null()
     else:
-        return False
+        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+    return arrow_type
 
 
-def _create_converter(dataType: DataType) -> Callable:
-    assert dataType is not None and isinstance(dataType, DataType)
-
-    if not _need_converter(dataType):
-        return lambda value: value
-
-    if isinstance(dataType, NullType):
-        return lambda value: None
-
-    elif isinstance(dataType, StructType):
-
-        field_convs = {f.name: _create_converter(f.dataType) for f in dataType.fields}
-        need_conv = any(_need_converter(f.dataType) for f in dataType.fields)
-
-        def convert_struct(value: Any) -> Row:
-            if value is None:
-                return Row()
-            else:
-                assert isinstance(value, dict)
-
-                if need_conv:
-                    _dict = {}
-                    for k, v in value.items():
-                        assert isinstance(k, str)
-                        _dict[k] = field_convs[k](v)
-                    return Row(**_dict)
-                else:
-                    return Row(**value)
-
-        return convert_struct
-
-    elif isinstance(dataType, ArrayType):
-
-        element_conv = _create_converter(dataType.elementType)
-
-        def convert_array(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, list)
-                return [element_conv(v) for v in value]
-
-        return convert_array
-
-    elif isinstance(dataType, MapType):
-
-        key_conv = _create_converter(dataType.keyType)
-        value_conv = _create_converter(dataType.valueType)
-
-        def convert_map(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, list)
-                assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
-                return dict((key_conv(t[0]), value_conv(t[1])) for t in value)
-
-        return convert_map
-
-    elif isinstance(dataType, BinaryType):
-
-        def convert_binary(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, bytes)
-                return bytearray(value)
-
-        return convert_binary
-
-    elif isinstance(dataType, (TimestampType, TimestampNTZType)):
-
-        def convert_timestample(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, datetime.datetime)
-                if value.tzinfo is not None:
-                    # always remove the time zone for now
-                    return value.replace(tzinfo=None)
-                else:
-                    return value
-
-        return convert_timestample
-
-    else:
-
-        return lambda value: value
+def to_arrow_schema(schema: StructType) -> "pa.Schema":
+    """Convert a schema from Spark to Arrow"""
+    fields = [
+        pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+        for field in schema
+    ]
+    return pa.schema(fields)

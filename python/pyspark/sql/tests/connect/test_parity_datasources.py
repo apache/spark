@@ -22,12 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataSourcesParityTests(DataSourcesTestsMixin, ReusedConnectTestCase):
-
-    # TODO(SPARK-42011): Implement DataFrameReader.csv
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_checking_csv_header(self):
-        super().test_checking_csv_header()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_csv_sampling_ratio(self):
         super().test_csv_sampling_ratio()
@@ -35,21 +29,6 @@ class DataSourcesParityTests(DataSourcesTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_json_sampling_ratio(self):
         super().test_json_sampling_ratio()
-
-    # TODO(SPARK-42011): Implement DataFrameReader.csv
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_multiline_csv(self):
-        super().test_multiline_csv()
-
-    # TODO(SPARK-42012): Implement DataFrameReader.orc
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_read_multiple_orc_file(self):
-        super().test_read_multiple_orc_file()
-
-    # TODO(SPARK-42013): Implement DataFrameReader.text to take multiple paths
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_read_text_file_list(self):
-        super().test_read_text_file_list()
 
 
 if __name__ == "__main__":

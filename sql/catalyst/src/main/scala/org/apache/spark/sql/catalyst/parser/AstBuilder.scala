@@ -914,15 +914,19 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
     val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
+      val relationPrimary = relation.relationPrimary()
       val right = if (conf.ansiRelationPrecedence) {
         visitRelation(relation)
       } else {
-        plan(relation.relationPrimary)
+        plan(relationPrimary)
       }
       val join = right.optionalMap(left) { (left, right) =>
         if (relation.LATERAL != null) {
-          if (!relation.relationPrimary.isInstanceOf[AliasedQueryContext]) {
-            throw QueryParsingErrors.invalidLateralJoinRelationError(relation.relationPrimary)
+          relationPrimary match {
+            case _: AliasedQueryContext =>
+            case _: TableValuedFunctionContext =>
+            case other =>
+              throw QueryParsingErrors.invalidLateralJoinRelationError(other)
           }
           LateralJoin(left, LateralSubquery(right), Inner, None)
         } else {
@@ -1295,8 +1299,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         case _ => Inner
       }
 
-      if (ctx.LATERAL != null && !ctx.right.isInstanceOf[AliasedQueryContext]) {
-        throw QueryParsingErrors.invalidLateralJoinRelationError(ctx.right)
+      if (ctx.LATERAL != null) {
+        ctx.right match {
+          case _: AliasedQueryContext =>
+          case _: TableValuedFunctionContext =>
+          case other =>
+            throw QueryParsingErrors.invalidLateralJoinRelationError(other)
+        }
       }
 
       // Resolve the join type and join condition

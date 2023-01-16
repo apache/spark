@@ -76,28 +76,34 @@ abstract class PartitioningAwareFileIndex(
     // be applied to files.
     val fileMetadataFilterOpt = dataFilters.filter { f =>
       f.references.nonEmpty && f.references.forall {
-        case FileSourceMetadataAttribute(_) => true
+        case FileSourceConstantMetadataAttribute(_) => true
         case _ => false
       }
     }.reduceOption(expressions.And)
 
-    // - create a bound references for filters: put the metadata struct at 0 position for each file
-    // - retrieve the final metadata struct (could be pruned) from filters
+    // - Retrieve all required metadata attributes and put them into a sequence
+    // - Bind all file constant metadata attribute references to their respective index
+    val requiredMetadataColumnNames: mutable.Buffer[String] = mutable.Buffer.empty
     val boundedFilterMetadataStructOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
-      val metadataStruct = fileMetadataFilter.references.head.dataType
-      val boundedFilter = Predicate.createInterpreted(fileMetadataFilter.transform {
-        case _: AttributeReference => BoundReference(0, metadataStruct, nullable = true)
+      Predicate.createInterpreted(fileMetadataFilter.transform {
+        case attr: AttributeReference =>
+          val existingMetadataColumnIndex = requiredMetadataColumnNames.indexOf(attr.name)
+          val metadataColumnIndex = if (existingMetadataColumnIndex >= 0) {
+            existingMetadataColumnIndex
+          } else {
+            requiredMetadataColumnNames += attr.name
+            requiredMetadataColumnNames.length - 1
+          }
+          BoundReference(metadataColumnIndex, attr.dataType, nullable = true)
       })
-      (boundedFilter, metadataStruct)
     }
 
     def matchFileMetadataPredicate(f: FileStatus): Boolean = {
       // use option.forall, so if there is no filter no metadata struct, return true
-      boundedFilterMetadataStructOpt.forall { case (boundedFilter, metadataStruct) =>
-        val row = InternalRow.fromSeq(Seq(
-          createMetadataInternalRow(metadataStruct.asInstanceOf[StructType].names,
+      boundedFilterMetadataStructOpt.forall { boundedFilter =>
+        val row =
+          createMetadataInternalRow(requiredMetadataColumnNames.toSeq,
             f.getPath, f.getLen, f.getModificationTime)
-        ))
         boundedFilter.eval(row)
       }
     }

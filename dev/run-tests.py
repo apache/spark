@@ -289,7 +289,7 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    if not os.environ.get("AMPLAB_JENKINS") and not os.environ.get("SKIP_UNIDOC"):
+    if not os.environ.get("SPARK_JENKINS") and not os.environ.get("SKIP_UNIDOC"):
         build_spark_unidoc_sbt(extra_profiles)
 
 
@@ -396,7 +396,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
 
 
 def run_python_packaging_tests():
-    if not os.environ.get("AMPLAB_JENKINS"):
+    if not os.environ.get("SPARK_JENKINS"):
         set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
         command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
         run_cmd(command)
@@ -500,17 +500,13 @@ def main():
         else:
             print("Cannot install SparkR as R was not found in PATH")
 
-    if os.environ.get("AMPLAB_JENKINS"):
+    if os.environ.get("SPARK_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
-        build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3")
-        test_env = "amplab_jenkins"
-        # add path for Python3 in Jenkins if we're calling from a Jenkins machine
-        # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
-        # /home/jenkins/anaconda2/envs/py36/bin
-        os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
+        build_tool = os.environ.get("SPARK_JENKINS_BUILD_TOOL", "sbt")
+        scala_version = os.environ.get("SPARK_JENKINS_BUILD_SCALA_PROFILE")
+        hadoop_version = os.environ.get("SPARK_JENKINS_BUILD_PROFILE", "hadoop3")
+        test_env = "spark_jenkins"
     else:
         # else we're running locally or GitHub Actions.
         build_tool = "sbt"
@@ -567,9 +563,9 @@ def main():
             print("[info] There are no modules to test, exiting without testing.")
             return
 
-    # If we're running the tests in AMPLab Jenkins, calculate the diff from the targeted branch, and
+    # If we're running the tests in Jenkins, calculate the diff from the targeted branch, and
     # detect modules to test.
-    elif test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
+    elif os.environ.get("SPARK_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
@@ -630,12 +626,12 @@ def main():
         ):
             run_sparkr_style_checks()
 
-    # determine if docs were changed and if we're inside the amplab environment
+    # determine if docs were changed and if we're inside the jenkins environment
     # note - the below commented out until *all* Jenkins workers can get the Bundler gem installed
-    # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
+    # if "DOCS" in changed_modules and test_env == "spark_jenkins":
     #    build_spark_documentation()
 
-    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
+    if any(m.should_run_build_tests for m in test_modules) and test_env != "spark_jenkins":
         run_build_tests()
 
     # spark build

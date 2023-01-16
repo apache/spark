@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
@@ -62,6 +63,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -1362,6 +1364,121 @@ public class RemoteBlockPushResolverSuite {
       + "\"shuffleId\":\"1\", \"shuffleMergeId\":\"1\"}";
     assertEquals(partitionId, mapper.readValue(legacyPartitionIdJson,
       RemoteBlockPushResolver.AppAttemptShuffleMergeId.class));
+  }
+
+  @Test
+  public void testRemoveShuffleMerge() throws IOException, InterruptedException {
+    Semaphore closed = new Semaphore(0);
+    String testApp = "testRemoveShuffleMerge";
+    RemoteBlockPushResolver pushResolver = new RemoteBlockPushResolver(conf, null) {
+      @Override
+      void closeAndDeleteOutdatedPartitions(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          Map<Integer, AppShufflePartitionInfo> partitions) {
+        super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
+        closed.release();
+      }
+
+      @Override
+      void deleteMergedFiles(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          AppShuffleInfo appShuffleInfo,
+          int[] reduceIds,
+          boolean deleteFromDB) {
+        super.deleteMergedFiles(appAttemptShuffleMergeId, appShuffleInfo, reduceIds, deleteFromDB);
+        closed.release();
+      }
+    };
+    pushResolver.registerExecutor(testApp, new ExecutorShuffleInfo(
+        prepareLocalDirs(localDirs, MERGE_DIRECTORY), 1, MERGE_DIRECTORY_META));
+    RemoteBlockPushResolver.AppShuffleInfo shuffleInfo =
+        pushResolver.validateAndGetAppShuffleInfo(testApp);
+
+    // 1. Check whether the data is cleaned up when merged shuffle is finalized
+    // 1.1 Cleaned up the merged files when msg.shuffleMergeId is current shuffleMergeId
+    StreamCallbackWithID streamCallback0 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    streamCallback0.onData(streamCallback0.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback0.onComplete(streamCallback0.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
+    assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertFalse(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+
+    // 1.2 Cleaned up the merged files when msg.shuffleMergeId is DELETE_ALL_MERGED_SHUFFLE
+    StreamCallbackWithID streamCallback1 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 1, 1, 0, 0, 0));
+    streamCallback1.onData(streamCallback1.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback1.onComplete(streamCallback1.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 1, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(1, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(1, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(1, 1, 0).exists());
+    pushResolver.removeShuffleMerge(new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 1,
+        RemoteBlockPushResolver.DELETE_ALL_MERGED_SHUFFLE));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(1, 1, 0).exists());
+    assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertFalse(shuffleInfo.getMergedShuffleDataFile(1, 1, 0).exists());
+
+    // 1.3 Cleaned up the merged files when msg.shuffleMergeId < current shuffleMergeId
+    StreamCallbackWithID streamCallback2 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 2, 1, 0, 0, 0));
+    streamCallback2.onData(streamCallback2.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback2.onComplete(streamCallback2.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 2, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(2, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(2, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(2, 1, 0).exists());
+
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> pushResolver.removeShuffleMerge(
+            new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 2, 0)));
+    assertEquals("Asked to remove old shuffle merged data for application " + testApp +
+        " shuffleId 2 shuffleMergeId 0, but current shuffleMergeId 1 ", e.getMessage());
+
+    // 1.4 Cleaned up the merged files when msg.shuffleMergeId > current shuffleMergeId
+    StreamCallbackWithID streamCallback3 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 3, 1, 0, 0, 0));
+    streamCallback3.onData(streamCallback3.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback3.onComplete(streamCallback3.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 3, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(3, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(3, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(3, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 3, 2));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(3, 1, 0).exists());
+    assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(3, 1, 0)).exists());
+    assertFalse(shuffleInfo.getMergedShuffleDataFile(3, 1, 0).exists());
+
+    // 2. Check whether the data is cleaned up when merged shuffle is not finalized.
+    StreamCallbackWithID streamCallback4 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 4, 1, 0, 0, 0));
+    streamCallback4.onData(streamCallback4.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback4.onComplete(streamCallback4.getID());
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(4, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 4, 1));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(4, 1, 0).exists());
+
+    // 3. Check whether the data is cleaned up when higher shuffleMergeId finalize request comes
+    StreamCallbackWithID streamCallback5 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 5, 1, 0, 0, 0));
+    streamCallback5.onData(streamCallback5.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback5.onComplete(streamCallback5.getID());
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(5, 1, 0).exists());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 5, 2));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(5, 1, 0).exists());
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {

@@ -22,11 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
-    # TODO(42016): Type inconsistency of struct and map when accessing the nested column
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_access_nested_types(self):
-        super().test_access_nested_types()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema(self):
         super().test_apply_schema()
@@ -63,10 +58,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_complex_nested_udt_in_df(self):
         super().test_complex_nested_udt_in_df()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_convert_row_to_dict(self):
-        super().test_convert_row_to_dict()
 
     # TODO(SPARK-42020): createDataFrame with UDT
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -141,10 +132,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_infer_schema_with_udt(self):
         super().test_infer_schema_with_udt()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_metadata_null(self):
-        super().test_metadata_null()
 
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")

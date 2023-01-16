@@ -40,7 +40,6 @@ from collections.abc import Iterable
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.types import (
-    _create_row,
     Row,
     StructType,
     ArrayType,
@@ -60,7 +59,6 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.types import _create_converter
 from pyspark.sql.connect.functions import (
     _to_col,
     _invoke_function,
@@ -771,7 +769,11 @@ class DataFrame:
             raise ValueError("Argument to UnionByName does not contain a valid plan.")
         return DataFrame.withPlan(
             plan.SetOperation(
-                self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
+                self._plan,
+                other._plan,
+                "union",
+                by_name=True,
+                allow_missing_columns=allowMissingColumns,
             ),
             session=self._session,
         )
@@ -1273,18 +1275,9 @@ class DataFrame:
 
         assert schema is not None and isinstance(schema, StructType)
 
-        field_converters = [_create_converter(f.dataType) for f in schema.fields]
+        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 
-        # table.to_pylist() automatically remove columns with duplicated names,
-        # to avoid this, use columnar lists here.
-        # TODO: support duplicated field names in the one struct. e.g. SF.struct("a", "a")
-        columnar_data = [column.to_pylist() for column in table.columns]
-
-        rows: List[Row] = []
-        for i in range(0, table.num_rows):
-            values = [field_converters[j](columnar_data[j][i]) for j in range(0, table.num_columns)]
-            rows.append(_create_row(fields=table.column_names, values=values))
-        return rows
+        return ArrowTableToRowsConversion.convert(table, schema)
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
@@ -1672,9 +1665,6 @@ def _test() -> None:
 
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
-        # TODO(SPARK-41832): fix unionByName
-        del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
 
         # TODO(SPARK-41818): Support saveAsTable
         del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
