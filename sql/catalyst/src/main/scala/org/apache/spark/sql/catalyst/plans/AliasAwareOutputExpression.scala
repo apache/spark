@@ -35,14 +35,18 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
    */
   protected def strip(expr: Expression): Expression = expr
 
-  private lazy val aliasMap = {
+  // Split the alias map into 2 maps, the first contains `Expression` -> `Attribute` mappings where
+  // any children of the `Expression` contains any other mapping. This because during
+  // `normalizeExpression()` we will need to handle those maps separately and don't stop generating
+  // alternatives at the `Expression` but we also need to traverse down to its children.
+  private lazy val (exprAliasMap, attrAliasMap) = {
     val aliases = mutable.Map[Expression, mutable.ListBuffer[Attribute]]()
     // Add aliases to the map. If multiple alias is defined for a source attribute then add all.
     outputExpressions.foreach {
       case a @ Alias(child, _) =>
         // This prepend is needed to make the first element of the `ListBuffer` point to the last
         // occurrence of an aliased child. This is to keep the previous behavior and give precedence
-        // the last Alias during `normalizeExpression()` to avoid any kinds of regression.
+        // the last Alias during `normalizeExpression()` to avoid any kind of regression.
         a.toAttribute +=:
           aliases.getOrElseUpdate(strip(child.canonicalized), mutable.ListBuffer.empty)
       case _ =>
@@ -53,10 +57,11 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
       case a: Attribute if aliases.contains(a.canonicalized) => aliases(a.canonicalized) += a
       case _ =>
     }
-    aliases
+
+    aliases.partition { case (expr, _) => expr.children.exists(_.exists(aliases.contains)) }
   }
 
-  protected def hasAlias: Boolean = aliasMap.nonEmpty
+  protected def hasAlias: Boolean = attrAliasMap.nonEmpty
 
   /**
    * Return a set of Expression which normalize the original expression to the aliased.
@@ -67,8 +72,11 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
       expr: Expression,
       pruneFunc: (Expression, AttributeSet) => Option[Expression]): Seq[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
-    expr.multiTransform {
-      case e: Expression if aliasMap.contains(e.canonicalized) => aliasMap(e.canonicalized).toSeq
+    expr.multiTransformDown {
+      case e: Expression if exprAliasMap.contains(e.canonicalized) =>
+        (exprAliasMap(e.canonicalized) :+ e).toStream
+      case e: Expression if attrAliasMap.contains(e.canonicalized) =>
+        attrAliasMap(e.canonicalized).toStream
     }.flatMap { candidate =>
       if (candidate.references.subsetOf(outputSet)) {
         Some(candidate)
