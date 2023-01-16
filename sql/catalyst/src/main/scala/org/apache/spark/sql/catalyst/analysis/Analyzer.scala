@@ -73,7 +73,7 @@ object SimpleAnalyzer extends Analyzer(
     new SessionCatalog(
       new InMemoryCatalog,
       FunctionRegistry.builtin,
-      EmptyTableFunctionRegistry) {
+      TableFunctionRegistry.builtin) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
     })) {
   override def resolver: Resolver = caseSensitiveResolution

@@ -76,6 +76,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.DBIterator;
@@ -100,6 +101,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public static final String MERGE_DIR_KEY = "mergeDir";
   public static final String ATTEMPT_ID_KEY = "attemptId";
   private static final int UNDEFINED_ATTEMPT_ID = -1;
+
+  /**
+   * The flag for deleting all merged shuffle data.
+   */
+  public static final int DELETE_ALL_MERGED_SHUFFLE = -1;
+
   private static final String DB_KEY_DELIMITER = ";";
   private static final ErrorHandler.BlockPushErrorHandler ERROR_HANDLER = createErrorHandler();
   // ByteBuffer to respond to client upon a successful merge of a pushed block
@@ -404,6 +411,59 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
   }
 
+  @Override
+  public void removeShuffleMerge(RemoveShuffleMerge msg) {
+    AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
+    if (appShuffleInfo.attemptId != msg.appAttemptId) {
+      throw new IllegalArgumentException(
+          String.format("The attempt id %s in this RemoveShuffleMerge message does not match "
+                  + "with the current attempt id %s stored in shuffle service for application %s",
+              msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
+    }
+    appShuffleInfo.shuffles.compute(msg.shuffleId, (shuffleId, mergePartitionsInfo) -> {
+      if (mergePartitionsInfo == null) {
+        if (msg.shuffleMergeId == DELETE_ALL_MERGED_SHUFFLE) {
+          return null;
+        } else {
+          writeAppAttemptShuffleMergeInfoToDB(new AppAttemptShuffleMergeId(
+              msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId));
+          return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
+        }
+      }
+      boolean deleteCurrentMergedShuffle =
+          msg.shuffleMergeId == DELETE_ALL_MERGED_SHUFFLE ||
+              msg.shuffleMergeId == mergePartitionsInfo.shuffleMergeId;
+      int shuffleMergeIdToDelete = msg.shuffleMergeId != DELETE_ALL_MERGED_SHUFFLE ?
+          msg.shuffleMergeId : mergePartitionsInfo.shuffleMergeId;
+      if (deleteCurrentMergedShuffle ||
+          shuffleMergeIdToDelete > mergePartitionsInfo.shuffleMergeId) {
+        AppAttemptShuffleMergeId currentAppAttemptShuffleMergeId =
+            new AppAttemptShuffleMergeId(
+                msg.appId, msg.appAttemptId, msg.shuffleId, mergePartitionsInfo.shuffleMergeId);
+        if (!mergePartitionsInfo.isFinalized()) {
+          // Clean up shuffle data before the shuffle was finalized. Close and delete all the open
+          // files.
+          submitCleanupTask(() ->
+              closeAndDeleteOutdatedPartitions(
+                  currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
+        } else {
+          // Current shuffle was finalized, delete all the merged files through reduceIds set
+          // in finalizeShuffleMerge method.
+          submitCleanupTask(() ->
+              deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
+                  mergePartitionsInfo.getReduceIds(), false));
+        }
+      } else {
+        throw new RuntimeException(String.format("Asked to remove old shuffle merged data for " +
+                "application %s shuffleId %s shuffleMergeId %s, but current shuffleMergeId %s ",
+            msg.appId, msg.shuffleId, shuffleMergeIdToDelete, mergePartitionsInfo.shuffleMergeId));
+      }
+      writeAppAttemptShuffleMergeInfoToDB(new AppAttemptShuffleMergeId(
+          msg.appId, msg.appAttemptId, msg.shuffleId, shuffleMergeIdToDelete));
+      return new AppShuffleMergePartitionsInfo(shuffleMergeIdToDelete, true);
+    });
+  }
+
   /**
    * Clean up the AppShufflePartitionInfo for a specific AppShuffleInfo.
    * If cleanupLocalDirs is true, the merged shuffle files will also be deleted.
@@ -476,6 +536,40 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           partitionInfo.closeAllFilesAndDeleteIfNeeded(true);
         }
       });
+  }
+
+  void deleteMergedFiles(
+      AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+      AppShuffleInfo appShuffleInfo,
+      int[] reduceIds,
+      boolean deleteFromDB) {
+    if (deleteFromDB) {
+      removeAppShufflePartitionInfoFromDB(appAttemptShuffleMergeId);
+    }
+    int shuffleId = appAttemptShuffleMergeId.shuffleId;
+    int shuffleMergeId = appAttemptShuffleMergeId.shuffleMergeId;
+    int dataFilesDeleteCnt = 0;
+    int indexFilesDeleteCnt = 0;
+    int metaFilesDeleteCnt = 0;
+    for (int reduceId : reduceIds) {
+      File dataFile =
+          appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
+      if (dataFile.delete()) {
+        dataFilesDeleteCnt++;
+      }
+      File indexFile = new File(
+          appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
+      if (indexFile.delete()) {
+        indexFilesDeleteCnt++;
+      }
+      File metaFile =
+          appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
+      if (metaFile.delete()) {
+        metaFilesDeleteCnt++;
+      }
+    }
+    logger.info("Delete {} data files, {} index files, {} meta files for {}",
+        dataFilesDeleteCnt, indexFilesDeleteCnt, metaFilesDeleteCnt, appAttemptShuffleMergeId);
   }
 
   /**
@@ -730,6 +824,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       mergeStatuses = new MergeStatuses(msg.shuffleId, msg.shuffleMergeId,
         bitmaps.toArray(new RoaringBitmap[bitmaps.size()]), Ints.toArray(reduceIds),
         Longs.toArray(sizes));
+      appShuffleInfo.shuffles.get(msg.shuffleId).setReduceIds(Ints.toArray(reduceIds));
     }
     logger.info("{} attempt {} shuffle {} shuffleMerge {}: finalization of shuffle merge completed",
         msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
@@ -1514,6 +1609,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private final int shuffleMergeId;
     private final Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions;
 
+    private final AtomicReference<int[]> reduceIds = new AtomicReference<>(new int[0]);
+
     public AppShuffleMergePartitionsInfo(int shuffleMergeId, boolean shuffleFinalized) {
       this.shuffleMergeId = shuffleMergeId;
       this.shuffleMergePartitions = shuffleFinalized ? SHUFFLE_FINALIZED_MARKER :
@@ -1527,6 +1624,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     public boolean isFinalized() {
       return shuffleMergePartitions == SHUFFLE_FINALIZED_MARKER;
+    }
+
+    public void setReduceIds(int[] reduceIds) {
+      this.reduceIds.set(reduceIds);
+    }
+
+    public int[] getReduceIds() {
+      return this.reduceIds.get();
     }
   }
 
@@ -1736,9 +1841,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       try {
         if (dataChannel.isOpen()) {
           dataChannel.close();
-          if (delete) {
-            dataFile.delete();
-          }
+        }
+        if (delete) {
+          dataFile.delete();
         }
       } catch (IOException ioe) {
         logger.warn("Error closing data channel for {} reduceId {}",

@@ -1246,15 +1246,15 @@ class DataFrameTestsMixin:
         )
         # test types are inferred correctly without specifying schema
         df = self.spark.createDataFrame(pdf)
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         # test with schema will accept pdf as input
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp_ntz")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampNTZType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampNTZType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):

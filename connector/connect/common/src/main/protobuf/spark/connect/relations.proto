@@ -119,12 +119,17 @@ message Read {
     string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
+    //
+    // This schema string should be either DDL-formatted or JSON-formatted.
     optional string schema = 2;
 
     // Options for the data source. The context of this map varies based on the
     // data source format. This options could be empty for valid data source format.
     // The map key is case insensitive.
     map<string, string> options = 3;
+
+    // (Optional) A list of path for file-system backed data sources.
+    repeated string paths = 4;
   }
 }
 
@@ -210,6 +215,11 @@ message SetOperation {
   //
   // Only UNION supports this option.
   optional bool by_name = 5;
+
+  // (Optional) If to perform the Set operation and allow missing columns.
+  //
+  // Only UNION supports this option.
+  optional bool allow_missing_columns = 6;
 
   enum SetOpType {
     SET_OP_TYPE_UNSPECIFIED = 0;

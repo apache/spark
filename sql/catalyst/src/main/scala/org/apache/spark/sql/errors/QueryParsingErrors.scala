@@ -136,7 +136,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Map(
-        "inputString" -> s"${toSQLStmt("LATERAL")} can only be used with subquery."),
+        "inputString" ->
+          s"${toSQLStmt("LATERAL")} can only be used with subquery and table-valued functions."),
       ctx)
   }
 

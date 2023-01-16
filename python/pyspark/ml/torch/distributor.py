@@ -25,7 +25,7 @@ import signal
 import sys
 import subprocess
 import time
-from typing import Union, Callable, Optional, Any
+from typing import Union, Callable, List, Dict, Optional, Any
 import warnings
 
 from pyspark.sql import SparkSession
@@ -73,7 +73,7 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
     )
 
 
-def get_gpus_owned(sc: SparkContext) -> list[str]:
+def get_gpus_owned(sc: SparkContext) -> List[str]:
     """Gets the number of GPUs that Spark scheduled to the calling task.
 
     Parameters
@@ -130,7 +130,7 @@ class Distributor:
         self.num_tasks = self._get_num_tasks()
         self.ssl_conf = None
 
-    def _create_input_params(self) -> dict[str, Any]:
+    def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
         for unneeded_param in ["spark", "sc", "ssl_conf"]:
             del input_params[unneeded_param]
@@ -316,8 +316,8 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _create_torchrun_command(
-        input_params: dict[str, Any], path_to_train_file: str, *args: Any
-    ) -> list[str]:
+        input_params: Dict[str, Any], path_to_train_file: str, *args: Any
+    ) -> List[str]:
         local_mode = input_params["local_mode"]
         num_processes = input_params["num_processes"]
 
@@ -339,7 +339,7 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _execute_command(
-        cmd: list[str], _prctl: bool = True, redirect_to_stdout: bool = True
+        cmd: List[str], _prctl: bool = True, redirect_to_stdout: bool = True
     ) -> None:
         _TAIL_LINES_TO_KEEP = 100
 
@@ -430,7 +430,7 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _run_training_on_pytorch_file(
-        input_params: dict[str, Any], train_path: str, *args: Any
+        input_params: Dict[str, Any], train_path: str, *args: Any
     ) -> None:
         training_command = TorchDistributor._create_torchrun_command(
             input_params, train_path, *args
