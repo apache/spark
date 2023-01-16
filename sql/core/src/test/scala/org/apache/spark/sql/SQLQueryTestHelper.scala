@@ -41,13 +41,12 @@ trait SQLQueryTestHelper {
       .replaceAll(
         s"Location.*$clsName/",
         s"Location $notIncludedMsg/{warehouse_dir}/")
-      .replaceAll(s"file:.*$clsName", s"Location $notIncludedMsg/{warehouse_dir}")
+      .replaceAll(s"file:.*?$clsName", s"Location $notIncludedMsg/{warehouse_dir}")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
-      .replaceAll("@[0-9a-z]+,", ",") // remove hashCode
   }
 
 
