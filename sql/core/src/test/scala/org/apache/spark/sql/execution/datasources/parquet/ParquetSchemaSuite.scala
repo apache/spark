@@ -1001,9 +1001,29 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
-        assert(errMsg.contains("Column: [a], Expected: int, Found: BINARY"))
+        checkError(
+          exception = e.getCause.asInstanceOf[SparkException],
+          errorClass = "_LEGACY_ERROR_TEMP_2063",
+          parameters = Map(
+            "filePath" ->
+              s".*${dir.getCanonicalPath}.*",
+            "column" -> "\\[a\\]",
+            "logicalType" -> "int",
+            "physicalType" -> "BINARY"),
+          matchPVals = true
+        )
       } else {
-        assert(errMsg.endsWith("Column: [a], Expected: string, Found: INT32"))
+        checkError(
+          exception = e.getCause.asInstanceOf[SparkException],
+          errorClass = "_LEGACY_ERROR_TEMP_2063",
+          parameters = Map(
+            "filePath" ->
+              s".*${dir.getCanonicalPath}.*",
+            "column" -> "\\[a\\]",
+            "logicalType" -> "string",
+            "physicalType" -> "INT32"),
+          matchPVals = true
+        )
       }
     }
   }
