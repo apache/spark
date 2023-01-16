@@ -756,6 +756,16 @@ pyspark_pandas_slow = Module(
     ],
 )
 
+pyspark_errors = Module(
+    name="pyspark-errors",
+    dependencies=[],
+    source_file_regexes=["python/pyspark/errors"],
+    python_test_goals=[
+        # unittests
+        "pyspark.errors.tests.test_errors",
+    ],
+)
+
 sparkr = Module(
     name="sparkr",
     dependencies=[hive, mllib],
