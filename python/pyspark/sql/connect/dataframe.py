@@ -39,28 +39,18 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import (
-    _create_row,
-    Row,
-    StructType,
-    ArrayType,
-    MapType,
-    TimestampType,
-    TimestampNTZType,
-)
+from pyspark.sql.types import Row, StructType
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
-from pyspark.sql.pandas.types import from_arrow_schema
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.types import _create_converter
 from pyspark.sql.connect.functions import (
     _to_col,
     _invoke_function,
@@ -68,6 +58,8 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
+from pyspark.sql.connect.types import from_arrow_schema
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -1250,45 +1242,13 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table = self._session.client.to_table(query)
 
-        # We first try the inferred schema from PyArrow Table instead of always fetching
-        # the Connect Dataframe schema by 'self.schema', for two reasons:
-        # 1, the schema maybe quietly simple, then we can save an RPC;
-        # 2, if we always invoke 'self.schema' here, all catalog functions based on
-        # 'dataframe.collect' will be invoked twice (1, collect data, 2, fetch schema),
-        # and then some of them (e.g. "CREATE DATABASE") fail due to the second invocation.
-
-        schema: Optional[StructType] = None
-        try:
-            schema = from_arrow_schema(table.schema)
-        except Exception:
-            # may fail due to 'from_arrow_schema' not supporting nested struct
-            schema = None
-
-        if schema is None:
-            schema = self.schema
-        else:
-            if any(
-                isinstance(
-                    f.dataType, (StructType, ArrayType, MapType, TimestampType, TimestampNTZType)
-                )
-                for f in schema.fields
-            ):
-                schema = self.schema
+        schema = from_arrow_schema(table.schema)
 
         assert schema is not None and isinstance(schema, StructType)
 
-        field_converters = [_create_converter(f.dataType) for f in schema.fields]
+        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 
-        # table.to_pylist() automatically remove columns with duplicated names,
-        # to avoid this, use columnar lists here.
-        # TODO: support duplicated field names in the one struct. e.g. SF.struct("a", "a")
-        columnar_data = [column.to_pylist() for column in table.columns]
-
-        rows: List[Row] = []
-        for i in range(0, table.num_rows):
-            values = [field_converters[j](columnar_data[j][i]) for j in range(0, table.num_columns)]
-            rows.append(_create_row(fields=table.column_names, values=values))
-        return rows
+        return ArrowTableToRowsConversion.convert(table, schema)
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 

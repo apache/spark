@@ -528,7 +528,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
-    }
+    }.sortBy(_.name)
   }
 
   /** Returns all the files (not directories) in a directory, recursively. */
