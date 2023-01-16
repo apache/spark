@@ -14,21 +14,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-[tool.pytest.ini_options]
-# Pytest it used only to run mypy data tests
-python_files = "test_*.yml"
-testpaths = [
-  "pyspark/tests/typing",
-  "pyspark/sql/tests/typing",
-  "pyspark/ml/typing",
-]
-
-[tool.black]
-# When changing the version, we have to update
-# GitHub workflow version and dev/reformat-python
-required-version = "22.6.0"
-line-length = 100
-target-version = ['py37']
-include = '\.pyi?$'
-extend-exclude = 'cloudpickle|error_classes.py'

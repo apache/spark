@@ -38,6 +38,7 @@ from typing import (
 )
 
 from pyspark import SparkContext
+from pyspark.errors import PySparkException
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
@@ -172,7 +173,9 @@ def lit(col: Any) -> Column:
         return col
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
-            raise ValueError("lit does not allow a column in a list")
+            raise PySparkException(
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+            )
         return array(*[lit(item) for item in col])
     else:
         if has_numpy and isinstance(col, np.generic):

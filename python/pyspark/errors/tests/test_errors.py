@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,26 +18,28 @@
 
 import unittest
 
-from pyspark.sql.tests.test_datasources import DataSourcesTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.errors.utils import ErrorClassesReader
 
 
-class DataSourcesParityTests(DataSourcesTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_csv_sampling_ratio(self):
-        super().test_csv_sampling_ratio()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_json_sampling_ratio(self):
-        super().test_json_sampling_ratio()
+class ErrorsTest(unittest.TestCase):
+    def test_error_classes(self):
+        # Test error classes is sorted alphabetically
+        error_reader = ErrorClassesReader()
+        error_class_names = error_reader.error_info_map
+        for i in range(len(error_class_names) - 1):
+            self.assertTrue(
+                error_class_names[i] < error_class_names[i + 1],
+                f"Error class [{error_class_names[i]}] should place"
+                f"after [{error_class_names[i + 1]}]",
+            )
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_parity_datasources import *  # noqa: F401
+    from pyspark.errors.tests.test_errors import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

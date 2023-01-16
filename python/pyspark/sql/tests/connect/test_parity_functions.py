@@ -31,11 +31,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_basic_functions(self):
         super().test_basic_functions()
 
-    # TODO(SPARK-41847): DataFrame mapfield,structlist invalid type
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_explode(self):
-        super().test_explode()
-
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_function_parity(self):
         super().test_function_parity()
@@ -68,11 +63,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_map_functions(self):
         super().test_map_functions()
-
-    # TODO(SPARK-41903): Support data type ndarray
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ndarray_input(self):
-        super().test_ndarray_input()
 
     # TODO(SPARK-41902): Parity in String representation of higher_order_function's output
     @unittest.skip("Fails in Spark Connect, should enable.")
