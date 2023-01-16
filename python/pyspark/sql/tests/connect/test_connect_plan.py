@@ -739,7 +739,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_uuid_literal(self):
 
         val = uuid.uuid4()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             lit(val)
 
     def test_column_literals(self):

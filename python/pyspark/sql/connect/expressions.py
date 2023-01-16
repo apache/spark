@@ -240,7 +240,7 @@ class LiteralExpression(Expression):
                 value = DayTimeIntervalType().toInternal(value)
                 assert value is not None
             else:
-                raise ValueError(f"Unsupported Data Type {dataType}")
+                raise TypeError(f"Unsupported Data Type {dataType}")
 
         self._value = value
         self._dataType = dataType
@@ -277,7 +277,7 @@ class LiteralExpression(Expression):
                 dt = _from_numpy_type(value.dtype)
                 if dt is not None:
                     return dt
-            raise ValueError(f"Unsupported Data Type {type(value).__name__}")
+            raise TypeError(f"Unsupported Data Type {type(value).__name__}")
 
     @classmethod
     def _from_value(cls, value: Any) -> "LiteralExpression":
