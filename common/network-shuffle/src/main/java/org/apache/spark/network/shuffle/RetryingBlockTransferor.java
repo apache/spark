@@ -87,8 +87,6 @@ public class RetryingBlockTransferor {
   /** Number of times we've attempted to retry so far. */
   private int retryCount = 0;
 
-  private boolean saslTimeoutSeen;
-
   /**
    * Set of all block ids which have not been transferred successfully or with a non-IO Exception.
    * A retry involves requesting every outstanding block. Note that since this is a LinkedHashSet,
@@ -123,7 +121,6 @@ public class RetryingBlockTransferor {
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
     this.enableSaslRetries = conf.enableSaslRetries();
-    this.saslTimeoutSeen = false;
   }
 
   public RetryingBlockTransferor(
@@ -203,15 +200,13 @@ public class RetryingBlockTransferor {
     boolean isIOException = e instanceof IOException
       || e.getCause() instanceof IOException;
     boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
-    if (!isSaslTimeout && saslTimeoutSeen) {
+    if (!isSaslTimeout) {
       retryCount = 0;
-      saslTimeoutSeen = false;
     }
     boolean hasRemainingRetries = retryCount < maxRetries;
     boolean shouldRetry =  (isSaslTimeout || isIOException) &&
         hasRemainingRetries && errorHandler.shouldRetryError(e);
     if (shouldRetry && isSaslTimeout) {
-      this.saslTimeoutSeen = true;
     }
     return shouldRetry;
   }
@@ -236,10 +231,7 @@ public class RetryingBlockTransferor {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           outstandingBlocksIds.remove(blockId);
           shouldForwardSuccess = true;
-          if (saslTimeoutSeen) {
             retryCount = 0;
-            saslTimeoutSeen = false;
-          }
         }
       }
 
