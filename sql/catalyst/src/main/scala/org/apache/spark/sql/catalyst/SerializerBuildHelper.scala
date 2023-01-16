@@ -158,35 +158,30 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
-  def createSerializerForBigDecimal(inputObject: Expression): Expression = {
-    createSerializerForBigDecimal(inputObject, DecimalType.SYSTEM_DEFAULT)
-  }
-
-  def createSerializerForBigDecimal(inputObject: Expression, dt: DecimalType): Expression = {
+  def createSerializerForJavaBigDecimal(inputObject: Expression): Expression = {
     CheckOverflow(StaticInvoke(
       Decimal.getClass,
-      dt,
+      DecimalType.SYSTEM_DEFAULT,
       "apply",
       inputObject :: Nil,
-      returnNullable = false), dt, nullOnOverflow)
+      returnNullable = false), DecimalType.SYSTEM_DEFAULT, nullOnOverflow)
   }
 
-  def createSerializerForAnyDecimal(inputObject: Expression, dt: DecimalType): Expression = {
-    CheckOverflow(StaticInvoke(
-      Decimal.getClass,
-      dt,
-      "fromDecimal",
-      inputObject :: Nil,
-      returnNullable = false), dt, nullOnOverflow)
+  def createSerializerForScalaBigDecimal(inputObject: Expression): Expression = {
+    createSerializerForJavaBigDecimal(inputObject)
   }
 
-  def createSerializerForBigInteger(inputObject: Expression): Expression = {
+  def createSerializerForJavaBigInteger(inputObject: Expression): Expression = {
     CheckOverflow(StaticInvoke(
       Decimal.getClass,
       DecimalType.BigIntDecimal,
       "apply",
       inputObject :: Nil,
       returnNullable = false), DecimalType.BigIntDecimal, nullOnOverflow)
+  }
+
+  def createSerializerForScalaBigInt(inputObject: Expression): Expression = {
+    createSerializerForJavaBigInteger(inputObject)
   }
 
   def createSerializerForPrimitiveArray(
