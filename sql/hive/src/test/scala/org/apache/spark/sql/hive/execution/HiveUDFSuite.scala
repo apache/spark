@@ -716,10 +716,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("SPARK-42051: HiveGenericUDF Codegen Support") {
     withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
       sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFMaskHash].getName}'")
-      val df = sql("SELECT CodeGenHiveGenericUDF('Spark SQL')")
-      val plan = df.queryExecution.executedPlan
-      assert(plan.isInstanceOf[WholeStageCodegenExec])
-      checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
+      withTable("CodeGenHiveGenericUDF") {
+        sql(s"create table HiveGenericUDFTable as select 'Spark SQL' as v")
+        val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec])
+        checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
+      }
     }
   }
 }

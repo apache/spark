@@ -207,7 +207,6 @@ private[hive] case class HiveGenericUDF(
            |} else {
            |  (($deferredObjectAdapterClz) $refTerm.deferredObjects()[$i]).set(${eval.value});
            |}
-           |
            |""".stripMargin
     }
 
@@ -216,9 +215,7 @@ private[hive] case class HiveGenericUDF(
     ev.copy(code =
       code"""
          |${childrenEvals.map(_.code).mkString("\n")}
-         |
          |${setDeferredObjects.mkString("\n")}
-         |
          |$resultType $resultTerm = null;
          |boolean ${ev.isNull} = false;
          |try {
