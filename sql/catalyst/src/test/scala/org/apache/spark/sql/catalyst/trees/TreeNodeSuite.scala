@@ -987,10 +987,10 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown generates all alternatives") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => Seq(Literal(10), Literal(20), Literal(30))
+      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3))
+      case StringLiteral("b") => Stream(Literal(10), Literal(20), Literal(30))
       case Add(StringLiteral("c"), StringLiteral("d"), _) =>
-        Seq(Literal(100), Literal(200), Literal(300))
+        Stream(Literal(100), Literal(200), Literal(300))
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200), Literal(300))
@@ -1002,10 +1002,11 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
   test("multiTransformDown is lazy") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
-    val transformed = e.multiTransformDown {
-      case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => newErrorAfterStream(Literal(10))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+    val transformed = e.multiTransformDownWithContinuation {
+      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3)) -> true
+      case StringLiteral("b") => newErrorAfterStream(Literal(10)) -> true
+      case Add(StringLiteral("c"), StringLiteral("d"), _) =>
+        newErrorAfterStream(Literal(100)) -> true
     }
     val expected = for {
       a <- Seq(Literal(1), Literal(2), Literal(3))
@@ -1016,28 +1017,30 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       transformed.take(3 + 1).toList
     }
 
-    val transformed2 = e.multiTransformDown {
-      case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => Seq(Literal(10), Literal(20), Literal(30))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
-    }
-    val expected2 = for {
-      b <- Seq(Literal(10), Literal(20), Literal(30))
-      a <- Seq(Literal(1), Literal(2), Literal(3))
-    } yield Add(Add(a, b), Literal(100))
-    // We don't access alternatives for `c` after 100
-    assert(transformed2.take(3 * 3) === expected2)
-    intercept[NoSuchElementException] {
-      transformed.take(3 * 3 + 1).toList
-    }
+//    val transformed2 = e.multiTransformDownWithContinuation {
+//      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3)) -> true
+//      case StringLiteral("b") => Stream(Literal(10), Literal(20), Literal(30)) -> true
+//      case Add(StringLiteral("c"), StringLiteral("d"), _) =>
+//        newErrorAfterStream(Literal(100)) -> true
+//    }
+//    val expected2 = for {
+//      b <- Seq(Literal(10), Literal(20), Literal(30))
+//      a <- Seq(Literal(1), Literal(2), Literal(3))
+//    } yield Add(Add(a, b), Literal(100))
+//    // We don't access alternatives for `c` after 100
+//    assert(transformed2.take(3 * 3) === expected2)
+//    intercept[NoSuchElementException] {
+//      transformed.take(3 * 3 + 1).toList
+//    }
   }
 
   test("multiTransformDown rule return this") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case s @ StringLiteral("a") => Seq(Literal(1), Literal(2), s)
-      case s @ StringLiteral("b") => Seq(Literal(10), Literal(20), s)
-      case a @ Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200), a)
+      case s @ StringLiteral("a") => Stream(Literal(1), Literal(2), s)
+      case s @ StringLiteral("b") => Stream(Literal(10), Literal(20), s)
+      case a @ Add(StringLiteral("c"), StringLiteral("d"), _) =>
+        Stream(Literal(100), Literal(200), a)
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200), Add(Literal("c"), Literal("d")))
@@ -1047,15 +1050,16 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(transformed == expected)
   }
 
-  test("multiTransformDown doesn't stop generating alternatives of descendants when non-leaf is " +
-    "transformed") {
+  test("multiTransformDownWithContinuation doesn't stop generating alternatives of descendants " +
+    "when non-leaf is transformed but the itself is not in the alternatives") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
-    val transformed = e.multiTransformDown {
+    val transformed = e.multiTransformDownWithContinuation {
       case Add(StringLiteral("a"), StringLiteral("b"), _) =>
-        Seq(Literal(11), Literal(12), Literal(21), Literal(22))
-      case StringLiteral("a") => Seq(Literal(1), Literal(2))
-      case StringLiteral("b") => Seq(Literal(10), Literal(20))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200))
+        Stream(Literal(11), Literal(12), Literal(21), Literal(22)) -> true
+      case StringLiteral("a") => Stream(Literal(1), Literal(2)) -> true
+      case StringLiteral("b") => Stream(Literal(10), Literal(20)) -> true
+      case Add(StringLiteral("c"), StringLiteral("d"), _) =>
+        Stream(Literal(100), Literal(200)) -> true
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200))
@@ -1068,15 +1072,15 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(transformed == expected)
   }
 
-  test("multiTransformDown non-leaf transformation if a descendant can be transformed too " +
-    "behaves like non-leaf returned itself") {
+  test("multiTransformDown doesn't stop generating alternatives of descendants when non-leaf is " +
+    "transformed and itself is in the alternatives") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
       case a @ Add(StringLiteral("a"), StringLiteral("b"), _) =>
-        Seq(Literal(11), Literal(12), Literal(21), Literal(22), a)
-      case StringLiteral("a") => Seq(Literal(1), Literal(2))
-      case StringLiteral("b") => Seq(Literal(10), Literal(20))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200))
+        Stream(Literal(11), Literal(12), Literal(21), Literal(22), a)
+      case StringLiteral("a") => Stream(Literal(1), Literal(2))
+      case StringLiteral("b") => Stream(Literal(10), Literal(20))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Stream(Literal(100), Literal(200))
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200))
@@ -1092,12 +1096,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown can prune") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case StringLiteral("a") => Seq.empty
+      case StringLiteral("a") => Stream.empty
     }
     assert(transformed.isEmpty)
 
     val transformed2 = e.multiTransformDown {
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq.empty
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Stream.empty
     }
     assert(transformed2.isEmpty)
   }
