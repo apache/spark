@@ -352,9 +352,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-41982: When the partition is not enclosed with quotation marks, " +
-    "the partition type is string and keepPartitionSpecAsStringLiteral is enabled, " +
-    "we need to treat it as a string type partition") {
+  test("SPARK-41982: " +
+    "treat the partition field as a string type when keepPartitionSpecAsStringLiteral is enabled") {
     withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
       withTable("t") {
         sql("create table t(i string, j int) using orc partitioned by (dt string)")

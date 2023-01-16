@@ -255,7 +255,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     }
   }
 
-  test("SPARK-41982: drop partition when keepPartitionTypeAsString set `true`") {
+  test("SPARK-41982: drop partition when keepPartitionSpecAsString set `true`") {
     withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { t =>
         sql(s"CREATE TABLE $t(name STRING, age INT) using orc PARTITIONED BY (dt STRING)")

@@ -507,7 +507,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val legacyNullAsString =
       conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
-    val keepPartitionTypeAsString =
+    val keepPartitionSpecAsString =
       conf.getConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL)
 
     val parts = ctx.partitionVal.asScala.map { pVal =>
@@ -518,7 +518,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       }
       val name = pVal.identifier.getText
       val value = Option(pVal.constant).map(v => {
-        visitStringConstant(v, legacyNullAsString, keepPartitionTypeAsString)
+        visitStringConstant(v, legacyNullAsString, keepPartitionSpecAsString)
       })
       name -> value
     }
@@ -551,13 +551,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   protected def visitStringConstant(
       ctx: ConstantContext,
-      legacyNullAsString: Boolean,
-      keepPartitionTypeAsString: Boolean): String = withOrigin(ctx) {
+      legacyNullAsString: Boolean = false,
+      keepPartitionSpecAsString: Boolean = false): String = withOrigin(ctx) {
     expression(ctx) match {
       case Literal(null, _) if !legacyNullAsString => null
       case l @ Literal(null, _) => l.toString
       case l: Literal =>
-        if (keepPartitionTypeAsString && !ctx.isInstanceOf[StringLiteralContext]) {
+        if (keepPartitionSpecAsString && !ctx.isInstanceOf[StringLiteralContext]) {
           ctx.getText
         } else {
           // TODO For v2 commands, we will cast the string back to its actual value,

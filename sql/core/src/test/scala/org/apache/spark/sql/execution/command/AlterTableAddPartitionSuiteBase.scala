@@ -258,7 +258,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     }
   }
 
-  test("SPARK-41982: add partition when keepPartitionTypeAsString set `true`") {
+  test("SPARK-41982: add partition when keepPartitionSpecAsString set `true`") {
     withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { t =>
         sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (dt STRING)")

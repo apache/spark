@@ -3288,6 +3288,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL =
+    buildConf("spark.sql.legacy.keepPartitionSpecAsStringLiteral")
+      .internal()
+      .doc("If it is set to true and the type of the partition is string, " +
+        "partition value will be treated as string value but not numeric value")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
       .internal()
@@ -4058,15 +4067,6 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
-
-  val LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL =
-    buildConf("spark.sql.legacy.keepPartitionSpecAsStringLiteral")
-      .internal()
-      .doc("If it is set to true and the type of the partition is string, " +
-        "partition value will be treated as string value but not numeric value")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
