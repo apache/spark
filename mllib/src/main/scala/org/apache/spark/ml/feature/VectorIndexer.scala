@@ -35,7 +35,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.util.collection.{OpenHashSet, Utils}
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
 private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOutputCol
@@ -235,7 +235,7 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
           if (zeroExists) {
             sortedFeatureValues = 0.0 +: sortedFeatureValues
           }
-          val categoryMap: Map[Double, Int] = sortedFeatureValues.zipWithIndex.toMap
+          val categoryMap: Map[Double, Int] = Utils.toMapWithIndex(sortedFeatureValues)
           (featureIndex, categoryMap)
       }.toMap
     }

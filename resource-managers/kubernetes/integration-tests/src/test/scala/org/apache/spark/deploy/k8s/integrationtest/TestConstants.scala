@@ -36,4 +36,6 @@ object TestConstants {
   val CONFIG_KEY_UNPACK_DIR = "spark.kubernetes.test.unpackSparkDir"
   val CONFIG_DRIVER_REQUEST_CORES = "spark.kubernetes.test.driverRequestCores"
   val CONFIG_EXECUTOR_REQUEST_CORES = "spark.kubernetes.test.executorRequestCores"
+
+  val CONFIG_KEY_VOLCANO_MAX_JOB_NUM = "spark.kubernetes.test.volcanoMaxConcurrencyJobNum"
 }

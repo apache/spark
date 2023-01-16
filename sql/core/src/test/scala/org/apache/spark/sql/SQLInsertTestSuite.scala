@@ -156,8 +156,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     withTable("t1") {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)"))
-      assert(e1.getMessage.contains("Found duplicate column(s) in the column list: `c2`"))
+      checkError(
+        exception = intercept[AnalysisException](
+          sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)")),
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`c2`"))
     }
   }
 
@@ -165,10 +168,15 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     withTable("t1") {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
-      assert(e1.getMessage.contains(
-        "[UNRESOLVED_COLUMN] A column or function parameter with name `c4` cannot be resolved. " +
-          "Did you mean one of the following? [`c1`, `c2`, `c3`]"))
+      checkError(
+        exception =
+          intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"),
+        context = ExpectedContext(
+          fragment = "INSERT INTO t1 (c1, c2, c4)", start = 0, stop = 26
+        ))
     }
   }
 
@@ -193,8 +201,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "expected 2 columns but found"
+  test("insert with column list - missing columns") {
+    val v2Msg = "Cannot write incompatible data to table 'testcat.t1'"
     val cols = Seq("c1", "c2", "c3", "c4")
 
     withTable("t1") {
@@ -360,5 +368,17 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
     super.sparkConf
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+  }
+
+  test("static partition column name should not be used in the column list") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')")
+        },
+        errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
+        parameters = Map("staticName" -> "c"))
+    }
   }
 }

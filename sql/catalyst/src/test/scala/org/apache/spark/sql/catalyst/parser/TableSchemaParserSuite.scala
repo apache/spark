@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkThrowable}
 import org.apache.spark.sql.types._
 
 class TableSchemaParserSuite extends SparkFunSuite {
@@ -29,9 +29,6 @@ class TableSchemaParserSuite extends SparkFunSuite {
       assert(parse(tableSchemaString) === expectedDataType)
     }
   }
-
-  def assertError(sql: String): Unit =
-    intercept[ParseException](CatalystSqlParser.parseTableSchema(sql))
 
   checkTableSchema("a int", new StructType().add("a", "int"))
   checkTableSchema("A int", new StructType().add("A", "int"))
@@ -73,11 +70,31 @@ class TableSchemaParserSuite extends SparkFunSuite {
 
   // Negative cases
   test("Negative cases") {
-    assertError("")
-    assertError("a")
-    assertError("a INT b long")
-    assertError("a INT,, b long")
-    assertError("a INT, b long,,")
-    assertError("a INT, b long, c int,")
+    def parseException(sql: String): SparkThrowable =
+      intercept[ParseException](CatalystSqlParser.parseTableSchema(sql))
+
+    checkError(
+      exception = parseException(""),
+      errorClass = "PARSE_EMPTY_STATEMENT")
+    checkError(
+      exception = parseException("a"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "end of input", "hint" -> ""))
+    checkError(
+      exception = parseException("a INT b long"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'b'", "hint" -> ""))
+    checkError(
+      exception = parseException("a INT,, b long"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "','", "hint" -> ": extra input ','"))
+    checkError(
+      exception = parseException("a INT, b long,,"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "','", "hint" -> ""))
+    checkError(
+      exception = parseException("a INT, b long, c int,"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 }

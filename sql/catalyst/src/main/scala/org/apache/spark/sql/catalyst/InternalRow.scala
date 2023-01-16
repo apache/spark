@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -129,24 +130,25 @@ object InternalRow {
    */
   def getAccessor(dt: DataType, nullable: Boolean = true): (SpecializedGetters, Int) => Any = {
     val getValueNullSafe: (SpecializedGetters, Int) => Any = dt match {
-      case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
-      case ByteType => (input, ordinal) => input.getByte(ordinal)
-      case ShortType => (input, ordinal) => input.getShort(ordinal)
-      case IntegerType | DateType | _: YearMonthIntervalType =>
-        (input, ordinal) => input.getInt(ordinal)
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
-        (input, ordinal) => input.getLong(ordinal)
-      case FloatType => (input, ordinal) => input.getFloat(ordinal)
-      case DoubleType => (input, ordinal) => input.getDouble(ordinal)
-      case StringType => (input, ordinal) => input.getUTF8String(ordinal)
-      case BinaryType => (input, ordinal) => input.getBinary(ordinal)
-      case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
-      case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
-      case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
-      case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
-      case _: MapType => (input, ordinal) => input.getMap(ordinal)
       case u: UserDefinedType[_] => getAccessor(u.sqlType, nullable)
-      case _ => (input, ordinal) => input.get(ordinal, dt)
+      case _ => dt.physicalDataType match {
+        case PhysicalBooleanType => (input, ordinal) => input.getBoolean(ordinal)
+        case PhysicalByteType => (input, ordinal) => input.getByte(ordinal)
+        case PhysicalShortType => (input, ordinal) => input.getShort(ordinal)
+        case PhysicalIntegerType => (input, ordinal) => input.getInt(ordinal)
+        case PhysicalLongType => (input, ordinal) => input.getLong(ordinal)
+        case PhysicalFloatType => (input, ordinal) => input.getFloat(ordinal)
+        case PhysicalDoubleType => (input, ordinal) => input.getDouble(ordinal)
+        case PhysicalStringType => (input, ordinal) => input.getUTF8String(ordinal)
+        case PhysicalBinaryType => (input, ordinal) => input.getBinary(ordinal)
+        case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+        case t: PhysicalDecimalType => (input, ordinal) =>
+          input.getDecimal(ordinal, t.precision, t.scale)
+        case t: PhysicalStructType => (input, ordinal) => input.getStruct(ordinal, t.fields.size)
+        case _: PhysicalArrayType => (input, ordinal) => input.getArray(ordinal)
+        case _: PhysicalMapType => (input, ordinal) => input.getMap(ordinal)
+        case _ => (input, ordinal) => input.get(ordinal, dt)
+      }
     }
 
     if (nullable) {

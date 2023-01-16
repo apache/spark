@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, NumericType}
 
 case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -77,8 +77,13 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
 // scalastyle:on line.size.limit
 case class TryAdd(left: Expression, right: Expression, replacement: Expression)
     extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Add(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Add(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Add(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_add"
 
@@ -110,8 +115,13 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
 // scalastyle:on line.size.limit
 case class TryDivide(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Divide(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Divide(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Divide(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_divide"
 
@@ -144,8 +154,13 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
   group = "math_funcs")
 case class TrySubtract(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Subtract(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Subtract(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Subtract(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_subtract"
 
@@ -171,8 +186,13 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
   group = "math_funcs")
 case class TryMultiply(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Multiply(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Multiply(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Multiply(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_multiply"
 

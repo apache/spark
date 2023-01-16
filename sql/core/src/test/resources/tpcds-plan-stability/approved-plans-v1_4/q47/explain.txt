@@ -170,7 +170,7 @@ Arguments: [avg(_w0#19) windowspecdefinition(i_category#3, i_brand#2, s_store_na
 
 (27) Filter [codegen id : 22]
 Input [10]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum_sales#18, _w0#19, rn#20, avg_monthly_sales#21]
-Condition : (((isnotnull(avg_monthly_sales#21) AND isnotnull(sum_sales#18)) AND (avg_monthly_sales#21 > 0.000000)) AND ((abs((sum_sales#18 - avg_monthly_sales#21)) / avg_monthly_sales#21) > 0.1000000000000000))
+Condition : ((isnotnull(avg_monthly_sales#21) AND (avg_monthly_sales#21 > 0.000000)) AND CASE WHEN (avg_monthly_sales#21 > 0.000000) THEN ((abs((sum_sales#18 - avg_monthly_sales#21)) / avg_monthly_sales#21) > 0.1000000000000000) END)
 
 (28) Project [codegen id : 22]
 Output [9]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum_sales#18, avg_monthly_sales#21, rn#20]

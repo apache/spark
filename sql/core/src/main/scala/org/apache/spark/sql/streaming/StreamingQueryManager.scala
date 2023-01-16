@@ -231,6 +231,11 @@ class StreamingQueryManager private[sql] (
     listenerBus.post(event)
   }
 
+  private def useAsyncProgressTracking(extraOptions: Map[String, String]): Boolean = {
+    extraOptions.getOrElse(
+      AsyncProgressTrackingMicroBatchExecution.ASYNC_PROGRESS_TRACKING_ENABLED, "false").toBoolean
+  }
+
   // scalastyle:off argcount
   private def createQuery(
       userSpecifiedName: Option[String],
@@ -274,12 +279,22 @@ class StreamingQueryManager private[sql] (
           extraOptions,
           analyzedStreamWritePlan))
       case _ =>
-        new StreamingQueryWrapper(new MicroBatchExecution(
-          sparkSession,
-          trigger,
-          triggerClock,
-          extraOptions,
-          analyzedStreamWritePlan))
+        val microBatchExecution = if (useAsyncProgressTracking(extraOptions)) {
+          new AsyncProgressTrackingMicroBatchExecution(
+            sparkSession,
+            trigger,
+            triggerClock,
+            extraOptions,
+            analyzedStreamWritePlan)
+        } else {
+          new MicroBatchExecution(
+            sparkSession,
+            trigger,
+            triggerClock,
+            extraOptions,
+            analyzedStreamWritePlan)
+        }
+        new StreamingQueryWrapper(microBatchExecution)
     }
   }
   // scalastyle:on argcount

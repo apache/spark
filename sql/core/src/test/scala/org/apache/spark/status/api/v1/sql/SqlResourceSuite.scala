@@ -56,7 +56,7 @@ object SqlResourceSuite {
 
   val edges: Seq[SparkPlanGraphEdge] = Seq(SparkPlanGraphEdge(3, 2))
 
-  val nodesWhenCodegenIsOff: Seq[SparkPlanGraphNode] =
+  val nodesWhenCodegenIsOff: collection.Seq[SparkPlanGraphNode] =
     SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
 
   val metrics: Seq[SQLPlanMetric] = {
@@ -82,6 +82,7 @@ object SqlResourceSuite {
 
     new SQLExecutionUIData(
       executionId = 0,
+      rootExecutionId = 1,
       description = DESCRIPTION,
       details = "",
       physicalPlanDescription = PLAN_DESCRIPTION,
@@ -93,7 +94,8 @@ object SqlResourceSuite {
         0 -> JobExecutionStatus.SUCCEEDED,
         1 -> JobExecutionStatus.SUCCEEDED),
       stages = Set[Int](),
-      metricValues = getMetricValues()
+      metricValues = getMetricValues(),
+      errorMessage = None
     )
   }
 

@@ -126,7 +126,7 @@ class UDTOpsTest(OpsTestBase):
         sparse_vector = SparseVector(len(sparse_values), sparse_values)
         pser = pd.Series([sparse_vector])
         psser = ps.Series([sparse_vector])
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.data_type_ops.test_udt_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

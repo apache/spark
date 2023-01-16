@@ -48,9 +48,9 @@ import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.streaming.StreamingRelation
-import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.{PartitioningUtils => CatalystPartitioningUtils}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -106,22 +106,8 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
         None
       } else if (potentialSpecs.size == 1) {
         val partValue = potentialSpecs.head._2
-        conf.storeAssignmentPolicy match {
-          // SPARK-30844: try our best to follow StoreAssignmentPolicy for static partition
-          // values but not completely follow because we can't do static type checking due to
-          // the reason that the parser has erased the type info of static partition values
-          // and converted them to string.
-          case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-            val cast = Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone),
-              ansiEnabled = true)
-            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-            Some(Alias(cast, field.name)())
-          case _ =>
-            val castExpression =
-              Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone),
-                ansiEnabled = false)
-            Some(Alias(castExpression, field.name)())
-        }
+        Some(Alias(CatalystPartitioningUtils.castPartitionSpec(
+          partValue, field.dataType, conf), field.name)())
       } else {
         throw QueryCompilationErrors.multiplePartitionColumnValuesSpecifiedError(
           field, potentialSpecs)

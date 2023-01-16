@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.mllib.regression
 
 import java.io.Serializable
@@ -272,8 +271,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @param input RDD of tuples (label, feature, weight) where label is dependent variable
    *              for which we calculate isotonic regression, feature is independent variable
    *              and weight represents number of measures with default 1.
-   *              If multiple labels share the same feature value then they are ordered before
-   *              the algorithm is executed.
+   *              If multiple labels share the same feature value then they are aggregated using
+   *              the weighted average before the algorithm is executed.
    * @return Isotonic regression model.
    */
   @Since("1.3.0")
@@ -298,13 +297,65 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @param input JavaRDD of tuples (label, feature, weight) where label is dependent variable
    *              for which we calculate isotonic regression, feature is independent variable
    *              and weight represents number of measures with default 1.
-   *              If multiple labels share the same feature value then they are ordered before
-   *              the algorithm is executed.
+   *              If multiple labels share the same feature value then they are aggregated using
+   *              the weighted average before the algorithm is executed.
    * @return Isotonic regression model.
    */
   @Since("1.3.0")
   def run(input: JavaRDD[(JDouble, JDouble, JDouble)]): IsotonicRegressionModel = {
     run(input.rdd.retag.asInstanceOf[RDD[(Double, Double, Double)]])
+  }
+
+  /**
+   * Aggregates points of duplicate feature values into a single point using as label the weighted
+   * average of the labels of the points with duplicate feature values. All points for a unique
+   * feature value are aggregated as:
+   *
+   *   - Aggregated label is the weighted average of all labels.
+   *   - Aggregated feature is the unique feature value.
+   *   - Aggregated weight is the sum of all weights.
+   *
+   * @param input Input data of tuples (label, feature, weight). Weights must be non-negative.
+   * @return Points with unique feature values.
+   */
+  private[regression] def makeUnique(
+      input: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
+
+    val cleanInput = input.filter { case (y, x, weight) =>
+      require(
+        weight >= 0.0,
+        s"Negative weight at point ($y, $x, $weight). Weights must be non-negative")
+      weight > 0
+    }
+
+    if (cleanInput.length <= 1) {
+      cleanInput
+    } else {
+      val pointsAccumulator = new IsotonicRegression.PointsAccumulator
+
+      // Go through input points, merging all points with equal feature values into a single point.
+      // Equality of features is defined by shouldAccumulate method. The label of the accumulated
+      // points is the weighted average of the labels of all points of equal feature value.
+
+      // Initialize with first point
+      pointsAccumulator := cleanInput.head
+      // Accumulate the rest
+      cleanInput.tail.foreach { case point @ (_, feature, _) =>
+        if (pointsAccumulator.shouldAccumulate(feature)) {
+          // Still on a duplicate feature, accumulate
+          pointsAccumulator += point
+        } else {
+          // A new unique feature encountered:
+          // - append the last accumulated point to unique features output
+          pointsAccumulator.appendToOutput()
+          // - and reset
+          pointsAccumulator := point
+        }
+      }
+      // Append the last accumulated point to unique features output
+      pointsAccumulator.appendToOutput()
+      pointsAccumulator.getOutput
+    }
   }
 
   /**
@@ -322,35 +373,27 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * functions subject to simple chain constraints." SIAM Journal on Optimization 10.3 (2000):
    * 658-672.
    *
-   * @param input Input data of tuples (label, feature, weight). Weights must
-                  be non-negative.
+   * @param cleanUniqueInput Input data of tuples(label, feature, weight).Features must be unique
+   *                         and weights must be non-negative.
    * @return Result tuples (label, feature, weight) where labels were updated
    *         to form a monotone sequence as per isotonic regression definition.
    */
   private def poolAdjacentViolators(
-      input: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
+      cleanUniqueInput: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
 
-    val cleanInput = input.filter{ case (y, x, weight) =>
-      require(
-        weight >= 0.0,
-        s"Negative weight at point ($y, $x, $weight). Weights must be non-negative"
-      )
-      weight > 0
-    }
-
-    if (cleanInput.isEmpty) {
+    if (cleanUniqueInput.isEmpty) {
       return Array.empty
     }
 
     // Keeps track of the start and end indices of the blocks. if [i, j] is a valid block from
     // cleanInput(i) to cleanInput(j) (inclusive), then blockBounds(i) = j and blockBounds(j) = i
     // Initially, each data point is its own block.
-    val blockBounds = Array.range(0, cleanInput.length)
+    val blockBounds = Array.range(0, cleanUniqueInput.length)
 
     // Keep track of the sum of weights and sum of weight * y for each block. weights(start)
     // gives the values for the block. Entries that are not at the start of a block
     // are meaningless.
-    val weights: Array[(Double, Double)] = cleanInput.map { case (y, _, weight) =>
+    val weights: Array[(Double, Double)] = cleanUniqueInput.map { case (y, _, weight) =>
       (weight, weight * y)
     }
 
@@ -392,10 +435,10 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     // Merge on >= instead of > because it eliminates adjacent blocks with the same average, and we
     // want to compress our output as much as possible. Both give correct results.
     var i = 0
-    while (nextBlock(i) < cleanInput.length) {
+    while (nextBlock(i) < cleanUniqueInput.length) {
       if (average(i) >= average(nextBlock(i))) {
         merge(i, nextBlock(i))
-        while((i > 0) && (average(prevBlock(i)) >= average(i))) {
+        while ((i > 0) && (average(prevBlock(i)) >= average(i))) {
           i = merge(prevBlock(i), i)
         }
       } else {
@@ -406,15 +449,15 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     // construct the output by walking through the blocks in order
     val output = ArrayBuffer.empty[(Double, Double, Double)]
     i = 0
-    while (i < cleanInput.length) {
+    while (i < cleanUniqueInput.length) {
       // If block size is > 1, a point at the start and end of the block,
       // each receiving half the weight. Otherwise, a single point with
       // all the weight.
-      if (cleanInput(blockEnd(i))._2 > cleanInput(i)._2) {
-        output += ((average(i), cleanInput(i)._2, weights(i)._1 / 2))
-        output += ((average(i), cleanInput(blockEnd(i))._2, weights(i)._1 / 2))
+      if (cleanUniqueInput(blockEnd(i))._2 > cleanUniqueInput(i)._2) {
+        output += ((average(i), cleanUniqueInput(i)._2, weights(i)._1 / 2))
+        output += ((average(i), cleanUniqueInput(blockEnd(i))._2, weights(i)._1 / 2))
       } else {
-        output += ((average(i), cleanInput(i)._2, weights(i)._1))
+        output += ((average(i), cleanUniqueInput(i)._2, weights(i)._1))
       }
       i = nextBlock(i)
     }
@@ -434,12 +477,58 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       input: RDD[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
     val keyedInput = input.keyBy(_._2)
     val parallelStepResult = keyedInput
+      // Points with same or adjacent features must collocate within the same partition.
       .partitionBy(new RangePartitioner(keyedInput.getNumPartitions, keyedInput))
       .values
-      .mapPartitions(p => Iterator(p.toArray.sortBy(x => (x._2, x._1))))
+      // Lexicographically sort points by features.
+      .mapPartitions(p => Iterator(p.toArray.sortBy(_._2)))
+      // Aggregate points with equal features into a single point.
+      .map(makeUnique)
       .flatMap(poolAdjacentViolators)
       .collect()
-      .sortBy(x => (x._2, x._1)) // Sort again because collect() doesn't promise ordering.
+      // Sort again because collect() doesn't promise ordering.
+      .sortBy(_._2)
     poolAdjacentViolators(parallelStepResult)
+  }
+}
+
+object IsotonicRegression {
+  /**
+   * Utility class, holds a buffer of all points with unique features so far, and performs
+   * weighted sum accumulation of points. Hides these details for better readability of the
+   * main algorithm.
+   */
+  class PointsAccumulator {
+    private val output = ArrayBuffer[(Double, Double, Double)]()
+    private var (currentLabel: Double, currentFeature: Double, currentWeight: Double) =
+      (0d, 0d, 0d)
+
+    /** Whether or not this feature exactly equals the current accumulated feature. */
+    @inline def shouldAccumulate(feature: Double): Boolean = currentFeature == feature
+
+    /** Resets the current value of the point accumulator using the provided point. */
+    @inline def :=(point: (Double, Double, Double)): Unit = {
+      val (label, feature, weight) = point
+      currentLabel = label * weight
+      currentFeature = feature
+      currentWeight = weight
+    }
+
+    /** Accumulates the provided point into the current value of the point accumulator. */
+    @inline def +=(point: (Double, Double, Double)): Unit = {
+      val (label, _, weight) = point
+      currentLabel += label * weight
+      currentWeight += weight
+    }
+
+    /** Appends the current value of the point accumulator to the output. */
+    @inline def appendToOutput(): Unit =
+      output += ((
+        currentLabel / currentWeight,
+        currentFeature,
+        currentWeight))
+
+    /** Returns all accumulated points so far. */
+    @inline def getOutput: Array[(Double, Double, Double)] = output.toArray
   }
 }

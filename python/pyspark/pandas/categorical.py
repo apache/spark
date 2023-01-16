@@ -25,7 +25,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.data_type_ops.categorical_ops import _to_cat
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
@@ -658,7 +657,7 @@ class CategoricalAccessor:
         """
         Reorder categories as specified in new_categories.
 
-        `new_categories` need to include all old categories and no new category
+        `new_categories` needs to include all old categories and no new category
         items.
 
         Parameters
@@ -666,7 +665,7 @@ class CategoricalAccessor:
         new_categories : Index-like
            The categories in new order.
         ordered : bool, optional
-           Whether or not the categorical is treated as a ordered categorical.
+           Whether or not the categorical is treated as an ordered categorical.
            If not given, do not change the ordered information.
         inplace : bool, default False
            Whether or not to reorder the categories inplace or return a copy of
@@ -767,7 +766,7 @@ class CategoricalAccessor:
 
         `new_categories` can include new categories (which will result in
         unused categories) or remove old categories (which results in values
-        set to NaN). If `rename==True`, the categories will simple be renamed
+        set to NaN). If `rename==True`, the categories will simply be renamed
         (less or more items than in old categories will result in values set to
         NaN or in unused categories respectively).
 
@@ -778,7 +777,7 @@ class CategoricalAccessor:
         On the other hand this methods does not do checks (e.g., whether the
         old categories are included in the new categories on a reorder), which
         can result in surprising changes, for example when using special string
-        dtypes, which does not considers a S1 string equal to a single char
+        dtypes, which does not consider a S1 string equal to a single char
         python string.
 
         Parameters
@@ -786,7 +785,7 @@ class CategoricalAccessor:
         new_categories : Index-like
            The categories in new order.
         ordered : bool, default False
-           Whether or not the categorical is treated as a ordered categorical.
+           Whether or not the categorical is treated as an ordered categorical.
            If not given, do not change the ordered information.
         rename : bool, default False
            Whether or not the new_categories should be considered as a rename
@@ -879,7 +878,7 @@ class CategoricalAccessor:
 
         if rename:
             new_scol = (
-                F.when(scol >= len(new_categories), SF.lit(-1).cast(self._data.spark.data_type))
+                F.when(scol >= len(new_categories), F.lit(-1).cast(self._data.spark.data_type))
                 .otherwise(scol)
                 .alias(self._data._internal.data_spark_column_names[0])
             )

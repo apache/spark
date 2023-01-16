@@ -96,45 +96,75 @@ class LimitPushdownSuite extends PlanTest {
   // Outer join ----------------------------------------------------------------------------------
 
   test("left outer join") {
-    val originalQuery = x.join(y, LeftOuter).limit(1)
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, LeftOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.join(y, LeftOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), LeftOuter, condition).limit(1).analyze
+      } else {
+        LocalLimit(1, x).join(y, LeftOuter, condition).limit(1).analyze
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("left outer join and left sides are limited") {
-    val originalQuery = x.limit(2).join(y, LeftOuter).limit(1)
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, LeftOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.limit(2).join(y, LeftOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), LeftOuter, condition).limit(1).analyze
+      } else {
+        LocalLimit(1, x).join(y, LeftOuter, condition).limit(1).analyze
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("left outer join and right sides are limited") {
-    val originalQuery = x.join(y.limit(2), LeftOuter).limit(1)
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(Limit(2, y), LeftOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.join(y.limit(2), LeftOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), LeftOuter, condition).limit(1).analyze
+      } else {
+        LocalLimit(1, x).join(Limit(2, y), LeftOuter, condition).limit(1).analyze
+      }
+      comparePlans( Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("right outer join") {
-    val originalQuery = x.join(y, RightOuter).limit(1)
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, x.join(LocalLimit(1, y), RightOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.join(y, RightOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), RightOuter, condition).limit(1).analyze
+      } else {
+        x.join(LocalLimit(1, y), RightOuter, condition).limit(1).analyze
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("right outer join and right sides are limited") {
-    val originalQuery = x.join(y.limit(2), RightOuter).limit(1)
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, x.join(LocalLimit(1, y), RightOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.join(y.limit(2), RightOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), RightOuter, condition).limit(1).analyze
+      } else {
+        x.join(LocalLimit(1, y), RightOuter, condition).limit(1).analyze
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("right outer join and left sides are limited") {
-    val originalQuery = x.limit(2).join(y, RightOuter).limit(1)
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, Limit(2, x).join(LocalLimit(1, y), RightOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.limit(2).join(y, RightOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), RightOuter, condition).limit(1).analyze
+      } else {
+        Limit(2, x).join(LocalLimit(1, y), RightOuter, condition).limit(1).analyze
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("larger limits are not pushed on top of smaller ones in right outer join") {
@@ -146,35 +176,59 @@ class LimitPushdownSuite extends PlanTest {
 
   test("full outer join where neither side is limited and both sides have same statistics") {
     assert(x.stats.sizeInBytes === y.stats.sizeInBytes)
-    val originalQuery = x.join(y, FullOuter).limit(1).analyze
-    val optimized = Optimize.execute(originalQuery)
-    // No pushdown for FULL OUTER JOINS.
-    comparePlans(optimized, originalQuery)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.join(y, FullOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), FullOuter, condition).limit(1).analyze
+      } else {
+        // No pushdown for FULL OUTER JOINS.
+        originalQuery
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("full outer join where neither side is limited and left side has larger statistics") {
     val xBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("x")
     assert(xBig.stats.sizeInBytes > y.stats.sizeInBytes)
-    val originalQuery = xBig.join(y, FullOuter).limit(1).analyze
-    val optimized = Optimize.execute(originalQuery)
-    // No pushdown for FULL OUTER JOINS.
-    comparePlans(optimized, originalQuery)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = xBig.join(y, FullOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, xBig).join(LocalLimit(1, y), FullOuter, condition).limit(1).analyze
+      } else {
+        // No pushdown for FULL OUTER JOINS.
+        originalQuery
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("full outer join where neither side is limited and right side has larger statistics") {
     val yBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("y")
     assert(x.stats.sizeInBytes < yBig.stats.sizeInBytes)
-    val originalQuery = x.join(yBig, FullOuter).limit(1).analyze
-    val optimized = Optimize.execute(originalQuery)
-    // No pushdown for FULL OUTER JOINS.
-    comparePlans(optimized, originalQuery)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.join(yBig, FullOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, yBig), FullOuter, condition).limit(1).analyze
+      } else {
+        // No pushdown for FULL OUTER JOINS.
+        originalQuery
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("full outer join where both sides are limited") {
-    val originalQuery = x.limit(2).join(y.limit(2), FullOuter).limit(1).analyze
-    val optimized = Optimize.execute(originalQuery)
-    // No pushdown for FULL OUTER JOINS.
-    comparePlans(optimized, originalQuery)
+    Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
+      val originalQuery = x.limit(2).join(y.limit(2), FullOuter, condition).limit(1).analyze
+      val optimized = if (condition.isEmpty) {
+        LocalLimit(1, x).join(LocalLimit(1, y), FullOuter, condition).limit(1).analyze
+      } else {
+        // No pushdown for FULL OUTER JOINS.
+        originalQuery
+      }
+      comparePlans(Optimize.execute(originalQuery), optimized)
+    }
   }
 
   test("SPARK-33433: Change Aggregate max rows to 1 if grouping is empty") {

@@ -58,16 +58,21 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  // `ScalaUDF` uses `ExpressionEncoder` to convert the function result to Catalyst internal format.
+  // `ExpressionEncoder` is stateful as it reuses the `UnsafeRow` instance, thus `ScalaUDF` is
+  // stateful as well.
+  override def stateful: Boolean = true
+
   final override val nodePatterns: Seq[TreePattern] = Seq(SCALA_UDF)
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 
   override def name: String = udfName.getOrElse("UDF")
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't
     // need it to identify a `ScalaUDF`.
-    copy(children = children.map(_.preCanonicalized), inputEncoders = Nil, outputEncoder = None)
+    copy(children = children.map(_.canonicalized), inputEncoders = Nil, outputEncoder = None)
   }
 
   /**

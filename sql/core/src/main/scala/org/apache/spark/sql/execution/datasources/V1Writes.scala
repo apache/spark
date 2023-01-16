@@ -19,22 +19,43 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder, String2StringExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
 trait V1WriteCommand extends DataWritingCommand {
+  /**
+   * Specify the [[FileFormat]] of the provider of V1 write command.
+   */
+  def fileFormat: FileFormat
 
   /**
    * Specify the partition columns of the V1 write command.
    */
   def partitionColumns: Seq[Attribute]
+
+  /**
+   * Specify the partition spec of the V1 write command.
+   */
+  def staticPartitions: TablePartitionSpec
+
+  /**
+   * Specify the bucket spec of the V1 write command.
+   */
+  def bucketSpec: Option[BucketSpec]
+
+  /**
+   * Specify the storage options of the V1 write command.
+   */
+  def options: Map[String, String]
 
   /**
    * Specify the required ordering for the V1 write command. `FileFormatWriter` will
@@ -44,16 +65,25 @@ trait V1WriteCommand extends DataWritingCommand {
 }
 
 /**
- * A rule that adds logical sorts to V1 data writing commands.
+ * A rule that plans v1 write for [[V1WriteCommand]].
  */
 object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
+
+  import V1WritesUtils._
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.plannedWriteEnabled) {
-      plan.transformDown {
-        case write: V1WriteCommand =>
+      plan.transformUp {
+        case write: V1WriteCommand if !write.child.isInstanceOf[WriteFiles] =>
           val newQuery = prepareQuery(write, write.query)
           val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
-          val newWrite = write.withNewChildren(newQuery :: Nil).transformExpressions {
+          val writeFiles = WriteFiles(newQuery, write.fileFormat, write.partitionColumns,
+            write.bucketSpec, write.options, write.staticPartitions)
+          val newChild = writeFiles.transformExpressions {
+            case a: Attribute if attrMap.contains(a) =>
+              a.withExprId(attrMap(a).exprId)
+          }
+          val newWrite = write.withNewChildren(newChild :: Nil).transformExpressions {
             case a: Attribute if attrMap.contains(a) =>
               a.withExprId(attrMap(a).exprId)
           }
@@ -65,10 +95,11 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
   }
 
   private def prepareQuery(write: V1WriteCommand, query: LogicalPlan): LogicalPlan = {
-    val empty2NullPlan = if (hasEmptyToNull(query)) {
+    val hasEmpty2Null = query.exists(p => hasEmptyToNull(p.expressions))
+    val empty2NullPlan = if (hasEmpty2Null) {
       query
     } else {
-      val projectList = V1WritesUtils.convertEmptyToNull(query.output, write.partitionColumns)
+      val projectList = convertEmptyToNull(query.output, write.partitionColumns)
       if (projectList.isEmpty) query else Project(projectList, query)
     }
     assert(empty2NullPlan.output.length == query.output.length)
@@ -80,25 +111,12 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     }.asInstanceOf[SortOrder])
     val outputOrdering = query.outputOrdering
     // Check if the ordering is already matched to ensure the idempotency of the rule.
-    val orderingMatched = if (requiredOrdering.length > outputOrdering.length) {
-      false
-    } else {
-      requiredOrdering.zip(outputOrdering).forall {
-        case (requiredOrder, outputOrder) => requiredOrder.semanticEquals(outputOrder)
-      }
-    }
+    val orderingMatched = isOrderingMatched(requiredOrdering, outputOrdering)
     if (orderingMatched) {
       empty2NullPlan
     } else {
       Sort(requiredOrdering, global = false, empty2NullPlan)
     }
-  }
-
-  private def hasEmptyToNull(plan: LogicalPlan): Boolean = {
-    plan.find {
-      case p: Project => V1WritesUtils.hasEmptyToNull(p.projectList)
-      case _ => false
-    }.isDefined
   }
 }
 
@@ -208,5 +226,23 @@ object V1WritesUtils {
 
   def hasEmptyToNull(expressions: Seq[Expression]): Boolean = {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
+  }
+
+  def isOrderingMatched(
+      requiredOrdering: Seq[Expression],
+      outputOrdering: Seq[Expression]): Boolean = {
+    if (requiredOrdering.length > outputOrdering.length) {
+      false
+    } else {
+      requiredOrdering.zip(outputOrdering).forall {
+        case (requiredOrder, outputOrder) => requiredOrder.semanticEquals(outputOrder)
+      }
+    }
+  }
+
+  def getWriteFilesOpt(child: SparkPlan): Option[WriteFilesExec] = {
+    child.collectFirst {
+      case w: WriteFilesExec => w
+    }
   }
 }

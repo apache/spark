@@ -35,3 +35,4 @@ Pandas API on Spark follows the API specifications of latest pandas release.
    pyspark.mllib
    pyspark
    pyspark.resource
+   pyspark.errors

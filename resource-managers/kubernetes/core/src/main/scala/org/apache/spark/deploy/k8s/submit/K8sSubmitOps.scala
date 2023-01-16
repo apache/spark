@@ -19,9 +19,9 @@ package org.apache.spark.deploy.k8s.submit
 import scala.collection.JavaConverters._
 
 import K8SSparkSubmitOperation.getGracePeriod
-import io.fabric8.kubernetes.api.model.{Pod, PodList}
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.{NonNamespaceOperation, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitOperation
@@ -32,17 +32,15 @@ import org.apache.spark.deploy.k8s.KubernetesUtils.formatPodState
 import org.apache.spark.util.{CommandLineLoggingUtils, Utils}
 
 private sealed trait K8sSubmitOp extends CommandLineLoggingUtils {
-  type NON_NAMESPACED_PODS =
-    NonNamespaceOperation[Pod, PodList, PodResource[Pod]]
   def executeOnPod(pName: String, namespace: Option[String], sparkConf: SparkConf)
       (implicit client: KubernetesClient): Unit
   def executeOnGlob(pods: List[Pod], ns: Option[String], sparkConf: SparkConf)
       (implicit client: KubernetesClient): Unit
-  def listPodsInNameSpace(namespace: Option[String])
-      (implicit client: KubernetesClient): NON_NAMESPACED_PODS = {
+  def getPod(namespace: Option[String], name: String)
+      (implicit client: KubernetesClient): PodResource = {
     namespace match {
-      case Some(ns) => client.pods.inNamespace(ns)
-      case None => client.pods
+      case Some(ns) => client.pods.inNamespace(ns).withName(name)
+      case None => client.pods.withName(name)
     }
   }
 }
@@ -50,7 +48,7 @@ private sealed trait K8sSubmitOp extends CommandLineLoggingUtils {
 private class KillApplication extends K8sSubmitOp  {
   override def executeOnPod(pName: String, namespace: Option[String], sparkConf: SparkConf)
       (implicit client: KubernetesClient): Unit = {
-    val podToDelete = listPodsInNameSpace(namespace).withName(pName)
+    val podToDelete = getPod(namespace, pName)
 
     if (Option(podToDelete).isDefined) {
       getGracePeriod(sparkConf) match {
@@ -66,19 +64,11 @@ private class KillApplication extends K8sSubmitOp  {
       (implicit client: KubernetesClient): Unit = {
     if (pods.nonEmpty) {
       pods.foreach { pod => printMessage(s"Deleting driver pod: ${pod.getMetadata.getName}.") }
-      val listedPods = listPodsInNameSpace(namespace)
-
       getGracePeriod(sparkConf) match {
         case Some(period) =>
-          // this is not using the batch api because no option is provided
-          // when using the grace period.
-          pods.foreach { pod =>
-            listedPods
-              .withName(pod.getMetadata.getName)
-              .withGracePeriod(period)
-              .delete()
-          }
-        case _ => listedPods.delete(pods.asJava)
+          client.resourceList(pods.asJava).withGracePeriod(period).delete()
+        case _ =>
+          client.resourceList(pods.asJava).delete()
       }
     } else {
       printMessage("No applications found.")
@@ -89,7 +79,7 @@ private class KillApplication extends K8sSubmitOp  {
 private class ListStatus extends K8sSubmitOp {
   override def executeOnPod(pName: String, namespace: Option[String], sparkConf: SparkConf)
       (implicit client: KubernetesClient): Unit = {
-    val pod = listPodsInNameSpace(namespace).withName(pName).get()
+    val pod = getPod(namespace, pName).get()
     if (Option(pod).isDefined) {
       printMessage("Application status (driver): " +
         Option(pod).map(formatPodState).getOrElse("unknown."))
@@ -145,13 +135,12 @@ private[spark] class K8SSparkSubmitOperation extends SparkSubmitOperation
                   .pods
             }
             val pods = ops
+              .withLabel(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
               .list()
               .getItems
               .asScala
               .filter { pod =>
-                val meta = pod.getMetadata
-                meta.getName.startsWith(pName.stripSuffix("*")) &&
-                  meta.getLabels.get(SPARK_ROLE_LABEL) == SPARK_POD_DRIVER_ROLE
+                pod.getMetadata.getName.startsWith(pName.stripSuffix("*"))
               }.toList
             op.executeOnGlob(pods, namespace, sparkConf)
           } else {

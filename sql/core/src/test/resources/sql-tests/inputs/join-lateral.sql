@@ -2,6 +2,7 @@
 
 CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2);
 CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);
+CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4));
 
 -- lateral join with single column select
 SELECT * FROM t1, LATERAL (SELECT c1);
@@ -43,6 +44,9 @@ SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1);
 
 -- lateral join with correlated non-equality predicates
 SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c2 < t2.c2);
+
+-- SPARK-36114: lateral join with aggregation and correlated non-equality predicates
+SELECT * FROM t1, LATERAL (SELECT max(c2) AS m FROM t2 WHERE t1.c2 < t2.c2);
 
 -- lateral join can reference preceding FROM clause items
 SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2);
@@ -167,6 +171,32 @@ WITH cte1 AS (
 )
 SELECT * FROM cte2;
 
+-- SPARK-41441: lateral join with outer references in Generate
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2));
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE_OUTER(c2));
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
+
+-- SPARK-41961: lateral join with table-valued functions
+SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2));
+SELECT * FROM t1, LATERAL RANGE(3);
+SELECT * FROM t1, LATERAL EXPLODE(ARRAY(c1, c2)) t2(c3);
+SELECT * FROM t3, LATERAL EXPLODE(c2) t2(v);
+SELECT * FROM t3, LATERAL EXPLODE_OUTER(c2) t2(v);
+SELECT * FROM EXPLODE(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1);
+
+-- lateral join with table-valued functions and join conditions
+SELECT * FROM t1 JOIN LATERAL EXPLODE(ARRAY(c1, c2)) t(c3) ON t1.c1 = c3;
+SELECT * FROM t3 JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3;
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3;
+
+-- lateral join with table-valued functions in lateral subqueries
+SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)));
+SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3));
+SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3) WHERE t1.c2 > 1);
+SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)) l(x) JOIN EXPLODE(ARRAY(c2, c1)) r(y) ON x = y);
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;
+DROP VIEW t3;

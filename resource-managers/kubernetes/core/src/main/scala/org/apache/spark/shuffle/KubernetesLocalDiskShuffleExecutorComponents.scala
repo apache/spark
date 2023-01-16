@@ -22,6 +22,8 @@ import java.util.Optional
 
 import scala.reflect.ClassTag
 
+import org.apache.commons.io.FileExistsException
+
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputWriter, SingleSpillShuffleMapOutputWriter}
@@ -95,6 +97,8 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
         bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
       } catch {
         case _: UnrecognizedBlockId =>
+        case _: FileExistsException =>
+          // This may happen due to recompute, but we continue to recover next files
       }
     }
   }

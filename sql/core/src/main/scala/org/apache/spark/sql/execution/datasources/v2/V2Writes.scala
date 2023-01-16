@@ -40,13 +40,14 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case a @ AppendData(r: DataSourceV2Relation, query, options, _, None) =>
+    case a @ AppendData(r: DataSourceV2Relation, query, options, _, None, _) =>
       val writeBuilder = newWriteBuilder(r.table, options, query.schema)
       val write = writeBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
 
-    case o @ OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, options, _, None) =>
+    case o @ OverwriteByExpression(
+        r: DataSourceV2Relation, deleteExpr, query, options, _, None, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val predicates = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
         val predicate = DataSourceV2Strategy.translateFilterV2(pred)
@@ -67,7 +68,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
           throw QueryExecutionErrors.overwriteTableByUnsupportedExpressionError(table)
       }
 
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       o.copy(write = Some(write), query = newQuery)
 
     case o @ OverwritePartitionsDynamic(r: DataSourceV2Relation, query, options, _, None) =>
@@ -79,7 +80,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         case _ =>
           throw QueryExecutionErrors.dynamicPartitionOverwriteUnsupportedByTableError(table)
       }
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       o.copy(write = Some(write), query = newQuery)
 
     case WriteToMicroBatchDataSource(
@@ -89,14 +90,15 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
       val customMetrics = write.supportedCustomMetrics.toSeq
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
+      val funCatalogOpt = relation.flatMap(_.funCatalog)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, funCatalogOpt)
       WriteToDataSourceV2(relation, microBatchWrite, newQuery, customMetrics)
 
     case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, None) =>
       val rowSchema = StructType.fromAttributes(rd.dataInput)
       val writeBuilder = newWriteBuilder(r.table, Map.empty, rowSchema)
       val write = writeBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       // project away any metadata columns that could be used for distribution and ordering
       rd.copy(write = Some(write), query = Project(rd.dataInput, newQuery))
 

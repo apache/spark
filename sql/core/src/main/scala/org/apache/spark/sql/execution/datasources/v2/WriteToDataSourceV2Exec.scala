@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.UUID
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
@@ -404,11 +403,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
             throw QueryExecutionErrors.writingJobFailedError(cause)
         }
         logError(s"Data source write support $batchWrite aborted.")
-        cause match {
-          // Only wrap non fatal exceptions.
-          case NonFatal(e) => throw QueryExecutionErrors.writingJobAbortedError(e)
-          case _ => throw cause
-        }
+        throw cause
     }
 
     Nil

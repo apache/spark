@@ -128,9 +128,9 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES (" +
         " 'colelction.delim' = '@'," +
+        " 'field.delim' = ','," +
         " 'mapkey.delim' = '#'," +
-        " 'serialization.format' = ','," +
-        " 'field.delim' = ',')" +
+        " 'serialization.format' = ',')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
         " TBLPROPERTIES ("
@@ -178,9 +178,9 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
         " WITH SERDEPROPERTIES (" +
+        " 'field.delim' = ','," +
         " 'mapkey.delim' = ','," +
-        " 'serialization.format' = '1'," +
-        " 'field.delim' = ',')" +
+        " 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'" +
         " TBLPROPERTIES ("

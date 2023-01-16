@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-object ExprUtils {
+object ExprUtils extends QueryErrorsBase {
 
   def evalTypeExpr(exp: Expression): DataType = {
     if (exp.foldable) {
@@ -33,18 +35,18 @@ object ExprUtils {
         case s: UTF8String if s != null =>
           val dataType = DataType.fromDDL(s.toString)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
-        case _ => throw QueryCompilationErrors.invalidSchemaStringError(exp)
+        case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 
       }
     } else {
-      throw QueryCompilationErrors.schemaNotFoldableError(exp)
+      throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
     }
   }
 
   def evalSchemaExpr(exp: Expression): StructType = {
     val dataType = evalTypeExpr(exp)
     if (!dataType.isInstanceOf[StructType]) {
-      throw QueryCompilationErrors.schemaIsNotStructTypeError(dataType)
+      throw QueryCompilationErrors.schemaIsNotStructTypeError(exp, dataType)
     }
     dataType.asInstanceOf[StructType]
   }
@@ -97,18 +99,22 @@ object ExprUtils {
 
   /**
    * Check if the schema is valid for Json
-   * @param schema
+   * @param schema The schema to check.
    * @return
-   *  None if the schema is valid
-   *  Some(msg) with the error message if the schema is not valid
+   *  `TypeCheckSuccess` if the schema is valid
+   *  `DataTypeMismatch` with an error error if the schema is not valid
    */
-  def checkJsonSchema(schema: DataType): Option[Throwable] =
-    if (schema.existsRecursively {
+  def checkJsonSchema(schema: DataType): TypeCheckResult = {
+    val isInvalid = schema.existsRecursively {
       case MapType(keyType, _, _) if keyType != StringType => true
       case _ => false
-    }) {
-      Some(QueryCompilationErrors.invalidJsonSchema(schema))
-    } else {
-      None
     }
+    if (isInvalid) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_MAP_KEY_TYPE",
+        messageParameters = Map("schema" -> toSQLType(schema)))
+    } else {
+      TypeCheckSuccess
+    }
+  }
 }

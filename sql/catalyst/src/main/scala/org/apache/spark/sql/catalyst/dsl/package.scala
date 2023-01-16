@@ -501,6 +501,9 @@ package object dsl {
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
 
+      def repartition(): LogicalPlan =
+        RepartitionByExpression(Seq.empty, logicalPlan, None)
+
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 

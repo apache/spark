@@ -19,7 +19,9 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
+from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
 
 
 class SpecialLengths:
@@ -371,3 +373,354 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
                 raise ValueError(
                     "Invalid number of pandas.DataFrames in group {0}".format(dataframes_in_group)
                 )
+
+
+class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for applyInPandasWithState.
+
+    Parameters
+    ----------
+    timezone : str
+        A timezone to respect when handling timestamp values
+    safecheck : bool
+        If True, conversion from Arrow to Pandas checks for overflow/truncation
+    assign_cols_by_name : bool
+        If True, then Pandas DataFrames will get columns by name
+    state_object_schema : StructType
+        The type of state object represented as Spark SQL type
+    arrow_max_records_per_batch : int
+        Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
+    """
+
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        state_object_schema,
+        arrow_max_records_per_batch,
+    ):
+        super(ApplyInPandasWithStateSerializer, self).__init__(
+            timezone, safecheck, assign_cols_by_name
+        )
+        self.pickleSer = CPickleSerializer()
+        self.utf8_deserializer = UTF8Deserializer()
+        self.state_object_schema = state_object_schema
+
+        self.result_state_df_type = StructType(
+            [
+                StructField("properties", StringType()),
+                StructField("keyRowAsUnsafe", BinaryType()),
+                StructField("object", BinaryType()),
+                StructField("oldTimeoutTimestamp", LongType()),
+            ]
+        )
+
+        self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+
+    def load_stream(self, stream):
+        """
+        Read ArrowRecordBatches from stream, deserialize them to populate a list of pair
+        (data chunk, state), and convert the data into a list of pandas.Series.
+
+        Please refer the doc of inner function `gen_data_and_state` for more details how
+        this function works in overall.
+
+        In addition, this function further groups the return of `gen_data_and_state` by the state
+        instance (same semantic as grouping by grouping key) and produces an iterator of data
+        chunks for each group, so that the caller can lazily materialize the data chunk.
+        """
+
+        import pyarrow as pa
+        import json
+        from itertools import groupby
+        from pyspark.sql.streaming.state import GroupState
+
+        def construct_state(state_info_col):
+            """
+            Construct state instance from the value of state information column.
+            """
+
+            state_info_col_properties = state_info_col["properties"]
+            state_info_col_key_row = state_info_col["keyRowAsUnsafe"]
+            state_info_col_object = state_info_col["object"]
+
+            state_properties = json.loads(state_info_col_properties)
+            if state_info_col_object:
+                state_object = self.pickleSer.loads(state_info_col_object)
+            else:
+                state_object = None
+            state_properties["optionalValue"] = state_object
+
+            return GroupState(
+                keyAsUnsafe=state_info_col_key_row,
+                valueSchema=self.state_object_schema,
+                **state_properties,
+            )
+
+        def gen_data_and_state(batches):
+            """
+            Deserialize ArrowRecordBatches and return a generator of
+            `(a list of pandas.Series, state)`.
+
+            The logic on deserialization is following:
+
+            1. Read the entire data part from Arrow RecordBatch.
+            2. Read the entire state information part from Arrow RecordBatch.
+            3. Loop through each state information:
+               3.A. Extract the data out from entire data via the information of data range.
+               3.B. Construct a new state instance if the state information is the first occurrence
+                    for the current grouping key.
+               3.C. Leverage the existing state instance if it is already available for the current
+                    grouping key. (Meaning it's not the first occurrence.)
+               3.D. Remove the cache of state instance if the state information denotes the data is
+                    the last chunk for current grouping key.
+
+            This deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+
+            This function must avoid materializing multiple Arrow RecordBatches into memory at the
+            same time. And data chunks from the same grouping key should appear sequentially, to
+            further group them based on state instance (same state instance will be produced for
+            same grouping key).
+            """
+
+            state_for_current_group = None
+
+            for batch in batches:
+                batch_schema = batch.schema
+                data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
+                state_schema = pa.schema(
+                    [
+                        batch_schema[-1],
+                    ]
+                )
+
+                batch_columns = batch.columns
+                data_columns = batch_columns[0:-1]
+                state_column = batch_columns[-1]
+
+                data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
+                state_batch = pa.RecordBatch.from_arrays(
+                    [
+                        state_column,
+                    ],
+                    schema=state_schema,
+                )
+
+                state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
+                state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
+
+                for state_idx in range(0, len(state_pandas)):
+                    state_info_col = state_pandas.iloc[state_idx]
+
+                    if not state_info_col:
+                        # no more data with grouping key + state
+                        break
+
+                    data_start_offset = state_info_col["startOffset"]
+                    num_data_rows = state_info_col["numRows"]
+                    is_last_chunk = state_info_col["isLastChunk"]
+
+                    if state_for_current_group:
+                        # use the state, we already have state for same group and there should be
+                        # some data in same group being processed earlier
+                        state = state_for_current_group
+                    else:
+                        # there is no state being stored for same group, construct one
+                        state = construct_state(state_info_col)
+
+                    if is_last_chunk:
+                        # discard the state being cached for same group
+                        state_for_current_group = None
+                    elif not state_for_current_group:
+                        # there's no cached state but expected to have additional data in same group
+                        # cache the current state
+                        state_for_current_group = state
+
+                    data_batch_for_group = data_batch.slice(data_start_offset, num_data_rows)
+                    data_arrow = pa.Table.from_batches([data_batch_for_group]).itercolumns()
+
+                    data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
+
+                    # state info
+                    yield (
+                        data_pandas,
+                        state,
+                    )
+
+        _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
+
+        data_state_generator = gen_data_and_state(_batches)
+
+        # state will be same object for same grouping key
+        for _state, _data in groupby(data_state_generator, key=lambda x: x[1]):
+            yield (
+                _data,
+                _state,
+            )
+
+    def dump_stream(self, iterator, stream):
+        """
+        Read through an iterator of (iterator of pandas DataFrame, state), serialize them to Arrow
+        RecordBatches, and write batches to stream.
+        """
+
+        import pandas as pd
+        import pyarrow as pa
+
+        def construct_state_pdf(state):
+            """
+            Construct a pandas DataFrame from the state instance.
+            """
+
+            state_properties = state.json().encode("utf-8")
+            state_key_row_as_binary = state._keyAsUnsafe
+            if state.exists:
+                state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
+            else:
+                state_object = None
+            state_old_timeout_timestamp = state.oldTimeoutTimestamp
+
+            state_dict = {
+                "properties": [
+                    state_properties,
+                ],
+                "keyRowAsUnsafe": [
+                    state_key_row_as_binary,
+                ],
+                "object": [
+                    state_object,
+                ],
+                "oldTimeoutTimestamp": [
+                    state_old_timeout_timestamp,
+                ],
+            }
+
+            return pd.DataFrame.from_dict(state_dict)
+
+        def construct_record_batch(pdfs, pdf_data_cnt, pdf_schema, state_pdfs, state_data_cnt):
+            """
+            Construct a new Arrow RecordBatch based on output pandas DataFrames and states. Each
+            one matches to the single struct field for Arrow schema, hence the return value of
+            Arrow RecordBatch will have schema with two fields, in `data`, `state` order.
+            (Readers are expected to access the field via position rather than the name. We do
+            not guarantee the name of the field.)
+
+            Note that Arrow RecordBatch requires all columns to have all same number of rows,
+            hence this function inserts empty data for state/data with less elements to compensate.
+            """
+
+            max_data_cnt = max(pdf_data_cnt, state_data_cnt)
+
+            empty_row_cnt_in_data = max_data_cnt - pdf_data_cnt
+            empty_row_cnt_in_state = max_data_cnt - state_data_cnt
+
+            empty_rows_pdf = pd.DataFrame(
+                dict.fromkeys(pa.schema(pdf_schema).names),
+                index=[x for x in range(0, empty_row_cnt_in_data)],
+            )
+            empty_rows_state = pd.DataFrame(
+                columns=["properties", "keyRowAsUnsafe", "object", "oldTimeoutTimestamp"],
+                index=[x for x in range(0, empty_row_cnt_in_state)],
+            )
+
+            pdfs.append(empty_rows_pdf)
+            state_pdfs.append(empty_rows_state)
+
+            merged_pdf = pd.concat(pdfs, ignore_index=True)
+            merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
+
+            return self._create_batch(
+                [(merged_pdf, pdf_schema), (merged_state_pdf, self.result_state_pdf_arrow_type)]
+            )
+
+        def serialize_batches():
+            """
+            Read through an iterator of (iterator of pandas DataFrame, state), and serialize them
+            to Arrow RecordBatches.
+
+            This function does batching on constructing the Arrow RecordBatch; a batch will be
+            serialized to the Arrow RecordBatch when the total number of records exceeds the
+            configured threshold.
+            """
+            # a set of variables for the state of current batch which will be converted to Arrow
+            # RecordBatch.
+            pdfs = []
+            state_pdfs = []
+            pdf_data_cnt = 0
+            state_data_cnt = 0
+
+            return_schema = None
+
+            for data in iterator:
+                # data represents the result of each call of user function
+                packaged_result = data[0]
+
+                # There are two results from the call of user function:
+                # 1) iterator of pandas DataFrame (output)
+                # 2) updated state instance
+                pdf_iter = packaged_result[0][0]
+                state = packaged_result[0][1]
+
+                # This is static and won't change across batches.
+                return_schema = packaged_result[1]
+
+                for pdf in pdf_iter:
+                    # We ignore empty pandas DataFrame.
+                    if len(pdf) > 0:
+                        pdf_data_cnt += len(pdf)
+                        pdfs.append(pdf)
+
+                        # If the total number of records in current batch exceeds the configured
+                        # threshold, time to construct the Arrow RecordBatch from the batch.
+                        if pdf_data_cnt > self.arrow_max_records_per_batch:
+                            batch = construct_record_batch(
+                                pdfs, pdf_data_cnt, return_schema, state_pdfs, state_data_cnt
+                            )
+
+                            # Reset the variables to start with new batch for further data.
+                            pdfs = []
+                            state_pdfs = []
+                            pdf_data_cnt = 0
+                            state_data_cnt = 0
+
+                            yield batch
+
+                # This has to be performed 'after' evaluating all elements in iterator, so that
+                # the user function has been completed and the state is guaranteed to be updated.
+                state_pdf = construct_state_pdf(state)
+
+                state_pdfs.append(state_pdf)
+                state_data_cnt += 1
+
+            # processed all output, but current batch may not be flushed yet.
+            if pdf_data_cnt > 0 or state_data_cnt > 0:
+                batch = construct_record_batch(
+                    pdfs, pdf_data_cnt, return_schema, state_pdfs, state_data_cnt
+                )
+
+                yield batch
+
+        def init_stream_yield_batches(batches):
+            """
+            This function helps to ensure the requirement for Pandas UDFs - Pandas UDFs require a
+            START_ARROW_STREAM before the Arrow stream is sent.
+
+            START_ARROW_STREAM should be sent after creating the first record batch so in case of
+            an error, it can be sent back to the JVM before the Arrow stream starts.
+            """
+            should_write_start_length = True
+
+            for batch in batches:
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+
+                yield batch
+
+        batches_to_write = init_stream_yield_batches(serialize_batches())
+
+        return ArrowStreamSerializer.dump_stream(self, batches_to_write, stream)

@@ -35,11 +35,11 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
   private def canTranslate(b: BinaryOperator) = b match {
     case _: BinaryComparison => true
     case _: BitwiseAnd | _: BitwiseOr | _: BitwiseXor => true
-    case add: Add => add.failOnError
-    case sub: Subtract => sub.failOnError
-    case mul: Multiply => mul.failOnError
-    case div: Divide => div.failOnError
-    case r: Remainder => r.failOnError
+    case add: Add => add.evalMode == EvalMode.ANSI
+    case sub: Subtract => sub.evalMode == EvalMode.ANSI
+    case mul: Multiply => mul.evalMode == EvalMode.ANSI
+    case div: Divide => div.evalMode == EvalMode.ANSI
+    case r: Remainder => r.evalMode == EvalMode.ANSI
     case _ => false
   }
 

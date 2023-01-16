@@ -151,10 +151,25 @@ case class GroupingSets(
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
   // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
   // GROUP BY expressions, so that `SELECT c ... GROUP BY (a, b, c) GROUPING SETS (a, b)` works.
-  override def children: Seq[Expression] = flatGroupingSets ++ userGivenGroupByExprs
+  // Note that, we must put `userGivenGroupByExprs` at the beginning, to preserve the order of
+  // grouping columns specified by users. For example, GROUP BY (a, b) GROUPING SETS (b, a), the
+  // final grouping columns should be (a, b).
+  override def children: Seq[Expression] =
+    if (SQLConf.get.groupingIdWithAppendedUserGroupByEnabled) {
+      flatGroupingSets ++ userGivenGroupByExprs
+    } else {
+      userGivenGroupByExprs ++ flatGroupingSets
+    }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): GroupingSets =
-    super.legacyWithNewChildren(newChildren).asInstanceOf[GroupingSets]
+    if (SQLConf.get.groupingIdWithAppendedUserGroupByEnabled) {
+      super.legacyWithNewChildren(newChildren).asInstanceOf[GroupingSets]
+    } else {
+      copy(
+        userGivenGroupByExprs = newChildren.take(userGivenGroupByExprs.length),
+        flatGroupingSets = newChildren.drop(userGivenGroupByExprs.length))
+    }
 }
 
 object GroupingSets {

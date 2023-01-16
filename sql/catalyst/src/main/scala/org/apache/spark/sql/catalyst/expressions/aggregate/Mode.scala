@@ -59,10 +59,10 @@ case class Mode(
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
       input: InternalRow): OpenHashMap[AnyRef, Long] = {
-    val key = child.eval(input).asInstanceOf[AnyRef]
+    val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(key, 1L, _ + 1L)
+      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
     }
     buffer
   }
@@ -121,10 +121,12 @@ case class PandasMode(
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
       input: InternalRow): OpenHashMap[AnyRef, Long] = {
-    val key = child.eval(input).asInstanceOf[AnyRef]
+    val key = child.eval(input)
 
-    if (key != null || !ignoreNA) {
-      buffer.changeValue(key, 1L, _ + 1L)
+    if (key != null) {
+      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+    } else if (!ignoreNA) {
+      buffer.changeValue(null, 1L, _ + 1L)
     }
     buffer
   }
@@ -140,7 +142,7 @@ case class PandasMode(
 
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
     if (buffer.isEmpty) {
-      return new GenericArrayData(Seq.empty)
+      return new GenericArrayData(Array.empty)
     }
 
     val modes = collection.mutable.ArrayBuffer.empty[AnyRef]
@@ -156,7 +158,7 @@ case class PandasMode(
         modes.append(key)
       }
     }
-    new GenericArrayData(modes.toSeq)
+    new GenericArrayData(modes)
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PandasMode =

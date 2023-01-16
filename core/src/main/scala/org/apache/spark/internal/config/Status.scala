@@ -71,11 +71,10 @@ private[spark] object Status {
       .booleanConf
       .createWithDefault(false)
 
-  val DISK_STORE_DIR_FOR_STATUS =
-    ConfigBuilder("spark.appStatusStore.diskStoreDir")
-      .doc("Local directory where to store diagnostic information of SQL executions. " +
-        "This configuration is only for live UI.")
-      .version("3.4.0")
-      .stringConf
-      .createOptional
+  val LIVE_UI_LOCAL_STORE_DIR = ConfigBuilder("spark.ui.store.path")
+    .doc("Local directory where to cache application information for live UI. By default this is " +
+      "not set, meaning all application information will be kept in memory.")
+    .version("3.4.0")
+    .stringConf
+    .createOptional
 }

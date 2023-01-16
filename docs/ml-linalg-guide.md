@@ -21,7 +21,7 @@ license: |
 
 This guide provides necessary information to enable accelerated linear algebra processing for Spark MLlib.
 
-Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [dev.ludovic.netlib](https://github.com/luhenry/netlib) (the algorithms may also call [Breeze](https://github.com/scalanlp/breeze)). `dev.ludovic.netlib` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two popular ones.
+Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [dev.ludovic.netlib](https://github.com/luhenry/netlib) (the algorithms may also call [Breeze](https://github.com/scalanlp/breeze)). `dev.ludovic.netlib` can use optimized native linear algebra libraries (referred to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two popular ones.
 
 The official released Spark binaries don't contain these native libraries.
 
@@ -58,15 +58,17 @@ sudo yum install openblas
 
 To verify native libraries are properly loaded, start `spark-shell` and run the following code:
 ```
-scala> import dev.ludovic.netlib.NativeBLAS
+scala> import dev.ludovic.netlib.blas.NativeBLAS
 scala> NativeBLAS.getInstance()
 ```
 
-If they are correctly loaded, it should print `dev.ludovic.netlib.NativeBLAS = dev.ludovic.netlib.blas.JNIBLAS@...`. Otherwise the warnings should be printed:
+If they are correctly loaded, it should print `dev.ludovic.netlib.blas.NativeBLAS = dev.ludovic.netlib.blas.JNIBLAS@...`. Otherwise the warnings should be printed:
 ```
-WARN NativeBLAS: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+...
 java.lang.RuntimeException: Unable to load native implementation
-  at dev.ludovic.netlib.NativeBLAS.getInstance(NativeBLAS.java:44)
+  at dev.ludovic.netlib.blas.InstanceBuilder.nativeBlas(InstanceBuilder.java:59)
+  at dev.ludovic.netlib.blas.NativeBLAS.getInstance(NativeBLAS.java:31)
   ...
 ```
 

@@ -16,7 +16,7 @@
 #
 
 """
-A base class of DataFrame/Column to behave similar to pandas DataFrame/Series.
+A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
 from collections import Counter
@@ -45,7 +45,6 @@ from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
-    IntegralType,
     LongType,
     NumericType,
 )
@@ -160,13 +159,13 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative minimum.
 
         .. note:: the current implementation of cummin uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moveing all data into a
+            single partition in a single machine and could cause serious
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
-        skipna : boolean, default True
+        skipna: boolean, default True
             Exclude NA/null values. If an entire row/column is NA, the result will be NA.
 
         Returns
@@ -175,15 +174,15 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        DataFrame.min : Return the minimum over DataFrame axis.
-        DataFrame.cummax : Return cumulative maximum over DataFrame axis.
-        DataFrame.cummin : Return cumulative minimum over DataFrame axis.
-        DataFrame.cumsum : Return cumulative sum over DataFrame axis.
-        Series.min : Return the minimum over Series axis.
-        Series.cummax : Return cumulative maximum over Series axis.
-        Series.cummin : Return cumulative minimum over Series axis.
-        Series.cumsum : Return cumulative sum over Series axis.
-        Series.cumprod : Return cumulative product over Series axis.
+        DataFrame.min: Return the minimum over DataFrame axis.
+        DataFrame.cummax: Return cumulative maximum over DataFrame axis.
+        DataFrame.cummin: Return cumulative minimum over DataFrame axis.
+        DataFrame.cumsum: Return cumulative sum over DataFrame axis.
+        Series.min: Return the minimum over Series axis.
+        Series.cummax: Return cumulative maximum over Series axis.
+        Series.cummin: Return cumulative minimum over Series axis.
+        Series.cumsum: Return cumulative sum over Series axis.
+        Series.cumprod: Return cumulative product over Series axis.
 
         Examples
         --------
@@ -220,13 +219,13 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative maximum.
 
         .. note:: the current implementation of cummax uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moveing all data into a
+            single partition in a single machine and could cause serious
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
-        skipna : boolean, default True
+        skipna: boolean, default True
             Exclude NA/null values. If an entire row/column is NA, the result will be NA.
 
         Returns
@@ -235,16 +234,16 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        DataFrame.max : Return the maximum over DataFrame axis.
-        DataFrame.cummax : Return cumulative maximum over DataFrame axis.
-        DataFrame.cummin : Return cumulative minimum over DataFrame axis.
-        DataFrame.cumsum : Return cumulative sum over DataFrame axis.
-        DataFrame.cumprod : Return cumulative product over DataFrame axis.
-        Series.max : Return the maximum over Series axis.
-        Series.cummax : Return cumulative maximum over Series axis.
-        Series.cummin : Return cumulative minimum over Series axis.
-        Series.cumsum : Return cumulative sum over Series axis.
-        Series.cumprod : Return cumulative product over Series axis.
+        DataFrame.max: Return the maximum over DataFrame axis.
+        DataFrame.cummax: Return cumulative maximum over DataFrame axis.
+        DataFrame.cummin: Return cumulative minimum over DataFrame axis.
+        DataFrame.cumsum: Return cumulative sum over DataFrame axis.
+        DataFrame.cumprod: Return cumulative product over DataFrame axis.
+        Series.max: Return the maximum over Series axis.
+        Series.cummax: Return cumulative maximum over Series axis.
+        Series.cummin: Return cumulative minimum over Series axis.
+        Series.cumsum: Return cumulative sum over Series axis.
+        Series.cumprod: Return cumulative product over Series axis.
 
         Examples
         --------
@@ -281,13 +280,13 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative sum.
 
         .. note:: the current implementation of cumsum uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moveing all data into a
+            single partition in a single machine and could cause serious
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
-        skipna : boolean, default True
+        skipna: boolean, default True
             Exclude NA/null values. If an entire row/column is NA, the result will be NA.
 
         Returns
@@ -296,16 +295,16 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        DataFrame.sum : Return the sum over DataFrame axis.
-        DataFrame.cummax : Return cumulative maximum over DataFrame axis.
-        DataFrame.cummin : Return cumulative minimum over DataFrame axis.
-        DataFrame.cumsum : Return cumulative sum over DataFrame axis.
-        DataFrame.cumprod : Return cumulative product over DataFrame axis.
-        Series.sum : Return the sum over Series axis.
-        Series.cummax : Return cumulative maximum over Series axis.
-        Series.cummin : Return cumulative minimum over Series axis.
-        Series.cumsum : Return cumulative sum over Series axis.
-        Series.cumprod : Return cumulative product over Series axis.
+        DataFrame.sum: Return the sum over DataFrame axis.
+        DataFrame.cummax: Return cumulative maximum over DataFrame axis.
+        DataFrame.cummin: Return cumulative minimum over DataFrame axis.
+        DataFrame.cumsum: Return cumulative sum over DataFrame axis.
+        DataFrame.cumprod: Return cumulative product over DataFrame axis.
+        Series.sum: Return the sum over Series axis.
+        Series.cummax: Return cumulative maximum over Series axis.
+        Series.cummin: Return cumulative minimum over Series axis.
+        Series.cumsum: Return cumulative sum over Series axis.
+        Series.cumprod: Return cumulative product over Series axis.
 
         Examples
         --------
@@ -344,16 +343,16 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative product.
 
         .. note:: the current implementation of cumprod uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moveing all data into a
+            single partition in a single machine and could cause serious
+            performance degradation. Avoid this method with very large datasets.
 
         .. note:: unlike pandas', pandas-on-Spark's emulates cumulative product by
             ``exp(sum(log(...)))`` trick. Therefore, it only works for positive numbers.
 
         Parameters
         ----------
-        skipna : boolean, default True
+        skipna: boolean, default True
             Exclude NA/null values. If an entire row/column is NA, the result will be NA.
 
         Returns
@@ -362,18 +361,18 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        DataFrame.cummax : Return cumulative maximum over DataFrame axis.
-        DataFrame.cummin : Return cumulative minimum over DataFrame axis.
-        DataFrame.cumsum : Return cumulative sum over DataFrame axis.
-        DataFrame.cumprod : Return cumulative product over DataFrame axis.
-        Series.cummax : Return cumulative maximum over Series axis.
-        Series.cummin : Return cumulative minimum over Series axis.
-        Series.cumsum : Return cumulative sum over Series axis.
-        Series.cumprod : Return cumulative product over Series axis.
+        DataFrame.cummax: Return cumulative maximum over DataFrame axis.
+        DataFrame.cummin: Return cumulative minimum over DataFrame axis.
+        DataFrame.cumsum: Return cumulative sum over DataFrame axis.
+        DataFrame.cumprod: Return cumulative product over DataFrame axis.
+        Series.cummax: Return cumulative maximum over Series axis.
+        Series.cummin: Return cumulative minimum over Series axis.
+        Series.cumsum: Return cumulative sum over Series axis.
+        Series.cumprod: Return cumulative product over Series axis.
 
         Raises
         ------
-        Exception : If the values is equal to or lower than 0.
+        Exception: If the values is equal to or lower than 0.
 
         Examples
         --------
@@ -413,12 +412,12 @@ class Frame(object, metaclass=ABCMeta):
 
         Returns
         -------
-        dtype : pd.Series
+        dtype: pd.Series
             Series with the count of columns with each dtype.
 
         See Also
         --------
-        dtypes : Return the dtypes in this object.
+        dtypes: Return the dtypes in this object.
 
         Examples
         --------
@@ -457,20 +456,20 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        func : function
+        func: function
             function to apply to the DataFrame.
             ``args``, and ``kwargs`` are passed into ``func``.
             Alternatively a ``(callable, data_keyword)`` tuple where
             ``data_keyword`` is a string indicating the keyword of
             ``callable`` that expects the DataFrames.
-        args : iterable, optional
+        args: iterable, optional
             positional arguments passed into ``func``.
-        kwargs : mapping, optional
+        kwargs: mapping, optional
             a dictionary of keyword arguments passed into ``func``.
 
         Returns
         -------
-        object : the return type of ``func``.
+        object: the return type of ``func``.
 
         Notes
         -----
@@ -508,7 +507,7 @@ class Frame(object, metaclass=ABCMeta):
         1        A     2     5     3    15
 
 
-        If you have a function that takes the data as (say) the second
+        If you have a function that takes the data as the second
         argument, pass a tuple indicating which keyword expects the
         data. For example, suppose ``f`` takes its data as ``df``:
 
@@ -526,7 +525,7 @@ class Frame(object, metaclass=ABCMeta):
         0        A     1     4     2     8
         1        A     2     5     3    15
 
-        You can use lambda as wel
+        You can use lambda as well
 
         >>> ps.Series([1, 2, 3]).pipe(lambda x: (x + 1).rename("value"))
         0    2
@@ -672,32 +671,33 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
-            This behaviour was inherited from Apache Spark. The number of files can
-            be controlled by `num_files`.
+            This behavior was inherited from Apache Spark. The number of partitions can
+            be controlled by `num_files`. This is deprecated.
+            Use `DataFrame.spark.repartition` instead.
 
         Parameters
         ----------
-        path : str, default None
+        path: str, default None
             File path. If None is provided the result is returned as a string.
-        sep : str, default ','
+        sep: str, default ','
             String of length 1. Field delimiter for the output file.
-        na_rep : str, default ''
+        na_rep: str, default ''
             Missing data representation.
-        columns : sequence, optional
+        columns: sequence, optional
             Columns to write.
-        header : bool or list of str, default True
+        header: bool or list of str, default True
             Write out the column names. If a list of strings is given it is
             assumed to be aliases for the column names.
-        quotechar : str, default '\"'
+        quotechar: str, default '\"'
             String of length 1. Character used to quote fields.
-        date_format : str, default None
+        date_format: str, default None
             Format string for datetime objects.
-        escapechar : str, default None
+        escapechar: str, default None
             String of length 1. Character used to escape `sep` and `quotechar`
             when appropriate.
-        num_files : the number of files to be written in `path` directory when
-            this is a path.
-        mode : str
+        num_files: the number of partitions to be written in `path` directory when
+            this is a path. This is deprecated. Use `DataFrame.spark.repartition` instead.
+        mode: str
             Python write mode, default 'w'.
 
             .. note:: mode can accept the strings for Spark writing mode.
@@ -708,13 +708,13 @@ class Frame(object, metaclass=ABCMeta):
                 - 'ignore': Silently ignore this operation if data already exists.
                 - 'error' or 'errorifexists': Throw an exception if data already exists.
 
-        partition_cols : str or list of str, optional, default None
+        partition_cols: str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
             in pandas-on-Spark is ignored. By default, the index is always lost.
         options: keyword arguments for additional options specific to PySpark.
-            This kwargs are specific to PySpark's CSV options to pass. Check
+            These kwargs are specific to PySpark's CSV options to pass. Check
             the options in PySpark's API documentation for spark.write.csv(...).
             It has higher priority and overwrites all other options.
             This parameter only works when `path` is specified.
@@ -901,11 +901,12 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
-            This behaviour was inherited from Apache Spark. The number of files can
-            be controlled by `num_files`.
+            This behavior was inherited from Apache Spark. The number of partitions can
+            be controlled by `num_files`. This is deprecated.
+            Use `DataFrame.spark.repartition` instead.
 
-        .. note:: output JSON format is different from pandas'. It always use `orient='records'`
-            for its output. This behaviour might have to change in the near future.
+        .. note:: output JSON format is different from pandas'. It always uses `orient='records'`
+            for its output. This behavior might have to change soon.
 
         .. note:: Set `ignoreNullFields` keyword argument to `True` to omit `None` or `NaN` values
             when writing JSON objects. It works only when `path` is provided.
@@ -915,22 +916,22 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        path : string, optional
+        path: string, optional
             File path. If not specified, the result is returned as
             a string.
-        lines : bool, default True
-            If ‘orient’ is ‘records’ write out line delimited json format.
+        lines: bool, default True
+            If ‘orient’ is ‘records’ write out line delimited JSON format.
             Will throw ValueError if incorrect ‘orient’ since others are not
             list like. It should be always True for now.
-        orient : str, default 'records'
+        orient: str, default 'records'
              It should be always 'records' for now.
-        compression : {'gzip', 'bz2', 'xz', None}
+        compression: {'gzip', 'bz2', 'xz', None}
             A string representing the compression to use in the output file,
             only used when the first argument is a filename. By default, the
             compression is inferred from the filename.
-        num_files : the number of files to be written in `path` directory when
-            this is a path.
-        mode : str
+        num_files: the number of partitions to be written in `path` directory when
+            this is a path. This is deprecated. Use `DataFrame.spark.repartition` instead.
+        mode: str
             Python write mode, default 'w'.
 
             .. note:: mode can accept the strings for Spark writing mode.
@@ -941,7 +942,7 @@ class Frame(object, metaclass=ABCMeta):
                 - 'ignore': Silently ignore this operation if data already exists.
                 - 'error' or 'errorifexists': Throw an exception if data already exists.
 
-        partition_cols : str or list of str, optional, default None
+        partition_cols: str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
@@ -1065,45 +1066,45 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        excel_writer : str or ExcelWriter object
+        excel_writer: str or ExcelWriter object
             File path or existing ExcelWriter.
-        sheet_name : str, default 'Sheet1'
+        sheet_name: str, default 'Sheet1'
             Name of sheet which will contain DataFrame.
-        na_rep : str, default ''
+        na_rep: str, default ''
             Missing data representation.
-        float_format : str, optional
+        float_format: str, optional
             Format string for floating point numbers. For example
             ``float_format="%%.2f"`` will format 0.1234 to 0.12.
-        columns : sequence or list of str, optional
+        columns: sequence or list of str, optional
             Columns to write.
-        header : bool or list of str, default True
+        header: bool or list of str, default True
             Write out the column names. If a list of string is given it is
             assumed to be aliases for the column names.
-        index : bool, default True
+        index: bool, default True
             Write row names (index).
-        index_label : str or sequence, optional
+        index_label: str or sequence, optional
             Column label for index column(s) if desired. If not specified, and
             `header` and `index` are True, then the index names are used. A
             sequence should be given if the DataFrame uses MultiIndex.
-        startrow : int, default 0
+        startrow: int, default 0
             Upper left cell row to dump data frame.
-        startcol : int, default 0
+        startcol: int, default 0
             Upper left cell column to dump data frame.
-        engine : str, optional
+        engine: str, optional
             Write engine to use, 'openpyxl' or 'xlsxwriter'. You can also set this
             via the options ``io.excel.xlsx.writer``, ``io.excel.xls.writer``, and
             ``io.excel.xlsm.writer``.
-        merge_cells : bool, default True
+        merge_cells: bool, default True
             Write MultiIndex and Hierarchical Rows as merged cells.
-        encoding : str, optional
+        encoding: str, optional
             Encoding of the resulting excel file. Only necessary for xlwt,
             other writers support unicode natively.
-        inf_rep : str, default 'inf'
+        inf_rep: str, default 'inf'
             Representation for infinity (there is no native representation for
             infinity in Excel).
-        verbose : bool, default True
+        verbose: bool, default True
             Display more information in the error logs.
-        freeze_panes : tuple of int (length 2), optional
+        freeze_panes: tuple of int (length 2), optional
             Specifies the one-based bottommost row and rightmost column that
             is to be frozen.
 
@@ -1114,11 +1115,11 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        read_excel : Read Excel file.
+        read_excel: Read Excel file.
 
         Examples
         --------
-        Create, write to and save a workbook:
+        Create, write to, and save a workbook:
 
         >>> df1 = ps.DataFrame([['a', 'b'], ['c', 'd']],
         ...                    index=['row 1', 'row 2'],
@@ -1172,20 +1173,20 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        numeric_only : bool, default None
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
 
         Returns
         -------
-        mean : scalar for a Series, and a Series for a DataFrame.
+        mean: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1250,23 +1251,23 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
-               Added *skipna* to exclude .
-        numeric_only : bool, default None
+               Added *skipna* to exclude.
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
-        min_count : int, default 0
+        min_count: int, default 0
             The required number of valid values to perform the operation. If fewer than
              ``min_count`` non-NA values are present the result will be NA.
 
         Returns
         -------
-        sum : scalar for a Series, and a Series for a DataFrame.
+        sum: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1329,7 +1330,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.coalesce(F.sum(spark_column), SF.lit(0))
+            return F.coalesce(F.sum(spark_column), F.lit(0))
 
         return self._reduce_for_stat_function(
             sum,
@@ -1355,17 +1356,17 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        numeric_only : bool, default None
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
-        min_count : int, default 0
+        min_count: int, default 0
             The required number of valid values to perform the operation. If fewer than
             ``min_count`` non-NA values are present the result will be NA.
 
@@ -1421,32 +1422,16 @@ class Frame(object, metaclass=ABCMeta):
         def prod(psser: "Series") -> Column:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-
-            if not skipna:
-                spark_column = F.when(spark_column.isNull(), np.nan).otherwise(spark_column)
-
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, SF.lit(True))).cast(LongType())
-            elif isinstance(spark_type, NumericType):
-                num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
-                sign = F.when(
-                    F.sum(F.when(spark_column < 0, 1).otherwise(0)) % 2 == 0, 1
-                ).otherwise(-1)
-
-                scol = F.when(num_zeros > 0, 0).otherwise(
-                    sign * F.exp(F.sum(F.log(F.abs(spark_column))))
-                )
-
-                if isinstance(spark_type, IntegralType):
-                    scol = F.round(scol).cast(LongType())
-            else:
+                spark_column = spark_column.cast(LongType())
+            elif not isinstance(spark_type, NumericType):
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
 
-            return F.coalesce(scol, SF.lit(1))
+            return SF.product(spark_column, skipna)
 
         return self._reduce_for_stat_function(
             prod,
@@ -1467,20 +1452,20 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        numeric_only : bool, default None
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
 
         Returns
         -------
-        skew : scalar for a Series, and a Series for a DataFrame.
+        skew: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1536,20 +1521,20 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        numeric_only : bool, default None
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
 
         Returns
         -------
-        kurt : scalar for a Series, and a Series for a DataFrame.
+        kurt: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1606,21 +1591,21 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        numeric_only : bool, default None
+        numeric_only: bool, default None
             If True, include only float, int, boolean columns. This parameter is mainly for
             pandas compatibility. False is supported; however, the columns should
             be all numeric or all non-numeric.
 
         Returns
         -------
-        min : scalar for a Series, and a Series for a DataFrame.
+        min: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1670,21 +1655,21 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        numeric_only : bool, default None
+        numeric_only: bool, default None
             If True, include only float, int, boolean columns. This parameter is mainly for
             pandas compatibility. False is supported; however, the columns should
             be all numeric or all non-numeric.
 
         Returns
         -------
-        max : scalar for a Series, and a Series for a DataFrame.
+        max: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1736,16 +1721,16 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {0 or ‘index’, 1 or ‘columns’}, default 0
+        axis: {0 or ‘index’, 1 or ‘columns’}, default 0
             If 0 or ‘index’ counts are generated for each column. If 1 or ‘columns’ counts are
             generated for each row.
-        numeric_only : bool, default False
+        numeric_only: bool, default False
             If True, include only float, int, boolean columns. This parameter is mainly for
             pandas compatibility.
 
         Returns
         -------
-        max : scalar for a Series, and a Series for a DataFrame.
+        max: scalar for a Series, and a Series for a DataFrame.
 
         See Also
         --------
@@ -1810,25 +1795,30 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return sample standard deviation.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        ddof : int, default 1
+        ddof: int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
-        numeric_only : bool, default None
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
 
         Returns
         -------
-        std : scalar for a Series, and a Series for a DataFrame.
+        std: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1841,6 +1831,11 @@ class Frame(object, metaclass=ABCMeta):
         >>> df.std()
         a    1.0
         b    0.1
+        dtype: float64
+
+        >>> df.std(ddof=2)
+        a    1.414214
+        b    0.141421
         dtype: float64
 
         >>> df.std(axis=1)
@@ -1862,8 +1857,12 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df['a'].std(ddof=0)
         0.816496580927726
+
+        >>> df['a'].std(ddof=-1)
+        0.707106...
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -1881,10 +1880,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         return self._reduce_for_stat_function(
             std, name="std", axis=axis, numeric_only=numeric_only, ddof=ddof, skipna=skipna
@@ -1896,20 +1892,25 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased variance.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        ddof : int, default 1
+        ddof: int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
-        numeric_only : bool, default None
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
 
         Returns
         -------
-        var : scalar for a Series, and a Series for a DataFrame.
+        var: scalar for a Series, and a Series for a DataFrame.
 
         Examples
         --------
@@ -1922,6 +1923,11 @@ class Frame(object, metaclass=ABCMeta):
         >>> df.var()
         a    1.00
         b    0.01
+        dtype: float64
+
+        >>> df.var(ddof=2)
+        a    2.00
+        b    0.02
         dtype: float64
 
         >>> df.var(axis=1)
@@ -1943,8 +1949,12 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df['a'].var(ddof=0)
         0.6666666666666666
+
+        >>> df['a'].var(ddof=-2)
+        0.4
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -1962,10 +1972,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.var_pop(spark_column)
-            else:
-                return F.var_samp(spark_column)
+            return SF.var(spark_column, ddof)
 
         return self._reduce_for_stat_function(
             var, name="var", axis=axis, numeric_only=numeric_only, ddof=ddof
@@ -1987,23 +1994,23 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        numeric_only : bool, default None
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
-        accuracy : int, optional
+        accuracy: int, optional
             Default accuracy of approximation. Larger value means better accuracy.
             The relative error can be deduced by 1.0 / accuracy.
 
         Returns
         -------
-        median : scalar or Series
+        median: scalar or Series
 
         Examples
         --------
@@ -2105,19 +2112,24 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased standard error of the mean over requested axis.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
-        axis : {index (0), columns (1)}
+        axis: {index (0), columns (1)}
             Axis for the function to be applied on.
-        skipna : bool, default True
+        skipna: bool, default True
             Exclude NA/null values when computing the result.
 
             .. versionchanged:: 3.4.0
                Supported including NA/null values.
-        ddof : int, default 1
+        ddof: int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
-        numeric_only : bool, default None
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
+        numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
 
@@ -2144,6 +2156,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.471405
         dtype: float64
 
+        >>> psdf.sem(ddof=2)
+        a    0.816497
+        b    0.816497
+        dtype: float64
+
         >>> psdf.sem(axis=1)
         0    1.5
         1    1.5
@@ -2165,7 +2182,8 @@ class Frame(object, metaclass=ABCMeta):
         >>> psser.sem(ddof=0)
         0.47140452079103173
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -2183,13 +2201,10 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         def sem(psser: "Series") -> Column:
-            return std(psser) / pow(Frame._count_expr(psser), 0.5)
+            return std(psser) / F.sqrt(Frame._count_expr(psser))
 
         return self._reduce_for_stat_function(
             sem,
@@ -2234,7 +2249,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Returns
         -------
-        abs : Series/DataFrame containing the absolute value of each element.
+        abs: Series/DataFrame containing the absolute value of each element.
 
         Examples
         --------
@@ -2301,18 +2316,18 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        by : Series, label, or list of labels
+        by: Series, label, or list of labels
             Used to determine the groups for the groupby.
             If Series is passed, the Series or dict VALUES
             will be used to determine the groups. A label or list of
             labels may be passed to group by the columns in ``self``.
-        axis : int, default 0 or 'index'
-            Can only be set to 0 at the moment.
-        as_index : bool, default True
+        axis: int, default 0 or 'index'
+            Can only be set to 0 now.
+        as_index: bool, default True
             For aggregated output, return object with group labels as the
             index. Only relevant for DataFrame input. as_index=False is
             effectively "SQL-style" grouped output.
-        dropna : bool, default True
+        dropna: bool, default True
             If True, and if group keys contain NA values,
             NA values together with row/column will be dropped.
             If False, NA values will also be treated as the key in groups.
@@ -2462,8 +2477,6 @@ class Frame(object, metaclass=ABCMeta):
             df = self
         elif isinstance(self, ps.Series):
             df = self.to_dataframe()
-        else:
-            raise TypeError("bool() expects DataFrame or Series; however, " "got [%s]" % (self,))
         return df.head(2)._to_internal_pandas().bool()
 
     def first_valid_index(self) -> Optional[Union[Scalar, Tuple[Scalar, ...]]]:
@@ -2683,16 +2696,16 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
             Unlike pandas, NA is also counted as the period. This might be changed
-            in the near future.
+            soon.
 
         Parameters
         ----------
-        window : int, or offset
+        window: int, or offset
             Size of the moving window.
             This is the number of observations used for calculating the statistic.
             Each window will be a fixed size.
 
-        min_periods : int, default None
+        min_periods: int, default None
             Minimum number of observations in window required to have a value
             (otherwise result is NA).
             For a window that is specified by an offset, min_periods will default to 1.
@@ -2700,7 +2713,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Returns
         -------
-        a Window sub-classed for the particular operation
+        a Window sub-classed for the operation
         """
         from pyspark.pandas.window import Rolling
 
@@ -2714,17 +2727,17 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
             Unlike pandas, NA is also counted as the period. This might be changed
-            in the near future.
+            soon.
 
         Parameters
         ----------
-        min_periods : int, default 1
+        min_periods: int, default 1
             Minimum number of observations in window required to have a value
             (otherwise result is NA).
 
         Returns
         -------
-        a Window sub-classed for the particular operation
+        a Window sub-classed for the operation
         """
         from pyspark.pandas.window import Expanding
 
@@ -2745,33 +2758,33 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
             Unlike pandas, NA is also counted as the period. This might be changed
-            in the near future.
+            soon.
 
         .. versionadded:: 3.4.0
 
         Parameters
         ----------
-        com : float, optional
+        com: float, optional
             Specify decay in terms of center of mass.
             alpha = 1 / (1 + com), for com >= 0.
 
-        span : float, optional
+        span: float, optional
             Specify decay in terms of span.
             alpha = 2 / (span + 1), for span >= 1.
 
-        halflife : float, optional
+        halflife: float, optional
             Specify decay in terms of half-life.
             alpha = 1 - exp(-ln(2) / halflife), for halflife > 0.
 
-        alpha : float, optional
+        alpha: float, optional
             Specify smoothing factor alpha directly.
             0 < alpha <= 1.
 
-        min_periods : int, default None
+        min_periods: int, default None
             Minimum number of observations in window required to have a value
             (otherwise result is NA).
 
-        ignore_na : bool, default False
+        ignore_na: bool, default False
             Ignore missing values when calculating weights.
 
             - When ``ignore_na=False`` (default), weights are based on absolute positions.
@@ -2788,7 +2801,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Returns
         -------
-        a Window sub-classed for the particular operation
+        a Window sub-classed for the operation
         """
         from pyspark.pandas.window import ExponentialMoving
 
@@ -2809,11 +2822,11 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        key : object
+        key: object
 
         Returns
         -------
-        value : same type as items contained in object
+        value: same type as items contained in object
 
         Examples
         --------
@@ -2868,7 +2881,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis : {0 or 'index', 1 or 'columns', None}, default None
+        axis: {0 or 'index', 1 or 'columns', None}, default None
             A specific axis to squeeze. By default, all length-1 axes are
             squeezed.
 
@@ -2879,9 +2892,9 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        Series.iloc : Integer-location based indexing for selecting scalars.
-        DataFrame.iloc : Integer-location based indexing for selecting Series.
-        Series.to_frame : Inverse of DataFrame.squeeze for a
+        Series.iloc: Integer-location based indexing for selecting scalars.
+        DataFrame.iloc: Integer-location based indexing for selecting Series.
+        Series.to_frame: Inverse of DataFrame.squeeze for a
             single-column DataFrame.
 
         Examples
@@ -2930,7 +2943,7 @@ class Frame(object, metaclass=ABCMeta):
         0  1
         1  3
 
-        So the columns can be squeezed down, resulting in a Series:
+        The columns can be squeezed down, resulting in a Series:
 
         >>> df_a.squeeze('columns')
         0    1
@@ -3003,13 +3016,13 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        before : date, str, int
+        before: date, str, int
             Truncate all rows before this index value.
-        after : date, str, int
+        after: date, str, int
             Truncate all rows after this index value.
-        axis : {0 or 'index', 1 or 'columns'}, optional
+        axis: {0 or 'index', 1 or 'columns'}, optional
             Axis to truncate. Truncates the index (rows) by default.
-        copy : bool, default is True,
+        copy: bool, default is True,
             Return a copy of the truncated section.
 
         Returns
@@ -3019,8 +3032,8 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        DataFrame.loc : Select a subset of a DataFrame by label.
-        DataFrame.iloc : Select a subset of a DataFrame by position.
+        DataFrame.loc: Select a subset of a DataFrame by label.
+        DataFrame.iloc: Select a subset of a DataFrame by position.
 
         Examples
         --------
@@ -3145,11 +3158,11 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        buf : writable buffer, defaults to sys.stdout
+        buf: writable buffer, defaults to sys.stdout
             Where to send the output. By default, the output is printed to
             sys.stdout. Pass a writable buffer if you need to further process
             the output.
-        mode : str, optional
+        mode: str, optional
             Mode in which file is opened.
         **kwargs
             These parameters will be passed to `tabulate`.
@@ -3217,17 +3230,17 @@ class Frame(object, metaclass=ABCMeta):
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`bfill```.
 
         .. note:: the current implementation of 'bfill' uses Spark's Window
-            without specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            without specifying partition specification. This leads to moveing all data into a
+            single partition in a single machine and could cause serious
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
-        axis : {0 or `index`}
+        axis: {0 or `index`}
             1 and `columns` are not supported.
-        inplace : boolean, default False
+        inplace: boolean, default False
             Fill in place (do not create a new object)
-        limit : int, default None
+        limit: int, default None
             If method is specified, this is the maximum number of consecutive NaN values to
             forward/backward fill. In other words, if there is a gap with more than this number of
             consecutive NaNs, it will only be partially filled. If method is not specified,
@@ -3296,17 +3309,17 @@ class Frame(object, metaclass=ABCMeta):
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`ffill```.
 
         .. note:: the current implementation of 'ffill' uses Spark's Window
-            without specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            without specifying partition specification. This leads to moveing all data into a
+            single a partition in a single machine and could cause serious
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
-        axis : {0 or `index`}
+        axis: {0 or `index`}
             1 and `columns` are not supported.
-        inplace : boolean, default False
+        inplace: boolean, default False
             Fill in place (do not create a new object)
-        limit : int, default None
+        limit: int, default None
             If method is specified, this is the maximum number of consecutive NaN values to
             forward/backward fill. In other words, if there is a gap with more than this number of
             consecutive NaNs, it will only be partially filled. If method is not specified,
@@ -3376,29 +3389,29 @@ class Frame(object, metaclass=ABCMeta):
         Fill NaN values using an interpolation method.
 
         .. note:: the current implementation of interpolate uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moveing all data into a
+            single partition in a single machine and could cause serious
+            performance degradation. Avoid this method with very large datasets.
 
         .. versionadded:: 3.4.0
 
         Parameters
         ----------
-        method : str, default 'linear'
+        method: str, default 'linear'
             Interpolation technique to use. One of:
 
             * 'linear': Ignore the index and treat the values as equally
               spaced.
 
-        limit : int, optional
+        limit: int, optional
             Maximum number of consecutive NaNs to fill. Must be greater than
             0.
 
-        limit_direction : str, default None
+        limit_direction: str, default None
             Consecutive NaNs will be filled in this direction.
             One of {{'forward', 'backward', 'both'}}.
 
-        limit_area : str, default None
+        limit_area: str, default None
             If limit is specified, consecutive NaNs will be filled with this restriction. One of:
 
             * None: No fill restriction.
@@ -3413,7 +3426,7 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        fillna : Fill missing values using different methods.
+        fillna: Fill missing values using different methods.
 
         Examples
         --------

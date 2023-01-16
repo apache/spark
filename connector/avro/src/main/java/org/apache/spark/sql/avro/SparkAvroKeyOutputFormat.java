@@ -25,6 +25,7 @@ import org.apache.avro.Schema;
 import org.apache.avro.file.CodecFactory;
 import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.mapred.AvroKey;
 import org.apache.avro.mapreduce.AvroKeyOutputFormat;
@@ -53,7 +54,7 @@ class SparkAvroKeyOutputFormat extends AvroKeyOutputFormat<GenericRecord> {
         CodecFactory compressionCodec,
         OutputStream outputStream,
         int syncInterval) throws IOException {
-      return new SparkAvroKeyRecordWriter(
+      return new SparkAvroKeyRecordWriter<>(
         writerSchema, dataModel, compressionCodec, outputStream, syncInterval, metadata);
     }
   }
@@ -72,7 +73,7 @@ class SparkAvroKeyRecordWriter<T> extends RecordWriter<AvroKey<T>, NullWritable>
       OutputStream outputStream,
       int syncInterval,
       Map<String, String> metadata) throws IOException {
-    this.mAvroFileWriter = new DataFileWriter(dataModel.createDatumWriter(writerSchema));
+    this.mAvroFileWriter = new DataFileWriter<>(new GenericDatumWriter<>(writerSchema, dataModel));
     for (Map.Entry<String, String> entry : metadata.entrySet()) {
       this.mAvroFileWriter.setMeta(entry.getKey(), entry.getValue());
     }

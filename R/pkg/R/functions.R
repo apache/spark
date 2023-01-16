@@ -453,7 +453,7 @@ setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lit",
-                              if (class(x) == "Column") { x@jc } else { x })
+                              if (inherits(x, "Column")) { x@jc } else { x })
             column(jc)
           })
 
@@ -974,7 +974,7 @@ setMethod("hash",
 #' @details
 #' \code{xxhash64}: Calculates the hash code of given columns using the 64-bit
 #' variant of the xxHash algorithm, and returns the result as a long
-#' column.
+#' column. The hash computation uses an initial seed of 42.
 #'
 #' @rdname column_misc_functions
 #' @aliases xxhash64 xxhash64,Column-method
@@ -3595,7 +3595,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
-              value <- if (class(value) == "Column") { value@jc } else { value }
+              value <- if (inherits(value, "Column")) { value@jc } else { value }
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
@@ -3614,8 +3614,8 @@ setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
               test <- test@jc
-              yes <- if (class(yes) == "Column") { yes@jc } else { yes }
-              no <- if (class(no) == "Column") { no@jc } else { no }
+              yes <- if (inherits(yes, "Column")) { yes@jc } else { yes }
+              no <- if (inherits(no, "Column")) { no@jc } else { no }
               jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
                                             "when",
                                             test, yes),

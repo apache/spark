@@ -35,7 +35,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
-from pyspark.sql.types import DataType, StructField, StructType, IntegerType, StringType
+from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
@@ -77,7 +77,7 @@ def _to_seq(
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
-    Convert a list of Column (or names) into a JVM Seq of Column.
+    Convert a list of Columns (or names) into a JVM Seq of Column.
 
     An optional `converter` could be used to convert items in `cols`
     into JVM Column objects.
@@ -94,7 +94,7 @@ def _to_list(
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
-    Convert a list of Column (or names) into a JVM (Scala) List of Column.
+    Convert a list of Columns (or names) into a JVM (Scala) List of Columns.
 
     An optional `converter` could be used to convert items in `cols`
     into JVM Column objects.
@@ -182,23 +182,38 @@ def _reverse_op(
     return _
 
 
+# TODO(SPARK-41757): Compatibility of string representation for Column
+
+
 class Column:
 
     """
     A column in a DataFrame.
 
-    :class:`Column` instances can be created by::
-
-        # 1. Select a column out of a DataFrame
-
-        df.colName
-        df["colName"]
-
-        # 2. Create from an expression
-        df.colName + 1
-        1 / df.colName
-
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
+    Examples
+    --------
+    Column instances can be created by
+
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+
+    Select a column out of a DataFrame
+    >>> df.name   # doctest: +SKIP
+    Column<'name'>
+    >>> df["name"]  # doctest: +SKIP
+    Column<'name'>
+
+    Create from an expression
+
+    >>> df.age + 1  # doctest: +SKIP
+    Column<'(age + 1)'>
+    >>> 1 / df.age  # doctest: +SKIP
+    Column<'(1 / age)'>
     """
 
     def __init__(self, jc: JavaObject) -> None:
@@ -267,10 +282,14 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
+    # TODO(SPARK-41812): DataFrame.join: ambiguous column
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -299,9 +318,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
@@ -348,6 +367,9 @@ class Column:
     _bitwiseOR_doc = """
     Compute bitwise OR of this expression with another expression.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -364,6 +386,9 @@ class Column:
     _bitwiseAND_doc = """
     Compute bitwise AND of this expression with another expression.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -379,6 +404,9 @@ class Column:
     """
     _bitwiseXOR_doc = """
     Compute bitwise XOR of this expression with another expression.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -405,6 +433,23 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        key
+            a literal value, or a :class:`Column` expression.
+            The result will only be true at a location if the item matches in the column.
+
+             .. deprecated:: 3.0.0
+                 :class:`Column` as a parameter is deprecated.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item(s) got at position out of a list or by key out of a dict.
+
         Examples
         --------
         >>> df = spark.createDataFrame([([1, 2], {"key": "value"})], ["l", "d"])
@@ -429,6 +474,22 @@ class Column:
         An expression that gets a field by name in a :class:`StructType`.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        name
+            a literal value, or a :class:`Column` expression.
+            The result will only be true at a location if the field matches in the Column.
+
+             .. deprecated:: 3.0.0
+                 :class:`Column` as a parameter is deprecated.
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column got by name.
 
         Examples
         --------
@@ -462,6 +523,23 @@ class Column:
 
         .. versionadded:: 3.1.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        fieldName : str
+            a literal value.
+            The result will only be true at a location if any field matches in the Column.
+        col : :class:`Column`
+            A :class:`Column` expression for the column with `fieldName`.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column
+            which field was added/replaced by fieldName.
+
         Examples
         --------
         >>> from pyspark.sql import Row
@@ -491,9 +569,23 @@ class Column:
     def dropFields(self, *fieldNames: str) -> "Column":
         """
         An expression that drops fields in :class:`StructType` by name.
-        This is a no-op if schema doesn't contain field name(s).
+        This is a no-op if the schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        fieldNames : str
+            Desired field names (collects all positional arguments passed)
+            The result will drop at a location if any field matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column with field dropped by fieldName.
 
         Examples
         --------
@@ -563,6 +655,9 @@ class Column:
     _contains_doc = """
     Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -570,6 +665,8 @@ class Column:
 
     Examples
     --------
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
     >>> df.filter(df.name.contains('o')).collect()
     [Row(age=5, name='Bob')]
     """
@@ -581,8 +678,13 @@ class Column:
     other : :class:`Column` or str
         string at start of line (do not use a regex `^`)
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
     >>> df.filter(df.name.startswith('Al')).collect()
     [Row(age=2, name='Alice')]
     >>> df.filter(df.name.startswith('^Al')).collect()
@@ -591,6 +693,9 @@ class Column:
     _endswith_doc = """
     String ends with. Returns a boolean :class:`Column` based on a string match.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other : :class:`Column` or str
@@ -598,6 +703,8 @@ class Column:
 
     Examples
     --------
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
     >>> df.filter(df.name.endswith('ice')).collect()
     [Row(age=2, name='Alice')]
     >>> df.filter(df.name.endswith('ice$')).collect()
@@ -612,6 +719,9 @@ class Column:
         """
         SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         other : str
@@ -621,8 +731,16 @@ class Column:
         --------
         pyspark.sql.Column.rlike
 
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.filter(df.name.like('Al%')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -634,13 +752,24 @@ class Column:
         SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
         match.
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         other : str
             an extended regex expression
 
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by extended regex expression.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.filter(df.name.rlike('ice$')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -654,6 +783,9 @@ class Column:
 
         .. versionadded:: 3.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         other : str
@@ -663,8 +795,16 @@ class Column:
         --------
         pyspark.sql.Column.rlike
 
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.filter(df.name.ilike('%Ice')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -685,6 +825,9 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         startPos : :class:`Column` or int
@@ -692,8 +835,15 @@ class Column:
         length : :class:`Column` or int
             length of the substring
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is substr of origin Column.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
         """
@@ -720,8 +870,23 @@ class Column:
 
         .. versionadded:: 1.5.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        cols
+            The result will only be true at a location if any value matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is contained in cols.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df[df.name.isin("Bob", "Mike")].collect()
         [Row(age=5, name='Bob')]
         >>> df[df.age.isin([1, 2, 3])].collect()
@@ -740,7 +905,7 @@ class Column:
 
     # order
     _asc_doc = """
-    Returns a sort expression based on ascending order of the column.
+    Returns a sort expression based on the ascending order of the column.
 
     Examples
     --------
@@ -827,6 +992,9 @@ class Column:
     _isNull_doc = """
     True if the current expression is null.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -836,6 +1004,9 @@ class Column:
     """
     _isNotNull_doc = """
     True if the current expression is NOT null.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -855,6 +1026,9 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         alias : str
@@ -870,8 +1044,15 @@ class Column:
             .. versionchanged:: 2.2.0
                Added optional ``metadata`` argument.
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is aliased with new name or names.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
@@ -903,8 +1084,25 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        dataType : :class:`DataType` or str
+            a DataType or Python string literal with a DDL-formatted string
+            to use when parsing the column to the same type.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is cast into new type.
+
         Examples
         --------
+        >>> from pyspark.sql.types import StringType
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages='2'), Row(ages='5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
@@ -934,8 +1132,23 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        lowerBound : :class:`Column`, int, float, string, bool, datetime, date or Decimal
+            a boolean expression that boundary start, inclusive.
+        upperBound : :class:`Column`, int, float, string, bool, datetime, date or Decimal
+            a boolean expression that boundary end, inclusive.
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element of Column
+            is between left and right (inclusive).
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, df.age.between(2, 4)).show()
         +-----+---------------------------+
         | name|((age >= 2) AND (age <= 4))|
@@ -953,6 +1166,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         condition : :class:`Column`
@@ -960,9 +1176,16 @@ class Column:
         value
             a literal value, or a :class:`Column` expression.
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is in conditions.
+
         Examples
         --------
         >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
         +-----+------------------------------------------------------------+
         | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
@@ -988,14 +1211,24 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         value
             a literal value, or a :class:`Column` expression.
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is unmatched conditions.
+
         Examples
         --------
         >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
         +-----+-------------------------------------+
         | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
@@ -1018,6 +1251,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         window : :class:`WindowSpec`
@@ -1031,8 +1267,9 @@ class Column:
         >>> from pyspark.sql import Window
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
+        >>> from pyspark.sql.functions import rank, min, desc
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.withColumn("rank", rank().over(window)) \
                 .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
@@ -1068,11 +1305,7 @@ def _test() -> None:
 
     globs = pyspark.sql.column.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.column tests").getOrCreate()
-    sc = spark.sparkContext
     globs["spark"] = spark
-    globs["df"] = sc.parallelize([(2, "Alice"), (5, "Bob")]).toDF(
-        StructType([StructField("age", IntegerType()), StructField("name", StringType())])
-    )
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.column,

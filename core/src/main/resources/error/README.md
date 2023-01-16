@@ -8,13 +8,13 @@ and message parameters rather than an arbitrary error message.
 1. Check if the error is an internal error.
    Internal errors are bugs in the code that we do not expect users to encounter; this does not include unsupported operations.
    If true, use the error class `INTERNAL_ERROR` and skip to step 4.
-2. Check if an appropriate error class already exists in `error-class.json`.
+2. Check if an appropriate error class already exists in `error-classes.json`.
    If true, use the error class and skip to step 4.
-3. Add a new class to `error-class.json`; keep in mind the invariants below.
+3. Add a new class to `error-classes.json`; keep in mind the invariants below.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
-6. Throw the exception with the error class and message parameters.
+6. Throw the exception with the error class and message parameters. If the same exception is thrown in several places, create an util function in a central place such as `QueryCompilationErrors.scala` to instantiate the exception.
 
 ### Before
 
@@ -24,10 +24,10 @@ Throw with arbitrary error message:
 
 ### After
 
-`error-class.json`
+`error-classes.json`
 
     "PROBLEM_BECAUSE": {
-      "message": ["Problem %s because %s"],
+      "message": ["Problem <problem> because <cause>"],
       "sqlState": "XXXXX"
     }
 
@@ -35,16 +35,18 @@ Throw with arbitrary error message:
 
     class SparkTestException(
         errorClass: String,
-        messageParameters: Seq[String])
+        messageParameters: Map[String, String])
       extends TestException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
         with SparkThrowable {
         
-      def getErrorClass: String = errorClass
+      override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+      override def getErrorClass: String = errorClass
     }
 
 Throw with error class and message parameters:
 
-    throw new SparkTestException("PROBLEM_BECAUSE", Seq("A", "B"))
+    throw new SparkTestException("PROBLEM_BECAUSE", Map("problem" -> "A", "cause" -> "B"))
 
 ## Access fields
 
@@ -65,6 +67,8 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkThro
 ### Error class
 
 Error classes are a succinct, human-readable representation of the error category.
+
+An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
 #### Invariants
 

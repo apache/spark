@@ -63,21 +63,26 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyzing views is not supported") {
-    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
-      val err = intercept[AnalysisException] {
-        sql(analyzeCommand)
-      }
-      assert(err.message.contains("ANALYZE TABLE is not supported"))
-    }
-
     val tableName = "tbl"
     withTable(tableName) {
       spark.range(10).write.saveAsTable(tableName)
       val viewName = "view"
       withView(viewName) {
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -124,16 +129,29 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       Seq(ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3)))).toDF().write.saveAsTable(tableName)
 
       // Test unsupported data types
-      val err1 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
-      }
-      assert(err1.message.contains("does not support statistics collection"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
+        parameters = Map(
+          "columnType" -> "\"ARRAY<INT>\"",
+          "columnName" -> "`data`",
+          "tableName" -> "`spark_catalog`.`default`.`column_stats_test1`"
+        )
+      )
 
       // Test invalid columns
-      val err2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
-      }
-      assert(err2.message.contains("does not exist"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`some_random_column`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
     }
   }
 
@@ -581,10 +599,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     withTempView("tempView") {
       // Analyzes in a temporary view
       sql("CREATE TEMPORARY VIEW tempView AS SELECT 1 id")
-      val errMsg = intercept[AnalysisException] {
-        sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg.contains("Temporary view `tempView` is not cached for analyzing columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`tempView`")
+      )
 
       // Cache the view then analyze it
       sql("CACHE TABLE tempView")
@@ -597,18 +618,20 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached global temporary view") {
     withGlobalTempView("gTempView") {
       val globalTempDB = spark.sharedState.globalTempViewManager.database
-      val errMsg1 = intercept[AnalysisException] {
+      val e1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg1.contains("Table or view not found: " +
-        s"$globalTempDB.gTempView"))
+      }
+      checkErrorTableNotFound(e1, s"`$globalTempDB`.`gTempView`",
+        ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
-      val errMsg2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg2.contains(
-        s"Temporary view `$globalTempDB`.`gTempView` is not cached for analyzing columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`global_temp`.`gTempView`")
+      )
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")
@@ -721,10 +744,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
           val dupCol = if (caseSensitive) "value" else "VaLuE"
-          val errorMsg = intercept[AnalysisException] {
-            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
-          }.getMessage
-          assert(errorMsg.contains("Found duplicate column(s)"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+            },
+            errorClass = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> "`value`"))
         }
       }
     }
@@ -793,9 +818,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
 
-    val errMsg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
-    }.getMessage
-    assert(errMsg.contains("Database 'db_not_exists' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`db_not_exists`"))
   }
 }

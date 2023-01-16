@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkThrowableHelper}
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -59,7 +59,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
 
       val reconstructedEvent = JsonProtocol.sparkEventFromJson(SQLExecutionStartJsonString)
       if (newExecutionStartEvent) {
-        val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail",
+        val expectedEvent = SparkListenerSQLExecutionStart(0, 0, "test desc", "test detail",
           "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
           Map("k1" -> "v1"))
         assert(reconstructedEvent == expectedEvent)
@@ -74,26 +74,59 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
   test("SparkListenerSQLExecutionEnd backward compatibility") {
     spark = new TestSparkSession()
     val qe = spark.sql("select 1").queryExecution
-    val event = SparkListenerSQLExecutionEnd(1, 10)
+    val errorMessage = SparkThrowableHelper.getMessage(new Exception("test"))
+    val event = SparkListenerSQLExecutionEnd(1, 10, Some(errorMessage))
     event.duration = 1000
     event.executionName = Some("test")
     event.qe = qe
-    event.executionFailure = Some(new RuntimeException("test"))
+    event.executionFailure = Some(new Exception("test"))
     val json = JsonProtocol.sparkEventToJsonString(event)
+    // scalastyle:off line.size.limit
     assert(parse(json) == parse(
       """
         |{
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
         |  "executionId" : 1,
-        |  "time" : 10
+        |  "time" : 10,
+        |  "errorMessage" : "{\"errorClass\":\"java.lang.Exception\",\"messageParameters\":{\"message\":\"test\"}}"
         |}
       """.stripMargin))
+    // scalastyle:on
     val readBack = JsonProtocol.sparkEventFromJson(json)
     event.duration = 0
     event.executionName = None
     event.qe = null
     event.executionFailure = None
     assert(readBack == event)
+  }
+
+  test("SPARK-40834: Use SparkListenerSQLExecutionEnd to track final SQL status in UI") {
+    // parse old event log using new SparkListenerSQLExecutionEnd
+    val executionEnd =
+      """
+        |{
+        |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
+        |  "executionId" : 1,
+        |  "time" : 10
+        |}
+      """.stripMargin
+    val readBack = JsonProtocol.sparkEventFromJson(executionEnd)
+    assert(readBack == SparkListenerSQLExecutionEnd(1, 10))
+
+    // parse new event using old SparkListenerSQLExecutionEnd
+    // scalastyle:off line.size.limit
+    val newExecutionEnd =
+      """
+        |{
+        |  "Event" : "org.apache.spark.sql.execution.OldVersionSQLExecutionEnd",
+        |  "executionId" : 1,
+        |  "time" : 10,
+        |  "errorMessage" : "{\"errorClass\":\"java.lang.Exception\",\"messageParameters\":{\"message\":\"test\"}}"
+        |}
+      """.stripMargin
+    // scalastyle:on
+    val readBack2 = JsonProtocol.sparkEventFromJson(newExecutionEnd)
+    assert(readBack2 == OldVersionSQLExecutionEnd(1, 10))
   }
 }
 
@@ -104,4 +137,7 @@ private case class OldVersionSQLExecutionStart(
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
     time: Long)
+  extends SparkListenerEvent
+
+private case class OldVersionSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent

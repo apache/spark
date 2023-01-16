@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.FooEnum.FooEnum
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, MapObjects, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -178,12 +178,16 @@ class ScalaReflectionSuite extends SparkFunSuite {
   import TestingValueClass._
 
   // A helper method used to test `ScalaReflection.serializerForType`.
-  private def serializerFor[T: TypeTag]: Expression =
-    serializerForType(ScalaReflection.localTypeOf[T])
+  private def serializerFor[T: TypeTag]: Expression = {
+    val enc = ScalaReflection.encoderFor[T]
+    ScalaReflection.serializerFor(enc)
+  }
 
   // A helper method used to test `ScalaReflection.deserializerForType`.
-  private def deserializerFor[T: TypeTag]: Expression =
-    deserializerForType(ScalaReflection.localTypeOf[T])
+  private def deserializerFor[T: TypeTag]: Expression = {
+    val enc = ScalaReflection.encoderFor[T]
+    ScalaReflection.deserializerFor(enc)
+  }
 
   test("isSubtype") {
     assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))
@@ -384,11 +388,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-15062: Get correct serializer for List[_]") {
-    val list = List(1, 2, 3)
     val serializer = serializerFor[List[Int]]
-    assert(serializer.isInstanceOf[NewInstance])
-    assert(serializer.asInstanceOf[NewInstance]
-      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
+    assert(serializer.isInstanceOf[MapObjects])
+    val mapObjects = serializer.asInstanceOf[MapObjects]
+    assert(mapObjects.customCollectionCls.isEmpty)
   }
 
   test("SPARK 16792: Get correct deserializer for List[_]") {

@@ -35,8 +35,7 @@ import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
@@ -2060,7 +2059,7 @@ class Dataset[T] private[sql](
    * All "value" columns must share a least common data type. Unless they are the same data type,
    * all "value" columns are cast to the nearest common data type. For instance,
    * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
-   * do not have a common data type and `unpivot` fails.
+   * do not have a common data type and `unpivot` fails with an `AnalysisException`.
    *
    * @param ids Id columns
    * @param values Value columns to unpivot
@@ -2076,10 +2075,11 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame = withPlan {
     Unpivot(
-      ids.map(_.named),
-      values.map(_.named),
+      Some(ids.map(_.named)),
+      Some(values.map(v => Seq(v.named))),
+      None,
       variableColumnName,
-      valueColumnName,
+      Seq(valueColumnName),
       logicalPlan
     )
   }
@@ -2104,8 +2104,16 @@ class Dataset[T] private[sql](
   def unpivot(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): DataFrame =
-    unpivot(ids, Array.empty, variableColumnName, valueColumnName)
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      Some(ids.map(_.named)),
+      None,
+      None,
+      variableColumnName,
+      Seq(valueColumnName),
+      logicalPlan
+    )
+  }
 
   /**
    * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
@@ -2117,6 +2125,16 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame =
     unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
@@ -2737,7 +2755,6 @@ class Dataset[T] private[sql](
         s"the size of columns: ${cols.size}")
     SchemaUtils.checkColumnNameDuplication(
       colNames,
-      "in given column names",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val resolver = sparkSession.sessionState.analyzer.resolver
@@ -2807,6 +2824,52 @@ class Dataset[T] private[sql](
       toDF()
     }
   }
+
+  /**
+   * (Scala-specific)
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @throws AnalysisException if there are duplicate names in resulting projection
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @throws[AnalysisException]
+  def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val output: Seq[NamedExpression] = queryExecution.analyzed.output
+
+    val projectList = colsMap.foldLeft(output) {
+      case (attrs, (existingName, newName)) =>
+      attrs.map(attr =>
+        if (resolver(attr.name, existingName)) {
+          Alias(attr, newName)()
+        } else {
+          attr
+        }
+      )
+    }
+    SchemaUtils.checkColumnNameDuplication(
+      projectList.map(_.name),
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    withPlan(Project(projectList, logicalPlan))
+  }
+
+  /**
+   * (Java-specific)
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def withColumnsRenamed(colsMap: java.util.Map[String, String]): DataFrame =
+    withColumnsRenamed(colsMap.asScala.toMap)
 
   /**
    * Returns a new Dataset by updating an existing column with metadata.
@@ -3733,13 +3796,21 @@ class Dataset[T] private[sql](
       global: Boolean): CreateViewCommand = {
     val viewType = if (global) GlobalTempView else LocalTempView
 
-    val tableIdentifier = try {
-      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
+    val identifier = try {
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(viewName)
     } catch {
       case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
+
+    if (!SQLConf.get.allowsTempViewCreationWithMultipleNameparts && identifier.size > 1) {
+      // Temporary view names should NOT contain database prefix like "database.table"
+      throw new AnalysisException(
+        errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("actualName" -> viewName))
+    }
+
     CreateViewCommand(
-      name = tableIdentifier,
+      name = TableIdentifier(identifier.last),
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,
@@ -3760,7 +3831,8 @@ class Dataset[T] private[sql](
   def write: DataFrameWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
-        "'write' can not be called on streaming Dataset/DataFrame")
+        errorClass = "_LEGACY_ERROR_TEMP_2312",
+        messageParameters = Map.empty)
     }
     new DataFrameWriter[T](this)
   }
@@ -3788,7 +3860,8 @@ class Dataset[T] private[sql](
     // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
       logicalPlan.failAnalysis(
-        "'writeTo' can not be called on streaming Dataset/DataFrame")
+        errorClass = "_LEGACY_ERROR_TEMP_2311",
+        messageParameters = Map.empty)
     }
     new DataFrameWriterV2[T](table, this)
   }
@@ -3802,7 +3875,8 @@ class Dataset[T] private[sql](
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
-        "'writeStream' can be called only on streaming Dataset/DataFrame")
+        errorClass = "WRITE_STREAM_NOT_ALLOWED",
+        messageParameters = Map.empty)
     }
     new DataStreamWriter[T](this)
   }

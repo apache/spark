@@ -42,7 +42,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("HashAggregate should be included in WholeStageCodegen") {
-    val df = spark.range(10).groupBy().agg(max(col("id")), avg(col("id")))
+    val df = spark.range(10).agg(max(col("id")), avg(col("id")))
     val plan = df.queryExecution.executedPlan
     assert(plan.exists(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeProjection}
@@ -53,13 +53,15 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       }
     }
 
-    intercept[IndexOutOfBoundsException] {
-      seq(-1)
-    }.getMessage().contains("must be between 0 and the length of the ArrayData.")
-
-    intercept[IndexOutOfBoundsException] {
-      seq(seq.length)
-    }.getMessage().contains("must be between 0 and the length of the ArrayData.")
+    Seq(-1, seq.length).foreach { index =>
+      checkError(
+        exception = intercept[SparkException] {
+          seq(index)
+        },
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map(
+          "message" -> s"Index $index must be between 0 and the length of the ArrayData."))
+    }
   }
 
   private def testArrayData(): Unit = {

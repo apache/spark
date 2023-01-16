@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.types._
 
 class TypeUtilsSuite extends SparkFunSuite {
@@ -28,7 +28,8 @@ class TypeUtilsSuite extends SparkFunSuite {
   }
 
   private def typeCheckFail(types: Seq[DataType]): Unit = {
-    assert(TypeUtils.checkForSameTypeInputExpr(types, "a").isInstanceOf[TypeCheckFailure])
+    assert(TypeUtils.checkForSameTypeInputExpr(types, "a")
+      .isInstanceOf[DataTypeMismatch])
   }
 
   test("checkForSameTypeInputExpr") {

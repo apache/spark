@@ -333,6 +333,13 @@ public class TransportConf {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
+  /** Whether to enable sasl retries or not. The number of retries is dictated by the config
+   * `spark.shuffle.io.maxRetries`.
+   */
+  public boolean enableSaslRetries() {
+    return conf.getBoolean("spark.shuffle.sasl.enableRetries", false);
+  }
+
   /**
    * Class name of the implementation of MergedShuffleFileManager that merges the blocks
    * pushed to it when push-based shuffle is enabled. By default, push-based shuffle is disabled at
@@ -385,5 +392,14 @@ public class TransportConf {
    */
   public int ioExceptionsThresholdDuringMerge() {
     return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
+  }
+
+  /**
+   * The RemoteBlockPushResolver#mergedShuffleCleanermergedShuffleCleaner
+   * shutdown timeout, in seconds.
+   */
+  public long mergedShuffleCleanerShutdownTimeout() {
+    return JavaUtils.timeStringAsSec(
+      conf.get("spark.shuffle.push.server.mergedShuffleCleaner.shutdown.timeout", "60s"));
   }
 }

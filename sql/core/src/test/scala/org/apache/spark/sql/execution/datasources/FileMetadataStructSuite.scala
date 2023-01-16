@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Ro
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
@@ -222,10 +223,12 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
 
     // select metadata will fail when analysis
-    val ex = intercept[AnalysisException] {
-      df.select("name", METADATA_FILE_NAME).collect()
-    }
-    assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select("name", METADATA_FILE_NAME).collect()
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
   }
 
   metadataColumnsTest("select only metadata", schema) { (df, f0, f1) =>
@@ -274,8 +277,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     val expectedSchema = new StructType()
       .add(StructField("myName", StringType))
       .add(StructField("myAge", IntegerType))
-      .add(StructField("myFileName", StringType))
-      .add(StructField("myFileSize", LongType))
+      .add(StructField("myFileName", StringType, nullable = false))
+      .add(StructField("myFileSize", LongType, nullable = false))
 
     assert(aliasDF.schema.fields.toSet == expectedSchema.fields.toSet)
 
@@ -378,15 +381,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           )
 
           // select metadata will fail when analysis - metadata cannot overwrite user data
-          val ex = intercept[AnalysisException] {
-            df.select("name", "_metadata.file_name").collect()
-          }
-          assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_metadata.file_name").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
 
-          val ex1 = intercept[AnalysisException] {
-            df.select("name", "_METADATA.file_NAME").collect()
-          }
-          assert(ex1.getMessage.contains("No such struct field file_NAME in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_METADATA.file_NAME").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"))
         }
       }
     }
@@ -440,7 +447,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   metadataColumnsTest("prune metadata schema in projects", schema) { (df, f0, f1) =>
     val prunedDF = df.select("name", "age", "info.id", METADATA_FILE_NAME)
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 1)
     assert(fileSourceScanMetaCols.head.name == "file_name")
@@ -457,7 +464,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 1)
     assert(fileSourceScanMetaCols.head.name == "file_path")
@@ -473,7 +480,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 2)
     assert(fileSourceScanMetaCols.map(_.name).toSet == Set("file_size", "file_path"))
@@ -518,16 +525,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       df.coalesce(1).write.format("json").save(dir.getCanonicalPath + "/source/new-streaming-data")
 
-      val stream = spark.readStream.format("json")
+      val streamDf = spark.readStream.format("json")
         .schema(schema)
         .load(dir.getCanonicalPath + "/source/new-streaming-data")
         .select("*", "_metadata")
+
+      val streamQuery0 = streamDf
         .writeStream.format("json")
         .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint")
+        .trigger(Trigger.AvailableNow())
         .start(dir.getCanonicalPath + "/target/new-streaming-data")
 
-      stream.processAllAvailable()
-      stream.stop()
+      streamQuery0.awaitTermination()
+      assert(streamQuery0.lastProgress.numInputRows == 2L)
 
       val newDF = spark.read.format("json")
         .load(dir.getCanonicalPath + "/target/new-streaming-data")
@@ -565,6 +575,34 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME))
         )
       )
+
+      // Verify self-union
+      val streamQuery1 = streamDf.union(streamDf)
+        .writeStream.format("json")
+        .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint_union")
+        .trigger(Trigger.AvailableNow())
+        .start(dir.getCanonicalPath + "/target/new-streaming-data-union")
+      streamQuery1.awaitTermination()
+      val df1 = spark.read.format("json")
+        .load(dir.getCanonicalPath + "/target/new-streaming-data-union")
+      // Verify self-union results
+      assert(streamQuery1.lastProgress.numInputRows == 4L)
+      assert(df1.count() == 4L)
+      assert(df1.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
+
+      // Verify self-join
+      val streamQuery2 = streamDf.join(streamDf, Seq("name", "age", "info", "_metadata"))
+        .writeStream.format("json")
+        .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint_join")
+        .trigger(Trigger.AvailableNow())
+        .start(dir.getCanonicalPath + "/target/new-streaming-data-join")
+      streamQuery2.awaitTermination()
+      val df2 = spark.read.format("json")
+        .load(dir.getCanonicalPath + "/target/new-streaming-data-join")
+      // Verify self-join results
+      assert(streamQuery2.lastProgress.numInputRows == 2L)
+      assert(df2.count() == 2L)
+      assert(df2.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
     }
   }
 
@@ -587,6 +625,151 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           checkAnswer(spark.read.parquet(dir.getAbsolutePath)
             .select("*", METADATA_FILE_NAME, METADATA_FILE_SIZE), expectedDf)
         }
+      }
+    }
+  }
+
+  Seq("parquet", "orc").foreach { format =>
+    test(s"SPARK-40918: Output cols around WSCG.isTooManyFields limit in $format") {
+      // The issue was that ParquetFileFormat would not count the _metadata columns towards
+      // the WholeStageCodegenExec.isTooManyFields limit, while FileSourceScanExec would,
+      // resulting in Parquet reader returning columnar output, while scan expected row.
+      withTempPath { dir =>
+        sql(s"SELECT ${(1 to 100).map(i => s"id+$i as c$i").mkString(", ")} FROM RANGE(100)")
+          .write.format(format).save(dir.getAbsolutePath)
+        (98 to 102).foreach { wscgCols =>
+          withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> wscgCols.toString) {
+            // Would fail with
+            // java.lang.ClassCastException: org.apache.spark.sql.vectorized.ColumnarBatch
+            // cannot be cast to org.apache.spark.sql.catalyst.InternalRow
+            sql(
+              s"""
+                 |SELECT
+                 |  ${(1 to 100).map(i => s"sum(c$i)").mkString(", ")},
+                 |  max(_metadata.file_path)
+                 |FROM $format.`$dir`""".stripMargin
+            ).collect()
+          }
+        }
+      }
+    }
+  }
+
+  metadataColumnsTest("SPARK-41151: consistent _metadata nullability " +
+    "between analyzed and executed", schema) { (df, _, _) =>
+    val queryExecution = df.select("_metadata").queryExecution
+    val analyzedSchema = queryExecution.analyzed.schema
+    val executedSchema = queryExecution.executedPlan.schema
+    // For stateful streaming, we store the schema in the state store
+    // and check consistency across batches.
+    // To avoid state schema compatibility mismatched,
+    // we should keep nullability consistent for _metadata struct
+    assert(analyzedSchema.fields.head.name == "_metadata")
+    assert(executedSchema.fields.head.name == "_metadata")
+
+    // Metadata struct is not nullable
+    assert(!analyzedSchema.fields.head.nullable)
+    assert(analyzedSchema.fields.head.nullable == executedSchema.fields.head.nullable)
+
+    // All sub-fields all not nullable
+    val analyzedStruct = analyzedSchema.fields.head.dataType.asInstanceOf[StructType]
+    val executedStruct = executedSchema.fields.head.dataType.asInstanceOf[StructType]
+    assert(analyzedStruct.fields.forall(!_.nullable), analyzedStruct.fields.mkString(", "))
+    assert(executedStruct.fields.forall(!_.nullable), executedStruct.fields.mkString(", "))
+  }
+
+  test("SPARK-41896: Filter on row_index and a stored column at the same time") {
+    withTempPath { dir =>
+      val storedIdName = "stored_id"
+      val storedIdUpperLimitExclusive = 520
+      val rowIndexLowerLimitInclusive = 10
+
+      spark.range(start = 500, end = 600)
+        .toDF(storedIdName)
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // Select stored_id 510 to 519 via a stored_id and row_index filter.
+      val collectedRows = spark.read.load(dir.getAbsolutePath)
+        .select(storedIdName, METADATA_ROW_INDEX)
+        .where(col(storedIdName).lt(lit(storedIdUpperLimitExclusive)))
+        .where(col(METADATA_ROW_INDEX).geq(lit(rowIndexLowerLimitInclusive)))
+        .collect()
+
+      assert(collectedRows.length === 10)
+      assert(collectedRows.forall(_.getLong(0) < storedIdUpperLimitExclusive))
+      assert(collectedRows.forall(_.getLong(1) >= rowIndexLowerLimitInclusive))
+    }
+  }
+
+  test("SPARK-41896: Filter on constant and generated metadata attributes at the same time") {
+    withTempPath { dir =>
+      val idColumnName = "id"
+      val partitionColumnName = "partition"
+      val numFiles = 4
+      val totalNumRows = 40
+
+      spark.range(end = totalNumRows)
+        .toDF(idColumnName)
+        .withColumn(partitionColumnName, col(idColumnName).mod(lit(numFiles)))
+        .write
+        .partitionBy(partitionColumnName)
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // Get one file path.
+      val randomTableFilePath = spark.read.load(dir.getAbsolutePath)
+        .select(METADATA_FILE_PATH).collect().head.getString(0)
+
+      // Select half the rows from one file.
+      val halfTheNumberOfRowsPerFile = totalNumRows / (numFiles * 2)
+      val collectedRows = spark.read.load(dir.getAbsolutePath)
+        .select(METADATA_FILE_PATH, METADATA_ROW_INDEX)
+        .where(col(METADATA_FILE_PATH).equalTo(lit(randomTableFilePath)))
+        .where(col(METADATA_ROW_INDEX).leq(lit(halfTheNumberOfRowsPerFile)))
+        .collect()
+
+      // Assert we only select rows from one file.
+      assert(collectedRows.map(_.getString(0)).distinct.length === 1)
+      // Assert we filtered by row index.
+      assert(collectedRows.forall(row => row.getLong(1) < halfTheNumberOfRowsPerFile))
+      assert(collectedRows.length === halfTheNumberOfRowsPerFile)
+    }
+  }
+
+  test("SPARK-41896: Filter by a function that takes the metadata struct as argument") {
+    withTempPath { dir =>
+      val idColumnName = "id"
+      val numFiles = 4
+      spark.range(end = numFiles)
+        .toDF(idColumnName)
+        .withColumn("partition", col(idColumnName))
+        .write
+        .format("parquet")
+        .partitionBy("partition")
+        .save(dir.getAbsolutePath)
+
+      // Select path and partition value for a random file.
+      val testFileData = spark.read.load(dir.getAbsolutePath)
+        .select(idColumnName, METADATA_FILE_PATH).collect().head
+      val testFilePartition = testFileData.getLong(0)
+      val testFilePath = testFileData.getString(1)
+
+      val filterFunctionName = "isTestFile"
+      withUserDefinedFunction(filterFunctionName -> true) {
+        // Create and use a filter using the file path.
+        spark.udf.register(filterFunctionName,
+          (metadata: Row) => {
+            metadata.getAs[String]("file_path") == testFilePath
+          })
+        val udfFilterResult = spark.read.load(dir.getAbsolutePath)
+          .select(idColumnName, METADATA_FILE_PATH)
+          .where(s"$filterFunctionName(_metadata)")
+          .collect().head
+
+        assert(testFilePartition === udfFilterResult.getLong(0))
+        assert(testFilePath === udfFilterResult.getString(1))
       }
     }
   }

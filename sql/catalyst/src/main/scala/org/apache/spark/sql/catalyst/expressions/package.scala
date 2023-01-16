@@ -21,8 +21,9 @@ import java.util.Locale
 
 import com.google.common.collect.Maps
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -67,15 +68,7 @@ package object expressions  {
    * column of the new row. If the schema of the input row is specified, then the given expression
    * will be bound to that schema.
    */
-  abstract class Projection extends (InternalRow => InternalRow) {
-
-    /**
-     * Initializes internal states given the current partition index.
-     * This is used by nondeterministic expressions to set initial states.
-     * The default implementation does nothing.
-     */
-    def initialize(partitionIndex: Int): Unit = {}
-  }
+  abstract class Projection extends (InternalRow => InternalRow) with ExpressionsEvaluator
 
   /**
    * An identity projection. This returns the input row.
@@ -265,7 +258,7 @@ package object expressions  {
         case (Seq(), _) =>
           val name = nameParts.head
           val attributes = collectMatches(name, direct.get(name.toLowerCase(Locale.ROOT)))
-          (attributes, nameParts.tail)
+          (attributes.filterNot(_.qualifiedAccessOnly), nameParts.tail)
         case _ => matches
       }
     }
@@ -314,10 +307,12 @@ package object expressions  {
       var i = nameParts.length - 1
       while (i >= 0 && candidates.isEmpty) {
         val name = nameParts(i)
-        candidates = collectMatches(
-          name,
-          nameParts.take(i),
-          direct.get(name.toLowerCase(Locale.ROOT)))
+        val attrsToLookup = if (i == 0) {
+          direct.get(name.toLowerCase(Locale.ROOT)).map(_.filterNot(_.qualifiedAccessOnly))
+        } else {
+          direct.get(name.toLowerCase(Locale.ROOT))
+        }
+        candidates = collectMatches(name, nameParts.take(i), attrsToLookup)
         if (candidates.nonEmpty) {
           nestedFields = nameParts.takeRight(nameParts.length - i - 1)
         }
@@ -365,8 +360,7 @@ package object expressions  {
 
         case ambiguousReferences =>
           // More than one match.
-          val referenceNames = ambiguousReferences.map(_.qualifiedName).mkString(", ")
-          throw new AnalysisException(s"Reference '$name' is ambiguous, could be: $referenceNames.")
+          throw QueryCompilationErrors.ambiguousReferenceError(name, ambiguousReferences)
       }
     }
   }

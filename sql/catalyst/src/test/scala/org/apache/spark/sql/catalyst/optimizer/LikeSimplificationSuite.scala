@@ -207,10 +207,10 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) ||
-        Contains($"a", "mn")) || ($"a" === "")) || ($"a" === "abc")) ||
-        ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%")))
+      .where(((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
+        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
+          Contains($"a", "mn")) || (($"a" === "") || ($"a" === "abc")) ||
+        ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%"))))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -224,9 +224,9 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((Not(StartsWith($"a", "abc")) || Not(EndsWith($"a", "xyz"))) ||
-        Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) ||
-        Not(Contains($"a", "mn"))) || Not($"a" === "")) || Not($"a" === "abc")) ||
+      .where((((Not(StartsWith($"a", "abc")) || Not(EndsWith($"a", "xyz"))) ||
+        (Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
+          Not(Contains($"a", "mn")))) || (Not($"a" === "") || Not($"a" === "abc"))) ||
         ($"a" notLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
 
@@ -249,5 +249,16 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.where($"a" notLikeAny("abc%")).analyze),
       testRelation.where(Not(StartsWith($"a", "abc"))).analyze)
+  }
+
+  test("SPARK-40228: Simplify multiLike if child is foldable expression") {
+    comparePlans(Optimize.execute(testRelation.where("a" likeAny("abc%", "", "ab")).analyze),
+      testRelation.where(StartsWith("a", "abc") || EqualTo("a", "") || EqualTo("a", "ab")).analyze)
+  }
+
+  test("SPARK-40228: Do not simplify multiLike if child is not a cheap expression") {
+    val originalQuery = testRelation.where($"a".substring(1, 5) likeAny("abc%", "", "ab")).analyze
+
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 }

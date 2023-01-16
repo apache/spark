@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
@@ -39,14 +39,16 @@ case class BatchScanExec(
     runtimeFilters: Seq[Expression],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
-    @transient table: Table) extends DataSourceV2ScanExecBase {
+    @transient table: Table,
+    commonPartitionValues: Option[Seq[InternalRow]] = None) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
-      this.batch == other.batch && this.runtimeFilters == other.runtimeFilters
+      this.batch == other.batch && this.runtimeFilters == other.runtimeFilters &&
+          this.commonPartitionValues == other.commonPartitionValues
     case _ =>
       false
   }
@@ -81,18 +83,21 @@ case class BatchScanExec(
 
           val newRows = new InternalRowSet(p.expressions.map(_.dataType))
           newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
-          val oldRows = p.partitionValuesOpt.get
 
-          if (oldRows.size != newRows.size) {
-            throw new SparkException("Data source must have preserved the original partitioning " +
-                "during runtime filtering: the number of unique partition values obtained " +
-                s"through HasPartitionKey changed: before ${oldRows.size}, after ${newRows.size}")
+          val oldRows = p.partitionValuesOpt.get.toSet
+          // We require the new number of partition keys to be equal or less than the old number
+          // of partition keys here. In the case of less than, empty partitions will be added for
+          // those missing keys that are not present in the new input partitions.
+          if (oldRows.size < newRows.size) {
+            throw new SparkException("During runtime filtering, data source must either report " +
+                "the same number of partition keys, or a subset of partition keys from the " +
+                s"original. Before: ${oldRows.size} partition keys. After: ${newRows.size} " +
+                "partition keys")
           }
 
-          if (!oldRows.forall(newRows.contains)) {
-            throw new SparkException("Data source must have preserved the original partitioning " +
-                "during runtime filtering: the number of unique partition values obtained " +
-                s"through HasPartitionKey remain the same but do not exactly match")
+          if (!newRows.forall(oldRows.contains)) {
+            throw new SparkException("During runtime filtering, data source must not report new " +
+                "partition keys that are not present in the original partitioning.")
           }
 
           groupPartitions(newPartitions).get.map(_._2)
@@ -107,6 +112,15 @@ case class BatchScanExec(
     }
   }
 
+  override def outputPartitioning: Partitioning = {
+    super.outputPartitioning match {
+      case k: KeyGroupedPartitioning if commonPartitionValues.isDefined =>
+        val values = commonPartitionValues.get
+        k.copy(numPartitions = values.length, partitionValuesOpt = Some(values))
+      case p => p
+    }
+  }
+
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
@@ -114,8 +128,21 @@ case class BatchScanExec(
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
       sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
+      var finalPartitions = filteredPartitions
+
+      outputPartitioning match {
+        case p: KeyGroupedPartitioning =>
+          val partitionMapping = finalPartitions.map(s =>
+            s.head.asInstanceOf[HasPartitionKey].partitionKey() -> s).toMap
+          finalPartitions = p.partitionValuesOpt.get.map { partValue =>
+            // Use empty partition for those partition values that are not present
+            partitionMapping.getOrElse(partValue, Seq.empty)
+          }
+        case _ =>
+      }
+
       new DataSourceRDD(
-        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
+        sparkContext, finalPartitions, readerFactory, supportsColumnar, customMetrics)
     }
     postDriverMetrics()
     rdd

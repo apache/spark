@@ -486,6 +486,70 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
+  test("SPARK-35084: include jars of the --packages" +
+    " in k8s client mode & driver runs inside a POD") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
+      val clArgs = Seq(
+        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--class", "org.SomeClass",
+        "--master", "k8s://host:port",
+        "--packages", Seq(main, dep).mkString(","),
+        "--repositories", repo,
+        "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.kubernetes.namespace=spark",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
+        unusedJar.toString,
+        "my.great.lib.MyLib", "my.great.dep.MyLib")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
+      sparkConf.get("spark.jars").contains("mylib") shouldBe true
+    }
+  }
+
+  test("SPARK-33782: handles k8s files download to current directory") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--proxy-user", "test.user",
+      "--master", "k8s://host:port",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "--conf", "spark.kubernetes.namespace=spark",
+      "--conf", "spark.kubernetes.driver.container.image=bar",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--files", "src/test/resources/test_metrics_config.properties",
+      "--py-files", "src/test/resources/test_metrics_system.properties",
+      "--archives", "src/test/resources/log4j2.properties",
+      "--jars", "src/test/resources/TestUDTF.jar",
+      "/home/thejar.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
+    conf.get("spark.master") should be ("k8s://https://host:port")
+    conf.get("spark.executor.memory") should be ("5g")
+    conf.get("spark.driver.memory") should be ("4g")
+    conf.get("spark.kubernetes.namespace") should be ("spark")
+    conf.get("spark.kubernetes.driver.container.image") should be ("bar")
+
+    Files.exists(Paths.get("test_metrics_config.properties")) should be (true)
+    Files.exists(Paths.get("test_metrics_system.properties")) should be (true)
+    Files.exists(Paths.get("log4j2.properties")) should be (true)
+    Files.exists(Paths.get("TestUDTF.jar")) should be (true)
+    Files.delete(Paths.get("test_metrics_config.properties"))
+    Files.delete(Paths.get("test_metrics_system.properties"))
+    Files.delete(Paths.get("log4j2.properties"))
+    Files.delete(Paths.get("TestUDTF.jar"))
+  }
+
   /**
    * Helper function for testing main class resolution on remote JAR files.
    *

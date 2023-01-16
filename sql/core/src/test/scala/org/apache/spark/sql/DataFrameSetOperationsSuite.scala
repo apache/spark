@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
@@ -522,16 +523,21 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // Check failure cases
     df1 = Seq((1, 2)).toDF("a", "c")
     df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
-    var errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains(
-      "Union can only be performed on tables with the same number of columns, " +
-        "but the first table has 2 columns and the second table has 3 columns"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      errorClass = "NUM_COLUMNS_MISMATCH",
+      parameters = Map(
+        "operator" -> "UNION",
+        "firstNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "3")
+    )
 
     df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
     df2 = Seq((4, 5, 6)).toDF("a", "c", "d")
-    errMsg = intercept[AnalysisException] {
+    val errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
     assert(errMsg.contains("""Cannot resolve column name "b" among (a, c, d)"""))
@@ -581,16 +587,20 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         var df1 = Seq((1, 1)).toDF(c0, c1)
         var df2 = Seq((1, 1)).toDF("c0", "c1")
-        var errMsg = intercept[AnalysisException] {
-          df1.unionByName(df2)
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the left attributes:"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df1.unionByName(df2)
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         df1 = Seq((1, 1)).toDF("c0", "c1")
         df2 = Seq((1, 1)).toDF(c0, c1)
-        errMsg = intercept[AnalysisException] {
-          df1.unionByName(df2)
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the right attributes:"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df1.unionByName(df2)
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -989,22 +999,24 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // nested struct, inner struct having different col name
     df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
     df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
-    var errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains("No such struct field c in a, b"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
 
     // If right side of the nested struct has extra col.
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
     df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1, 5)))).toDF("a", "b", "c")
-    errMsg = intercept[AnalysisException] {
+    val errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
-    assert(errMsg.contains("Union can only be performed on tables with" +
-      " the compatible column types." +
+    assert(errMsg.contains("UNION can only be performed on tables with" +
+      " compatible column types." +
       " The third column of the second table is struct<c1:int,c2:int,c3:struct<c3:int,c5:int>>" +
-      " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at same" +
-      " column of first table"))
+      " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at the same" +
+      " column of the first table"))
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
@@ -1084,7 +1096,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     val err = intercept[AnalysisException](df7.union(df8).collect())
     assert(err.message
-      .contains("Union can only be performed on tables with the compatible column types"))
+      .contains("UNION can only be performed on tables with compatible column types"))
   }
 
   test("SPARK-36546: Add unionByName support to arrays of structs") {

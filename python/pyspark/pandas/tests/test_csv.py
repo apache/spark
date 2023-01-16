@@ -157,6 +157,7 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             check(index_col=["amount"])
             check(header=None, index_col=[1])
             check(names=["n", "a"], index_col=["a"])
+            check(names=["n", "a"], index_col="a")
 
             # check with pyspark patch.
             expected = pd.read_csv(fn)
@@ -434,7 +435,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_csv import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

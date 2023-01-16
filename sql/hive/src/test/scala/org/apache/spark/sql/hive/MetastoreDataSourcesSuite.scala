@@ -324,7 +324,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin)
 
         // Create the table again should trigger a AnalysisException.
-        val message = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(
             s"""CREATE TABLE ctasJsonTable
                |USING org.apache.spark.sql.json.DefaultSource
@@ -333,11 +333,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
                |) AS
                |SELECT * FROM jsonTable
              """.stripMargin)
-        }.getMessage
+        }
 
-        assert(
-          message.contains(s"Table $SESSION_CATALOG_NAME.default.ctasJsonTable already exists."),
-          "We should complain that ctasJsonTable already exists")
+        checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`ctasJsonTable`")
 
         // The following statement should be fine if it has IF NOT EXISTS.
         // It tries to create a table ctasJsonTable with a new schema.
@@ -522,11 +520,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
-          assert(
-            intercept[AnalysisException] {
+          val e = intercept[AnalysisException] {
               sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
-            }.getMessage.contains(
-              s"Table $SESSION_CATALOG_NAME.default.createdJsonTable already exists."))
+            }
+          checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`createdJsonTable`")
         }
 
         // Data should not be deleted.
@@ -1194,22 +1191,29 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("saveAsTable[append]: mismatch column names") {
     withTable("saveAsTable_mismatch_column_names") {
       Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_mismatch_column_names")
-      val e = intercept[AnalysisException] {
-        Seq((3, 4)).toDF("i", "k")
-          .write.mode("append").saveAsTable("saveAsTable_mismatch_column_names")
-      }
-      assert(e.getMessage.contains("cannot resolve"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq((3, 4)).toDF("i", "k")
+            .write.mode("append").saveAsTable("saveAsTable_mismatch_column_names")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1162",
+        parameters = Map("col" -> "j", "inputColumns" -> "i, k"))
     }
   }
 
   test("saveAsTable[append]: too many columns") {
     withTable("saveAsTable_too_many_columns") {
       Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_too_many_columns")
-      val e = intercept[AnalysisException] {
-        Seq((3, 4, 5)).toDF("i", "j", "k")
-          .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
-      }
-      assert(e.getMessage.contains("doesn't match"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq((3, 4, 5)).toDF("i", "j", "k")
+            .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1161",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.saveastable_too_many_columns",
+          "existingTableSchema" -> "struct<i:int,j:int>",
+          "querySchema" -> "struct<i:int,j:int,k:int>"))
     }
   }
 
@@ -1244,14 +1248,15 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       var e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
-      }.getMessage
-      assert(e.contains(s"Cannot overwrite table $SESSION_CATALOG_NAME.default.$tableName " +
+      }
+      assert(e.getMessage.contains(
+        s"Cannot overwrite table $SESSION_CATALOG_NAME.default.$tableName " +
         "that is also being read from"))
 
       e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
-      }.getMessage
-      assert(e.contains(s"Table `$SESSION_CATALOG_NAME`.`default`.`$tableName` already exists"))
+      }
+      checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
     }
   }
 
@@ -1285,11 +1290,15 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("saveAsTable[append]: less columns") {
     withTable("saveAsTable_less_columns") {
       Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_less_columns")
-      val e = intercept[AnalysisException] {
-        Seq((4)).toDF("j")
-          .write.mode("append").saveAsTable("saveAsTable_less_columns")
-      }
-      assert(e.getMessage.contains("doesn't match"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq(4).toDF("j").write.mode("append").saveAsTable("saveAsTable_less_columns")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1161",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.saveastable_less_columns",
+          "existingTableSchema" -> "struct<i:int,j:int>",
+          "querySchema" -> "struct<j:int>"))
     }
   }
 

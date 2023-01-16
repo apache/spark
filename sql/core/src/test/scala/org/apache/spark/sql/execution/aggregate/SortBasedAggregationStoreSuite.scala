@@ -124,7 +124,8 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
   def createSortedAggBufferIterator(
       hashMap: ObjectAggregationMap): KVIterator[UnsafeRow, UnsafeRow] = {
 
-    val sortedIterator = hashMap.iterator.toList.sortBy(_.groupingKey.getInt(0)).iterator
+    val sortedIterator = hashMap.destructiveIterator().toList.sortBy(_.groupingKey.getInt(0))
+      .iterator
     new KVIterator[UnsafeRow, UnsafeRow] {
       var key: UnsafeRow = null
       var value: UnsafeRow = null

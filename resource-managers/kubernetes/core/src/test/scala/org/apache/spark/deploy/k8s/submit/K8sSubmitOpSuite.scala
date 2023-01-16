@@ -17,12 +17,13 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.PrintStream
+import java.util.Arrays
 
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.PodResource
+import io.fabric8.kubernetes.client.{KubernetesClient, PropagationPolicyConfigurable}
+import io.fabric8.kubernetes.client.dsl.{Deletable, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
 import org.mockito.{ArgumentMatchers, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
@@ -30,8 +31,9 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_SUBMIT_GRACE_PERIOD
 import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_POD_DRIVER_ROLE, SPARK_ROLE_LABEL}
-import org.apache.spark.deploy.k8s.Fabric8Aliases.PODS
+import org.apache.spark.deploy.k8s.Fabric8Aliases.{PODS, PODS_WITH_NAMESPACE}
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
+
 
 class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private val driverPodName1 = "driver1"
@@ -45,28 +47,39 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: PODS = _
 
   @Mock
-  private var driverPodOperations1: PodResource[Pod] = _
+  private var podsWithNamespace: PODS_WITH_NAMESPACE = _
 
   @Mock
-  private var driverPodOperations2: PodResource[Pod] = _
+  private var driverPodOperations1: PodResource = _
+
+  @Mock
+  private var driverPodOperations2: PodResource = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
 
   @Mock
+  private var deletable: PropagationPolicyConfigurable[_ <: Deletable] = _
+
+  @Mock
+  private var deletableList:
+    NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[HasMetadata] = _
+
+  @Mock
   private var err: PrintStream = _
+
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   before {
     MockitoAnnotations.openMocks(this).close()
     when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.inNamespace(namespace)).thenReturn(podOperations)
-    when(podOperations.delete(podList.asJava)).thenReturn(true)
-    when(podOperations.withName(driverPodName1)).thenReturn(driverPodOperations1)
-    when(podOperations.withName(driverPodName2)).thenReturn(driverPodOperations2)
+    when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
+    when(podsWithNamespace.withName(driverPodName1)).thenReturn(driverPodOperations1)
+    when(podsWithNamespace.withName(driverPodName2)).thenReturn(driverPodOperations2)
     when(driverPodOperations1.get).thenReturn(driverPod1)
-    when(driverPodOperations1.delete()).thenReturn(true)
+    when(driverPodOperations1.delete()).thenReturn(Arrays.asList(new StatusDetails))
     when(driverPodOperations2.get).thenReturn(driverPod2)
-    when(driverPodOperations2.delete()).thenReturn(true)
+    when(driverPodOperations2.delete()).thenReturn(Arrays.asList(new StatusDetails))
   }
 
   test("List app status") {
@@ -101,18 +114,19 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
     implicit val kubeClient: KubernetesClient = kubernetesClient
     val killApp = new KillApplication
     val conf = new SparkConf().set(KUBERNETES_SUBMIT_GRACE_PERIOD, 1L)
-    when(driverPodOperations1.withGracePeriod(1L)).thenReturn(driverPodOperations1)
+    doReturn(deletable).when(driverPodOperations1).withGracePeriod(1L)
     killApp.executeOnPod(driverPodName1, Option(namespace), conf)
     verify(driverPodOperations1, times(1)).withGracePeriod(1L)
-    verify(driverPodOperations1, times(1)).delete()
+    verify(deletable, times(1)).delete()
   }
 
   test("Kill multiple apps with glob without gracePeriod") {
     implicit val kubeClient: KubernetesClient = kubernetesClient
     val killApp = new KillApplication
     killApp.printStream = err
+    doReturn(deletableList).when(kubernetesClient).resourceList(podList.asJava)
     killApp.executeOnGlob(podList, Option(namespace), new SparkConf())
-    verify(podOperations, times(1)).delete(podList.asJava)
+    verify(deletableList, times(1)).delete()
     // scalastyle:off
     verify(err).println(ArgumentMatchers.eq(s"Deleting driver pod: $driverPodName1."))
     verify(err).println(ArgumentMatchers.eq(s"Deleting driver pod: $driverPodName2."))

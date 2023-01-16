@@ -1161,24 +1161,34 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
   }
 
   test("SPARK-39833: pushed filters with count()") {
-    withTempPath { path =>
-      val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
-      Seq(0).toDF("COL").coalesce(1).write.save(p)
-      val df = spark.read.parquet(path.getCanonicalPath)
-      checkAnswer(df.filter("col = 0"), Seq(Row(0)))
-      assert(df.filter("col = 0").count() == 1, "col")
-      assert(df.filter("COL = 0").count() == 1, "COL")
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempPath { path =>
+          val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
+          Seq(0).toDF("COL").coalesce(1).write.save(p)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          val expected = if (caseSensitive) Seq(Row(0, 0)) else Seq(Row(0))
+          checkAnswer(df.filter("col = 0"), expected)
+          assert(df.filter("col = 0").count() == 1, "col")
+          assert(df.filter("COL = 0").count() == 1, "COL")
+        }
+      }
     }
   }
 
   test("SPARK-39833: pushed filters with project without filter columns") {
-    withTempPath { path =>
-      val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
-      Seq((0, 1)).toDF("COL", "a").coalesce(1).write.save(p)
-      val df = spark.read.parquet(path.getCanonicalPath)
-      checkAnswer(df.filter("col = 0"), Seq(Row(0, 1)))
-      assert(df.filter("col = 0").select("a").collect().toSeq == Row(1) :: Nil)
-      assert(df.filter("col = 0 and a = 1").select("a").collect().toSeq == Row(1) :: Nil)
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempPath { path =>
+          val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
+          Seq((0, 1)).toDF("COL", "a").coalesce(1).write.save(p)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          val expected = if (caseSensitive) Seq(Row(0, 1, 0)) else Seq(Row(0, 1))
+          checkAnswer(df.filter("col = 0"), expected)
+          assert(df.filter("col = 0").select("a").collect().toSeq == Row(1) :: Nil)
+          assert(df.filter("col = 0 and a = 1").select("a").collect().toSeq == Row(1) :: Nil)
+        }
+      }
     }
   }
 }

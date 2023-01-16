@@ -105,12 +105,29 @@ class QueryExecution(
     case other => other
   }
 
+  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
+  lazy val normalized: LogicalPlan = {
+    val normalizationRules = sparkSession.sessionState.planNormalizationRules
+    if (normalizationRules.isEmpty) {
+      commandExecuted
+    } else {
+      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
+      val normalized = normalizationRules.foldLeft(commandExecuted) { (p, rule) =>
+        val result = rule.apply(p)
+        planChangeLogger.logRule(rule.ruleName, p, result)
+        result
+      }
+      planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
+      normalized
+    }
+  }
+
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
     assertAnalyzed()
     assertSupported()
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(commandExecuted.clone())
+    sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
   }
 
   def assertCommandExecuted(): Unit = commandExecuted
@@ -213,11 +230,9 @@ class QueryExecution(
     append("\n")
   }
 
-  def explainString(
-      mode: ExplainMode,
-      maxFields: Int = SQLConf.get.maxToStringFields): String = {
+  def explainString(mode: ExplainMode): String = {
     val concat = new PlanStringConcat()
-    explainString(mode, maxFields, concat.append)
+    explainString(mode, SQLConf.get.maxToStringFields, concat.append)
     withRedaction {
       concat.toString
     }
@@ -229,7 +244,7 @@ class QueryExecution(
       // output mode does not matter since there is no `Sink`.
       new IncrementalExecution(
         sparkSession, logical, OutputMode.Append(), "<unknown>",
-        UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+        UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0))
     } else {
       this
     }
@@ -396,7 +411,7 @@ object QueryExecution {
 
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
-   * These rules will make sure subqueries are planned, make use the data partitioning and ordering
+   * These rules will make sure subqueries are planned, make sure the data partitioning and ordering
    * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
    * and subqueries.
    */
@@ -495,11 +510,10 @@ object QueryExecution {
    */
   private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
     case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
-      new SparkException(
-        errorClass = "INTERNAL_ERROR",
-        messageParameters = Array(msg +
-          " Please, fill a bug report in, and provide the full stack trace."),
-        cause = e)
+      SparkException.internalError(
+        msg + " You hit a bug in Spark or the Spark plugins you use. Please, report this bug " +
+          "to the corresponding communities or vendors, and provide the full stack trace.",
+        e)
     case e: Throwable =>
       e
   }

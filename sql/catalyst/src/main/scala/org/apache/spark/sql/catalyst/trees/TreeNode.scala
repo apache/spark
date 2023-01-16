@@ -28,6 +28,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -68,6 +69,12 @@ case class Origin(
 
   lazy val context: SQLQueryContext = SQLQueryContext(
     line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+
+  def getQueryContext: Array[QueryContext] = if (context.isValid) {
+    Array(context)
+  } else {
+    Array.empty
+  }
 }
 
 /**
@@ -1106,7 +1113,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
   override final def mapChildren(f: T => T): T = this.asInstanceOf[T]
-  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
+  // Stateful expressions should override this method to return a new instance.
+  override def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
