@@ -95,7 +95,7 @@ private[sql] class AvroFileFormat extends FileFormat
       // Doing input file filtering is improper because we may generate empty tasks that process no
       // input files but stress the scheduler. We should probably add a more general input file
       // filtering mechanism for `FileFormat` data sources. See SPARK-16317.
-      if (parsedOptions.ignoreExtension || file.uriEncodedPath.endsWith(".avro")) {
+      if (parsedOptions.ignoreExtension || file.urlEncodedPath.endsWith(".avro")) {
         val reader = {
           val in = new FsInput(file.toPath, conf)
           try {

@@ -62,7 +62,7 @@ case class PartitionedFile(
 
   def pathUri: URI = filePath.toUri
   def toPath: Path = filePath.toPath
-  def uriEncodedPath: String = filePath.uriEncoded
+  def urlEncodedPath: String = filePath.urlEncoded
 
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
@@ -231,7 +231,7 @@ class FileScanRDD(
           logInfo(s"Reading File $currentFile")
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder
-            .set(currentFile.uriEncodedPath, currentFile.start, currentFile.length)
+            .set(currentFile.urlEncodedPath, currentFile.start, currentFile.length)
 
           resetCurrentIterator()
           if (ignoreMissingFiles || ignoreCorruptFiles) {
@@ -286,13 +286,13 @@ class FileScanRDD(
           } catch {
             case e: SchemaColumnConvertNotSupportedException =>
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
-                currentFile.uriEncodedPath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
+                currentFile.urlEncodedPath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
             case sue: SparkUpgradeException => throw sue
             case NonFatal(e) =>
               e.getCause match {
                 case sue: SparkUpgradeException => throw sue
                 case _ =>
-                  throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.uriEncodedPath)
+                  throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.urlEncodedPath)
               }
           }
         } else {

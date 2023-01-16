@@ -54,14 +54,14 @@ case class SinkFileStatus(
       blockReplication,
       blockSize,
       modificationTime,
-      SparkPath.fromUriString(path).toPath)
+      SparkPath.fromUrlString(path).toPath)
   }
 }
 
 object SinkFileStatus {
   def apply(f: FileStatus): SinkFileStatus = {
     SinkFileStatus(
-      path = SparkPath.fromPath(f.getPath).uriEncoded,
+      path = SparkPath.fromPath(f.getPath).urlEncoded,
       size = f.getLen,
       isDir = f.isDirectory,
       modificationTime = f.getModificationTime,

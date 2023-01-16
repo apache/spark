@@ -3936,7 +3936,7 @@ class Dataset[T] private[sql](
           _, _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
-    files.iterator.map(_.uriEncoded).toSet.toArray
+    files.iterator.map(_.urlEncoded).toSet.toArray
   }
 
   /**

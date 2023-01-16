@@ -165,7 +165,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
-          FileInputFormat.setInputPaths(job, file.uriEncodedPath)
+          FileInputFormat.setInputPaths(job, file.urlEncodedPath)
 
           // Custom OrcRecordReader is used to get
           // ObjectInspector during recordReader creation itself and can

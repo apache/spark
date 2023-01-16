@@ -520,7 +520,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           .filter(_.toString.endsWith(".parquet"))
           .map(_.getFileName.toString)
           .toSet
-        val trackingFileNames = tracking.map(SparkPath.fromUriString(_).toPath.getName).toSet
+        val trackingFileNames = tracking.map(SparkPath.fromUrlString(_).toPath.getName).toSet
 
         // there would be possible to have race condition:
         // - some tasks complete while abortJob is being called
@@ -710,14 +710,14 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
     // Read with pruning, should read only files in partition dir id=1
     checkFileScanPartitions(df.filter("id = 1")) { partitions =>
       val filesToBeRead = partitions.flatMap(_.files)
-      assert(filesToBeRead.map(_.uriEncodedPath).forall(_.contains("/id=1/")))
+      assert(filesToBeRead.map(_.urlEncodedPath).forall(_.contains("/id=1/")))
       assert(filesToBeRead.map(_.partitionValues).distinct.size === 1)
     }
 
     // Read with pruning, should read only files in partition dir id=1 and id=2
     checkFileScanPartitions(df.filter("id in (1,2)")) { partitions =>
       val filesToBeRead = partitions.flatMap(_.files)
-      assert(!filesToBeRead.map(_.uriEncodedPath).exists(_.contains("/id=3/")))
+      assert(!filesToBeRead.map(_.urlEncodedPath).exists(_.contains("/id=3/")))
       assert(filesToBeRead.map(_.partitionValues).distinct.size === 2)
     }
   }

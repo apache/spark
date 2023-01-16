@@ -66,7 +66,7 @@ class FilePartitionReader[T](
     } catch {
       case e: SchemaColumnConvertNotSupportedException =>
         throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
-          currentReader.file.uriEncodedPath,
+          currentReader.file.urlEncodedPath,
           e.getColumn, e.getLogicalType, e.getPhysicalType, e)
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
@@ -77,7 +77,7 @@ class FilePartitionReader[T](
         e.getCause match {
           case sue: SparkUpgradeException => throw sue
           case _ => throw QueryExecutionErrors.cannotReadFilesError(e,
-            currentReader.file.uriEncodedPath)
+            currentReader.file.urlEncodedPath)
         }
     }
     if (hasNext) {
@@ -103,7 +103,7 @@ class FilePartitionReader[T](
     logInfo(s"Reading file $reader")
     // Sets InputFileBlockHolder for the file block's information
     val file = reader.file
-    InputFileBlockHolder.set(file.uriEncodedPath, file.start, file.length)
+    InputFileBlockHolder.set(file.urlEncodedPath, file.start, file.length)
     reader
   }
 }

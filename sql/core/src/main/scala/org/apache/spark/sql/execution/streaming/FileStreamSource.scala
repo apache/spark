@@ -193,7 +193,7 @@ class FileStreamSource(
       metadataLogCurrentOffset += 1
 
       val fileEntries = batchFiles.map { case (p, timestamp) =>
-        FileEntry(path = p.uriEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
+        FileEntry(path = p.urlEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
         logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
@@ -372,7 +372,7 @@ object FileStreamSource {
       path: String, // uri-encoded path string
       timestamp: Timestamp,
       batchId: Long) extends Serializable {
-    def sparkPath: SparkPath = SparkPath.fromUriString(path)
+    def sparkPath: SparkPath = SparkPath.fromUrlString(path)
   }
 
   /**
@@ -394,7 +394,7 @@ object FileStreamSource {
     private var lastPurgeTimestamp: Timestamp = 0L
 
     @inline private def stripPathIfNecessary(path: SparkPath) = {
-      if (fileNameOnly) path.toPath.getName else path.uriEncoded
+      if (fileNameOnly) path.toPath.getName else path.urlEncoded
     }
 
     /** Add a new file to the map. */

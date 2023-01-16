@@ -868,8 +868,8 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(fileScan.get.dataFilters.nonEmpty)
           assert(fileScan.get.planInputPartitions().forall { partition =>
             partition.asInstanceOf[FilePartition].files.forall { file =>
-              file.uriEncodedPath.contains("p1=1") &&
-                file.uriEncodedPath.contains("p2=2")
+              file.urlEncodedPath.contains("p1=1") &&
+                file.urlEncodedPath.contains("p2=2")
             }
           })
           checkAnswer(df, Row("b", 1, 2))

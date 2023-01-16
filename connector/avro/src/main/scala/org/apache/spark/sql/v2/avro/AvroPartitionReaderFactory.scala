@@ -59,7 +59,7 @@ case class AvroPartitionReaderFactory(
     val conf = broadcastedConf.value.value
     val userProvidedSchema = options.schema
 
-    if (options.ignoreExtension || partitionedFile.uriEncodedPath.endsWith(".avro")) {
+    if (options.ignoreExtension || partitionedFile.urlEncodedPath.endsWith(".avro")) {
       val reader = {
         val in = new FsInput(partitionedFile.toPath, conf)
         try {

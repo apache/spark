@@ -34,7 +34,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.paths.SparkPath.{fromUriString => sp}
+import org.apache.spark.paths.SparkPath.{fromUrlString => sp}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
