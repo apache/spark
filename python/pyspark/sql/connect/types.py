@@ -15,15 +15,13 @@
 # limitations under the License.
 #
 
-import datetime
 import json
 
 import pyarrow as pa
 
-from typing import Any, Optional, Callable
+from typing import Optional
 
 from pyspark.sql.types import (
-    Row,
     DataType,
     ByteType,
     ShortType,
@@ -250,113 +248,3 @@ def to_arrow_schema(schema: StructType) -> "pa.Schema":
         for field in schema
     ]
     return pa.schema(fields)
-
-
-def _need_converter(dataType: DataType) -> bool:
-    if isinstance(dataType, NullType):
-        return True
-    elif isinstance(dataType, StructType):
-        return True
-    elif isinstance(dataType, ArrayType):
-        return _need_converter(dataType.elementType)
-    elif isinstance(dataType, MapType):
-        # Different from PySpark, here always needs conversion,
-        # since the input from Arrow is a list of tuples.
-        return True
-    elif isinstance(dataType, BinaryType):
-        return True
-    elif isinstance(dataType, (TimestampType, TimestampNTZType)):
-        # Always remove the time zone info for now
-        return True
-    else:
-        return False
-
-
-def _create_converter(dataType: DataType) -> Callable:
-    assert dataType is not None and isinstance(dataType, DataType)
-
-    if not _need_converter(dataType):
-        return lambda value: value
-
-    if isinstance(dataType, NullType):
-        return lambda value: None
-
-    elif isinstance(dataType, StructType):
-
-        field_convs = {f.name: _create_converter(f.dataType) for f in dataType.fields}
-        need_conv = any(_need_converter(f.dataType) for f in dataType.fields)
-
-        def convert_struct(value: Any) -> Row:
-            if value is None:
-                return Row()
-            else:
-                assert isinstance(value, dict)
-
-                if need_conv:
-                    _dict = {}
-                    for k, v in value.items():
-                        assert isinstance(k, str)
-                        _dict[k] = field_convs[k](v)
-                    return Row(**_dict)
-                else:
-                    return Row(**value)
-
-        return convert_struct
-
-    elif isinstance(dataType, ArrayType):
-
-        element_conv = _create_converter(dataType.elementType)
-
-        def convert_array(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, list)
-                return [element_conv(v) for v in value]
-
-        return convert_array
-
-    elif isinstance(dataType, MapType):
-
-        key_conv = _create_converter(dataType.keyType)
-        value_conv = _create_converter(dataType.valueType)
-
-        def convert_map(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, list)
-                assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
-                return dict((key_conv(t[0]), value_conv(t[1])) for t in value)
-
-        return convert_map
-
-    elif isinstance(dataType, BinaryType):
-
-        def convert_binary(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, bytes)
-                return bytearray(value)
-
-        return convert_binary
-
-    elif isinstance(dataType, (TimestampType, TimestampNTZType)):
-
-        def convert_timestample(value: Any) -> Any:
-            if value is None:
-                return None
-            else:
-                assert isinstance(value, datetime.datetime)
-                if value.tzinfo is not None:
-                    # always remove the time zone for now
-                    return value.replace(tzinfo=None)
-                else:
-                    return value
-
-        return convert_timestample
-
-    else:
-
-        return lambda value: value
