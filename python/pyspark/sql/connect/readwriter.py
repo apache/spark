@@ -616,12 +616,8 @@ def _test() -> None:
         globs = pyspark.sql.connect.readwriter.__dict__.copy()
 
         # TODO(SPARK-41817): Support reading with schema
-        del pyspark.sql.connect.readwriter.DataFrameReader.load.__doc__
         del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameReader.text.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.csv.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.text.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
 
