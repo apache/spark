@@ -2282,15 +2282,39 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             ).toPandas(),
         )
 
+    def test_udf(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT a, b, c, BINARY(c) as d FROM VALUES
+            (-1.0, float("NAN"), 'x'), (-2.1, NULL, 'y'), (1, 2.1, 'z'), (0, 0.5, NULL)
+            AS tab(a, b, c)
+            """
+
+        # +----+----+----+----+
+        # |   a|   b|   c|   d|
+        # +----+----+----+----+
+        # |-1.0| NaN|   x|[78]|
+        # |-2.1|null|   y|[79]|
+        # | 1.0| 2.1|   z|[7A]|
+        # | 0.0| 0.5|null|null|
+        # +----+----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
+            sdf.select(SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41928: Disable unsupported functions.
 
         from pyspark.sql.connect import functions as CF
 
-        for f in (
-            "udf",
-            "pandas_udf",
-        ):
+        for f in ("pandas_udf",):
             with self.assertRaises(NotImplementedError):
                 getattr(CF, f)()
 
