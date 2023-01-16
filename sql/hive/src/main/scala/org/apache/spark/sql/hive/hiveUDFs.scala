@@ -212,24 +212,29 @@ private[hive] case class HiveGenericUDF(
     }
 
     val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
     ev.copy(code =
       code"""
          |${childrenEvals.map(_.code).mkString("\n")}
          |
          |${setDeferredObjects.mkString("\n")}
          |
-         |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |$resultType $resultTerm = null;
          |boolean ${ev.isNull} = false;
          |try {
-         |  ${ev.value} = ($resultType) $refTerm.unwrapper().apply(
+         |  $resultTerm = ($resultType) $refTerm.unwrapper().apply(
          |    $refTerm.function().evaluate($refTerm.deferredObjects()));
-         |  ${ev.isNull} = ${ev.value} == null;
+         |  ${ev.isNull} = $resultTerm == null;
          |} catch (Throwable e) {
          |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
          |    "${funcWrapper.functionClassName}",
          |    "${children.map(_.dataType.catalogString).mkString(", ")}",
          |    "${dataType.catalogString}",
          |    e);
+         |}
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
          |}
          |""".stripMargin
     )
