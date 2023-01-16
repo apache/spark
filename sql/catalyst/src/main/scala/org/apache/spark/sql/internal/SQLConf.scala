@@ -4083,6 +4083,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+    val HAS_CUSTOM_PARTITION_LOCATIONS =
+    buildConf("spark.sql.hasCustomPartitionLocations")
+      .internal()
+      .doc("Insert into hdfs will fetch partitions' details(e.g. createTime,sd,parameters...), " +
+        "when target table does not have custom partition locations, you can set it to false, " +
+        "it will just fetch partitions' name and reduce requests of hive metastore.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4887,6 +4897,8 @@ class SQLConf extends Serializable with Logging {
   def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
+
+  def hasCustomPartitionLocations: Boolean = getConf(SQLConf.HAS_CUSTOM_PARTITION_LOCATIONS)
 
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
