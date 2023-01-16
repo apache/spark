@@ -337,7 +337,12 @@ package object expressions  {
       }
 
       def name = UnresolvedAttribute(nameParts).name
-      prunedCandidates match {
+      // We may have resolved the attributes from metadata columns. The resolved attributes will be
+      // put in a logical plan node and becomes normal attributes. They can still keep the special
+      // attribute metadata to indicate that they are from metadata columns, but they should not
+      // keep any restrictions that may break column resolution for normal attributes.
+      // See SPARK-42084 for more details.
+      prunedCandidates.map(_.markAsAllowAnyAccess()) match {
         case Seq(a) if nestedFields.nonEmpty =>
           // One match, but we also need to extract the requested nested field.
           // The foldLeft adds ExtractValues for every remaining parts of the identifier,
