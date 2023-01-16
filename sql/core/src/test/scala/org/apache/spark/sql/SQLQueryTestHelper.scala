@@ -39,8 +39,8 @@ trait SQLQueryTestHelper {
     line.replaceAll("#\\d+", "#x")
       .replaceAll("plan_id=\\d+", "plan_id=x")
       .replaceAll(
-    s"Location.*$clsName/",
-    s"Location $notIncludedMsg/{warehouse_dir}/")
+        s"Location.*$clsName/",
+        s"Location $notIncludedMsg/{warehouse_dir}/")
       .replaceAll(s"file:.*$clsName", s"Location $notIncludedMsg/{warehouse_dir}")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
