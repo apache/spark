@@ -211,7 +211,7 @@ private[hive] case class HiveGenericUDF(
            |""".stripMargin
     }
 
-    val resultType = CodeGenerator.javaType(dataType)
+    val resultType = CodeGenerator.boxedType(dataType)
     ev.copy(code =
       code"""
          |${childrenEvals.map(_.code).mkString("\n")}
