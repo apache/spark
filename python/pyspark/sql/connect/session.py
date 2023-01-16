@@ -298,7 +298,7 @@ class SparkSession:
 
             _inferred_schema = self._inferSchemaFromList(_data, _cols)
 
-            if _has_nulltype(schema):
+            if _has_nulltype(_inferred_schema):
                 # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                 # we can not infer the schema from the data itself.
                 warnings.warn("failed to infer the schema from data")
