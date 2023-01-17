@@ -32,7 +32,7 @@ from pyspark.sql.functions import (
     PandasUDFType,
 )
 from pyspark.sql.types import ArrayType, TimestampType
-from pyspark.errors.exceptions import AnalysisException
+from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

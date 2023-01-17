@@ -49,7 +49,7 @@ from pyspark.sql.types import (
     DateType,
     BinaryType,
 )
-from pyspark.errors.exceptions import AnalysisException
+from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,

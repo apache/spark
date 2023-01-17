@@ -450,7 +450,7 @@ class VectorUDTTests(MLlibTestCase):
             RowMatrix(df.selectExpr("'monkey'"))
 
     def test_indexed_row_matrix_from_dataframe(self):
-        from pyspark.errors.exceptions import IllegalArgumentException
+        from pyspark.errors import IllegalArgumentException
 
         df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
         matrix = IndexedRowMatrix(df)

@@ -26,7 +26,7 @@ from py4j.java_gateway import (
 )
 
 from pyspark import SparkContext
-from pyspark.errors.exceptions import (  # noqa: F401
+from pyspark.errors import (  # noqa: F401
     AnalysisException,
     ParseException,
     IllegalArgumentException,

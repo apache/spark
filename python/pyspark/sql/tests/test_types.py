@@ -27,7 +27,7 @@ import unittest
 from pyspark.sql import Row
 from pyspark.sql.functions import col
 from pyspark.sql.udf import UserDefinedFunction
-from pyspark.errors.exceptions import AnalysisException
+from pyspark.errors import AnalysisException
 from pyspark.sql.types import (
     ByteType,
     ShortType,
