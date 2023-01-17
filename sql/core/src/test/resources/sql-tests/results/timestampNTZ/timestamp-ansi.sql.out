@@ -15,7 +15,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2019-01-01中文'",
     "valueType" : "\"TIMESTAMP\""
@@ -38,7 +38,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'4294967297'",
     "valueType" : "\"TIMESTAMP\""
@@ -61,7 +61,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42000",
+  "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2021-01-01T12:30:4294967297.123456'",
     "valueType" : "\"TIMESTAMP\""
@@ -382,7 +382,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1'",
@@ -405,7 +405,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
-  "sqlState" : "42000",
+  "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20"
@@ -477,7 +477,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
-  "sqlState" : "42000",
+  "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26"
@@ -501,7 +501,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
-  "sqlState" : "42000",
+  "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27"
@@ -573,7 +573,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
-  "sqlState" : "42000",
+  "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7"
@@ -589,7 +589,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
-  "sqlState" : "42000",
+  "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9"
@@ -669,7 +669,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
-  "sqlState" : "42000",
+  "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid date 'February 29' as '1970' is not a leap year"
@@ -781,6 +781,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP_NTZ\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
@@ -804,6 +805,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP_NTZ\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
@@ -827,6 +829,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP_NTZ\"",
     "right" : "\"VOID\"",
@@ -850,6 +853,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
     "right" : "\"TIMESTAMP_NTZ\"",
@@ -938,6 +942,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd MM yyyy EEEEE'"

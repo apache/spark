@@ -19,11 +19,9 @@ package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.CachedQuantile
 
-class CachedQuantileSerializer extends ProtobufSerDe {
-  override val supportClass: Class[_] = classOf[CachedQuantile]
+class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
 
-  override def serialize(input: Any): Array[Byte] = {
-    val data = input.asInstanceOf[CachedQuantile]
+  override def serialize(data: CachedQuantile): Array[Byte] = {
     val builder = StoreTypes.CachedQuantile.newBuilder()
       .setStageId(data.stageId.toLong)
       .setStageAttemptId(data.stageAttemptId)

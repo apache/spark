@@ -47,7 +47,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte`"
   },
@@ -262,7 +262,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`t1`"
   },
@@ -313,7 +313,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte_outer`"
   },
@@ -346,7 +346,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte_invisible_inner`"
   },
@@ -381,7 +381,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte_invisible_inner`"
   },

@@ -23,7 +23,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`s`"
   },
@@ -46,7 +46,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`r`"
   },
@@ -78,7 +78,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`s2`"
   },
@@ -170,7 +170,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "')'",
     "hint" : ""
@@ -211,7 +211,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`non_existing_table`"
   },

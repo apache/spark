@@ -25,14 +25,9 @@ import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class JobDataWrapperSerializer extends ProtobufSerDe {
+class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
 
-  override val supportClass: Class[_] = classOf[JobDataWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[JobDataWrapper])
-
-  private def serialize(j: JobDataWrapper): Array[Byte] = {
+  override def serialize(j: JobDataWrapper): Array[Byte] = {
     val jobData = serializeJobData(j.info)
     val builder = StoreTypes.JobDataWrapper.newBuilder()
     builder.setInfo(jobData)

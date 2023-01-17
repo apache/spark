@@ -184,7 +184,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42000",
+  "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`random_not_exist_func`",
     "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
