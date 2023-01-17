@@ -18,9 +18,29 @@
 """
 PySpark exceptions.
 """
-from pyspark.errors.exceptions import PySparkException
+from pyspark.errors.exceptions import (  # noqa: F401
+    PySparkException,
+    CapturedException,
+    AnalysisException,
+    ParseException,
+    IllegalArgumentException,
+    StreamingQueryException,
+    QueryExecutionException,
+    PythonException,
+    UnknownException,
+    SparkUpgradeException,
+)
 
 
 __all__ = [
     "PySparkException",
+    "CapturedException",
+    "AnalysisException",
+    "ParseException",
+    "IllegalArgumentException",
+    "StreamingQueryException",
+    "QueryExecutionException",
+    "PythonException",
+    "UnknownException",
+    "SparkUpgradeException",
 ]

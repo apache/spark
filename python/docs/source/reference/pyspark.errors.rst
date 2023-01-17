@@ -27,3 +27,14 @@ Errors
 
     PySparkException.getErrorClass
     PySparkException.getMessageParameters
+    CapturedException.getErrorClass
+    CapturedException.getMessageParameters
+    CapturedException.getSqlState
+    AnalysisException
+    ParseException
+    IllegalArgumentException
+    StreamingQueryException
+    QueryExecutionException
+    PythonException
+    UnknownException
+    SparkUpgradeException

@@ -26,6 +26,16 @@ from py4j.java_gateway import (
 )
 
 from pyspark import SparkContext
+from pyspark.errors.exceptions import (  # noqa: F401
+    AnalysisException,
+    ParseException,
+    IllegalArgumentException,
+    StreamingQueryException,
+    QueryExecutionException,
+    PythonException,
+    UnknownException,
+    SparkUpgradeException,
+)
 from pyspark.find_spark_home import _find_spark_home
 
 if TYPE_CHECKING:

@@ -440,7 +440,7 @@ class VectorUDTTests(MLlibTestCase):
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
     def test_row_matrix_from_dataframe(self):
-        from pyspark.errors.exceptions import IllegalArgumentException
+        from pyspark.errors import IllegalArgumentException
 
         df = self.spark.createDataFrame([Row(Vectors.dense(1))])
         row_matrix = RowMatrix(df)
