@@ -147,7 +147,7 @@ case class InsertAdaptiveSparkPlan(
           name, broadcastKeyIndex, onlyInBroadcast,
           buildPlan, buildKeys, executedPlan)
         subqueryMap.put(exprId.id, subquery)
-      case expressions.RuntimeFilterSubquery(_, buildPlan, buildKeys, broadcastKeyIndex, exprId)
+      case expressions.RuntimeFilterSubquery(_, buildPlan, buildKeys, broadcastKeyIndex, exprId, _)
         if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(buildPlan)
         verifyAdaptivePlan(executedPlan, buildPlan)
