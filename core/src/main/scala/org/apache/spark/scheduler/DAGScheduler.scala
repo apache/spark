@@ -583,7 +583,60 @@ class DAGScheduler(
       SerializationUtils.clone(properties)))
     waiter
   }
+// instrument code
+  var historyRefCount: mutable.HashMap[Int, Int] = new mutable.HashMap[Int, Int]()
+  val cachedSet: mutable.HashSet[RDD[_]] = new mutable.HashSet[RDD[_]]()
 
+  class RddGraph() {
+    var edges: mutable.HashSet[(Int, Int)] = new mutable.HashSet[(Int, Int)]()
+    var outDegrees: mutable.HashMap[Int, Int] = new mutable.HashMap[Int, Int]()
+    var rdds: mutable.HashMap[Int, RDD[_]] = new mutable.HashMap[Int, RDD[_]]()
+
+    def addRdd[T](rdd: RDD[T]): Unit = {
+      rdds.put(rdd.id, rdd)
+    }
+
+    def addEdge(father: RDD[_], son: RDD[_]): Unit = {
+      if (!edges.contains((father.id, son.id))) {
+        // father -> son
+        edges.add((father.id, son.id))
+        // ref count
+        outDegrees.put(father.id, outDegrees.getOrElse(father.id, 0) + 1)
+      }
+    }
+  }
+
+  def calRefCount[T](stageFinalRdd: RDD[T]): RddGraph = {
+    val stageGraph = new RddGraph()
+    // stageGraph.outDegrees
+    //   .put(stageFinalRdd.id, stageGraph.outDegrees.getOrElse(stageFinalRdd.id, 0))
+
+    // 2021年12月3日10:27:06
+    stageGraph.outDegrees
+      .put(stageFinalRdd.id, stageGraph.outDegrees.getOrElse(stageFinalRdd.id, 1))
+    val queue = new mutable.Queue[RDD[_]]()
+    queue.enqueue(stageFinalRdd)
+    while (!queue.isEmpty) {
+      val sonRdd = queue.dequeue()
+      stageGraph.addRdd(sonRdd)
+      sonRdd.dependencies.foreach{
+        case shufDep: ShuffleDependency[_, _, _] =>
+          logInfo(s"[instrument] info: dep from rdd ${sonRdd.id} to" +
+            s" ${shufDep.rdd.id} is ShuffleDependency")
+        case narrowDep: NarrowDependency[_] =>
+          queue.enqueue(narrowDep.rdd)
+          stageGraph.addEdge(narrowDep.rdd, sonRdd)
+      }
+    }
+    stageGraph
+  }
+
+  def updateRefCount(graph: DAGScheduler.this.RddGraph): Unit = {
+    graph.outDegrees.foreach(kv => {
+      historyRefCount.put(kv._1, historyRefCount.getOrElse(kv._1, 0) + kv._2)
+    })
+  }
+  // instrument code end
   /**
    * Run an action job on the given RDD and pass all the results to the resultHandler function as
    * they arrive.
@@ -916,6 +969,38 @@ class DAGScheduler(
         logDebug("missing: " + missing)
         if (missing.isEmpty) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
+            // instrument code
+          // logInfo(s"[instrument] info: cachedSet is \n " +
+          //   s"${cachedSet.toString()}")
+          val stageGraph = calRefCount(stage.rdd)
+          var maxIdRdd: RDD[_] = null
+          var cacheRddList: mutable.HashSet[RDD[_]] = new mutable.HashSet[RDD[_]]()
+
+          updateRefCount(stageGraph)
+
+          stageGraph.outDegrees.foreach(kv => {
+            // cache ref count > 1
+            if (kv._2 > 1) {
+              cacheRddList.add(stageGraph.rdds(kv._1))
+            }
+
+             if (historyRefCount.getOrElse(kv._1, 0) > 1 &&
+              !cacheRddList.contains(stageGraph.rdds(kv._1))) {
+              if (maxIdRdd == null || (maxIdRdd != null && maxIdRdd.id < kv._1)) {
+                maxIdRdd = stageGraph.rdds(kv._1)
+              }
+            }
+
+          })
+          if (maxIdRdd != null) cacheRddList.add(maxIdRdd)
+  
+          cacheRddList.foreach(rdd => {
+            if (rdd.getStorageLevel == StorageLevel.NONE) {
+              logInfo(s"[instrument] info: going to cache rdd ${rdd.id}")
+              rdd.cache()
+            }
+          })
+               // instrument code end
           submitMissingTasks(stage, jobId.get)
         } else {
           for (parent <- missing) {
