@@ -256,9 +256,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * union/intersect/except operator.
    */
   def pushConditionsThroughUnion(
-    conditions: Seq[Expression],
-    union: Union,
-    child: LogicalPlan): Seq[Expression] = {
+      conditions: Seq[Expression],
+      union: Union,
+      child: LogicalPlan): Seq[Expression] = {
     // The output attributes are always equal to the left child's output
     assert(union.output.size == child.output.size)
     val map = AttributeMap(union.output.zip(child.output))
@@ -431,6 +431,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val (correlated, uncorrelated) = conditions.partition(containsOuter)
             // Find outer references that can be substituted by attributes from the inner
             // query using the equality predicates.
+            // If we are under a set op, we never use the predicates directly to substitute outer
+            // refs for now. Future improvement: use the predicates directly if they exist in all
+            // children of the set op.
             val equivalences =
               if (underSetOp) AttributeMap.empty[Attribute]
               else collectEquivalentOuterReferences(correlated)
@@ -721,7 +724,16 @@ object DecorrelateInnerQuery extends PredicateHelper {
             (newJoin, newJoinCond, newOuterReferenceMap)
 
           case u: Union =>
-            // First collect outer references from all children
+            // First collect outer references from all children - these must all be added to the
+            // Domain (otherwise we’d be unioning together inner values corresponding to different
+            // outer values).
+            //
+            // As an example, this inner subquery:
+            //   (select c from t1 where t1.a = outer.a UNION ALL
+            //   select c from t2 where t2.b = outer.b)
+            // has columns a, b in the Domain and is rewritten to:
+            //   (select c, outer.a, outer.b from t1 join outer where t1.a = outer.a UNION ALL
+            //   select c, outer.a, outer.b from t2 join outer where t2.b = outer.b)
             val collectedChildOuterReferences = collectOuterReferencesInPlanTree(u)
             val newOuterReferences = AttributeSet(
               parentOuterReferences ++ collectedChildOuterReferences)

@@ -197,6 +197,16 @@ SELECT * FROM t1 JOIN LATERAL
   FROM   t4
   WHERE  t4.c1 > t1.c2);
 
+-- COUNT bug with UNION in subquery
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT COUNT(t2.c2)
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION DISTINCT
+  SELECT COUNT(t4.c2)
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
 -- SPARK-41961: lateral join with table-valued functions
 SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2));
 SELECT * FROM t1, LATERAL RANGE(3);
