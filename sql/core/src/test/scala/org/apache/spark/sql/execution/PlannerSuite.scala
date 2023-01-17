@@ -1101,9 +1101,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
         val projects = collect(planned) { case p: ProjectExec => p }
         assert(projects.exists(_.outputOrdering match {
-          case Seq(SortOrder(_, Ascending, NullsFirst, sameOrderExprs)) =>
-            sameOrderExprs.size == 1 && sameOrderExprs.head.isInstanceOf[AttributeReference] &&
-              sameOrderExprs.head.asInstanceOf[AttributeReference].name == "t2id"
+          case Seq(s @ SortOrder(_, Ascending, NullsFirst, _)) =>
+            s.children.map(_.asInstanceOf[AttributeReference].name).toSet == Set("t2id", "t3id")
           case _ => false
         }))
       }
@@ -1374,22 +1373,26 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - ordering - multi-alias") {
-    Seq(0, 1, 5).foreach { limit =>
+    Seq(0, 1, 2, 5).foreach { limit =>
       withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> limit.toString) {
         val df = spark.range(2).orderBy($"id").selectExpr("id as x", "id as y", "id as z")
         val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
-        assert(outputOrdering.size == 1)
         limit match {
           case 5 =>
-            assert(outputOrdering.head.sameOrderExpressions.size == 3)
+            assert(outputOrdering.size == 1)
+            assert(outputOrdering.head.sameOrderExpressions.size == 2)
             assert(outputOrdering.head.sameOrderExpressions.map(_.asInstanceOf[Attribute].name)
-              .toSet == Set("x", "y", "z"))
-          case 1 =>
+              .toSet.subsetOf(Set("x", "y", "z")))
+          case 2 =>
+            assert(outputOrdering.size == 1)
             assert(outputOrdering.head.sameOrderExpressions.size == 1)
             assert(outputOrdering.head.sameOrderExpressions.map(_.asInstanceOf[Attribute].name)
               .toSet.subsetOf(Set("x", "y", "z")))
+          case 1 =>
+            assert(outputOrdering.size == 1)
+            assert(outputOrdering.head.sameOrderExpressions.size == 0)
           case 0 =>
-            assert(outputOrdering.head.sameOrderExpressions.isEmpty)
+            assert(outputOrdering.size == 0)
         }
       }
     }
@@ -1425,12 +1428,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       .orderBy($"a" + $"b").selectExpr("a as x", "b as y")
     val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
-    assert(outputOrdering.head.sameOrderExpressions.size == 1)
-    // (a + b), (a + y), (x + b) are pruned since their references are not the subset of output
-    outputOrdering.head.sameOrderExpressions.head match {
-      case Add(l: Attribute, r: Attribute, _) => assert(l.name == "x" && r.name == "y")
-      case _ => fail(s"Unexpected ${outputOrdering.head.sameOrderExpressions.head}")
-    }
+    assert(outputOrdering.head.sameOrderExpressions.size == 0)
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - partitioning - multi-references") {
