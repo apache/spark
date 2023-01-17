@@ -59,7 +59,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -104,7 +104,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`i`",
     "proposal" : "`si`"
@@ -127,7 +127,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`i`",
     "proposal" : "`si`"

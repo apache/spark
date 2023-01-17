@@ -364,7 +364,7 @@ struct<>
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
   "errorClass" : "PARTITIONS_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "428FT",
   "messageParameters" : {
     "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
     "tableName" : "`default`.`t`"

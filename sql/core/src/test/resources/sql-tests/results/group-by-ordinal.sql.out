@@ -223,7 +223,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "STAR_GROUP_BY_POS"
+  "errorClass" : "STAR_GROUP_BY_POS",
+  "sqlState" : "0A000"
 }
 
 

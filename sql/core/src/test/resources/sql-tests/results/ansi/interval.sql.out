@@ -294,6 +294,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL SECOND\"",
@@ -317,6 +318,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -426,6 +428,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INT\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -449,6 +452,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INT\"",
     "right" : "\"INTERVAL HOUR\"",
@@ -472,6 +476,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -495,6 +500,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
     "right" : "\"INTERVAL HOUR\"",
@@ -1683,7 +1689,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42000",
+  "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
     "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
@@ -1706,7 +1712,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42000",
+  "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
     "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
@@ -1745,7 +1751,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42000",
+  "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
     "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
@@ -1768,7 +1774,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42000",
+  "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
     "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
@@ -1872,6 +1878,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -1911,6 +1918,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -1934,6 +1942,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -2015,6 +2024,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -2038,6 +2048,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -2111,6 +2122,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
     "inputType" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2136,6 +2148,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
     "inputType" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2161,6 +2174,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
     "inputType" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2186,6 +2200,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2209,6 +2224,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
@@ -2234,6 +2250,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INT\"",
     "right" : "\"INTERVAL MONTH\"",
@@ -2257,6 +2274,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
@@ -2282,6 +2300,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INT\"",
@@ -3311,6 +3330,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3334,6 +3354,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"STRING\"",
@@ -3357,6 +3378,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"STRING\"",
@@ -3380,6 +3402,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"STRING\"",
@@ -3403,6 +3426,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3426,6 +3450,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3449,6 +3474,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3472,6 +3498,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -3495,6 +3522,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -3518,6 +3546,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -3541,6 +3570,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -3564,6 +3594,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -3587,6 +3618,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -3626,6 +3658,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
     "functionName" : "`array`",
@@ -3665,6 +3698,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
     "functionName" : "`coalesce`",
@@ -3736,6 +3770,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INTERVAL DAY\"",

@@ -766,6 +766,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
@@ -789,6 +790,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
@@ -812,6 +814,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
     "right" : "\"VOID\"",
@@ -835,6 +838,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
     "right" : "\"TIMESTAMP\"",
@@ -881,6 +885,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'yyyy-MM-dd GGGGG'"
@@ -896,6 +901,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd MM yyyy EEEEEE'"
@@ -911,6 +917,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd MM yyyy EEEEE'"
@@ -926,6 +933,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd MM yyyy EEEEE'"
@@ -941,6 +949,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd/MMMMM/yyyy'"
@@ -956,6 +965,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd/MMMMM/yyyy'"

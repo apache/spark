@@ -7,6 +7,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "> 0",
@@ -31,6 +32,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "> 0",
@@ -823,6 +825,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "2",
@@ -846,6 +849,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
     "expectedNum" : "2",
@@ -1639,6 +1643,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
     "inputValue" : "'1'",
@@ -1664,6 +1669,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
     "inputValue" : "'invalidformat'",
@@ -1697,6 +1703,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"fmtField\"",
     "inputName" : "fmt",

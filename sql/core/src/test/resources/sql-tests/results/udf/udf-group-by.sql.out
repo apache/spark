@@ -245,7 +245,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
@@ -447,6 +447,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"INT\"",
@@ -472,6 +473,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"SMALLINT\"",
@@ -497,6 +499,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"BIGINT\"",
@@ -522,6 +525,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",

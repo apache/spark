@@ -146,6 +146,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
     "expectedNum" : "0",
@@ -379,6 +380,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
@@ -404,6 +406,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
@@ -429,6 +432,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
     "inputType" : "\"DOUBLE\"",
@@ -551,6 +555,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
@@ -576,6 +581,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
@@ -601,6 +607,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
     "inputType" : "\"DOUBLE\"",
@@ -723,6 +730,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
     "inputType" : "\"DOUBLE\"",
@@ -828,6 +836,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"DATE\"",
@@ -853,6 +862,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"DATE '2011-11-11'\"",
     "inputType" : "\"DATE\"",
@@ -907,6 +917,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd/MMMMM/yyyy'"
@@ -922,6 +933,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd/MMMMM/yyyy'"
@@ -937,6 +949,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd/MMMMM/yyyy'"
