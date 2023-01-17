@@ -24,12 +24,18 @@ import sys
 import time
 import tempfile
 import threading
-from typing import Callable
+from typing import Callable, Any
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, ANY
 
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, get_gpus_owned
+from pyspark.ml.torch.instrumentation import (
+    instrumented,
+    TorchDistributorInputParams,
+    TorchDistributorSuccess,
+    TorchDistributorFailure,
+)
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import SPARK_HOME
@@ -371,6 +377,78 @@ class TorchWrapperUnitTests(unittest.TestCase):
         t.start()
         time.sleep(2)
         self.assertEqual(mock_clean_and_terminate.call_count, 0)  # type: ignore[attr-defined]
+
+
+class StubTorchDistributor:
+    def __init__(
+        self, num_processes: int, local_mode: bool, use_gpu: bool, result: str, failure: str
+    ):
+        self.num_processes = num_processes
+        self.local_mode = local_mode
+        self.use_gpu = use_gpu
+        self.result = result
+        self.failure = failure
+        self.num_tasks = num_processes
+        self.spark = SparkSession.getActiveSession()
+
+    @instrumented
+    def run(self, train_object: Callable, *args: Any) -> Any:
+        if self.result:
+            return self.result
+        else:
+            raise Exception(self.failure)
+
+
+class TestInstrumentation(unittest.TestCase):
+    def setUp(self) -> None:
+        conf = SparkConf()
+        self.sc = SparkContext("local[4]", conf=conf)
+        self.spark = SparkSession(self.sc)
+
+        self.log_patcher = patch("pyspark.ml.torch.instrumentation._flush_event")
+        self.mock_flush = self.log_patcher.start()
+
+    def tearDown(self) -> None:
+        self.spark.stop()
+        self.log_patcher.stop()
+
+    def test_instrumentation_distributor_success(self) -> None:
+        input_params = {
+            "num_processes": 3,
+            "local_mode": False,
+            "use_gpu": False,
+            "result": "passed",
+            "failure": None,
+        }
+        dist = StubTorchDistributor(**input_params)  # type: ignore
+        dist.run(train_object=lambda x: x)
+
+        expected_input_params = TorchDistributorInputParams(
+            num_processes=3, local_mode=False, use_gpu=False, num_tasks=3
+        )
+        expected_success = TorchDistributorSuccess(output="passed")
+        self.mock_flush.assert_any_call(spark=ANY, event=expected_input_params)
+        self.mock_flush.assert_called_with(spark=ANY, event=expected_success)
+
+    def test_instrumentation_distributor_failure(self) -> None:
+        e = Exception("failed")
+        input_params = {
+            "num_processes": 3,
+            "local_mode": False,
+            "use_gpu": True,
+            "result": None,
+            "failure": e,
+        }
+        dist = StubTorchDistributor(**input_params)  # type: ignore
+        with self.assertRaisesRegex(Exception, "failed"):
+            dist.run(train_object=lambda x: x)
+
+        expected_input_params = TorchDistributorInputParams(
+            num_processes=3, local_mode=False, use_gpu=True, num_tasks=3
+        )
+        expected_failure = TorchDistributorFailure(type(e).__name__, str(e))
+        self.mock_flush.assert_any_call(spark=ANY, event=expected_input_params)
+        self.mock_flush.assert_called_with(spark=ANY, event=expected_failure)
 
 
 if __name__ == "__main__":
