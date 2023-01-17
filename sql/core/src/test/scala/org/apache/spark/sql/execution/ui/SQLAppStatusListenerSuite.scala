@@ -1011,7 +1011,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     assert(received)
   }
 
-  test("SPARK-42100: onJobStart handle event with new executionId not throw NPE") {
+  test("SPARK-42100: onJobStart handle event with unregistered executionId shouldn't throw NPE") {
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get
 
