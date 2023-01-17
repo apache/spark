@@ -3569,6 +3569,7 @@ the effect of the change is not well-defined. For all of them:
     structures into bytes using an encoding/decoding scheme that supports schema migration. For example,
     if you save your state as Avro-encoded bytes, then you are free to change the Avro-state-schema between query
     restarts as the binary state will always be restored successfully.
+
 # Asynchronous Progress Tracking
 ## What is it?
 
@@ -3617,7 +3618,6 @@ Turning the async progress tracking off may cause the following exception to be 
 java.lang.IllegalStateException: batch x doesn't exist
 ```
 
-
 Also the following error message may be printed in the driver logs:
 
 ```
@@ -3625,6 +3625,7 @@ The offset log for batch x doesn't exist, which is required to restart the query
 ```
 
 This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used. To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressCheckpointingInterval” to 0 and run the streaming query until at least two micro-batches have been processed. Async progress tracking can be now safely disabled and restarting query should proceed normally.
+
 # Continuous Processing
 ## [Experimental]
 {:.no_toc}
