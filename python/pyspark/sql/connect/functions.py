@@ -42,6 +42,7 @@ from pyspark.sql.connect.expressions import (
     UnresolvedFunction,
     SQLExpression,
     LambdaFunction,
+    UnresolvedNamedLambdaVariable,
 )
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType
@@ -137,14 +138,18 @@ def _create_lambda(f: Callable) -> LambdaFunction:
     parameters = _get_lambda_parameters(f)
 
     arg_names = ["x", "y", "z"][: len(parameters)]
-    arg_cols = [column(arg) for arg in arg_names]
+    arg_exprs = [
+        UnresolvedNamedLambdaVariable([UnresolvedNamedLambdaVariable.fresh_var_name(arg_name)])
+        for arg_name in arg_names
+    ]
+    arg_cols = [Column(arg_expr) for arg_expr in arg_exprs]
 
     result = f(*arg_cols)
 
     if not isinstance(result, Column):
         raise ValueError(f"Callable {f} should return Column, got {type(result)}")
 
-    return LambdaFunction(result._expr, arg_names)
+    return LambdaFunction(result._expr, arg_exprs)
 
 
 def _invoke_higher_order_function(
