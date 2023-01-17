@@ -21,8 +21,10 @@ import struct
 import sys
 import unittest
 from time import time, sleep
+from typing import Dict, Optional
 
 from pyspark import SparkContext, SparkConf
+from pyspark.errors import PySparkException
 from pyspark.find_spark_home import _find_spark_home
 
 
@@ -137,6 +139,33 @@ class ReusedPySparkTestCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.sc.stop()
+
+    def check_error(
+        self,
+        exception: PySparkException,
+        error_class: str,
+        message_parameters: Optional[Dict[str, str]] = None,
+    ):
+        # Test if given error is an instance of PySparkException.
+        self.assertIsInstance(
+            exception,
+            PySparkException,
+            f"checkError requires 'PySparkException', got '{exception.__class__.__name__}'.",
+        )
+
+        # Test error class
+        expected = error_class
+        actual = exception.getErrorClass()
+        self.assertEqual(
+            expected, actual, f"Expected error class was '{expected}', got '{actual}'."
+        )
+
+        # Test message parameters
+        expected = message_parameters
+        actual = exception.getMessageParameters()
+        self.assertEqual(
+            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+        )
 
 
 class ByteArrayOutput:

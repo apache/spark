@@ -17,6 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
+import java.lang.reflect.ParameterizedType
 import java.util.ServiceLoader
 
 import collection.JavaConverters._
@@ -40,10 +41,16 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
 
 private[spark] object KVStoreProtobufSerializer {
 
- private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe] =
-   ServiceLoader.load(classOf[ProtobufSerDe])
-     .asScala.map(serDe => serDe.supportClass -> serDe).toMap
+  private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe[Any]] = {
+    def getGenericsType(klass: Class[_]): Class[_] = {
+      klass.getGenericInterfaces.head.asInstanceOf[ParameterizedType]
+        .getActualTypeArguments.head.asInstanceOf[Class[_]]
+    }
+    ServiceLoader.load(classOf[ProtobufSerDe[Any]]).asScala.map { serDe =>
+      getGenericsType(serDe.getClass) -> serDe
+    }.toMap
+  }
 
-  def getSerializer(klass: Class[_]): Option[ProtobufSerDe] =
+  def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] =
     serializerMap.get(klass)
 }

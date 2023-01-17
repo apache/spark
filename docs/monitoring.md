@@ -1421,6 +1421,21 @@ Note: applies to the shuffle service
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
 
+
+- **note:** the metrics below apply when the server side configuration
+  `spark.shuffle.push.server.mergedShuffleFileManagerImpl` is set to
+  `org.apache.spark.network.shuffle.MergedShuffleFileManager` for Push-Based Shuffle
+- blockBytesWritten - the size of the pushed block data written to file in bytes
+- blockAppendCollisions - the number of shuffle push blocks collided in shuffle services
+  as another block for the same reduce partition were being written
+- lateBlockPushes - the number of shuffle push blocks that are received in shuffle service
+  after the specific shuffle merge has been finalized
+- deferredBlocks - the number of the current deferred block parts buffered in memory
+- deferredBlockBytes - the size of the current deferred block parts buffered in memory
+- staleBlockPushes - the number of stale shuffle block push requests
+- ignoredBlockBytes - the size of the pushed block data that are ignored after the shuffle
+  file is finalized or when a request is for a duplicate block
+
 # Advanced Instrumentation
 
 Several external tools can be used to help profile the performance of Spark jobs:

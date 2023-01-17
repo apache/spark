@@ -445,6 +445,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
     "format" : "'m%aca'"
@@ -460,6 +461,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
     "format" : "'m%aca'"
@@ -475,6 +477,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
     "format" : "'m%a%%a'"
@@ -490,6 +493,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
     "format" : "'m%a%%a'"
@@ -505,6 +509,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",
     "format" : "'b_ear'"
@@ -520,6 +525,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",
     "format" : "'b_ear'"
@@ -535,6 +541,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",
     "format" : "'b_e__r'"
@@ -550,6 +557,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",
     "format" : "'b_e__r'"

@@ -20,7 +20,6 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Any
 from typing import TYPE_CHECKING
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
@@ -34,6 +33,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
 
+__all__ = ["DataFrameReader", "DataFrameWriter"]
 
 PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
@@ -70,9 +70,13 @@ class DataFrameReader(OptionUtils):
 
     format.__doc__ = PySparkDataFrameReader.format.__doc__
 
-    # TODO(SPARK-40539): support StructType in python client and support schema as StructType.
-    def schema(self, schema: str) -> "DataFrameReader":
-        self._schema = schema
+    def schema(self, schema: Union[StructType, str]) -> "DataFrameReader":
+        if isinstance(schema, StructType):
+            self._schema = schema.json()
+        elif isinstance(schema, str):
+            self._schema = schema
+        else:
+            raise TypeError(f"schema must be a StructType or str, but got {schema}")
         return self
 
     schema.__doc__ = PySparkDataFrameReader.schema.__doc__
@@ -92,9 +96,9 @@ class DataFrameReader(OptionUtils):
 
     def load(
         self,
-        path: Optional[str] = None,
+        path: Optional[PathOrPaths] = None,
         format: Optional[str] = None,
-        schema: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
         **options: "OptionalPrimitiveType",
     ) -> "DataFrame":
         if format is not None:
@@ -102,10 +106,17 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if path is not None:
-            self.option("path", path)
 
-        plan = DataSource(format=self._format, schema=self._schema, options=self._options)
+        paths = path
+        if isinstance(path, str):
+            paths = [path]
+
+        plan = DataSource(
+            format=self._format,
+            schema=self._schema,
+            options=self._options,
+            paths=paths,  # type: ignore[arg-type]
+        )
         return self._df(plan)
 
     load.__doc__ = PySparkDataFrameReader.load.__doc__
@@ -122,8 +133,8 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: str,
-        schema: Optional[str] = None,
+        path: PathOrPaths,
+        schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
         allowComments: Optional[Union[bool, str]] = None,
@@ -173,11 +184,13 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             allowNonNumericNumbers=allowNonNumericNumbers,
         )
+        if isinstance(path, str):
+            path = [path]
         return self.load(path=path, format="json", schema=schema)
 
     json.__doc__ = PySparkDataFrameReader.json.__doc__
 
-    def parquet(self, path: str, **options: "OptionalPrimitiveType") -> "DataFrame":
+    def parquet(self, *paths: str, **options: "OptionalPrimitiveType") -> "DataFrame":
         mergeSchema = options.get("mergeSchema", None)
         pathGlobFilter = options.get("pathGlobFilter", None)
         modifiedBefore = options.get("modifiedBefore", None)
@@ -195,9 +208,136 @@ class DataFrameReader(OptionUtils):
             int96RebaseMode=int96RebaseMode,
         )
 
-        return self.load(path=path, format="parquet")
+        return self.load(path=list(paths), format="parquet")
 
     parquet.__doc__ = PySparkDataFrameReader.parquet.__doc__
+
+    def text(
+        self,
+        paths: PathOrPaths,
+        wholetext: Optional[bool] = None,
+        lineSep: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            wholetext=wholetext,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+        )
+
+        if isinstance(paths, str):
+            paths = [paths]
+        return self.load(path=paths, format="text")
+
+    text.__doc__ = PySparkDataFrameReader.text.__doc__
+
+    def csv(
+        self,
+        path: PathOrPaths,
+        schema: Optional[Union[StructType, str]] = None,
+        sep: Optional[str] = None,
+        encoding: Optional[str] = None,
+        quote: Optional[str] = None,
+        escape: Optional[str] = None,
+        comment: Optional[str] = None,
+        header: Optional[Union[bool, str]] = None,
+        inferSchema: Optional[Union[bool, str]] = None,
+        ignoreLeadingWhiteSpace: Optional[Union[bool, str]] = None,
+        ignoreTrailingWhiteSpace: Optional[Union[bool, str]] = None,
+        nullValue: Optional[str] = None,
+        nanValue: Optional[str] = None,
+        positiveInf: Optional[str] = None,
+        negativeInf: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        maxColumns: Optional[Union[int, str]] = None,
+        maxCharsPerColumn: Optional[Union[int, str]] = None,
+        maxMalformedLogPerPartition: Optional[Union[int, str]] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        multiLine: Optional[Union[bool, str]] = None,
+        charToEscapeQuoteEscaping: Optional[str] = None,
+        samplingRatio: Optional[Union[float, str]] = None,
+        enforceSchema: Optional[Union[bool, str]] = None,
+        emptyValue: Optional[str] = None,
+        locale: Optional[str] = None,
+        lineSep: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+        unescapedQuoteHandling: Optional[str] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            sep=sep,
+            encoding=encoding,
+            quote=quote,
+            escape=escape,
+            comment=comment,
+            header=header,
+            inferSchema=inferSchema,
+            ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
+            ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
+            nullValue=nullValue,
+            nanValue=nanValue,
+            positiveInf=positiveInf,
+            negativeInf=negativeInf,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            maxColumns=maxColumns,
+            maxCharsPerColumn=maxCharsPerColumn,
+            maxMalformedLogPerPartition=maxMalformedLogPerPartition,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            multiLine=multiLine,
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
+            samplingRatio=samplingRatio,
+            enforceSchema=enforceSchema,
+            emptyValue=emptyValue,
+            locale=locale,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+            unescapedQuoteHandling=unescapedQuoteHandling,
+        )
+        if isinstance(path, str):
+            path = [path]
+        return self.load(path=path, format="csv", schema=schema)
+
+    csv.__doc__ = PySparkDataFrameReader.csv.__doc__
+
+    def orc(
+        self,
+        path: PathOrPaths,
+        mergeSchema: Optional[bool] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+            recursiveFileLookup=recursiveFileLookup,
+        )
+        if isinstance(path, str):
+            path = [path]
+        return self.load(path=path, format="orc")
+
+    orc.__doc__ = PySparkDataFrameReader.orc.__doc__
+
+    def jdbc(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("jdbc() not supported for DataFrameWriter")
 
 
 DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__
@@ -474,18 +614,10 @@ def _test() -> None:
         import pyspark.sql.connect.readwriter
 
         globs = pyspark.sql.connect.readwriter.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.readwriter tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.readwriter tests"}
-        )
 
         # TODO(SPARK-41817): Support reading with schema
-        del pyspark.sql.connect.readwriter.DataFrameReader.load.__doc__
         del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.csv.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.text.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
 
@@ -493,9 +625,11 @@ def _test() -> None:
         del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.readwriter tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.readwriter,
@@ -506,7 +640,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

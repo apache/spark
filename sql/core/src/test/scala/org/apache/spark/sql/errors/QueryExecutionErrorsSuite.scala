@@ -82,18 +82,18 @@ class QueryExecutionErrorsSuite
     (df1, df2)
   }
 
-  test("INVALID_PARAMETER_VALUE: invalid key lengths in AES functions") {
+  test("INVALID_PARAMETER_VALUE.AES_KEY_LENGTH: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
         exception = intercept[SparkException] {
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE",
-        parameters = Map("parameter" -> "key",
+        errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
+        parameters = Map(
+          "parameter" -> "`key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("expects a binary value with 16, 24 or 32 bytes, but got " +
-            inputBytes.toString + " bytes.")),
+          "actualLength" -> inputBytes.toString),
         sqlState = "22023")
     }
 
@@ -116,7 +116,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE: AES decrypt failure - key mismatch") {
+  test("INVALID_PARAMETER_VALUE.AES_KEY: AES decrypt failure - key mismatch") {
     val (_, df2) = getAesInputs()
     Seq(
       ("value16", "1234567812345678"),
@@ -126,11 +126,10 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE",
-        parameters = Map("parameter" -> "expr, key",
+        errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
+        parameters = Map("parameter" -> "`expr`, `key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("Detail message: " +
-            "Given final block not properly padded. " +
+          "detailMessage" -> ("Given final block not properly padded. " +
             "Such issues can arise if a bad key is used during decryption.")),
         sqlState = "22023")
     }
@@ -344,7 +343,7 @@ class QueryExecutionErrorsSuite
       exception = e4.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "CANNOT_PARSE_DECIMAL",
       parameters = Map[String, String](),
-      sqlState = "42000")
+      sqlState = "22018")
   }
 
   test("FAILED_EXECUTE_UDF: execute user defined function") {
@@ -391,7 +390,7 @@ class QueryExecutionErrorsSuite
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
       parameters = Map("columnName" -> "`__auto_generated_subquery_name`.`map`"),
-      sqlState = "42000")
+      sqlState = "42818")
   }
 
   test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
@@ -543,7 +542,7 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> unrecognizedColumnType.toString),
-      sqlState = "42000")
+      sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
   }
@@ -617,7 +616,7 @@ class QueryExecutionErrorsSuite
             "sourceType" -> s""""${sourceType.sql}"""",
             "targetType" -> s""""$it"""",
             "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
-          sqlState = "22005")
+          sqlState = "22003")
       }
     }
   }
@@ -659,7 +658,7 @@ class QueryExecutionErrorsSuite
         checkError(
           exception = e.getCause.asInstanceOf[SparkFileAlreadyExistsException],
           errorClass = "FAILED_RENAME_PATH",
-          sqlState = Some("22023"),
+          sqlState = Some("42K04"),
           matchPVals = true,
           parameters = Map("sourcePath" -> s"$expectedPath.+",
             "targetPath" -> s"$expectedPath.+"))

@@ -28,8 +28,12 @@ import json
 import decimal
 import datetime
 import warnings
+from threading import Lock
+
+import numpy as np
 
 from pyspark.sql.types import (
+    _from_numpy_type,
     DateType,
     NullType,
     BooleanType,
@@ -152,7 +156,7 @@ class ColumnAlias(Expression):
             return exp
 
     def __repr__(self) -> str:
-        return f"Alias({self._parent}, ({','.join(self._alias)}))"
+        return f"{self._parent} AS {','.join(self._alias)}"
 
 
 class LiteralExpression(Expression):
@@ -192,19 +196,30 @@ class LiteralExpression(Expression):
             if isinstance(dataType, BinaryType):
                 assert isinstance(value, (bytes, bytearray))
             elif isinstance(dataType, BooleanType):
-                assert isinstance(value, bool)
+                assert isinstance(value, (bool, np.bool_))
+                value = bool(value)
             elif isinstance(dataType, ByteType):
-                assert isinstance(value, int) and JVM_BYTE_MIN <= int(value) <= JVM_BYTE_MAX
+                assert isinstance(value, (int, np.int8))
+                assert JVM_BYTE_MIN <= int(value) <= JVM_BYTE_MAX
+                value = int(value)
             elif isinstance(dataType, ShortType):
-                assert isinstance(value, int) and JVM_SHORT_MIN <= int(value) <= JVM_SHORT_MAX
+                assert isinstance(value, (int, np.int8, np.int16))
+                assert JVM_SHORT_MIN <= int(value) <= JVM_SHORT_MAX
+                value = int(value)
             elif isinstance(dataType, IntegerType):
-                assert isinstance(value, int) and JVM_INT_MIN <= int(value) <= JVM_INT_MAX
+                assert isinstance(value, (int, np.int8, np.int16, np.int32))
+                assert JVM_INT_MIN <= int(value) <= JVM_INT_MAX
+                value = int(value)
             elif isinstance(dataType, LongType):
-                assert isinstance(value, int) and JVM_LONG_MIN <= int(value) <= JVM_LONG_MAX
+                assert isinstance(value, (int, np.int8, np.int16, np.int32, np.int64))
+                assert JVM_LONG_MIN <= int(value) <= JVM_LONG_MAX
+                value = int(value)
             elif isinstance(dataType, FloatType):
-                assert isinstance(value, float)
+                assert isinstance(value, (float, np.float32))
+                value = float(value)
             elif isinstance(dataType, DoubleType):
-                assert isinstance(value, float)
+                assert isinstance(value, (float, np.float32, np.float64))
+                value = float(value)
             elif isinstance(dataType, DecimalType):
                 assert isinstance(value, decimal.Decimal)
             elif isinstance(dataType, StringType):
@@ -226,7 +241,7 @@ class LiteralExpression(Expression):
                 value = DayTimeIntervalType().toInternal(value)
                 assert value is not None
             else:
-                raise ValueError(f"Unsupported Data Type {dataType}")
+                raise TypeError(f"Unsupported Data Type {dataType}")
 
         self._value = value
         self._dataType = dataType
@@ -259,7 +274,11 @@ class LiteralExpression(Expression):
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
         else:
-            raise ValueError(f"Unsupported Data Type {type(value).__name__}")
+            if isinstance(value, np.generic):
+                dt = _from_numpy_type(value.dtype)
+                if dt is not None:
+                    return dt
+            raise TypeError(f"Unsupported Data Type {type(value).__name__}")
 
     @classmethod
     def _from_value(cls, value: Any) -> "LiteralExpression":
@@ -308,7 +327,7 @@ class LiteralExpression(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"Literal({self._value})"
+        return f"{self._value}"
 
 
 class ColumnReference(Expression):
@@ -333,7 +352,7 @@ class ColumnReference(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"ColumnReference({self._unparsed_identifier})"
+        return f"{self._unparsed_identifier}"
 
 
 class SQLExpression(Expression):
@@ -414,6 +433,7 @@ class UnresolvedFunction(Expression):
         return fun
 
     def __repr__(self) -> str:
+        # Default print handling:
         if self._is_distinct:
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
@@ -539,11 +559,53 @@ class CastExpression(Expression):
         return f"({self._expr} ({self._data_type}))"
 
 
+class UnresolvedNamedLambdaVariable(Expression):
+
+    _lock: Lock = Lock()
+    _nextVarNameId: int = 0
+
+    def __init__(
+        self,
+        name_parts: Sequence[str],
+    ) -> None:
+        super().__init__()
+
+        assert (
+            isinstance(name_parts, list)
+            and len(name_parts) > 0
+            and all(isinstance(p, str) for p in name_parts)
+        )
+
+        self._name_parts = name_parts
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.unresolved_named_lambda_variable.name_parts.extend(self._name_parts)
+        return expr
+
+    def __repr__(self) -> str:
+        return f"(UnresolvedNamedLambdaVariable({', '.join(self._name_parts)})"
+
+    @staticmethod
+    def fresh_var_name(name: str) -> str:
+        assert isinstance(name, str) and str != ""
+
+        _id: Optional[int] = None
+
+        with UnresolvedNamedLambdaVariable._lock:
+            _id = UnresolvedNamedLambdaVariable._nextVarNameId
+            UnresolvedNamedLambdaVariable._nextVarNameId += 1
+
+        assert _id is not None
+
+        return f"{name}_{_id}"
+
+
 class LambdaFunction(Expression):
     def __init__(
         self,
         function: Expression,
-        arguments: Sequence[str],
+        arguments: Sequence[UnresolvedNamedLambdaVariable],
     ) -> None:
         super().__init__()
 
@@ -552,17 +614,19 @@ class LambdaFunction(Expression):
         assert (
             isinstance(arguments, list)
             and len(arguments) > 0
-            and all(isinstance(arg, str) for arg in arguments)
+            and all(isinstance(arg, UnresolvedNamedLambdaVariable) for arg in arguments)
         )
 
         self._function = function
         self._arguments = arguments
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        fun = proto.Expression()
-        fun.lambda_function.function.CopyFrom(self._function.to_plan(session))
-        fun.lambda_function.arguments.extend(self._arguments)
-        return fun
+        expr = proto.Expression()
+        expr.lambda_function.function.CopyFrom(self._function.to_plan(session))
+        expr.lambda_function.arguments.extend(
+            [arg.to_plan(session).unresolved_named_lambda_variable for arg in self._arguments]
+        )
+        return expr
 
     def __repr__(self) -> str:
         return f"(LambdaFunction({str(self._function)}, {', '.join(self._arguments)})"

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
@@ -727,6 +728,42 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(rightKeys === Seq(exprC))
           assert(right.numPartitions == 10)
         case other => fail(other.toString)
+      }
+    }
+  }
+
+  test("SPARK-41986: Introduce shuffle on SinglePartition") {
+    val filesMaxPartitionBytes = conf.filesMaxPartitionBytes
+    withSQLConf(SQLConf.MAX_SINGLE_PARTITION_BYTES.key -> filesMaxPartitionBytes.toString) {
+      Seq(filesMaxPartitionBytes, filesMaxPartitionBytes + 1).foreach { size =>
+        val logicalPlan = StatsTestPlan(Nil, 1L, AttributeMap.empty, Some(size))
+        val left = DummySparkPlan(outputPartitioning = SinglePartition)
+        left.setLogicalLink(logicalPlan)
+        val right = DummySparkPlan(outputPartitioning = SinglePartition)
+        right.setLogicalLink(logicalPlan)
+        val smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, left, right)
+
+        if (size <= filesMaxPartitionBytes) {
+          EnsureRequirements.apply(smjExec) match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+            SortExec(_, _, _: DummySparkPlan, _),
+            SortExec(_, _, _: DummySparkPlan, _), _) =>
+              assert(leftKeys === Seq(exprA))
+              assert(rightKeys === Seq(exprC))
+            case other => fail(other.toString)
+          }
+        } else {
+          EnsureRequirements.apply(smjExec) match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+            SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+              assert(leftKeys === Seq(exprA))
+              assert(rightKeys === Seq(exprC))
+              assert(left.numPartitions == 5)
+              assert(right.numPartitions == 5)
+            case other => fail(other.toString)
+          }
+        }
       }
     }
   }

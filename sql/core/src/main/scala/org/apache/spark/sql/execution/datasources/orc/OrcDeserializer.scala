@@ -42,21 +42,26 @@ class OrcDeserializer(
   //   is always null in this case
   // - a function that updates target column `index` otherwise.
   private val fieldWriters: Array[WritableComparable[_] => Unit] = {
+    // Assume we create a table backed by Orc files. Then if we later run a command "ALTER TABLE t
+    // ADD COLUMN c DEFAULT <value>" on the Orc table, this adds one field to the Catalyst schema.
+    // Then if we query the old files with the new Catalyst schema, we should only apply the
+    // existence default value to the columns whose IDs are not explicitly requested.
+    if (requiredSchema.hasExistenceDefaultValues) {
+      for (i <- 0 until requiredSchema.existenceDefaultValues.size) {
+        requiredSchema.existenceDefaultsBitmask(i) =
+          if (requestedColIds(i) != -1) {
+            false
+          } else {
+            requiredSchema.existenceDefaultValues(i) != null
+          }
+      }
+    }
     requiredSchema.zipWithIndex
       .map { case (f, index) =>
         if (requestedColIds(index) == -1) {
           null
         } else {
-          // Create a RowUpdater instance for converting Orc objects to Catalyst rows. If any fields
-          // in the Orc result schema have associated existence default values, maintain a
-          // boolean array to track which fields have been explicitly assigned for each row.
-          val rowUpdater: RowUpdater =
-            if (requiredSchema.hasExistenceDefaultValues) {
-              resetExistenceDefaultsBitmask(requiredSchema)
-              new RowUpdaterWithBitmask(resultRow, requiredSchema.existenceDefaultsBitmask)
-            } else {
-              new RowUpdater(resultRow)
-            }
+          val rowUpdater = new RowUpdater(resultRow)
           val writer = newWriter(f.dataType, rowUpdater)
           (value: WritableComparable[_]) => writer(index, value)
         }
@@ -93,6 +98,7 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
+    applyExistenceDefaultValuesToRow(requiredSchema, resultRow)
     resultRow
   }
 
@@ -287,50 +293,5 @@ class OrcDeserializer(
     override def setLong(ordinal: Int, value: Long): Unit = array.setLong(ordinal, value)
     override def setDouble(ordinal: Int, value: Double): Unit = array.setDouble(ordinal, value)
     override def setFloat(ordinal: Int, value: Float): Unit = array.setFloat(ordinal, value)
-  }
-
-  /**
-   * Subclass of RowUpdater that also updates a boolean array bitmask. In this way, after all
-   * assignments are complete, it is possible to inspect the bitmask to determine which columns have
-   * been written at least once.
-   */
-  final class RowUpdaterWithBitmask(
-      row: InternalRow, bitmask: Array[Boolean]) extends RowUpdater(row) {
-    override def setNullAt(ordinal: Int): Unit = {
-      bitmask(ordinal) = false
-      super.setNullAt(ordinal)
-    }
-    override def set(ordinal: Int, value: Any): Unit = {
-      bitmask(ordinal) = false
-      super.set(ordinal, value)
-    }
-    override def setBoolean(ordinal: Int, value: Boolean): Unit = {
-      bitmask(ordinal) = false
-      super.setBoolean(ordinal, value)
-    }
-    override def setByte(ordinal: Int, value: Byte): Unit = {
-      bitmask(ordinal) = false
-      super.setByte(ordinal, value)
-    }
-    override def setShort(ordinal: Int, value: Short): Unit = {
-      bitmask(ordinal) = false
-      super.setShort(ordinal, value)
-    }
-    override def setInt(ordinal: Int, value: Int): Unit = {
-      bitmask(ordinal) = false
-      super.setInt(ordinal, value)
-    }
-    override def setLong(ordinal: Int, value: Long): Unit = {
-      bitmask(ordinal) = false
-      super.setLong(ordinal, value)
-    }
-    override def setDouble(ordinal: Int, value: Double): Unit = {
-      bitmask(ordinal) = false
-      super.setDouble(ordinal, value)
-    }
-    override def setFloat(ordinal: Int, value: Float): Unit = {
-      bitmask(ordinal) = false
-      super.setFloat(ordinal, value)
-    }
   }
 }

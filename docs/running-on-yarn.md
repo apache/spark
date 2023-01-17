@@ -800,7 +800,7 @@ staging directory of the Spark application.
   <td><code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems</code></td>
   <td>(none)</td>
   <td>
-    A comma-separated list of Hadoop filesystems for whose hosts will be excluded from from delegation
+    A comma-separated list of Hadoop filesystems for whose hosts will be excluded from delegation
     token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
     hdfs://nn2.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
     Note that as resource scheduler does not renew token, so any application running longer than the original token expiration that tries

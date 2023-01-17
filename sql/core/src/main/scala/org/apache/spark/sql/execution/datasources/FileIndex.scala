@@ -82,4 +82,6 @@ trait FileIndex {
    * to update the metrics.
    */
   def metadataOpsTimeNs: Option[Long] = None
+
+  override def toString: String = s"${getClass.getName}(${rootPaths.mkString(",")})"
 }

@@ -331,24 +331,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
         self.assertEqual(plan.root.freq_items.support, 0.01)
 
-    def test_freqItems(self):
-        df = self.connect.readTable(table_name=self.tbl_name)
-        plan = (
-            df.filter(df.col_name > 3).freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
-        )
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 1)
-        plan = df.filter(df.col_name > 3).freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 0.01)
-
-        plan = df.stat.freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 1)
-        plan = df.stat.freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 0.01)
-
     def test_limit(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         limit_plan = df.limit(10)._plan.to_proto(self.connect)
@@ -507,10 +489,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         data_source = plan.root.read.data_source
         self.assertEqual(data_source.format, "text")
         self.assertEqual(data_source.schema, "id INT")
-        self.assertEqual(len(data_source.options), 3)
-        self.assertEqual(data_source.options.get("path"), "test_path")
+        self.assertEqual(len(data_source.options), 2)
         self.assertEqual(data_source.options.get("op1"), "opv")
         self.assertEqual(data_source.options.get("op2"), "opv2")
+        self.assertEqual(len(data_source.paths), 1)
+        self.assertEqual(data_source.paths[0], "test_path")
 
     def test_simple_udf(self):
         u = udf(lambda x: "Martin", StringType())
@@ -584,6 +567,32 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         with self.assertRaises(ValueError) as context:
             df.repartition(-1)._plan.to_proto(self.connect)
         self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+    def test_repartition_by_expression(self):
+        # SPARK-41354: test dataframe.repartition(expressions)
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.repartition(10, "col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(10, plan.root.repartition_by_expression.num_partitions)
+        self.assertEqual(
+            [
+                f.unresolved_attribute.unparsed_identifier
+                for f in plan.root.repartition_by_expression.partition_exprs
+            ],
+            ["col_a", "col_b"],
+        )
+
+    def test_repartition_by_range(self):
+        # SPARK-41354: test dataframe.repartitionByRange(expressions)
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.repartitionByRange(10, "col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(10, plan.root.repartition_by_expression.num_partitions)
+        self.assertEqual(
+            [
+                f.sort_order.child.unresolved_attribute.unparsed_identifier
+                for f in plan.root.repartition_by_expression.partition_exprs
+            ],
+            ["col_a", "col_b"],
+        )
 
     def test_to(self):
         # SPARK-41464: test `to` API in Python client.
@@ -730,7 +739,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_uuid_literal(self):
 
         val = uuid.uuid4()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             lit(val)
 
     def test_column_literals(self):
@@ -805,7 +814,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases
         col0 = col("a").alias("martin")
-        self.assertEqual("Column<'Alias(ColumnReference(a), (martin))'>", str(col0))
+        self.assertEqual("Column<'a AS martin'>", str(col0))
 
         col0 = col("a").alias("martin", metadata={"pii": True})
         plan = col0.to_plan(self.session.client)

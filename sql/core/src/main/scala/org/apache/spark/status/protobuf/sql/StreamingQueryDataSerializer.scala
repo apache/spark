@@ -23,24 +23,21 @@ import org.apache.spark.sql.streaming.ui.StreamingQueryData
 import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class StreamingQueryDataSerializer extends ProtobufSerDe {
+class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
 
-  override val supportClass: Class[_] = classOf[StreamingQueryData]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val data = input.asInstanceOf[StreamingQueryData]
+  override def serialize(data: StreamingQueryData): Array[Byte] = {
     val builder = StoreTypes.StreamingQueryData.newBuilder()
-      .setName(data.name)
       .setId(data.id.toString)
       .setRunId(data.runId)
       .setIsActive(data.isActive)
+    Option(data.name).foreach(builder.setName)
     data.exception.foreach(builder.setException)
     builder.setStartTimestamp(data.startTimestamp)
     data.endTimestamp.foreach(builder.setEndTimestamp)
     builder.build().toByteArray
   }
 
-  override def deserialize(bytes: Array[Byte]): Any = {
+  override def deserialize(bytes: Array[Byte]): StreamingQueryData = {
     val data = StoreTypes.StreamingQueryData.parseFrom(bytes)
     val exception =
       getOptional(data.hasException, () => data.getException)

@@ -110,17 +110,16 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
+  test("INVALID_PARAMETER_VALUE.ZERO_INDEX: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
           sql("select format_string('%0$s', 'Hello')")
         },
-        errorClass = "INVALID_PARAMETER_VALUE",
+        errorClass = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
         parameters = Map(
-          "parameter" -> "strfmt",
-          "functionName" -> "`format_string`",
-          "expected" -> "expects %1$, %2$ and so on, but got %0$."),
+          "parameter" -> "`strfmt`",
+          "functionName" -> "`format_string`"),
         context = ExpectedContext(
           fragment = "format_string('%0$s', 'Hello')", start = 7, stop = 36))
     }
@@ -278,7 +277,7 @@ class QueryCompilationErrorsSuite
       exception = groupingColMismatchEx,
       errorClass = "GROUPING_COLUMN_MISMATCH",
       parameters = Map("grouping" -> "earnings.*", "groupingColumns" -> "course.*,year.*"),
-      sqlState = Some("42000"),
+      sqlState = Some("42803"),
       matchPVals = true)
   }
 
@@ -291,7 +290,7 @@ class QueryCompilationErrorsSuite
       errorClass = "GROUPING_ID_COLUMN_MISMATCH",
       parameters = Map("groupingIdColumn" -> "earnings.*",
       "groupByColumns" -> "course.*,year.*"),
-      sqlState = Some("42000"),
+      sqlState = Some("42803"),
       matchPVals = true)
   }
 

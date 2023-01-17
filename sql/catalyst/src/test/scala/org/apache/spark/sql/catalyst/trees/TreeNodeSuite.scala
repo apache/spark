@@ -977,4 +977,108 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       assert(origin.context.summary.isEmpty)
     }
   }
+
+  private def newErrorAfterStream(es: Expression*) = {
+    es.toStream.append(
+      throw new NoSuchElementException("Stream should not return more elements")
+    )
+  }
+
+  test("multiTransformDown generates all alternatives") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3))
+      case StringLiteral("b") => Stream(Literal(10), Literal(20), Literal(30))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) =>
+        Stream(Literal(100), Literal(200), Literal(300))
+    }
+    val expected = for {
+      cd <- Seq(Literal(100), Literal(200), Literal(300))
+      b <- Seq(Literal(10), Literal(20), Literal(30))
+      a <- Seq(Literal(1), Literal(2), Literal(3))
+    } yield Add(Add(a, b), cd)
+    assert(transformed === expected)
+  }
+
+  test("multiTransformDown is lazy") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3))
+      case StringLiteral("b") => newErrorAfterStream(Literal(10))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+    }
+    val expected = for {
+      a <- Seq(Literal(1), Literal(2), Literal(3))
+    } yield Add(Add(a, Literal(10)), Literal(100))
+    // We don't access alternatives for `b` after 10 and for `c` after 100
+    assert(transformed.take(3) == expected)
+    intercept[NoSuchElementException] {
+      transformed.take(3 + 1).toList
+    }
+
+    val transformed2 = e.multiTransformDown {
+      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3))
+      case StringLiteral("b") => Stream(Literal(10), Literal(20), Literal(30))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+    }
+    val expected2 = for {
+      b <- Seq(Literal(10), Literal(20), Literal(30))
+      a <- Seq(Literal(1), Literal(2), Literal(3))
+    } yield Add(Add(a, b), Literal(100))
+    // We don't access alternatives for `c` after 100
+    assert(transformed2.take(3 * 3) === expected2)
+    intercept[NoSuchElementException] {
+      transformed.take(3 * 3 + 1).toList
+    }
+  }
+
+  test("multiTransformDown rule return this") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case s @ StringLiteral("a") => Stream(Literal(1), Literal(2), s)
+      case s @ StringLiteral("b") => Stream(Literal(10), Literal(20), s)
+      case a @ Add(StringLiteral("c"), StringLiteral("d"), _) =>
+        Stream(Literal(100), Literal(200), a)
+    }
+    val expected = for {
+      cd <- Seq(Literal(100), Literal(200), Add(Literal("c"), Literal("d")))
+      b <- Seq(Literal(10), Literal(20), Literal("b"))
+      a <- Seq(Literal(1), Literal(2), Literal("a"))
+    } yield Add(Add(a, b), cd)
+    assert(transformed == expected)
+  }
+
+  test("multiTransformDown doesn't stop generating alternatives of descendants when non-leaf is " +
+    "transformed and itself is in the alternatives") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case a @ Add(StringLiteral("a"), StringLiteral("b"), _) =>
+        Stream(Literal(11), Literal(12), Literal(21), Literal(22), a)
+      case StringLiteral("a") => Stream(Literal(1), Literal(2))
+      case StringLiteral("b") => Stream(Literal(10), Literal(20))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Stream(Literal(100), Literal(200))
+    }
+    val expected = for {
+      cd <- Seq(Literal(100), Literal(200))
+      ab <- Seq(Literal(11), Literal(12), Literal(21), Literal(22)) ++
+        (for {
+          b <- Seq(Literal(10), Literal(20))
+          a <- Seq(Literal(1), Literal(2))
+        } yield Add(a, b))
+    } yield Add(ab, cd)
+    assert(transformed == expected)
+  }
+
+  test("multiTransformDown can prune") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") => Stream.empty
+    }
+    assert(transformed.isEmpty)
+
+    val transformed2 = e.multiTransformDown {
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Stream.empty
+    }
+    assert(transformed2.isEmpty)
+  }
 }
