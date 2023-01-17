@@ -723,12 +723,16 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 131,
-    "fragment" : "SELECT t0a, (SELECT sum(d) FROM\n  (SELECT sum(t0a) as d\n  FROM   t1\n  UNION ALL\n  SELECT sum(t2a) + t0a as d\n  FROM   t2)\n)\nFROM t0"
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
   } ]
 }
