@@ -92,14 +92,6 @@ def _unary_op(name: str, doc: Optional[str] = "unary function") -> Callable[["Co
     return wrapped
 
 
-def scalar_function(op: str, *args: "Column") -> "Column":
-    return Column(UnresolvedFunction(op, [arg._expr for arg in args]))
-
-
-def sql_expression(expr: str) -> "Column":
-    return Column(SQLExpression(expr))
-
-
 class Column:
     def __init__(self, expr: "Expression") -> None:
         if not isinstance(expr, Expression):

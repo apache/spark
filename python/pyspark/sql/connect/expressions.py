@@ -433,11 +433,6 @@ class UnresolvedFunction(Expression):
         return fun
 
     def __repr__(self) -> str:
-        # Special handling for certain infix operators that require slightly
-        # different printing.
-        if len(self._args) == 2 and len(self._name) == 1:
-            return f"{self._args[0]} {self._name} {self._args[1]}"
-
         # Default print handling:
         if self._is_distinct:
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"

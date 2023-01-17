@@ -208,9 +208,9 @@ class Column:
     Create from an expression
 
     >>> df.age + 1
-    Column<'(age + 1)'>
+    Column<...>
     >>> 1 / df.age
-    Column<'(1 / age)'>
+    Column<...>
     """
 
     def __init__(self, jc: JavaObject) -> None:
