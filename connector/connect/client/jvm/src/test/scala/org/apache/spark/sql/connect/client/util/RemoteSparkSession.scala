@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client.util
 
-import java.io.File
+import java.io.{BufferedOutputStream, File}
 
 import org.scalatest.BeforeAndAfterAll
 import sys.process._
@@ -35,16 +35,16 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  * --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
  * }}}
  *
- * Set env variable `SPARK_HOME` if the test is not executed from the Spark project top folder.
- * Set env variable `DEBUG_SC_JVM_CLIENT=true` to print the server process output in the console
- * to debug server start stop problems.
+ * Set system property `SPARK_HOME` if the test is not executed from the Spark project top folder.
+ * Set system property `DEBUG_SC_JVM_CLIENT=true` to print the server process output in the
+ * console to debug server start stop problems.
  */
 object SparkConnectServerUtils {
   // Env variables used for testing and debugging
   private val SPARK_HOME = "SPARK_HOME"
   private val ENV_DEBUG_SC_JVM_CLIENT = "DEBUG_SC_JVM_CLIENT"
 
-  private val sparkHome = System.getProperty(SPARK_HOME, "./")
+  private val sparkHome = System.getProperty(SPARK_HOME, fileSparkHome())
   private val isDebug = System.getProperty(ENV_DEBUG_SC_JVM_CLIENT, "false").toBoolean
 
   // Log server start stop debug info into console
@@ -60,18 +60,23 @@ object SparkConnectServerUtils {
 
   private lazy val sparkConnect: Process = {
     debug("Starting the Spark Connect Server...")
+    val jar = findSparkConnectJar
     val builder = Process(
-      "bin/spark-shell",
+      new File(sparkHome, "bin/spark-shell").getCanonicalPath,
       Seq(
         "--jars",
-        findSparkConnectJar,
+        jar,
+        "--driver-class-path",
+        jar,
         "--conf",
         "spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin"))
-    val process = if (isDebug) {
-      builder.run(connectInput = true)
-    } else {
-      builder.run(ProcessLogger((_: String) => {}), connectInput = true)
-    }
+
+    val io = new ProcessIO(
+      // hold the input channel to the spark console to keep the console open
+      in => new BufferedOutputStream(in),
+      out => scala.io.Source.fromInputStream(out).getLines.foreach(debug),
+      err => scala.io.Source.fromInputStream(err).getLines.foreach(debug))
+    val process = builder.run(io)
 
     // Adding JVM shutdown hook
     sys.addShutdownHook(kill())
@@ -90,6 +95,16 @@ object SparkConnectServerUtils {
     val code = sparkConnect.exitValue()
     debug(s"Spark Connect Server is stopped with exit code: $code")
     code
+  }
+
+  private def fileSparkHome(): String = {
+    val path = new File("./").getCanonicalPath
+    if (path.endsWith("connector/connect/client/jvm")) {
+      // the current folder is the client project folder
+      new File("../../../../").getCanonicalPath
+    } else {
+      path
+    }
   }
 
   private def findSparkConnectJar: String = {
@@ -112,6 +127,7 @@ object SparkConnectServerUtils {
     assert(
       jars.nonEmpty,
       s"Failed to find the `spark-connect` jar inside folder: ${parentDir.getCanonicalPath}")
+    debug("Using jar: " + jars(0).getCanonicalPath)
     jars(0).getCanonicalPath // return the first one
   }
 
@@ -136,7 +152,7 @@ trait RemoteSparkSession
     val stop = System.currentTimeMillis() + 60000 * 1 // ~1 min
     var sleepInternal = 1000 // 1s with * 2 backoff
     var success = false
-    val error = new RuntimeException(s"Failed to start the test server on port $port")
+    val error = new RuntimeException(s"Failed to start the test server on port $port.")
 
     while (!success && System.currentTimeMillis() < stop) {
       try {
@@ -159,6 +175,7 @@ trait RemoteSparkSession
 
     // Throw error if failed
     if (!success) {
+      debug(error)
       throw error
     }
   }

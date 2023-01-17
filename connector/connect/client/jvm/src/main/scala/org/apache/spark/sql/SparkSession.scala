@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.client.{SparkResult, SparkConnectClient}
+import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.Cleaner
 
 /**
