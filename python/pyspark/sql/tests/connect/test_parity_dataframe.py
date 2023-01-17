@@ -27,11 +27,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_cache(self):
         super().test_cache()
 
-    # TODO(SPARK-41866): createDataframe support array type
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_array_of_long(self):
-        super().test_create_dataframe_from_array_of_long()
-
     # TODO(SPARK-41868): Support data type Duration(NANOSECOND)
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
