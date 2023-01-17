@@ -58,7 +58,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`curdate`",
         "expectedNum" -> "0",
-        "actualNum" -> "1"
+        "actualNum" -> "1",
       ),
       context = ExpectedContext("", "", 7, 16, "CURDATE(1)")
     )

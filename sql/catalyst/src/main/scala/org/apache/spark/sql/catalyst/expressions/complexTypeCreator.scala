@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -204,13 +205,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
       DataTypeMismatch(
@@ -460,13 +456,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)

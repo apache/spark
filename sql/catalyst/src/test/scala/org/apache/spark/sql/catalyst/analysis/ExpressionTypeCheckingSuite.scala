@@ -77,7 +77,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = messageParameters)
   }
 
@@ -469,9 +469,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(coalesce)
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
-        "sqlExpr" -> "\"coalesce()\"",
         "functionName" -> toSQLId(coalesce.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
@@ -481,9 +480,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(murmur3Hash)
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
-        "sqlExpr" -> "\"hash()\"",
         "functionName" -> toSQLId(murmur3Hash.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
@@ -493,9 +491,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(xxHash64)
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
-        "sqlExpr" -> "\"xxhash64()\"",
         "functionName" -> toSQLId(xxHash64.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
@@ -529,9 +526,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   test("check types for CreateNamedStruct") {
     checkError(
       exception = analysisException(CreateNamedStruct(Seq("a", "b", 2.0))),
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
-        "sqlExpr" -> "\"named_struct(a, b, 2.0)\"",
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",
         "actualNum" -> "3")
@@ -562,9 +558,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   test("check types for CreateMap") {
     checkError(
       exception = analysisException(CreateMap(Seq("a", "b", 2.0))),
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
-        "sqlExpr" -> "\"map(a, b, 2.0)\"",
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
         "actualNum" -> "3")
@@ -693,7 +688,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       assertErrorForWrongNumParameters(
         expr = expr1,
         messageParameters = Map(
-          "sqlExpr" -> toSQLExpr(expr1),
           "functionName" -> toSQLId(expr1.prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> "1")

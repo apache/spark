@@ -423,17 +423,6 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
-      "WRONG_NUM_ARGS" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
-        ]
-      },
-      "WRONG_NUM_ARGS_WITH_SUGGESTION" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
-          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
-        ]
-      },
       "WRONG_NUM_ENDPOINTS" : {
         "message" : [
           "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
@@ -1719,7 +1708,7 @@
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
-      "Invalid number of arguments for the function <functionName>."
+      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -1729,7 +1718,8 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "Consider to change the number of arguments because the function requires <expectedNum> parameters but the actual number is <actualNum>."
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
+          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
         ]
       }
     },
