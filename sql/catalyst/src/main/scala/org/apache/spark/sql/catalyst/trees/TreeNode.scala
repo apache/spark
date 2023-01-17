@@ -645,7 +645,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * The rule can return `Stream.empty` to indicate that the original node should be pruned. In this
    * case `multiTransform()` returns an empty `Stream`.
    *
-   * Please consider the following examples of `input.multiTransform(rule)`:
+   * Please consider the following examples of `input.multiTransformDown(rule)`:
    *
    * We have an input expression:
    *    `Add(a, b)`
