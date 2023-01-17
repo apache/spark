@@ -20,16 +20,16 @@
 Errors
 ======
 
+Classes
+-------
+
 .. currentmodule:: pyspark.errors
 
 .. autosummary::
     :toctree: api/
 
-    PySparkException.getErrorClass
-    PySparkException.getMessageParameters
-    CapturedException.getErrorClass
-    CapturedException.getMessageParameters
-    CapturedException.getSqlState
+    PySparkException
+    CapturedException
     AnalysisException
     ParseException
     IllegalArgumentException
@@ -38,3 +38,16 @@ Errors
     PythonException
     UnknownException
     SparkUpgradeException
+
+
+Methods
+-------
+
+.. currentmodule:: pyspark.errors
+
+.. autosummary::
+    :toctree: api/
+
+    PySparkException.getErrorClass
+    PySparkException.getMessageParameters
+    CapturedException.getSqlState
