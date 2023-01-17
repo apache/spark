@@ -859,7 +859,7 @@ case class MapObjects private(
     case _ => inputData.dataType
   }
 
-  private def executeFuncOnCollection(inputCollection: Seq[_]): Iterator[_] = {
+  private def executeFuncOnCollection(inputCollection: Iterable[_]): Iterator[_] = {
     val row = new GenericInternalRow(1)
     inputCollection.iterator.map { element =>
       row.update(0, element)
@@ -867,7 +867,7 @@ case class MapObjects private(
     }
   }
 
-  private lazy val convertToSeq: Any => Seq[_] = inputDataType match {
+  private lazy val convertToSeq: Any => scala.collection.Seq[_] = inputDataType match {
     case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[scala.collection.Seq[_]].toSeq
     case ObjectType(cls) if cls.isArray =>
@@ -879,7 +879,7 @@ case class MapObjects private(
         if (inputCollection.getClass.isArray) {
           inputCollection.asInstanceOf[Array[_]].toSeq
         } else {
-          inputCollection.asInstanceOf[Seq[_]]
+          inputCollection.asInstanceOf[scala.collection.Seq[_]]
         }
       }
     case ArrayType(et, _) =>
@@ -895,7 +895,7 @@ case class MapObjects private(
     ClassTag(clazz).asInstanceOf[ClassTag[Any]]
   }
 
-  private lazy val mapElements: Seq[_] => Any = customCollectionCls match {
+  private lazy val mapElements: scala.collection.Seq[_] => Any = customCollectionCls match {
     case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
       // The implicit tag is a workaround to deal with a small change in the
       // (scala) signature of ArrayBuilder.make between Scala 2.12 and 2.13.
@@ -1919,7 +1919,9 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
       }
     case _: ArrayType =>
       (value: Any) => {
-        value.getClass.isArray || value.isInstanceOf[Seq[_]] || value.isInstanceOf[Set[_]]
+        value.getClass.isArray ||
+          value.isInstanceOf[scala.collection.Seq[_]] ||
+          value.isInstanceOf[Set[_]]
       }
     case _: DateType =>
       (value: Any) => {
@@ -1960,7 +1962,8 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
           classOf[scala.math.BigDecimal],
           classOf[Decimal]))
       case _: ArrayType =>
-        s"$obj.getClass().isArray() || ${genCheckTypes(Seq(classOf[Seq[_]], classOf[Set[_]]))}"
+        val check = genCheckTypes(Seq(classOf[scala.collection.Seq[_]], classOf[Set[_]]))
+        s"$obj.getClass().isArray() || $check"
       case _: DateType =>
         genCheckTypes(Seq(classOf[java.sql.Date], classOf[java.time.LocalDate]))
       case _: TimestampType =>
