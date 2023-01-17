@@ -26,29 +26,20 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
  * register itself to `org.apache.spark.status.protobuf.ProtobufSerDe` so that
  * `KVStoreProtobufSerializer` can use `ServiceLoader` to load and use them.
  *
- * TODO: SPARK-41644 How to define `ProtobufSerDe` as `ProtobufSerDe[T]`
- *
  * @since 3.4.0
  */
 @DeveloperApi
 @Unstable
-trait ProtobufSerDe {
+trait ProtobufSerDe[T] {
 
   /**
-   * Specify the data types supported by the current `ProtobufSerDe`
+   * Serialize the input data of the type `T` to `Array[Byte]`.
    */
-  val supportClass: Class[_]
-
-  /**
-   * Serialize the input data of the type corresponding to `supportClass`
-   * to `Array[Byte]`, since the current input parameter type is `Any`,
-   * the input type needs to be guaranteed from the code level.
-   */
-  def serialize(input: Any): Array[Byte]
+  def serialize(input: T): Array[Byte]
 
   /**
    * Deserialize the input `Array[Byte]` to an object of the
-   * type corresponding to `supportClass`.
+   * type `T`.
    */
-  def deserialize(bytes: Array[Byte]): Any
+  def deserialize(bytes: Array[Byte]): T
 }

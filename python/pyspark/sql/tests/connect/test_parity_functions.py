@@ -31,11 +31,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_basic_functions(self):
         super().test_basic_functions()
 
-    # TODO(SPARK-41847): DataFrame mapfield,structlist invalid type
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_explode(self):
-        super().test_explode()
-
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_function_parity(self):
         super().test_function_parity()
@@ -59,30 +54,15 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_lit_list(self):
         super().test_lit_list()
 
-    # TODO(SPARK-41900): support Data Type int8
+    # TODO(SPARK-41283): Different column names of `lit(np.int8(1))`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_lit_np_scalar(self):
         super().test_lit_np_scalar()
 
-    # TODO(SPARK-41902): Fix String representation of maps created by `map_from_arrays`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_map_functions(self):
-        super().test_map_functions()
-
-    # TODO(SPARK-41903): Support data type ndarray
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ndarray_input(self):
-        super().test_ndarray_input()
-
-    # TODO(SPARK-41902): Parity in String representation of higher_order_function's output
+    # TODO(SPARK-42089): Different result in nested lambda function
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_nested_higher_order_function(self):
         super().test_nested_higher_order_function()
-
-    # TODO(SPARK-41900): support Data Type int8
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_np_scalar_input(self):
-        super().test_np_scalar_input()
 
     # TODO(SPARK-41901): Parity in String representation of Column
     @unittest.skip("Fails in Spark Connect, should enable.")

@@ -308,7 +308,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t2`.`c1`"
   },
@@ -346,6 +346,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "treeNode" : "LateralJoin lateral-subquery#x [c1#x && c2#x], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(0)) AS c3#x]\n:        +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
   },
@@ -367,6 +368,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [rand(0) AS rand(0)#x]\n:        +- SubqueryAlias spark_catalog.default.t2\n:           +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:                 +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
   },
@@ -388,6 +390,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "condition" : "((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE))"
   },
@@ -464,7 +467,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`"
   },
@@ -486,7 +489,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`c2`"
   },
@@ -526,7 +529,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",
     "proposal" : "`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"
@@ -835,6 +838,141 @@ struct<c1:int,c2:array<int>,c3:int>
 1	[2]	NULL
 2	[]	NULL
 NULL	[4]	NULL
+
+
+-- !query
+SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2))
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT * FROM t1, LATERAL RANGE(3)
+-- !query schema
+struct<c1:int,c2:int,id:bigint>
+-- !query output
+0	1	0
+0	1	1
+0	1	2
+1	2	0
+1	2	1
+1	2	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL EXPLODE(ARRAY(c1, c2)) t2(c3)
+-- !query schema
+struct<c1:int,c2:int,c3:int>
+-- !query output
+0	1	0
+0	1	1
+1	2	1
+1	2	2
+
+
+-- !query
+SELECT * FROM t3, LATERAL EXPLODE(c2) t2(v)
+-- !query schema
+struct<c1:int,c2:array<int>,v:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3, LATERAL EXPLODE_OUTER(c2) t2(v)
+-- !query schema
+struct<c1:int,c2:array<int>,v:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM EXPLODE(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1)
+-- !query schema
+struct<v:int,(outer(t.v) + 1):int>
+-- !query output
+1	2
+2	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL EXPLODE(ARRAY(c1, c2)) t(c3) ON t1.c1 = c3
+-- !query schema
+struct<c1:int,c2:int,c3:int>
+-- !query output
+0	1	0
+1	2	1
+
+
+-- !query
+SELECT * FROM t3 JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,c3:int>
+-- !query output
+0	[0,1]	0
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,c3:int>
+-- !query output
+0	[0,1]	0
+1	[2]	NULL
+2	[]	NULL
+NULL	[4]	NULL
+
+
+-- !query
+SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)))
+-- !query schema
+struct<c1:int,c2:int,col:int>
+-- !query output
+0	1	0
+0	1	1
+1	2	1
+1	2	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3))
+-- !query schema
+struct<c1:int,c2:int,(outer(spark_catalog.default.t1.c1) + c3):int>
+-- !query output
+0	1	0
+0	1	1
+1	2	2
+1	2	3
+
+
+-- !query
+SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3) WHERE t1.c2 > 1)
+-- !query schema
+struct<c1:int,c2:int,(outer(spark_catalog.default.t1.c1) + c3):int>
+-- !query output
+1	2	2
+1	2	3
+
+
+-- !query
+SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)) l(x) JOIN EXPLODE(ARRAY(c2, c1)) r(y) ON x = y)
+-- !query schema
+struct<c1:int,c2:int,x:int,y:int>
+-- !query output
+0	1	0	0
+0	1	1	1
+1	2	1	1
+1	2	2	2
 
 
 -- !query

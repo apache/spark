@@ -75,14 +75,14 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       " JOIN LATERAL t2" -> ("JOIN LATERAL t2", 17, 31),
       ", LATERAL (t2 JOIN t3)" -> ("FROM t1, LATERAL (t2 JOIN t3)", 9, 37),
       ", LATERAL (LATERAL t2)" -> ("FROM t1, LATERAL (LATERAL t2)", 9, 37),
-      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38),
-      ", LATERAL RANGE(0, 1)" -> ("FROM t1, LATERAL RANGE(0, 1)", 9, 36)
+      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38)
     ).foreach { case (sqlText, (fragment, start, stop)) =>
       checkError(
         exception = parseException(s"SELECT * FROM t1$sqlText"),
         errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
-        parameters = Map("inputString" -> "LATERAL can only be used with subquery."),
+        parameters = Map("inputString" ->
+          "LATERAL can only be used with subquery and table-valued functions."),
         context = ExpectedContext(fragment, start, stop))
     }
   }
@@ -322,7 +322,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'"),
       errorClass = "DUPLICATE_KEY",
-      sqlState = "23000",
+      sqlState = "23505",
       parameters = Map("keyColumn" -> "`p1`"),
       context = ExpectedContext(
         fragment = "PARTITION(p1='1', p1='1')",
@@ -334,7 +334,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')"),
       errorClass = "DUPLICATE_KEY",
-      sqlState = "23000",
+      sqlState = "23505",
       parameters = Map("keyColumn" -> "`key1`"),
       context = ExpectedContext(
         fragment = "('key1' = '1', 'key1' = '2')",
@@ -346,24 +346,24 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException(""),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = Some("42000"))
+      sqlState = Some("42617"))
 
     checkError(
       exception = parseException("   "),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = Some("42000"))
+      sqlState = Some("42617"))
 
     checkError(
       exception = parseException(" \n"),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = Some("42000"))
+      sqlState = Some("42617"))
   }
 
   test("PARSE_SYNTAX_ERROR: no viable input") {
     checkError(
       exception = parseException("select ((r + 1) "),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
@@ -371,13 +371,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select 1 1"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'1'", "hint" -> ": extra input '1'"))
 
     checkError(
       exception = parseException("select *\nfrom r as q t"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'t'", "hint" -> ": extra input 't'"))
   }
 
@@ -385,13 +385,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select * from r order by q from t"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'from'", "hint" -> ""))
 
     checkError(
       exception = parseException("select *\nfrom r\norder by q\nfrom t"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'from'", "hint" -> ""))
   }
 
@@ -400,13 +400,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select count(*"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "end of input", "hint" -> ""))
 
     checkError(
       exception = parseException("select 1 as a from"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
@@ -415,19 +415,19 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select * from a left join_ b on a.id = b.id"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'join_'", "hint" -> ": missing 'JOIN'"))
 
     checkError(
       exception = parseException("select * from test where test.t is like 'test'"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'is'", "hint" -> ""))
 
     checkError(
       exception = parseException("SELECT * FROM test WHERE x NOT NULL"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'NOT'", "hint" -> ""))
   }
 

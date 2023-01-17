@@ -52,3 +52,14 @@ Input/Output
     DataFrameWriter.saveAsTable
     DataFrameWriter.sortBy
     DataFrameWriter.text
+    DataFrameWriterV2.using
+    DataFrameWriterV2.option
+    DataFrameWriterV2.options
+    DataFrameWriterV2.tableProperty
+    DataFrameWriterV2.partitionedBy
+    DataFrameWriterV2.create
+    DataFrameWriterV2.replace
+    DataFrameWriterV2.createOrReplace
+    DataFrameWriterV2.append
+    DataFrameWriterV2.overwrite
+    DataFrameWriterV2.overwritePartitions

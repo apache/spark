@@ -343,7 +343,7 @@ class QueryExecutionErrorsSuite
       exception = e4.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "CANNOT_PARSE_DECIMAL",
       parameters = Map[String, String](),
-      sqlState = "42000")
+      sqlState = "22018")
   }
 
   test("FAILED_EXECUTE_UDF: execute user defined function") {
@@ -390,7 +390,7 @@ class QueryExecutionErrorsSuite
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
       parameters = Map("columnName" -> "`__auto_generated_subquery_name`.`map`"),
-      sqlState = "42000")
+      sqlState = "42818")
   }
 
   test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
@@ -542,7 +542,7 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> unrecognizedColumnType.toString),
-      sqlState = "42000")
+      sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
   }
@@ -616,7 +616,7 @@ class QueryExecutionErrorsSuite
             "sourceType" -> s""""${sourceType.sql}"""",
             "targetType" -> s""""$it"""",
             "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
-          sqlState = "22005")
+          sqlState = "22003")
       }
     }
   }
@@ -658,7 +658,7 @@ class QueryExecutionErrorsSuite
         checkError(
           exception = e.getCause.asInstanceOf[SparkFileAlreadyExistsException],
           errorClass = "FAILED_RENAME_PATH",
-          sqlState = Some("22023"),
+          sqlState = Some("42K04"),
           matchPVals = true,
           parameters = Map("sourcePath" -> s"$expectedPath.+",
             "targetPath" -> s"$expectedPath.+"))

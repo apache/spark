@@ -761,6 +761,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
       CollapseProject(EliminateSubqueryAliases(plan), alwaysInline = alwaysInline) match {
         case p @ Project(_, _: OneRowRelation) => Some(p)
         case g @ Generate(_, _, _, _, _, _: OneRowRelation) => Some(g)
+        case p @ Project(_, Generate(_, _, _, _, _, _: OneRowRelation)) => Some(p)
         case _ => None
       }
     }
@@ -786,6 +787,11 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
         case g @ Generate(generator, _, _, _, _, _: OneRowRelation) =>
           val newGenerator = stripOuterReference(generator)
           g.copy(generator = newGenerator, child = left)
+
+        case Project(projectList, g @ Generate(generator, _, _, _, _, _: OneRowRelation)) =>
+          val newPList = stripOuterReferences(projectList)
+          val newGenerator = stripOuterReference(generator)
+          Project(left.output ++ newPList, g.copy(generator = newGenerator, child = left))
 
         case o =>
           throw SparkException.internalError(

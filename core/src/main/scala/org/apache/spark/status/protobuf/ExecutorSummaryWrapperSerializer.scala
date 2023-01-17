@@ -26,15 +26,9 @@ import org.apache.spark.status.ExecutorSummaryWrapper
 import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
+class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrapper] {
 
-  override val supportClass: Class[_] = classOf[ExecutorSummaryWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    serialize(input.asInstanceOf[ExecutorSummaryWrapper])
-  }
-
-  def serialize(input: ExecutorSummaryWrapper): Array[Byte] = {
+  override def serialize(input: ExecutorSummaryWrapper): Array[Byte] = {
     val info = serializeExecutorSummary(input.info)
     val builder = StoreTypes.ExecutorSummaryWrapper.newBuilder()
       .setInfo(info)

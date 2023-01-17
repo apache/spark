@@ -229,26 +229,41 @@ class DataSource(LogicalPlan):
 
     def __init__(
         self,
-        format: str = "",
+        format: str,
         schema: Optional[str] = None,
         options: Optional[Mapping[str, str]] = None,
+        paths: Optional[List[str]] = None,
     ) -> None:
         super().__init__(None)
-        self.format = format
-        self.schema = schema
-        self.options = options
+
+        assert isinstance(format, str) and format != ""
+
+        assert schema is None or isinstance(schema, str)
+
+        if options is not None:
+            for k, v in options.items():
+                assert isinstance(k, str)
+                assert isinstance(v, str)
+
+        if paths is not None:
+            assert isinstance(paths, list)
+            assert all(isinstance(path, str) for path in paths)
+
+        self._format = format
+        self._schema = schema
+        self._options = options
+        self._paths = paths
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = proto.Relation()
-        if self.format is not None:
-            plan.read.data_source.format = self.format
-        if self.schema is not None:
-            plan.read.data_source.schema = self.schema
-        if self.options is not None:
-            for k in self.options.keys():
-                v = self.options.get(k)
-                if v is not None:
-                    plan.read.data_source.options[k] = v
+        plan.read.data_source.format = self._format
+        if self._schema is not None:
+            plan.read.data_source.schema = self._schema
+        if self._options is not None and len(self._options) > 0:
+            for k, v in self._options.items():
+                plan.read.data_source.options[k] = v
+        if self._paths is not None and len(self._paths) > 0:
+            plan.read.data_source.paths.extend(self._paths)
         return plan
 
 
@@ -772,12 +787,14 @@ class SetOperation(LogicalPlan):
         set_op: str,
         is_all: bool = True,
         by_name: bool = False,
+        allow_missing_columns: bool = False,
     ) -> None:
         super().__init__(child)
         self.other = other
         self.by_name = by_name
         self.is_all = is_all
         self.set_op = set_op
+        self.allow_missing_columns = allow_missing_columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -802,6 +819,7 @@ class SetOperation(LogicalPlan):
 
         rel.set_op.is_all = self.is_all
         rel.set_op.by_name = self.by_name
+        rel.set_op.allow_missing_columns = self.allow_missing_columns
         return rel
 
     def print(self, indent: int = 0) -> str:
@@ -947,7 +965,7 @@ class ToSchema(LogicalPlan):
         return plan
 
 
-class RenameColumnsNameByName(LogicalPlan):
+class WithColumnsRenamed(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], colsMap: Mapping[str, str]) -> None:
         super().__init__(child)
         self._colsMap = colsMap
@@ -956,9 +974,9 @@ class RenameColumnsNameByName(LogicalPlan):
         assert self._child is not None
 
         plan = proto.Relation()
-        plan.rename_columns_by_name_to_name_map.input.CopyFrom(self._child.plan(session))
+        plan.with_columns_renamed.input.CopyFrom(self._child.plan(session))
         for k, v in self._colsMap.items():
-            plan.rename_columns_by_name_to_name_map.rename_columns_map[k] = v
+            plan.with_columns_renamed.rename_columns_map[k] = v
         return plan
 
 
@@ -1275,7 +1293,7 @@ class StatCorr(LogicalPlan):
         return plan
 
 
-class RenameColumns(LogicalPlan):
+class ToDF(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], cols: Sequence[str]) -> None:
         super().__init__(child)
         self._cols = cols
@@ -1284,8 +1302,8 @@ class RenameColumns(LogicalPlan):
         assert self._child is not None
 
         plan = proto.Relation()
-        plan.rename_columns_by_same_length_names.input.CopyFrom(self._child.plan(session))
-        plan.rename_columns_by_same_length_names.column_names.extend(self._cols)
+        plan.to_df.input.CopyFrom(self._child.plan(session))
+        plan.to_df.column_names.extend(self._cols)
         return plan
 
 

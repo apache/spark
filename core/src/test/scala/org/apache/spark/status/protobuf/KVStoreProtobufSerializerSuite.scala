@@ -1277,6 +1277,28 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.shuffleMergersCount == input.info.shuffleMergersCount)
   }
 
+  test("AppSummary") {
+    val input = new AppSummary(
+      numCompletedJobs = 10,
+      numCompletedStages = 20
+    )
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[AppSummary])
+    assert(result.numCompletedJobs == input.numCompletedJobs)
+    assert(result.numCompletedStages == input.numCompletedStages)
+  }
+
+  test("PoolData") {
+    val input = new PoolData(
+      name = "big-pool",
+      stageIds = Set(11, 13, 15, 17)
+    )
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[PoolData])
+    assert(result.name == input.name)
+    assert(result.stageIds == input.stageIds)
+  }
+
   private def checkAnswer(result: TaskMetrics, expected: TaskMetrics): Unit = {
     assert(result.executorDeserializeTime == expected.executorDeserializeTime)
     assert(result.executorDeserializeCpuTime == expected.executorDeserializeCpuTime)

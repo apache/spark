@@ -98,9 +98,9 @@ class SparkConnectClientSuite
     TestPackURI("sc://host", isCorrect = true),
     TestPackURI("sc://localhost/", isCorrect = true, client => testClientConnection(client)),
     TestPackURI(
-      "sc://localhost:123/",
+      "sc://localhost:1234/",
       isCorrect = true,
-      client => testClientConnection(client, 123)),
+      client => testClientConnection(client, 1234)),
     TestPackURI("sc://localhost/;", isCorrect = true, client => testClientConnection(client)),
     TestPackURI("sc://host:123", isCorrect = true),
     TestPackURI(
