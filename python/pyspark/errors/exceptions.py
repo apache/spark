@@ -177,7 +177,7 @@ class CapturedException(PySparkException):
         else:
             return None
 
-    def getSqlState(self) -> Optional[str]:
+    def getSqlState(self) -> Optional[str]:  # type: ignore[override]
         """
         Returns an SQLSTATE as a string.
 
