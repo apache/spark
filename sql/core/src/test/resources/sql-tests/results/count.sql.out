@@ -145,26 +145,13 @@ SELECT count() FROM testData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS_WITH_SUGGESTION",
-  "sqlState" : "42K09",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "actualNum" : "0",
-    "expectedNum" : " >= 1",
-    "functionName" : "`count`",
-    "legacyConfKey" : "\"spark.sql.legacy.allowParameterlessCount\"",
-    "legacyConfValue" : "\"true\"",
-    "legacyNum" : "0",
-    "sqlExpr" : "\"count()\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 14,
-    "fragment" : "count()"
-  } ]
+    "message" : "Cannot find sub error class 'DATATYPE_MISMATCH.WRONG_NUM_ARGS_WITH_SUGGESTION'"
+  }
 }
 
 

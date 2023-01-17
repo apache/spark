@@ -6,21 +6,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "> 0",
-    "functionName" : "`concat_ws`",
-    "sqlExpr" : "\"concat_ws()\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 18,
-    "fragment" : "concat_ws()"
-  } ]
+    "functionName" : "`concat_ws`"
+  }
 }
 
 
@@ -31,21 +23,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "> 0",
-    "functionName" : "`format_string`",
-    "sqlExpr" : "\"format_string()\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "format_string()"
-  } ]
+    "functionName" : "`format_string`"
+  }
 }
 
 
@@ -756,7 +740,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -780,7 +764,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
