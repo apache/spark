@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import java.io._
+import java.lang.invoke.SerializedLambda
 import java.nio.ByteBuffer
 import java.util.Locale
 import javax.annotation.Nullable
@@ -45,7 +46,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, SerializableConfiguration, SerializableJobConf, Utils}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
@@ -487,7 +488,9 @@ private[serializer] object KryoSerializer {
     classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf],
-    classOf[TaskCommitMessage]
+    classOf[TaskCommitMessage],
+    classOf[SerializedLambda],
+    classOf[BitSet]
   )
 
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
