@@ -50,4 +50,4 @@ Methods
 
     PySparkException.getErrorClass
     PySparkException.getMessageParameters
-    CapturedException.getSqlState
+    PySparkException.getSqlState

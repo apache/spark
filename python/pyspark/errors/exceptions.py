@@ -62,6 +62,7 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getSqlState`
         """
         return self.error_class
 
@@ -74,8 +75,24 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getSqlState`
         """
         return self.message_parameters
+
+    def getSqlState(self) -> None:
+        """
+        Returns an SQLSTATE as a string.
+
+        Errors generated in Python have no SQLSTATE, so it always returns None.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessageParameters`
+        """
+        return None
 
     def __str__(self) -> str:
         return f"[{self.getErrorClass()}] {self.message}"
