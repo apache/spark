@@ -82,12 +82,13 @@ case class PlanAdaptiveRuntimeFilterFilters(
   }
 
   private def getFilterCreationSidePlan(plan: SparkPlan): SparkPlan = {
-    assert(plan.isInstanceOf[ObjectHashAggregateExec])
-    plan.asInstanceOf[ObjectHashAggregateExec].child match {
+    plan match {
       case objectHashAggregate: ObjectHashAggregateExec =>
-        objectHashAggregate.child
+        getFilterCreationSidePlan(objectHashAggregate.child)
       case shuffleExchange: ShuffleExchangeExec =>
-        shuffleExchange.child.asInstanceOf[ObjectHashAggregateExec].child
+        getFilterCreationSidePlan(shuffleExchange.child)
+      case queryStageExec: ShuffleQueryStageExec =>
+        getFilterCreationSidePlan(queryStageExec.plan)
       case other => other
     }
   }

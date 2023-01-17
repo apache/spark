@@ -73,7 +73,6 @@ case class RuntimeFilterSubquery(
       joinKeys.forall(_.resolved) &&
       broadcastKeyIndex >= 0 &&
       broadcastKeyIndex < joinKeys.size &&
-      joinKeys.forall(_.references.subsetOf(filterCreationSidePlan.outputSet)) &&
       filterApplicationSideExp.dataType == joinKeys(broadcastKeyIndex).dataType
   }
 

@@ -49,7 +49,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan,
-      joinKeys: Seq[Expression],
       canReuseExchange: Boolean): LogicalPlan = {
     require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
@@ -58,7 +57,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         filterApplicationSidePlan,
         filterCreationSideExp,
         filterCreationSidePlan,
-        joinKeys,
         canReuseExchange
       )
     } else {
@@ -76,7 +74,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan,
-      joinKeys: Seq[Expression],
       canReuseExchange: Boolean): LogicalPlan = {
     // Skip if the filter creation side is too big
     if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
@@ -92,12 +89,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val bloomFilterSubquery = if (canReuseExchange) {
       // Try to reuse the results of broadcast exchange.
-      val index = joinKeys.indexOf(filterCreationSideExp)
       RuntimeFilterSubquery(
         filterApplicationSideExp,
-        ConstantFolding(Aggregate(Nil, Seq(alias), filterCreationSidePlan)),
-        joinKeys,
-        index)
+        ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan))),
+        Seq(filterCreationSideExp),
+        0)
     } else {
       ScalarSubquery(ConstantFolding(ColumnPruning(
         Aggregate(Nil, Seq(alias), filterCreationSidePlan))), Nil)
@@ -313,14 +309,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
               val canReuseExchange = conf.exchangeReuseEnabled &&
                 (canBroadcastBySize(right, conf) || hintToBroadcastRight(hint))
-              newLeft = injectFilter(l, newLeft, r, right, rightKeys, canReuseExchange)
+              newLeft = injectFilter(l, newLeft, r, right, canReuseExchange)
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               filteringHasBenefit(right, left, r, hint)) {
               val canReuseExchange = conf.exchangeReuseEnabled &&
                 (canBroadcastBySize(left, conf) || hintToBroadcastRight(hint))
-              newRight = injectFilter(r, newRight, l, left, leftKeys, canReuseExchange)
+              newRight = injectFilter(r, newRight, l, left, canReuseExchange)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1
