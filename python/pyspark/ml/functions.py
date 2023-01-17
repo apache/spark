@@ -486,6 +486,7 @@ def predict_batch_udf(
     data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
     pdf = pd.DataFrame(data, columns=['a','b','c','d'])
     df = spark.createDataFrame(pdf)
+    df.show(5)
     # +----+----+----+----+
     # |   a|   b|   c|   d|
     # +----+----+----+----+
@@ -556,7 +557,7 @@ def predict_batch_udf(
     import numpy as np
     import pandas as pd
     from pyspark.ml.functions import predict_batch_udf
-    from pyspark.sql.types import FloatType, StructType, StructField
+    from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
     from typing import Mapping
 
     data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
@@ -602,10 +603,13 @@ def predict_batch_udf(
     # |[12.0, 13.0, 14.0...|[12.0, 13.0, 14.0]| 93.0|
     # |[16.0, 17.0, 18.0...|[16.0, 17.0, 18.0]|121.0|
     # +--------------------+------------------+-----+
+    ```
 
-    # Note that some models can provide multiple outputs.  These can be returned as a dictionary
-    # of named values, which can be represented in columnar (or row-based) formats.
+    Example (multiple outputs):
 
+    Note that some models can provide multiple outputs.  These can be returned as a dictionary
+    of named values, which can be represented in either columnar or row-based formats.
+    ```
     def make_multi_sum_fn():
         def predict_columnar(x1: np.ndarray, x2: np.ndarray) -> Mapping[str, np.ndarray]:
             # x1.shape = [batch_size, 4]
@@ -637,6 +641,62 @@ def predict_batch_udf(
     # |[12.0, 13.0, 14.0...|[12.0, 13.0, 14.0]|54.0|39.0|
     # |[16.0, 17.0, 18.0...|[16.0, 17.0, 18.0]|70.0|51.0|
     # +--------------------+------------------+----+----+
+
+    def make_multi_sum_fn():
+        def predict_row(x1: np.ndarray, x2: np.ndarray) -> list[Mapping[str, float]]:
+            # x1.shape = [batch_size, 4]
+            # x2.shape = [batch_size, 3]
+            return [{'sum1': np.sum(x1[i]), 'sum2': np.sum(x2[i])} for i in range(len(x1))]
+        return predict_row
+
+    multi_sum_udf = predict_batch_udf(
+        make_multi_sum_fn,
+        return_type=StructType([
+            StructField("sum1", FloatType(), True),
+            StructField("sum2", FloatType(), True)
+        ]),
+        batch_size=5,
+        input_tensor_shapes=[[4], [3]],
+    )
+
+    df.withColumn("sum", multi_sum_udf("t1", "t2")).select("t1", "t2", "sum.*").show(5)
+    # +--------------------+------------------+----+----+
+    # |                  t1|                t2|sum1|sum2|
+    # +--------------------+------------------+----+----+
+    # |[0.0, 1.0, 2.0, 3.0]|   [0.0, 1.0, 2.0]| 6.0| 3.0|
+    # |[4.0, 5.0, 6.0, 7.0]|   [4.0, 5.0, 6.0]|22.0|15.0|
+    # |[8.0, 9.0, 10.0, ...|  [8.0, 9.0, 10.0]|38.0|27.0|
+    # |[12.0, 13.0, 14.0...|[12.0, 13.0, 14.0]|54.0|39.0|
+    # |[16.0, 17.0, 18.0...|[16.0, 17.0, 18.0]|70.0|51.0|
+    # +--------------------+------------------+----+----+
+
+    def make_multi_times_two_fn():
+        def predict(x1: np.ndarray, x2: np.ndarray) -> Mapping[str, np.ndarray]:
+            # x1.shape = [batch_size, 4]
+            # x2.shape = [batch_size, 3]
+            return {"t1x2": x1 * 2, "t2x2": x2 * 2}
+        return predict
+
+    multi_times_two_udf = predict_batch_udf(
+        make_multi_times_two_fn,
+        return_type=StructType([
+            StructField("t1x2", ArrayType(FloatType()), True),
+            StructField("t2x2", ArrayType(FloatType()), True)
+        ]),
+        batch_size=5,
+        input_tensor_shapes=[[4], [3]],
+    )
+
+    df.withColumn("x2", multi_times_two_udf("t1", "t2")).select("t1", "t2", "x2.*").show(5)
+    # +--------------------+------------------+--------------------+------------------+
+    # |                  t1|                t2|                t1x2|              t2x2|
+    # +--------------------+------------------+--------------------+------------------+
+    # |[0.0, 1.0, 2.0, 3.0]|   [0.0, 1.0, 2.0]|[0.0, 2.0, 4.0, 6.0]|   [0.0, 2.0, 4.0]|
+    # |[4.0, 5.0, 6.0, 7.0]|   [4.0, 5.0, 6.0]|[8.0, 10.0, 12.0,...| [8.0, 10.0, 12.0]|
+    # |[8.0, 9.0, 10.0, ...|  [8.0, 9.0, 10.0]|[16.0, 18.0, 20.0...|[16.0, 18.0, 20.0]|
+    # |[12.0, 13.0, 14.0...|[12.0, 13.0, 14.0]|[24.0, 26.0, 28.0...|[24.0, 26.0, 28.0]|
+    # |[16.0, 17.0, 18.0...|[16.0, 17.0, 18.0]|[32.0, 34.0, 36.0...|[32.0, 34.0, 36.0]|
+    # +--------------------+------------------+--------------------+------------------+
     ```
 
     .. versionadded:: 3.4.0
