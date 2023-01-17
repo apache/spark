@@ -160,7 +160,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         expected_local_mode_output = [
             sys.executable,
             "-m",
-            "pyspark.ml.torch.distributor.torch_run_process_wrapper",
+            "pyspark.ml.torch.torch_run_process_wrapper",
             "--standalone",
             "--nnodes=1",
             "--nproc_per_node=4",
@@ -183,7 +183,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         expected_distributed_mode_output = [
             sys.executable,
             "-m",
-            "pyspark.ml.torch.distributor.torch_run_process_wrapper",
+            "pyspark.ml.torch.torch_run_process_wrapper",
             "--nnodes=4",
             "--node_rank=3",
             "--rdzv_endpoint=localhost:9350",
