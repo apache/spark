@@ -142,7 +142,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       // See HADOOP-17125. Hadoop lower than 3.3.1 can throw an exception when its native
       // library for Snappy is unavailable. Here it calls `SnappyCodec.getCompressorType`
       // to indirectly test if the Snappy native library is available in lower Hadoop versions.
-      new SnappyCodec().getCompressorType
+      new SnappyCodec().createCompressor().compress("snappy".getBytes, 0, 1)
       Some(new SnappyCodec(), "snappy")
     } catch {
       case _: LinkageError => None
