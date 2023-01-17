@@ -323,7 +323,7 @@ Input [2]: [wp_web_page_sk#11, wp_char_count#12]
 (56) ObjectHashAggregate
 Input [1]: [wp_web_page_sk#11]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 1539, 0, 0)]
 Aggregate Attributes [1]: [buf#36]
 Results [1]: [buf#37]
 
@@ -334,9 +334,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
 (58) ObjectHashAggregate
 Input [1]: [buf#37]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)#38]
-Results [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)#38 AS bloomFilter#39]
+Functions [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 1539, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 1539, 0, 0)#38]
+Results [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 1539, 0, 0)#38 AS bloomFilter#39]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
 ObjectHashAggregate (65)
@@ -369,7 +369,7 @@ Input [2]: [hd_demo_sk#13, hd_dep_count#14]
 (63) ObjectHashAggregate
 Input [1]: [hd_demo_sk#13]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 18176, 0, 0)]
 Aggregate Attributes [1]: [buf#40]
 Results [1]: [buf#41]
 
@@ -380,9 +380,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 (65) ObjectHashAggregate
 Input [1]: [buf#41]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)#42]
-Results [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)#42 AS bloomFilter#43]
+Functions [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 18176, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 18176, 0, 0)#42]
+Results [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 18176, 0, 0)#42 AS bloomFilter#43]
 
 Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
 ObjectHashAggregate (72)
@@ -415,7 +415,7 @@ Input [2]: [t_time_sk#15, t_hour#16]
 (70) ObjectHashAggregate
 Input [1]: [t_time_sk#15]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 81926, 0, 0)]
 Aggregate Attributes [1]: [buf#44]
 Results [1]: [buf#45]
 
@@ -426,9 +426,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 (72) ObjectHashAggregate
 Input [1]: [buf#45]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)#46]
-Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)#46 AS bloomFilter#47]
+Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 81926, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 81926, 0, 0)#46]
+Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 81926, 0, 0)#46 AS bloomFilter#47]
 
 Subquery:4 Hosting operator id = 31 Hosting Expression = ReusedSubquery Subquery scalar-subquery#5, [id=#6]
 
@@ -465,7 +465,7 @@ Input [2]: [t_time_sk#29, t_hour#30]
 (77) ObjectHashAggregate
 Input [1]: [t_time_sk#29]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 81926, 0, 0)]
 Aggregate Attributes [1]: [buf#48]
 Results [1]: [buf#49]
 
@@ -476,8 +476,8 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
 (79) ObjectHashAggregate
 Input [1]: [buf#49]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)#50]
-Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)#50 AS bloomFilter#51]
+Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 81926, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 81926, 0, 0)#50]
+Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 81926, 0, 0)#50 AS bloomFilter#51]
 
 

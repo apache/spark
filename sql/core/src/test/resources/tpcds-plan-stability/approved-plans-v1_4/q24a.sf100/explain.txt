@@ -579,7 +579,7 @@ Input [5]: [s_store_sk#22, s_store_name#23, s_market_id#24, s_state#25, s_zip#26
 (101) ObjectHashAggregate
 Input [4]: [s_store_sk#22, s_store_name#23, s_state#25, s_zip#26]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 320, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 1250, 0, 0)]
 Aggregate Attributes [1]: [buf#52]
 Results [1]: [buf#53]
 
@@ -590,9 +590,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=19]
 (103) ObjectHashAggregate
 Input [1]: [buf#53]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 320, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 320, 0, 0)#54]
-Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 320, 0, 0)#54 AS bloomFilter#55]
+Functions [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 1250, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 1250, 0, 0)#54]
+Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 1250, 0, 0)#54 AS bloomFilter#55]
 
 Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
 ObjectHashAggregate (109)
@@ -620,7 +620,7 @@ Condition : ((isnotnull(i_color#12) AND (i_color#12 = pale                )) AND
 (107) ObjectHashAggregate
 Input [6]: [i_item_sk#9, i_current_price#10, i_size#11, i_color#12, i_units#13, i_manager_id#14]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 18504, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 52773, 0, 0)]
 Aggregate Attributes [1]: [buf#56]
 Results [1]: [buf#57]
 
@@ -631,8 +631,8 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=20]
 (109) ObjectHashAggregate
 Input [1]: [buf#57]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 18504, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 18504, 0, 0)#58]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 18504, 0, 0)#58 AS bloomFilter#59]
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 52773, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 52773, 0, 0)#58]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 52773, 0, 0)#58 AS bloomFilter#59]
 
 

@@ -466,7 +466,7 @@ Condition : ((isnotnull(i_color#26) AND (i_color#26 = pale                )) AND
 (80) ObjectHashAggregate
 Input [6]: [i_item_sk#23, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 18504, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 52773, 0, 0)]
 Aggregate Attributes [1]: [buf#52]
 Results [1]: [buf#53]
 
@@ -477,8 +477,8 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=15]
 (82) ObjectHashAggregate
 Input [1]: [buf#53]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 18504, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 18504, 0, 0)#54]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 18504, 0, 0)#54 AS bloomFilter#55]
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 52773, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 52773, 0, 0)#54]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 52773, 0, 0)#54 AS bloomFilter#55]
 
 

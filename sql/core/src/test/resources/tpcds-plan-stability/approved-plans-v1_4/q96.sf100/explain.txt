@@ -194,7 +194,7 @@ Input [3]: [t_time_sk#11, t_hour#12, t_minute#13]
 (33) ObjectHashAggregate
 Input [1]: [t_time_sk#11]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 39855, 0, 0)]
 Aggregate Attributes [1]: [buf#22]
 Results [1]: [buf#23]
 
@@ -205,9 +205,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 (35) ObjectHashAggregate
 Input [1]: [buf#23]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)#24]
-Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)#24 AS bloomFilter#25]
+Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 39855, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 39855, 0, 0)#24]
+Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 39855, 0, 0)#24 AS bloomFilter#25]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
 ObjectHashAggregate (42)
@@ -240,7 +240,7 @@ Input [2]: [s_store_sk#14, s_store_name#15]
 (40) ObjectHashAggregate
 Input [1]: [s_store_sk#14]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 1279, 0, 0)]
 Aggregate Attributes [1]: [buf#26]
 Results [1]: [buf#27]
 
@@ -251,9 +251,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
 (42) ObjectHashAggregate
 Input [1]: [buf#27]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)#28]
-Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)#28 AS bloomFilter#29]
+Functions [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 1279, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 1279, 0, 0)#28]
+Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 1279, 0, 0)#28 AS bloomFilter#29]
 
 Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
 ObjectHashAggregate (49)
@@ -286,7 +286,7 @@ Input [2]: [hd_demo_sk#16, hd_dep_count#17]
 (47) ObjectHashAggregate
 Input [1]: [hd_demo_sk#16]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 18176, 0, 0)]
 Aggregate Attributes [1]: [buf#30]
 Results [1]: [buf#31]
 
@@ -297,8 +297,8 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 (49) ObjectHashAggregate
 Input [1]: [buf#31]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)#32]
-Results [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)#32 AS bloomFilter#33]
+Functions [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 18176, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 18176, 0, 0)#32]
+Results [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 18176, 0, 0)#32 AS bloomFilter#33]
 
 

@@ -21,7 +21,7 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                         BroadcastHashJoin [ss_item_sk,i_item_sk]
                                           Filter [ss_item_sk,ss_customer_sk,ss_store_sk]
                                             Subquery #2
-                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 2056, 16448, 0, 0),bloomFilter,buf]
+                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 2056, 47413, 0, 0),bloomFilter,buf]
                                                 Exchange #4
                                                   ObjectHashAggregate [i_item_sk] [buf,buf]
                                                     WholeStageCodegen (1)

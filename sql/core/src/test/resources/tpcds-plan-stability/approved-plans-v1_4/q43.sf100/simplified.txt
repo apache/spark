@@ -19,7 +19,7 @@ TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed
                                     Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_day_name]
                       Filter [ss_store_sk]
                         Subquery #2
-                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 200, 1600, 0, 0),bloomFilter,buf]
+                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 200, 5582, 0, 0),bloomFilter,buf]
                             Exchange #3
                               ObjectHashAggregate [s_store_sk] [buf,buf]
                                 WholeStageCodegen (1)

@@ -218,7 +218,7 @@ Input [2]: [d_date_sk#8, d_month_seq#9]
 (37) ObjectHashAggregate
 Input [1]: [d_date_sk#8]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 2680, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 8990, 0, 0)]
 Aggregate Attributes [1]: [buf#38]
 Results [1]: [buf#39]
 
@@ -229,8 +229,8 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
 (39) ObjectHashAggregate
 Input [1]: [buf#39]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 2680, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 2680, 0, 0)#40]
-Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 2680, 0, 0)#40 AS bloomFilter#41]
+Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 8990, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 8990, 0, 0)#40]
+Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#8, 42), 335, 8990, 0, 0)#40 AS bloomFilter#41]
 
 

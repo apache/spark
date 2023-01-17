@@ -25,7 +25,7 @@ WholeStageCodegen (10)
                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                   Filter [ss_store_sk,ss_hdemo_sk,ss_customer_sk]
                                                     Subquery #2
-                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 179, 1432, 0, 0),bloomFilter,buf]
+                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 179, 5037, 0, 0),bloomFilter,buf]
                                                         Exchange #5
                                                           ObjectHashAggregate [s_store_sk] [buf,buf]
                                                             WholeStageCodegen (1)
@@ -35,7 +35,7 @@ WholeStageCodegen (10)
                                                                     InputAdapter
                                                                       Scan parquet spark_catalog.default.store [s_store_sk,s_county]
                                                     Subquery #3
-                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 1760, 14080, 0, 0),bloomFilter,buf]
+                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 1760, 41157, 0, 0),bloomFilter,buf]
                                                         Exchange #6
                                                           ObjectHashAggregate [hd_demo_sk] [buf,buf]
                                                             WholeStageCodegen (1)

@@ -21,7 +21,7 @@ TakeOrderedAndProject [total_sales,i_item_id]
                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                           Filter [ss_addr_sk,ss_item_sk]
                                             Subquery #2
-                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 161645, 1293160, 0, 0),bloomFilter,buf]
+                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 161645, 2259282, 0, 0),bloomFilter,buf]
                                                 Exchange #4
                                                   ObjectHashAggregate [ca_address_sk] [buf,buf]
                                                     WholeStageCodegen (1)

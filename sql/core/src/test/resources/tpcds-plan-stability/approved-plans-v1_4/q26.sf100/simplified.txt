@@ -15,7 +15,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                             BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
                               Filter [cs_bill_cdemo_sk,cs_item_sk,cs_promo_sk]
                                 Subquery #2
-                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 27440, 219520, 0, 0),bloomFilter,buf]
+                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 27440, 484807, 0, 0),bloomFilter,buf]
                                     Exchange #3
                                       ObjectHashAggregate [cd_demo_sk] [buf,buf]
                                         WholeStageCodegen (1)
@@ -25,7 +25,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
                                 Subquery #3
-                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(p_promo_sk, 42), 1000, 8000, 0, 0),bloomFilter,buf]
+                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(p_promo_sk, 42), 1000, 24561, 0, 0),bloomFilter,buf]
                                     Exchange #4
                                       ObjectHashAggregate [p_promo_sk] [buf,buf]
                                         WholeStageCodegen (1)

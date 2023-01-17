@@ -15,7 +15,7 @@ WholeStageCodegen (10)
                             Project [ws_sold_time_sk,ws_ship_hdemo_sk,ws_web_page_sk]
                               Filter [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
                                 Subquery #1
-                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(wp_web_page_sk, 42), 50, 400, 0, 0),bloomFilter,buf]
+                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(wp_web_page_sk, 42), 50, 1539, 0, 0),bloomFilter,buf]
                                     Exchange #2
                                       ObjectHashAggregate [wp_web_page_sk] [buf,buf]
                                         WholeStageCodegen (1)
@@ -25,7 +25,7 @@ WholeStageCodegen (10)
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.web_page [wp_web_page_sk,wp_char_count]
                                 Subquery #2
-                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 720, 5760, 0, 0),bloomFilter,buf]
+                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 720, 18176, 0, 0),bloomFilter,buf]
                                     Exchange #3
                                       ObjectHashAggregate [hd_demo_sk] [buf,buf]
                                         WholeStageCodegen (1)
@@ -35,7 +35,7 @@ WholeStageCodegen (10)
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_dep_count]
                                 Subquery #3
-                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(t_time_sk, 42), 3757, 30056, 0, 0),bloomFilter,buf]
+                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(t_time_sk, 42), 3757, 81926, 0, 0),bloomFilter,buf]
                                     Exchange #4
                                       ObjectHashAggregate [t_time_sk] [buf,buf]
                                         WholeStageCodegen (1)
@@ -90,7 +90,7 @@ WholeStageCodegen (10)
                                       ReusedSubquery [bloomFilter] #1
                                       ReusedSubquery [bloomFilter] #2
                                       Subquery #4
-                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(t_time_sk, 42), 3757, 30056, 0, 0),bloomFilter,buf]
+                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(t_time_sk, 42), 3757, 81926, 0, 0),bloomFilter,buf]
                                           Exchange #10
                                             ObjectHashAggregate [t_time_sk] [buf,buf]
                                               WholeStageCodegen (1)

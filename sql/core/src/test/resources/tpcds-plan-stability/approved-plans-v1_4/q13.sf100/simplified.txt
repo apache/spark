@@ -16,7 +16,7 @@ WholeStageCodegen (7)
                               BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk,cd_marital_status,cd_education_status,ss_sales_price]
                                 Filter [ss_store_sk,ss_addr_sk,ss_cdemo_sk,ss_hdemo_sk,ss_net_profit,ss_sales_price]
                                   Subquery #2
-                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 159981, 1279848, 0, 0),bloomFilter,buf]
+                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 159981, 2239471, 0, 0),bloomFilter,buf]
                                       Exchange #3
                                         ObjectHashAggregate [cd_demo_sk] [buf,buf]
                                           WholeStageCodegen (1)
@@ -25,7 +25,7 @@ WholeStageCodegen (7)
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                                   Subquery #3
-                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 1952, 15616, 0, 0),bloomFilter,buf]
+                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 1952, 45226, 0, 0),bloomFilter,buf]
                                       Exchange #4
                                         ObjectHashAggregate [hd_demo_sk] [buf,buf]
                                           WholeStageCodegen (1)
@@ -34,7 +34,7 @@ WholeStageCodegen (7)
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_dep_count]
                                   Subquery #4
-                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 136816, 1094528, 0, 0),bloomFilter,buf]
+                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 136816, 1959741, 0, 0),bloomFilter,buf]
                                       Exchange #5
                                         ObjectHashAggregate [ca_address_sk] [buf,buf]
                                           WholeStageCodegen (1)

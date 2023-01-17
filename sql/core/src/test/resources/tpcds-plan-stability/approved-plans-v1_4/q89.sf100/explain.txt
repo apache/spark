@@ -182,7 +182,7 @@ Condition : (((i_category#4 IN (Books                                           
 (31) ObjectHashAggregate
 Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 29248, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 79931, 0, 0)]
 Aggregate Attributes [1]: [buf#23]
 Results [1]: [buf#24]
 
@@ -193,9 +193,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 (33) ObjectHashAggregate
 Input [1]: [buf#24]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 29248, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 29248, 0, 0)#25]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 29248, 0, 0)#25 AS bloomFilter#26]
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 79931, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 79931, 0, 0)#25]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 3656, 79931, 0, 0)#25 AS bloomFilter#26]
 
 Subquery:2 Hosting operator id = 5 Hosting Expression = ss_sold_date_sk#8 IN dynamicpruning#9
 BroadcastExchange (38)

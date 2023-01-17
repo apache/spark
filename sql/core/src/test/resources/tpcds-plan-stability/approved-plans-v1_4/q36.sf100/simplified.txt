@@ -22,7 +22,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                             Filter [ss_item_sk,ss_store_sk]
                                               Subquery #2
-                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 45, 360, 0, 0),bloomFilter,buf]
+                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 45, 1395, 0, 0),bloomFilter,buf]
                                                   Exchange #4
                                                     ObjectHashAggregate [s_store_sk] [buf,buf]
                                                       WholeStageCodegen (1)

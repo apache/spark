@@ -265,7 +265,7 @@ Input [6]: [i_item_sk#9, i_brand_id#10, i_brand#11, i_manufact_id#12, i_manufact
 (46) ObjectHashAggregate
 Input [5]: [i_item_sk#9, i_brand_id#10, i_brand#11, i_manufact_id#12, i_manufact#13]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 16448, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 47413, 0, 0)]
 Aggregate Attributes [1]: [buf#28]
 Results [1]: [buf#29]
 
@@ -276,9 +276,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
 (48) ObjectHashAggregate
 Input [1]: [buf#29]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 16448, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 16448, 0, 0)#30]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 16448, 0, 0)#30 AS bloomFilter#31]
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 47413, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 47413, 0, 0)#30]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2056, 47413, 0, 0)#30 AS bloomFilter#31]
 
 Subquery:2 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#5 IN dynamicpruning#6
 BroadcastExchange (53)

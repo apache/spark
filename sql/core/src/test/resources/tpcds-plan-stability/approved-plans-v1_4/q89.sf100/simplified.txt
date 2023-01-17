@@ -29,7 +29,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                                                         Scan parquet spark_catalog.default.item [i_item_sk,i_brand,i_class,i_category]
                                             Filter [ss_item_sk,ss_store_sk]
                                               Subquery #2
-                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 3656, 29248, 0, 0),bloomFilter,buf]
+                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 3656, 79931, 0, 0),bloomFilter,buf]
                                                   Exchange #5
                                                     ObjectHashAggregate [i_item_sk] [buf,buf]
                                                       WholeStageCodegen (1)

@@ -156,7 +156,7 @@ Input [4]: [s_store_sk#10, s_store_id#11, s_store_name#12, s_gmt_offset#13]
 (26) ObjectHashAggregate
 Input [3]: [s_store_sk#10, s_store_id#11, s_store_name#12]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 1600, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 5582, 0, 0)]
 Aggregate Attributes [1]: [buf#42]
 Results [1]: [buf#43]
 
@@ -167,9 +167,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 (28) ObjectHashAggregate
 Input [1]: [buf#43]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 1600, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 1600, 0, 0)#44]
-Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 1600, 0, 0)#44 AS bloomFilter#45]
+Functions [1]: [bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 5582, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 5582, 0, 0)#44]
+Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 5582, 0, 0)#44 AS bloomFilter#45]
 
 Subquery:2 Hosting operator id = 6 Hosting Expression = ss_sold_date_sk#6 IN dynamicpruning#7
 ReusedExchange (29)

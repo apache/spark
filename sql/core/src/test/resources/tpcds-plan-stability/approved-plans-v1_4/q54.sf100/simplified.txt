@@ -50,7 +50,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                                   Project [cs_sold_date_sk,cs_bill_customer_sk,cs_item_sk]
                                                                     Filter [cs_item_sk,cs_bill_customer_sk]
                                                                       Subquery #2
-                                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 204, 1632, 0, 0),bloomFilter,buf]
+                                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 204, 5685, 0, 0),bloomFilter,buf]
                                                                           Exchange #6
                                                                             ObjectHashAggregate [i_item_sk] [buf,buf]
                                                                               WholeStageCodegen (1)

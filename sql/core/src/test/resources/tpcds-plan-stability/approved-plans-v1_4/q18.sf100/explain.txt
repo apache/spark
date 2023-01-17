@@ -309,7 +309,7 @@ Input [4]: [cd_demo_sk#13, cd_gender#14, cd_education_status#15, cd_dep_count#16
 (54) ObjectHashAggregate
 Input [2]: [cd_demo_sk#13, cd_dep_count#16]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1097600, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1964441, 0, 0)]
 Aggregate Attributes [1]: [buf#77]
 Results [1]: [buf#78]
 
@@ -320,9 +320,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 (56) ObjectHashAggregate
 Input [1]: [buf#78]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1097600, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1097600, 0, 0)#79]
-Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1097600, 0, 0)#79 AS bloomFilter#80]
+Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1964441, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1964441, 0, 0)#79]
+Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#13, 42), 137200, 1964441, 0, 0)#79 AS bloomFilter#80]
 
 Subquery:2 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#9 IN dynamicpruning#10
 BroadcastExchange (61)

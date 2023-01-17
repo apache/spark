@@ -206,7 +206,7 @@ Input [4]: [cd_demo_sk#14, cd_gender#15, cd_marital_status#16, cd_education_stat
 (35) ObjectHashAggregate
 Input [1]: [cd_demo_sk#14]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 219520, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 484807, 0, 0)]
 Aggregate Attributes [1]: [buf#48]
 Results [1]: [buf#49]
 
@@ -217,9 +217,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 (37) ObjectHashAggregate
 Input [1]: [buf#49]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 219520, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 219520, 0, 0)#50]
-Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 219520, 0, 0)#50 AS bloomFilter#51]
+Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 484807, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 484807, 0, 0)#50]
+Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#14, 42), 27440, 484807, 0, 0)#50 AS bloomFilter#51]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#12, [id=#13]
 ObjectHashAggregate (44)
@@ -252,7 +252,7 @@ Input [3]: [p_promo_sk#18, p_channel_email#19, p_channel_event#20]
 (42) ObjectHashAggregate
 Input [1]: [p_promo_sk#18]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 8000, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 24561, 0, 0)]
 Aggregate Attributes [1]: [buf#52]
 Results [1]: [buf#53]
 
@@ -263,9 +263,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
 (44) ObjectHashAggregate
 Input [1]: [buf#53]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 8000, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 8000, 0, 0)#54]
-Results [1]: [bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 8000, 0, 0)#54 AS bloomFilter#55]
+Functions [1]: [bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 24561, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 24561, 0, 0)#54]
+Results [1]: [bloom_filter_agg(xxhash64(p_promo_sk#18, 42), 1000, 24561, 0, 0)#54 AS bloomFilter#55]
 
 Subquery:3 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#8 IN dynamicpruning#9
 BroadcastExchange (49)
