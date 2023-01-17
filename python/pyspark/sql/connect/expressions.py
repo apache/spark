@@ -354,6 +354,13 @@ class ColumnReference(Expression):
     def __repr__(self) -> str:
         return f"{self._unparsed_identifier}"
 
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, ColumnReference)
+            and other._unparsed_identifier == self._unparsed_identifier
+        )
+
 
 class SQLExpression(Expression):
     """Returns Expression which contains a string which is a SQL expression
@@ -369,6 +376,9 @@ class SQLExpression(Expression):
         expr = proto.Expression()
         expr.expression_string.expression = self._expr
         return expr
+
+    def __eq__(self, other: Any) -> bool:
+        return other is not None and isinstance(other, SQLExpression) and other._expr == self._expr
 
 
 class SortOrder(Expression):

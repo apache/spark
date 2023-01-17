@@ -799,11 +799,11 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
-    # convert count(*) and count(expr(*)) to count(1)
+    # convert count(*), count(col(*)) and count(expr(*)) to count(1)
     if isinstance(col, str) and col == "*":
         col = lit(1)
-    elif (
-        isinstance(col, Column) and isinstance(col._expr, SQLExpression) and col._expr._expr == "*"
+    elif isinstance(col, Column) and (
+        SQLExpression("*") == col._expr or ColumnReference("*") == col._expr
     ):
         col = lit(1)
     return _invoke_function_over_columns("count", col)
