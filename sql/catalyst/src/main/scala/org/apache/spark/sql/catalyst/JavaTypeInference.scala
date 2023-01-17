@@ -423,10 +423,10 @@ object JavaTypeInference {
         case c if c == classOf[java.time.Period] => createSerializerForJavaPeriod(inputObject)
 
         case c if c == classOf[java.math.BigInteger] =>
-          createSerializerForBigInteger(inputObject)
+          createSerializerForJavaBigInteger(inputObject)
 
         case c if c == classOf[java.math.BigDecimal] =>
-          createSerializerForBigDecimal(inputObject)
+          createSerializerForJavaBigDecimal(inputObject)
 
         case c if c == classOf[java.lang.Boolean] => createSerializerForBoolean(inputObject)
         case c if c == classOf[java.lang.Byte] => createSerializerForByte(inputObject)

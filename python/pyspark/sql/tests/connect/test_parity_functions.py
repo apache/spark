@@ -59,12 +59,7 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_lit_np_scalar(self):
         super().test_lit_np_scalar()
 
-    # TODO(SPARK-41902): Fix String representation of maps created by `map_from_arrays`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_map_functions(self):
-        super().test_map_functions()
-
-    # TODO(SPARK-41902): Parity in String representation of higher_order_function's output
+    # TODO(SPARK-42089): Different result in nested lambda function
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_nested_higher_order_function(self):
         super().test_nested_higher_order_function()

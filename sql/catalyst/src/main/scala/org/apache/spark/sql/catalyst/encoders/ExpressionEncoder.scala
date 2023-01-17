@@ -47,10 +47,7 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
 
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
-    apply(ScalaReflection.encoderFor[T])
-  }
-
-  def apply[T](enc: AgnosticEncoder[T]): ExpressionEncoder[T] = {
+    val enc = ScalaReflection.encoderFor[T]
     new ExpressionEncoder[T](
       ScalaReflection.serializerFor(enc),
       ScalaReflection.deserializerFor(enc),
