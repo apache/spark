@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
-private[sql] class ClientSparkResult(
+private[sql] class SparkResult(
     responses: java.util.Iterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator)
     extends AutoCloseable
@@ -155,7 +155,7 @@ private[sql] class ClientSparkResult(
         deserializer(iterator.next())
       }
 
-      override def close(): Unit = ClientSparkResult.this.close()
+      override def close(): Unit = SparkResult.this.close()
     }
   }
 

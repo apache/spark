@@ -17,8 +17,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.client.ClientSparkResult
+import org.apache.spark.sql.connect.client.SparkResult
 
 class Dataset(val session: SparkSession, private[sql] val plan: proto.Plan) {
-  def collectResult(): ClientSparkResult = session.execute(plan)
+  def collectResult(): SparkResult = session.execute(plan)
 }

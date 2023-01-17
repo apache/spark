@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.client.{ClientSparkResult, SparkConnectClient}
+import org.apache.spark.sql.connect.client.{SparkResult, SparkConnectClient}
 import org.apache.spark.sql.connect.client.util.Cleaner
 
 /**
@@ -64,9 +64,9 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     new Dataset(this, plan)
   }
 
-  private[sql] def execute(plan: proto.Plan): ClientSparkResult = {
+  private[sql] def execute(plan: proto.Plan): SparkResult = {
     val value = client.execute(plan)
-    val result = new ClientSparkResult(value, allocator)
+    val result = new SparkResult(value, allocator)
     cleaner.register(result)
     result
   }
