@@ -71,6 +71,28 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         self.assertEqual(str1, str2)
 
+    def test_count_star(self):
+        # SPARK-42099: test count(*) and count(expr(*))
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        data = [(None,), ("a",), ("b",), ("c",)]
+
+        cdf = self.connect.createDataFrame(data, schema=["alphabets"])
+
+        sdf = self.spark.createDataFrame(data, schema=["alphabets"])
+
+        self.assertEqual(
+            cdf.select(CF.count(CF.expr("*")), CF.count(cdf.alphabets)).collect(),
+            sdf.select(SF.count(SF.expr("*")), SF.count(sdf.alphabets)).collect(),
+        )
+
+        self.assertEqual(
+            cdf.select(CF.count("*"), CF.count(cdf.alphabets)).collect(),
+            sdf.select(SF.count("*"), SF.count(sdf.alphabets)).collect(),
+        )
+
     def test_broadcast(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF

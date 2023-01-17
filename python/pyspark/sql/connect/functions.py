@@ -799,6 +799,13 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
+    # convert count(*) and count(expr(*)) to count(1)
+    if isinstance(col, str) and col == "*":
+        col = lit(1)
+    elif (
+        isinstance(col, Column) and isinstance(col._expr, SQLExpression) and col._expr._expr == "*"
+    ):
+        col = lit(1)
     return _invoke_function_over_columns("count", col)
 
 
@@ -2388,9 +2395,6 @@ def _test() -> None:
 
         # TODO(SPARK-41843): Implement SparkSession.udf
         del pyspark.sql.connect.functions.call_udf.__doc__
-
-        # TODO(SPARK-41845): Fix count bug
-        del pyspark.sql.connect.functions.count.__doc__
 
         globs["spark"] = (
             PySparkSession.builder.appName("sql.connect.functions tests")
