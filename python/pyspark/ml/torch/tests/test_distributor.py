@@ -288,6 +288,13 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
                 if cuda_env_var:
                     self.delete_env_vars({CUDA_VISIBLE_DEVICES: cuda_env_var})
 
+    def test_local_file_with_pytorch(self) -> None:
+        test_file_path = "python/pyspark/ml/torch/tests/test_file.py"
+        learning_rate_str = "0.01"
+        TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
+            test_file_path, learning_rate_str
+        )
+
 
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -348,6 +355,13 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
                 self.assertEqual(distributor._get_num_tasks(), expected_output)
 
         self.spark.sparkContext._conf.set("spark.task.resource.gpu.amount", "1")
+
+    def test_distributed_file_with_pytorch(self) -> None:
+        test_file_path = "python/pyspark/ml/torch/tests/test_file.py"
+        learning_rate_str = "0.01"
+        TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
+            test_file_path, learning_rate_str
+        )
 
 
 class TorchWrapperUnitTests(unittest.TestCase):
