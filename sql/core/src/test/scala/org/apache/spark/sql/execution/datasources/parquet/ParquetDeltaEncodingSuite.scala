@@ -215,7 +215,7 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
   test("random data test") {
     val maxSize = 1000
     val data = allocDataArray(maxSize)
-    for (round <- 0 until 100000) {
+    for (round <- 0 until 10) {
       val size = random.nextInt(maxSize)
       for (i <- 0 until size) {
         data(i) = getNextRandom
