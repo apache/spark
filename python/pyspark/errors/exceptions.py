@@ -136,16 +136,6 @@ class CapturedException(PySparkException):
         return str(desc)
 
     def getErrorClass(self) -> Optional[str]:
-        """
-        Returns an error class as a string.
-
-        .. versionadded:: 3.4.0
-
-        See Also
-        --------
-        :meth:`CapturedException.getMessageParameters`
-        :meth:`CapturedException.getSqlState`
-        """
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
@@ -157,16 +147,6 @@ class CapturedException(PySparkException):
             return None
 
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
-        """
-        Returns a message parameters as a dictionary.
-
-        .. versionadded:: 3.4.0
-
-        See Also
-        --------
-        :meth:`CapturedException.getErrorClass`
-        :meth:`CapturedException.getSqlState`
-        """
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
@@ -178,16 +158,6 @@ class CapturedException(PySparkException):
             return None
 
     def getSqlState(self) -> Optional[str]:  # type: ignore[override]
-        """
-        Returns an SQLSTATE as a string.
-
-        .. versionadded:: 3.4.0
-
-        See Also
-        --------
-        :meth:`CapturedException.getErrorClass`
-        :meth:`CapturedException.getMessageParameters`
-        """
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
