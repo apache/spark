@@ -2245,16 +2245,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def failToSetOriginalPermissionBackError(
-      permission: FsPermission,
-      path: Path,
-      e: Throwable): Throwable = {
+  def cannotRestorePermissionsForPathError(permission: FsPermission, path: Path): Throwable = {
     new SparkSecurityException(
-      errorClass = "RESET_PERMISSION_TO_ORIGINAL",
+      errorClass = "CANNOT_RESTORE_PERMISSIONS_FOR_PATH",
       messageParameters = Map(
         "permission" -> permission.toString,
-        "path" -> path.toString,
-        "message" -> e.getMessage))
+        "path" -> path.toString))
   }
 
   def failToSetOriginalACLBackError(
