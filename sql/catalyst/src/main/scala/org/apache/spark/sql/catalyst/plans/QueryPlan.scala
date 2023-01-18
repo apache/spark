@@ -53,6 +53,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   @transient
   lazy val outputSet: AttributeSet = AttributeSet(output)
 
+  /**
+   * Returns the output ordering that this plan generates.
+   */
+  def outputOrdering: Seq[SortOrder] = Nil
+
   // Override `treePatternBits` to propagate bits for its expressions.
   override lazy val treePatternBits: BitSet = {
     val bits: BitSet = getDefaultTreePatternBits

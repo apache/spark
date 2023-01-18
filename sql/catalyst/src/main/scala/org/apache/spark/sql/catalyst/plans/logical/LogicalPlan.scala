@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -142,11 +142,6 @@ abstract class LogicalPlan
   def refresh(): Unit = children.foreach(_.refresh())
 
   /**
-   * Returns the output ordering that this plan generates.
-   */
-  def outputOrdering: Seq[SortOrder] = Nil
-
-  /**
    * Returns true iff `other`'s output is semantically the same, i.e.:
    *  - it contains the same number of `Attribute`s;
    *  - references are the same;
@@ -205,8 +200,10 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
  */
 trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan]
 
-abstract class OrderPreservingUnaryNode extends UnaryNode {
-  override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
+trait OrderPreservingUnaryNode extends UnaryNode
+  with AliasAwareQueryOutputOrdering[LogicalPlan] {
+  override protected def outputExpressions: Seq[NamedExpression] = child.output
+  override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 }
 
 object LogicalPlanIntegrity {

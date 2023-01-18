@@ -340,6 +340,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
       //   ShuffleQueryStage 2
       //     ReusedQueryStage 0
       val grouped = df.groupBy("key").agg(max("value").as("value"))
+        .repartition(col("key") + 10)
       val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
         .union(grouped.groupBy(col("key") + 2).max("value"))
       QueryTest.checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Row(2, 1) :: Row(3, 1) ::
