@@ -25,7 +25,7 @@ from pyspark import SparkConf, SparkContext, BasicProfiler
 from pyspark.profiler import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
-from pyspark.sql.utils import PythonException
+from pyspark.errors import PythonException
 from pyspark.testing.utils import PySparkTestCase
 
 

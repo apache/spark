@@ -440,7 +440,7 @@ class VectorUDTTests(MLlibTestCase):
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
     def test_row_matrix_from_dataframe(self):
-        from pyspark.sql.utils import IllegalArgumentException
+        from pyspark.errors import IllegalArgumentException
 
         df = self.spark.createDataFrame([Row(Vectors.dense(1))])
         row_matrix = RowMatrix(df)
@@ -450,7 +450,7 @@ class VectorUDTTests(MLlibTestCase):
             RowMatrix(df.selectExpr("'monkey'"))
 
     def test_indexed_row_matrix_from_dataframe(self):
-        from pyspark.sql.utils import IllegalArgumentException
+        from pyspark.errors import IllegalArgumentException
 
         df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
         matrix = IndexedRowMatrix(df)
