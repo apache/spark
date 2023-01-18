@@ -167,6 +167,41 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
+  test(
+    "SPARK-40817: Check that remote files do not get discarded in spark.files",
+    k8sTestTag,
+    MinikubeTag) {
+    tryDepsTest({
+      // Create a local file
+      val localFileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+
+      // Create a remote file on S3
+      val remoteFileKey = "some-path/some-remote-file.txt"
+      createS3Object(remoteFileKey, "Some Content")
+      val remoteFileFullPath = s"s3a://${BUCKET}/${remoteFileKey}"
+
+      // Put both file paths in spark.files
+      sparkAppConf.set("spark.files", s"$HOST_PATH/$localFileName,${remoteFileFullPath}")
+      // Allows to properly read executor logs once the job is finished
+      sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
+
+      // Run SparkPi and make sure that both files have been properly downloaded on running pods
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
+      runSparkApplicationAndVerifyCompletion(
+        appResource = examplesJar,
+        mainClass = SPARK_PI_MAIN_CLASS,
+        appArgs = Array(),
+        expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
+        // We can check whether the Executor pod has successfully
+        // downloaded both the local and the remote file
+        expectedExecutorLogOnCompletion = Seq(localFileName, "some-remote-file.txt"),
+        driverPodChecker = doBasicDriverPodCheck,
+        executorPodChecker = doBasicExecutorPodCheck,
+        isJVM = true
+      )
+    })
+  }
+
   test("SPARK-33615: Launcher client archives", k8sTestTag, MinikubeTag) {
     tryDepsTest {
       val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
@@ -237,41 +272,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     } finally {
       Files.delete(new File(outDepsFile).toPath)
     }
-  }
-
-  test(
-    "SPARK-40817: Check that remote files do not get discarded in spark.files",
-    k8sTestTag,
-    MinikubeTag) {
-    tryDepsTest({
-      // Create a local file
-      val localFileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
-
-      // Create a remote file on S3
-      val remoteFileKey = "some-path/some-remote-file.txt"
-      createS3Object(remoteFileKey, "Some Content")
-      val remoteFileFullPath = s"s3a://${BUCKET}/${remoteFileKey}"
-
-      // Put both file paths in spark.files
-      sparkAppConf.set("spark.files", s"$HOST_PATH/$localFileName,${remoteFileFullPath}")
-      // Allows to properly read executor logs once the job is finished
-      sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
-
-      // Run SparkPi and make sure that both files have been properly downloaded on running pods
-      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
-      runSparkApplicationAndVerifyCompletion(
-        appResource = examplesJar,
-        mainClass = SPARK_PI_MAIN_CLASS,
-        appArgs = Array(),
-        expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
-        // We can check whether the Executor pod has successfully
-        // downloaded both the local and the remote file
-        expectedExecutorLogOnCompletion = Seq(localFileName, "some-remote-file.txt"),
-        driverPodChecker = doBasicDriverPodCheck,
-        executorPodChecker = doBasicExecutorPodCheck,
-        isJVM = true
-      )
-    })
   }
 
   private def testPython(
