@@ -400,7 +400,7 @@ case class MapGroupsExec(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    dataOrder: Option[Seq[SortOrder]],
+    dataOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
@@ -410,7 +410,7 @@ case class MapGroupsExec(
     ClusteredDistribution(groupingAttributes) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)) ++ dataOrder.getOrElse(Seq.empty))
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)) ++ dataOrder)
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -440,7 +440,7 @@ object MapGroupsExec {
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
-      dataOrder: Option[Seq[SortOrder]],
+      dataOrder: Seq[SortOrder],
       outputObjAttr: Attribute,
       timeoutConf: GroupStateTimeout,
       child: SparkPlan): MapGroupsExec = {
@@ -626,8 +626,8 @@ case class CoGroupExec(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
-    leftOrder: Option[Seq[SortOrder]],
-    rightOrder: Option[Seq[SortOrder]],
+    leftOrder: Seq[SortOrder],
+    rightOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with ObjectProducerExec {
@@ -636,8 +636,8 @@ case class CoGroupExec(
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    (leftGroup.map(SortOrder(_, Ascending)) ++ leftOrder.getOrElse(Seq.empty)) ::
-      (rightGroup.map(SortOrder(_, Ascending)) ++ rightOrder.getOrElse(Seq.empty)) ::
+    (leftGroup.map(SortOrder(_, Ascending)) ++ leftOrder) ::
+      (rightGroup.map(SortOrder(_, Ascending)) ++ rightOrder) ::
       Nil
 
   override protected def doExecute(): RDD[InternalRow] = {

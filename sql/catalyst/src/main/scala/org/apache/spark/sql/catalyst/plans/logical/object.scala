@@ -386,18 +386,18 @@ case class AppendColumnsWithObject(
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
   def apply[K : Encoder, T : Encoder, U : Encoder](
-    func: (K, Iterator[T]) => TraversableOnce[U],
-    groupingAttributes: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
-    dataOrder: Seq[SortOrder],
-    child: LogicalPlan): LogicalPlan = {
+      func: (K, Iterator[T]) => TraversableOnce[U],
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      dataOrder: Seq[SortOrder],
+      child: LogicalPlan): LogicalPlan = {
     val mapped = new MapGroups(
       func.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,
-      Some(dataOrder),
+      dataOrder,
       CatalystSerde.generateObjAttr[U],
       child)
     CatalystSerde.serialize[U](mapped)
@@ -419,7 +419,7 @@ case class MapGroups(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    dataOrder: Option[Seq[SortOrder]],
+    dataOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
   override protected def withNewChildInternal(newChild: LogicalPlan): MapGroups =
@@ -670,8 +670,8 @@ object CoGroup {
       rightGroup,
       leftAttr,
       rightAttr,
-      Some(leftOrder),
-      Some(rightOrder),
+      leftOrder,
+      rightOrder,
       CatalystSerde.generateObjAttr[OUT],
       left,
       right)
@@ -692,8 +692,8 @@ case class CoGroup(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
-    leftOrder: Option[Seq[SortOrder]],
-    rightOrder: Option[Seq[SortOrder]],
+    leftOrder: Seq[SortOrder],
+    rightOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {

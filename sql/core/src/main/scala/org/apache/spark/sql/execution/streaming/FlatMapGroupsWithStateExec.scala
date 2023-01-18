@@ -510,12 +510,12 @@ object FlatMapGroupsWithStateExec {
       }
       CoGroupExec(
         func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
-        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, None, None, outputObjAttr,
-        child, initialState)
+        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, Seq.empty, Seq.empty,
+        outputObjAttr, child, initialState)
     } else {
       MapGroupsExec(
         userFunc, keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, None, outputObjAttr, timeoutConf, child)
+        dataAttributes, Seq.empty, outputObjAttr, timeoutConf, child)
     }
   }
 }
