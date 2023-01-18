@@ -389,25 +389,8 @@ object MapGroups {
       func: (K, Iterator[T]) => TraversableOnce[U],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
+      dataOrder: Seq[SortOrder],
       child: LogicalPlan): LogicalPlan = {
-    val mapped = new MapGroups(
-      func.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
-      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
-      UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
-      groupingAttributes,
-      dataAttributes,
-      Seq.empty,
-      CatalystSerde.generateObjAttr[U],
-      child)
-    CatalystSerde.serialize[U](mapped)
-  }
-
-  def apply[K : Encoder, T : Encoder, U : Encoder](
-    func: (K, Iterator[T]) => TraversableOnce[U],
-    groupingAttributes: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
-    dataOrder: Seq[SortOrder],
-    child: LogicalPlan): LogicalPlan = {
     val mapped = new MapGroups(
       func.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
@@ -664,35 +647,6 @@ case class FlatMapGroupsInRWithArrow(
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
-  def apply[K : Encoder, L : Encoder, R : Encoder, OUT : Encoder](
-      func: (K, Iterator[L], Iterator[R]) => TraversableOnce[OUT],
-      leftGroup: Seq[Attribute],
-      rightGroup: Seq[Attribute],
-      leftAttr: Seq[Attribute],
-      rightAttr: Seq[Attribute],
-      left: LogicalPlan,
-      right: LogicalPlan): LogicalPlan = {
-    require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
-
-    val cogrouped = CoGroup(
-      func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
-      // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
-      // resolve the `keyDeserializer` based on either of them, here we pick the left one.
-      UnresolvedDeserializer(encoderFor[K].deserializer, leftGroup),
-      UnresolvedDeserializer(encoderFor[L].deserializer, leftAttr),
-      UnresolvedDeserializer(encoderFor[R].deserializer, rightAttr),
-      leftGroup,
-      rightGroup,
-      leftAttr,
-      rightAttr,
-      Seq.empty,
-      Seq.empty,
-      CatalystSerde.generateObjAttr[OUT],
-      left,
-      right)
-    CatalystSerde.serialize[OUT](cogrouped)
-  }
-
   def apply[K : Encoder, L : Encoder, R : Encoder, OUT : Encoder](
       func: (K, Iterator[L], Iterator[R]) => TraversableOnce[OUT],
       leftGroup: Seq[Attribute],

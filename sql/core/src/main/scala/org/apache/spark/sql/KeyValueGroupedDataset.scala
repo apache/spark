@@ -145,6 +145,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         f,
         groupingAttributes,
         dataAttributes,
+        Seq.empty,
         logicalPlan))
   }
 
@@ -831,6 +832,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
         other.groupingAttributes,
         this.dataAttributes,
         other.dataAttributes,
+        Seq.empty,
+        Seq.empty,
         this.logicalPlan,
         other.logicalPlan))
   }
