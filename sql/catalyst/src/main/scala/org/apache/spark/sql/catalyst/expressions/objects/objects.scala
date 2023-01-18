@@ -50,6 +50,9 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   def propagateNull: Boolean
 
+  // InvokeLike is stateful because of the evaluatedArgs Array
+  override def stateful: Boolean = true
+
   override def foldable: Boolean =
     children.forall(_.foldable) && deterministic && trustedSerializable(dataType)
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
@@ -1399,6 +1402,9 @@ case class ExternalMapToCatalyst private(
   override def foldable: Boolean = false
 
   override def nullable: Boolean = inputData.nullable
+
+  // ExternalMapToCatalyst is stateful because of the rowBuffer in mapCatalystConverter
+  override def stateful: Boolean = true
 
   override def children: Seq[Expression] = Seq(
     keyLoopVar, keyConverter, valueLoopVar, valueConverter, inputData)
