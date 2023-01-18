@@ -193,7 +193,10 @@ class Analyzer(override val catalogManager: CatalogManager)
   override protected def isPlanIntegral(
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Boolean = {
-    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan)
+    import org.apache.spark.sql.catalyst.util._
+    !Utils.isTesting || (LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
+      (!LogicalPlanIntegrity.canGetOutputAttrs(currentPlan) ||
+        !currentPlan.output.exists(_.qualifiedAccessOnly)))
   }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
@@ -919,7 +922,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * projecting away metadata columns prematurely.
    */
   object AddMetadataColumns extends Rule[LogicalPlan] {
-
     import org.apache.spark.sql.catalyst.util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
@@ -970,7 +972,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
         val newProj = p.copy(
-          projectList = p.projectList ++ p.metadataOutput,
+          // Do not leak the qualified-access-only restriction to normal plan outputs.
+          projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
           child = addMetadataCol(p.child))
         newProj.copyTagsFrom(p)
         newProj
