@@ -481,14 +481,14 @@ class UnresolvedFunction(Expression):
 
 
 class PythonUDF:
+    """Represents a Python user-defined function."""
+
     def __init__(
         self,
         output_type: str,
         eval_type: int,
         command: bytes,
     ) -> None:
-        super().__init__()
-
         self._output_type = output_type
         self._eval_type = eval_type
         self._command = command
@@ -508,6 +508,8 @@ class PythonUDF:
 
 
 class ScalarInlineUserDefinedFunction(Expression):
+    """Represents a scalar inline user-defined function of any programming languages."""
+
     def __init__(
         self,
         function_name: str,

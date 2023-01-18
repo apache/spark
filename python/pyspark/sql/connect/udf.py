@@ -20,7 +20,7 @@ User-defined function related classes and functions
 import functools
 from typing import Callable, Any, TYPE_CHECKING, Optional
 
-from pyspark import cloudpickle
+from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     PythonUDF,
@@ -108,7 +108,7 @@ class UserDefinedFunction:
         py_udf = PythonUDF(
             output_type=data_type_str,
             eval_type=self.evalType,
-            command=cloudpickle.dumps(self.func),
+            command=CloudPickleSerializer().dumps((self.func, self._returnType)),
         )
         return Column(
             ScalarInlineUserDefinedFunction(
@@ -160,17 +160,6 @@ class UserDefinedFunction:
     def asNondeterministic(self) -> "UserDefinedFunction":
         """
         Updates UserDefinedFunction to nondeterministic.
-
         """
-        # Here, we explicitly clean the cache to create a JVM UDF instance
-        # with 'deterministic' updated. See SPARK-23233.
         self.deterministic = False
         return self
-
-
-def _test() -> None:
-    pass
-
-
-if __name__ == "__main__":
-    _test()

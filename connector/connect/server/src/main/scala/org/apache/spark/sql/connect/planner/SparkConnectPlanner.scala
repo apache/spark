@@ -19,13 +19,15 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny}
+
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{PythonEvalType, PythonFunction, SimplePythonFunction}
+import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, expressions}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
@@ -829,6 +831,9 @@ class SparkConnectPlanner(val session: SparkSession) {
     fun.getFunctionCase match {
       case proto.Expression.ScalarInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         transformPythonUDF(fun)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
   }
 
@@ -836,37 +841,41 @@ class SparkConnectPlanner(val session: SparkSession) {
    * Translates a Python user-defined function from proto to the Catalyst expression.
    *
    * @param fun
-   *   Proto representation of the function call.
+   *   Proto representation of the Python user-defined function.
    * @return
    *   PythonUDF.
    */
   private def transformPythonUDF(
       fun: proto.Expression.ScalarInlineUserDefinedFunction): PythonUDF = {
-    val udf = fun.getPythonUDF
+    val udf = fun.getPythonUdf
     PythonUDF(
-      fun.getFunctionName,
-      transformPythonFunction(udf),
-      DataType.parseTypeWithFallback(
+      name = fun.getFunctionName,
+      func = transformPythonFunction(udf),
+      dataType = DataType.parseTypeWithFallback(
         schema = udf.getOutputType,
         parser = DataType.fromDDL,
         fallbackParser = DataType.fromJson) match {
         case s: DataType => s
         case other => throw InvalidPlanInput(s"Invalid return type $other")
       },
-      fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      udf.getEvalType,
-      fun.getDeterministic)
+      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+      evalType = udf.getEvalType,
+      udfDeterministic = fun.getDeterministic)
   }
 
   private def transformPythonFunction(fun: proto.Expression.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
-      fun.getCommand.toByteArray,
-      Maps.newHashMap(),
-      Lists.newArrayList(),
-      pythonExec,
-      "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
-      Lists.newArrayList(),
-      null)
+      command = fun.getCommand.toByteArray,
+      // Empty environment variables
+      envVars = Maps.newHashMap(),
+      // No imported Python libraries
+      pythonIncludes = Lists.newArrayList(),
+      pythonExec = pythonExec,
+      pythonVer = "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      // Empty broadcast variables
+      broadcastVars = Lists.newArrayList(),
+      // Null accumulator
+      accumulator = null)
   }
 
   /**
@@ -1404,11 +1413,15 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
     val function = SimplePythonFunction(
       cf.getSerializedFunction.toByteArray,
+      // Empty environment variables
       Maps.newHashMap(),
+      // No imported Python libraries
       Lists.newArrayList(),
       pythonExec,
       "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      // Empty broadcast variables
       Lists.newArrayList(),
+      // Null accumulator
       null)
 
     val udf = UserDefinedPythonFunction(

@@ -2411,17 +2411,20 @@ def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
+    from pyspark.rdd import PythonEvalType
+
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(
-            _create_udf, returnType=return_type, evalType=100  # PythonEvalType.SQL_BATCHED_UDF
+            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
         )
     else:
-        return _create_udf(
-            f=f, returnType=returnType, evalType=100  # PythonEvalType.SQL_BATCHED_UDF
-        )
+        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+
+
+udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
 def pandas_udf(*args: Any, **kwargs: Any) -> None:

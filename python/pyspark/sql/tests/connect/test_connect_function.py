@@ -19,7 +19,7 @@ import tempfile
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType
+from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -2287,26 +2287,39 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         from pyspark.sql.connect import functions as CF
 
         query = """
-            SELECT a, b, c, BINARY(c) as d FROM VALUES
-            (-1.0, float("NAN"), 'x'), (-2.1, NULL, 'y'), (1, 2.1, 'z'), (0, 0.5, NULL)
+            SELECT a, b, c FROM VALUES
+            (1, 1.0, 'x'), (2, 2.0, 'y'), (3, 3.0, 'z')
             AS tab(a, b, c)
             """
-
-        # +----+----+----+----+
-        # |   a|   b|   c|   d|
-        # +----+----+----+----+
-        # |-1.0| NaN|   x|[78]|
-        # |-2.1|null|   y|[79]|
-        # | 1.0| 2.1|   z|[7A]|
-        # | 0.0| 0.5|null|null|
-        # +----+----+----+----+
+        # +---+---+---+
+        # |  a|  b|  c|
+        # +---+---+---+
+        # |  1|1.0|  x|
+        # |  2|2.0|  y|
+        # |  3|3.0|  z|
+        # +---+---+---+
 
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
+        # as a normal function
         self.assert_eq(
-            cdf.select(CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
-            sdf.select(SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
+            cdf.select(CF.udf(lambda x: x + 1)(cdf.a), CF.udf(lambda x: x + 1)(cdf.b)).toPandas(),
+            sdf.select(SF.udf(lambda x: x + 1)(sdf.a), SF.udf(lambda x: x + 1)(sdf.b)).toPandas(),
+        )
+
+        # as a decorator
+        @CF.udf(StringType())
+        def cfun(x):
+            return x + "a"
+
+        @SF.udf(StringType())
+        def sfun(x):
+            return x + "a"
+
+        self.assert_eq(
+            cdf.select(cfun(cdf.c)).toPandas(),
+            sdf.select(sfun(sdf.c)).toPandas(),
         )
 
     def test_unsupported_functions(self):
