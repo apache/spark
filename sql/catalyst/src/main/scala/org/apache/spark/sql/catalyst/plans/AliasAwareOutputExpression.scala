@@ -83,7 +83,12 @@ trait AliasAwareOutputExpression extends SQLConfHelper with MultiTransformHelper
       // there.
       case a: Attribute if !outputSet.contains(a) => Stream.empty
 
-      // Filter PartitioningCollection children
+      // Remove `PartitioningCollection` elements that are expressions and contain an attribute that
+      // can't be mapped and the node's output set doesn't contain the attribute.
+      // To achieve this we need to "restart" `multiTransformDown()` for each expression child and
+      // filter out empty streams due to the above attribute pruning case.
+      // The child streams can be then combined using `generateChildrenSeq()` into one stream as
+      // `multiTransformDown()` would also do (but without filtering empty streams).
       case p: PartitioningCollection =>
         val childrenStreams = p.partitionings.map {
           case e: Expression => e.multiTransformDown(f).asInstanceOf[Stream[Partitioning]]
@@ -98,7 +103,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper with MultiTransformHelper
           case ps => Some(PartitioningCollection(ps))
         }
 
-      // Filter SortOrder children
+      // Filter `SortOrder` children similarly to `PartitioningCollection` elements
       case s: SortOrder =>
         val childrenStreams = s.children.map(_.multiTransformDown(f)).filter(_.nonEmpty)
         generateChildrenSeq(childrenStreams)
