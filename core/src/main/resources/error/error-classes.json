@@ -1006,6 +1006,11 @@
     ],
     "sqlState" : "42000"
   },
+  "NOT_A_PARTITIONED_TABLE" : {
+    "message" : [
+      "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
+    ]
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -3060,11 +3065,6 @@
   "_LEGACY_ERROR_TEMP_1248" : {
     "message" : [
       "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1249" : {
-    "message" : [
-      "Operation not allowed: <cmd> only works on partitioned tables: <tableIdentWithDB>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1250" : {
@@ -5292,6 +5292,11 @@
   "_LEGACY_ERROR_TEMP_2445" : {
     "message" : [
       "grouping() can only be used with GroupingSets/Cube/Rollup"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2446" : {
+    "message" : [
+      "Operation not allowed: <cmd> only works on table with location provided: <tableIdentWithDB>"
     ]
   }
 }
