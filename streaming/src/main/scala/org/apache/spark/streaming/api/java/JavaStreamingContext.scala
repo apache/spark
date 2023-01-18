@@ -51,6 +51,7 @@ import org.apache.spark.streaming.scheduler.StreamingListener
  * respectively. `context.awaitTermination()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
  */
+@deprecated
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /**
