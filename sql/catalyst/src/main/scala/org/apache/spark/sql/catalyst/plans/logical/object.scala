@@ -396,7 +396,7 @@ object MapGroups {
       UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,
-      None,
+      Seq.empty,
       CatalystSerde.generateObjAttr[U],
       child)
     CatalystSerde.serialize[U](mapped)
@@ -414,7 +414,7 @@ object MapGroups {
       UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,
-      Some(dataOrder),
+      dataOrder,
       CatalystSerde.generateObjAttr[U],
       child)
     CatalystSerde.serialize[U](mapped)
@@ -436,7 +436,7 @@ case class MapGroups(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    dataOrder: Option[Seq[SortOrder]],
+    dataOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
   override protected def withNewChildInternal(newChild: LogicalPlan): MapGroups =
@@ -685,8 +685,8 @@ object CoGroup {
       rightGroup,
       leftAttr,
       rightAttr,
-      None,
-      None,
+      Seq.empty,
+      Seq.empty,
       CatalystSerde.generateObjAttr[OUT],
       left,
       right)
@@ -716,8 +716,8 @@ object CoGroup {
       rightGroup,
       leftAttr,
       rightAttr,
-      Some(leftOrder),
-      Some(rightOrder),
+      leftOrder,
+      rightOrder,
       CatalystSerde.generateObjAttr[OUT],
       left,
       right)
@@ -738,8 +738,8 @@ case class CoGroup(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
-    leftOrder: Option[Seq[SortOrder]],
-    rightOrder: Option[Seq[SortOrder]],
+    leftOrder: Seq[SortOrder],
+    rightOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {
