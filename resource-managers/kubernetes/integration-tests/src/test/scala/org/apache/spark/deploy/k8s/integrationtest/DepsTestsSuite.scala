@@ -296,22 +296,20 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def getS3Client(
-      s3Endpoint: String,
+      endPoint: String,
       accessKey: String = ACCESS_KEY,
       secretKey: String = SECRET_KEY): AmazonS3Client = {
     val credentials = new BasicAWSCredentials(accessKey, secretKey)
     val s3client = new AmazonS3Client(credentials)
-    s3client.setEndpoint(s3Endpoint)
+    s3client.setEndpoint(endPoint)
     s3client
   }
 
-  private def createS3Bucket(
-      s3Endpoint: String = getServiceUrl(svcName),
-      bucket: String = BUCKET): Unit = {
+  private def createS3Bucket(accessKey: String, secretKey: String, endPoint: String): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) {
       try {
-        val s3client = getS3Client(s3Endpoint)
-        s3client.createBucket(bucket)
+        val s3client = getS3Client(endPoint, accessKey, secretKey)
+        s3client.createBucket(BUCKET)
       } catch {
         case e: Exception =>
           throw new SparkException(s"Failed to create bucket $BUCKET.", e)
@@ -322,12 +320,11 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   private def createS3Object(
       objectKey: String,
       objectContent: String,
-      s3Endpoint: String = getServiceUrl(svcName),
-      bucket: String = BUCKET): Unit = {
+      endPoint: String = getServiceUrl(svcName)): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) {
       try {
-        val s3client = getS3Client(s3Endpoint)
-        s3client.putObject(bucket, objectKey, objectContent)
+        val s3client = getS3Client(endPoint)
+        s3client.putObject(BUCKET, objectKey, objectContent)
       } catch {
         case e: Exception =>
           throw new SparkException(s"Failed to create object $BUCKET/$objectKey.", e)
@@ -385,7 +382,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     try {
       setupMinioStorage()
       val minioUrlStr = getServiceUrl(svcName)
-      createS3Bucket(minioUrlStr)
+      createS3Bucket(ACCESS_KEY, SECRET_KEY, minioUrlStr)
       setCommonSparkConfPropertiesForS3Access(sparkAppConf, minioUrlStr)
       runTest
     } finally {
