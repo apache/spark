@@ -105,7 +105,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("substr('abcd', 2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("substr"),
         "expectedNum" -> "[2, 3]",
@@ -125,7 +125,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         spark.udf.register("foo", (_: String).length)
         df.selectExpr("foo(2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",

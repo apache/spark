@@ -1718,7 +1718,6 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
           "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
         ]
       }
