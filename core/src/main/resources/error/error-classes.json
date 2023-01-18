@@ -3581,11 +3581,6 @@
       "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2009" : {
-    "message" : [
-      "dataType"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2010" : {
     "message" : [
       "Window Functions do not support merging."
