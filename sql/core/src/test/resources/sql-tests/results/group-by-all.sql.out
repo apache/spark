@@ -234,7 +234,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"id\"",
     "expressionAnyValue" : "\"any_value(id)\""

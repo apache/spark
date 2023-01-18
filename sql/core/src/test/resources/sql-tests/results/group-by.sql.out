@@ -190,7 +190,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
@@ -213,6 +213,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "sqlExprs" : "\"a\",\"a AS k\""
   },
