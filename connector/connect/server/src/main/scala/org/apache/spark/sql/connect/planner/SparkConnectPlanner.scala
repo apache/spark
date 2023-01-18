@@ -740,8 +740,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformWindowExpression(exp.getWindow)
       case proto.Expression.ExprTypeCase.EXTENSION =>
         transformExpressionPlugin(exp.getExtension)
-      case proto.Expression.ExprTypeCase.PYTHON_UDF =>
-        transformPythonUDF(exp.getPythonUDF)
+      case proto.Expression.ExprTypeCase.SCALAR_INLINE_USER_DEFINED_FUNCTION =>
+        transformScalarInlineUserDefinedFunction(exp.getScalarInlineUserDefinedFunction)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -822,24 +822,43 @@ class SparkConnectPlanner(val session: SparkSession) {
    * @param fun
    *   Proto representation of the function call.
    * @return
+   *   Expression.
    */
-  private def transformPythonUDF(fun: proto.Expression.PythonUDF): Expression = {
+  private def transformScalarInlineUserDefinedFunction(
+      fun: proto.Expression.ScalarInlineUserDefinedFunction): Expression = {
+    fun.getFunctionCase match {
+      case proto.Expression.ScalarInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+        transformPythonUDF(fun)
+    }
+  }
+
+  /**
+   * Translates a Python user-defined function from proto to the Catalyst expression.
+   *
+   * @param fun
+   *   Proto representation of the function call.
+   * @return
+   *   PythonUDF.
+   */
+  private def transformPythonUDF(
+      fun: proto.Expression.ScalarInlineUserDefinedFunction): PythonUDF = {
+    val udf = fun.getPythonUDF
     PythonUDF(
       fun.getFunctionName,
-      transformPythonFunction(fun.getFunction),
+      transformPythonFunction(udf),
       DataType.parseTypeWithFallback(
-        schema = fun.getOutputType,
+        schema = udf.getOutputType,
         parser = DataType.fromDDL,
         fallbackParser = DataType.fromJson) match {
         case s: DataType => s
         case other => throw InvalidPlanInput(s"Invalid return type $other")
       },
       fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      fun.getEvalType,
+      udf.getEvalType,
       fun.getDeterministic)
   }
 
-  private def transformPythonFunction(fun: proto.Expression.PythonFunction): PythonFunction = {
+  private def transformPythonFunction(fun: proto.Expression.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       fun.getCommand.toByteArray,
       Maps.newHashMap(),
