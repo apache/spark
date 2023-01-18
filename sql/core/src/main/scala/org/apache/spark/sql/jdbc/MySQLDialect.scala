@@ -254,9 +254,10 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
             throw new IndexAlreadyExistsException(message, cause = Some(e))
           case 1091 =>
             // The message is: Failed to drop index indexName in tableName
-            val regex = "(?s)Failed to drop index (.*) in".r
+            val regex = "(?s)Failed to drop index (.*) in (.*)".r
             val indexName = regex.findFirstMatchIn(message).get.group(1)
-            throw new NoSuchIndexException(indexName, cause = Some(e))
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case unsupported: UnsupportedOperationException => throw unsupported

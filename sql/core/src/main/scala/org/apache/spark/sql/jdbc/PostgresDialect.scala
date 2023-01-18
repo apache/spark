@@ -226,9 +226,10 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
           case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
           case "42704" =>
             // The message is: Failed to drop index indexName in tableName
-            val regex = "(?s)Failed to drop index (.*) in".r
+            val regex = "(?s)Failed to drop index (.*) in (.*)".r
             val indexName = regex.findFirstMatchIn(message).get.group(1)
-            throw new NoSuchIndexException(indexName, cause = Some(e))
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
           case _ => super.classifyException(message, e)
         }

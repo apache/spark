@@ -280,7 +280,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
             sql(s"DROP index i1 ON $catalogName.new_table")
           },
           errorClass = "INDEX_NOT_FOUND",
-          parameters = Map("indexName" -> "i1")
+          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
         )
       }
     }

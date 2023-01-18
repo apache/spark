@@ -212,9 +212,10 @@ private[sql] object H2Dialect extends JdbcDialect {
           // INDEX_NOT_FOUND_1
           case 42112 =>
             // The message is: Failed to drop index indexName in tableName
-            val regex = "(?s)Failed to drop index (.*) in".r
+            val regex = "(?s)Failed to drop index (.*) in (.*)".r
             val indexName = regex.findFirstMatchIn(message).get.group(1)
-            throw new NoSuchIndexException(indexName, cause = Some(e))
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case _ => // do nothing
         }
       case _ => // do nothing
