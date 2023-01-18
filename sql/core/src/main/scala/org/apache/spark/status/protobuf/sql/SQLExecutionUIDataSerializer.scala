@@ -31,11 +31,13 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
     val builder = StoreTypes.SQLExecutionUIData.newBuilder()
     builder.setExecutionId(ui.executionId)
     builder.setRootExecutionId(ui.rootExecutionId)
-    builder.setDescription(ui.description)
-    builder.setDetails(ui.details)
-    builder.setPhysicalPlanDescription(ui.physicalPlanDescription)
-    ui.modifiedConfigs.foreach {
-      case (k, v) => builder.putModifiedConfigs(k, v)
+    Option(ui.description).foreach(builder.setDescription)
+    Option(ui.details).foreach(builder.setDetails)
+    Option(ui.physicalPlanDescription).foreach(builder.setPhysicalPlanDescription)
+    if (ui.modifiedConfigs != null) {
+      ui.modifiedConfigs.foreach {
+        case (k, v) => builder.putModifiedConfigs(k, v)
+      }
     }
     ui.metrics.foreach(m => builder.addMetrics(SQLPlanMetricSerializer.serialize(m)))
     builder.setSubmissionTime(ui.submissionTime)
