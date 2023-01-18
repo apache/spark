@@ -19,9 +19,9 @@ package org.apache.spark.deploy.k8s.features
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.TestFileSystem
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -380,4 +380,17 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .build()
 
   private def amountAndFormat(quantity: Quantity): String = quantity.getAmount + quantity.getFormat
+}
+
+/**
+ * No-op Hadoop FileSystem
+ */
+private class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
+  override def copyFromLocalFile(
+                                  delSrc: Boolean,
+                                  overwrite: Boolean,
+                                  src: Path,
+                                  dst: Path): Unit = {}
+
+  override def mkdirs(path: Path): Boolean = true
 }
