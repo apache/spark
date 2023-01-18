@@ -127,7 +127,8 @@ case class HyperLogLogPlusPlusAggSketch(
 
       relativeSDUpdated match {
         case true =>
-          if (newRelativeSD != relativeSD) {
+          val newNumWords = new HyperLogLogPlusPlusHelper(newRelativeSD).numWords
+          if (newNumWords != hllppHelper.numWords) {
             throw new IllegalStateException(s"""One or more of the HyperLogLogPlusPlusSketch
               sketches were configured with different relativeSD values, and cannot be
               aggregated: new SD ($newRelativeSD) previous SD($relativeSD)""")
@@ -140,7 +141,8 @@ case class HyperLogLogPlusPlusAggSketch(
               offset1 = mutableAggBufferOffset + 1, offset2 = 0)
 
         case false =>
-          if (newRelativeSD < relativeSD) {
+          val newNumWords = new HyperLogLogPlusPlusHelper(newRelativeSD).numWords
+          if (newNumWords < hllppHelper.numWords) {
             throw new IllegalStateException(s"""The HyperLogLogPlusPlusAggSketch function
               must be configured with a relativeSD value that is equal or greater than the
               sketches written by a previous instance of the HyperLogLogPlusPlusSketch
