@@ -196,9 +196,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 3.4.0
    */
   def flatMapSortedGroups[U : Encoder]
-      (sortExpr: Column, sortExprs: Column*)
+      (sortExprs: Column*)
       (f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    val sortOrder: Seq[SortOrder] = (Seq(sortExpr) ++ sortExprs).map { col =>
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder => expr
         case expr: Expression => SortOrder(expr, Ascending)
@@ -242,12 +242,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @see [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.4.0
    */
-  def flatMapSortedGroups[U](SortExprs: Array[Column],
-                             f: FlatMapGroupsFunction[K, V, U],
-                             encoder: Encoder[U]): Dataset[U] = {
-    flatMapSortedGroups(
-      SortExprs.head, SortExprs.tail: _*
-    )((key, data) => f.call(key, data.asJava).asScala)(encoder)
+  def flatMapSortedGroups[U](
+      SortExprs: Array[Column],
+      f: FlatMapGroupsFunction[K, V, U],
+      encoder: Encoder[U]): Dataset[U] = {
+    flatMapSortedGroups(SortExprs: _*)((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
   /**
