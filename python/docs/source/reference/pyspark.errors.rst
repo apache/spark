@@ -29,7 +29,6 @@ Classes
     :toctree: api/
 
     PySparkException
-    CapturedException
     AnalysisException
     ParseException
     IllegalArgumentException

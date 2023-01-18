@@ -20,7 +20,6 @@ PySpark exceptions.
 """
 from pyspark.errors.exceptions import (  # noqa: F401
     PySparkException,
-    CapturedException,
     AnalysisException,
     ParseException,
     IllegalArgumentException,
@@ -34,7 +33,6 @@ from pyspark.errors.exceptions import (  # noqa: F401
 
 __all__ = [
     "PySparkException",
-    "CapturedException",
     "AnalysisException",
     "ParseException",
     "IllegalArgumentException",
