@@ -113,7 +113,8 @@ trait DecimalOperation extends Serializable {
    */
   def set(unscaled: Long, precision: Int, scale: Int): DecimalOperation = {
     if (setOrNull(unscaled, precision, scale) == null) {
-      throw QueryExecutionErrors.unscaledValueTooLargeForPrecisionError()
+      throw QueryExecutionErrors.unscaledValueTooLargeForPrecisionError(
+        toJavaBigDecimal, precision, scale)
     }
     this
   }

@@ -1250,7 +1250,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unscaledValueTooLargeForPrecisionError(
-      value: Decimal,
+      value: java.math.BigDecimal,
       decimalPrecision: Int,
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
