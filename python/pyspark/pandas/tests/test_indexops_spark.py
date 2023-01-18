@@ -16,7 +16,7 @@
 #
 
 import pandas as pd
-from pyspark.sql.utils import AnalysisException
+from pyspark.errors import AnalysisException
 from pyspark.sql import functions as F
 
 from pyspark import pandas as ps

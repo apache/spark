@@ -93,6 +93,11 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
+    "message" : [
+      "Failed to set permissions on created path <path> back to <permission>."
+    ]
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
@@ -128,6 +133,11 @@
       "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
     ],
     "sqlState" : "42703"
+  },
+  "COMPARATOR_RETURNS_NULL" : {
+    "message" : [
+      "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>. It should return a positive integer for \"greater than\", 0 for \"equal\" and a negative integer for \"less than\". To revert to deprecated behavior where NULL is treated as 0 (equal), you must set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
+    ]
   },
   "CONCURRENT_QUERY" : {
     "message" : [
@@ -643,7 +653,7 @@
   },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the index because it already exists. <message>."
+      "Cannot create the index <indexName> on table <tableName> because it already exists."
     ],
     "sqlState" : "42710"
   },
@@ -936,6 +946,11 @@
     ],
     "sqlState" : "42710"
   },
+  "MALFORMED_CSV_RECORD" : {
+    "message" : [
+      "Malformed CSV record: <badRecord>"
+    ]
+  },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
@@ -1001,6 +1016,11 @@
     ],
     "sqlState" : "42000"
   },
+  "NOT_A_PARTITIONED_TABLE" : {
+    "message" : [
+      "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
+    ]
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -1027,12 +1047,6 @@
       "Column or field <name> is nullable while it's required to be non-nullable."
     ],
     "sqlState" : "42000"
-  },
-  "NULL_COMPARISON_RESULT" : {
-    "message" : [
-      "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
-    ],
-    "sqlState" : "560A9"
   },
   "NULL_MAP_KEY" : {
     "message" : [
@@ -1149,11 +1163,6 @@
     ],
     "sqlState" : "42K03"
   },
-  "RESET_PERMISSION_TO_ORIGINAL" : {
-    "message" : [
-      "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
-    ]
-  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the function <routineName> because it already exists.",
@@ -1202,6 +1211,11 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "SORT_BY_WITHOUT_BUCKETING" : {
+    "message" : [
+      "sortBy must be used together with bucketBy."
+    ]
   },
   "STAR_GROUP_BY_POS" : {
     "message" : [
@@ -1715,6 +1729,11 @@
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
       "`writeStream` can be called only on streaming Dataset/DataFrame."
+    ]
+  },
+  "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
+    "message" : [
+      "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
     ]
   },
   "WRONG_NUM_ARGS" : {
@@ -2240,11 +2259,6 @@
   "_LEGACY_ERROR_TEMP_1055" : {
     "message" : [
       "The database name is not valid: <quoted>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1056" : {
-    "message" : [
-      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1057" : {
@@ -3057,11 +3071,6 @@
       "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1249" : {
-    "message" : [
-      "Operation not allowed: <cmd> only works on partitioned tables: <tableIdentWithDB>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1250" : {
     "message" : [
       "<action> is not allowed on <tableName> since filesource partition management is disabled (spark.sql.hive.manageFilesourcePartitions = false)."
@@ -3364,11 +3373,6 @@
       "Couldn't find a catalog to handle the identifier <quote>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1311" : {
-    "message" : [
-      "sortBy must be used together with bucketBy."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1312" : {
     "message" : [
       "'<operation>' does not support bucketBy right now."
@@ -3579,11 +3583,6 @@
   "_LEGACY_ERROR_TEMP_2008" : {
     "message" : [
       "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2009" : {
-    "message" : [
-      "dataType"
     ]
   },
   "_LEGACY_ERROR_TEMP_2010" : {
@@ -4229,11 +4228,6 @@
   "_LEGACY_ERROR_TEMP_2148" : {
     "message" : [
       "null value found but field <name> is not nullable."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2149" : {
-    "message" : [
-      "Malformed CSV record"
     ]
   },
   "_LEGACY_ERROR_TEMP_2150" : {
@@ -5292,6 +5286,11 @@
   "_LEGACY_ERROR_TEMP_2445" : {
     "message" : [
       "grouping() can only be used with GroupingSets/Cube/Rollup"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2446" : {
+    "message" : [
+      "Operation not allowed: <cmd> only works on table with location provided: <tableIdentWithDB>"
     ]
   }
 }
