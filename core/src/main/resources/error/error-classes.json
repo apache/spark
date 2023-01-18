@@ -1203,6 +1203,11 @@
     ],
     "sqlState" : "22023"
   },
+  "SORT_BY_WITHOUT_BUCKETING" : {
+    "message" : [
+      "sortBy must be used together with bucketBy."
+    ]
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -3362,11 +3367,6 @@
   "_LEGACY_ERROR_TEMP_1310" : {
     "message" : [
       "Couldn't find a catalog to handle the identifier <quote>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1311" : {
-    "message" : [
-      "sortBy must be used together with bucketBy."
     ]
   },
   "_LEGACY_ERROR_TEMP_1312" : {
