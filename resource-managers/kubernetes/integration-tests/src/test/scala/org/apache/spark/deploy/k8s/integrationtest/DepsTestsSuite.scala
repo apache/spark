@@ -176,7 +176,8 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       val localFileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
 
       // Create a remote file on S3
-      val remoteFileKey = "some-path/some-remote-file.txt"
+      val remoteFileName = "some-remote-file.txt"
+      val remoteFileKey = s"some-path/${remoteFileName}"
       createS3Object(remoteFileKey, "Some Content")
       val remoteFileFullPath = s"s3a://${BUCKET}/${remoteFileKey}"
 
@@ -194,7 +195,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
         // We can check whether the Executor pod has successfully
         // downloaded both the local and the remote file
-        expectedExecutorLogOnCompletion = Seq(localFileName, "some-remote-file.txt"),
+        expectedExecutorLogOnCompletion = Seq(localFileName, remoteFileName),
         driverPodChecker = doBasicDriverPodCheck,
         executorPodChecker = doBasicExecutorPodCheck,
         isJVM = true
