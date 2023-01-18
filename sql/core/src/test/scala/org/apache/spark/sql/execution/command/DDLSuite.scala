@@ -984,8 +984,16 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(e.getMessage.contains(
-      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
+    checkError(
+      exception = e,
+      errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+      parameters = Map(
+        "alternative" -> "DROP TABLE",
+        "operation" -> "DROP VIEW",
+        "foundType" -> "EXTERNAL",
+        "requiredType" -> "VIEW",
+        "objectName" -> "spark_catalog.dbx.tab1")
+    )
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {

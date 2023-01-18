@@ -1732,6 +1732,11 @@
       "`writeStream` can be called only on streaming Dataset/DataFrame."
     ]
   },
+  "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
+    "message" : [
+      "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
+    ]
+  },
   "WRONG_NUM_ARGS" : {
     "message" : [
       "Invalid number of arguments for the function <functionName>."
@@ -2255,11 +2260,6 @@
   "_LEGACY_ERROR_TEMP_1055" : {
     "message" : [
       "The database name is not valid: <quoted>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1056" : {
-    "message" : [
-      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1057" : {
