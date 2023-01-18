@@ -185,7 +185,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     checkError(
       exception = intercept[AnalysisException] {sql(query)},
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
-      sqlState = "42000",
+      sqlState = "42702",
       parameters = parameters
     )
   }
@@ -766,5 +766,30 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       sqlState = "0A000",
       parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\"")
     )
+  }
+
+  test("Leaf expression as aggregate expressions should be eligible to lift up") {
+    // literal
+    sql(s"select 1, avg(salary) as m, m + 1 from $testTable group by dept")
+      .queryExecution.assertAnalyzed
+    // leaf expression current_date, now and etc
+    sql(s"select current_date(), max(salary) as m, m + 1 from $testTable group by dept")
+      .queryExecution.assertAnalyzed
+    sql("select dateadd(month, 5, current_date()), min(salary) as m, m + 1 as n " +
+      s"from $testTable group by dept").queryExecution.assertAnalyzed
+    sql(s"select now() as n, dateadd(day, -1, n) from $testTable group by name")
+      .queryExecution.assertAnalyzed
+  }
+
+  test("Aggregate expressions containing no aggregate or grouping expressions still resolves") {
+    // Note these queries are without HAVING, otherwise during resolution the grouping or aggregate
+    // functions in having will be added to Aggregate by rule ResolveAggregateFunctions
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar " +
+        s"FROM $testTable GROUP BY dept"),
+      Row(Row(Row(1)), 2) :: Row(Row(Row(1)), 2) :: Row(Row(Row(1)), 2) :: Nil)
+
+    checkAnswer(sql(s"select 1 as a, a + 1 from $testTable group by dept"),
+      Row(1, 2) :: Row(1, 2) :: Row(1, 2) :: Nil)
   }
 }

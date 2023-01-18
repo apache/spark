@@ -38,13 +38,14 @@ from typing import (
 )
 
 from pyspark import SparkContext
+from pyspark.errors import PySparkException
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
+from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -172,7 +173,9 @@ def lit(col: Any) -> Column:
         return col
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
-            raise ValueError("lit does not allow a column in a list")
+            raise PySparkException(
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+            )
         return array(*[lit(item) for item in col])
     else:
         if has_numpy and isinstance(col, np.generic):
@@ -7776,6 +7779,36 @@ def array_compact(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Collection function: returns an array of the elements in col1 along
+    with the added element in col2 at the last of the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing element
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values from first array along with the element.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
+    >>> df.select(array_append(df.c1, df.c2)).collect()
+    [Row(array_append(c1, c2)=['b', 'a', 'c', 'c'])]
+    """
+    return _invoke_function_over_columns("array_append", col1, col2)
+
+
+@try_remote_functions
 def explode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -9551,14 +9584,11 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": -2.0, "bar": 2.0})], ("id", "data"))
-    >>> df.select(transform_keys(
+    >>> row = df.select(transform_keys(
     ...     "data", lambda k, _: upper(k)).alias("data_upper")
-    ... ).show(truncate=False)
-    +-------------------------+
-    |data_upper               |
-    +-------------------------+
-    |{BAR -> 2.0, FOO -> -2.0}|
-    +-------------------------+
+    ... ).head()
+    >>> sorted(row["data_upper"].items())
+    [('BAR', 2.0), ('FOO', -2.0)]
     """
     return _invoke_higher_order_function("TransformKeys", [col], [f])
 
@@ -9594,14 +9624,11 @@ def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column])
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"IT": 10.0, "SALES": 2.0, "OPS": 24.0})], ("id", "data"))
-    >>> df.select(transform_values(
+    >>> row = df.select(transform_values(
     ...     "data", lambda k, v: when(k.isin("IT", "OPS"), v + 10.0).otherwise(v)
-    ... ).alias("new_data")).show(truncate=False)
-    +---------------------------------------+
-    |new_data                               |
-    +---------------------------------------+
-    |{OPS -> 34.0, IT -> 20.0, SALES -> 2.0}|
-    +---------------------------------------+
+    ... ).alias("new_data")).head()
+    >>> sorted(row["new_data"].items())
+    [('IT', 20.0), ('OPS', 34.0), ('SALES', 2.0)]
     """
     return _invoke_higher_order_function("TransformValues", [col], [f])
 
@@ -9635,14 +9662,11 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-    >>> df.select(map_filter(
+    >>> row = df.select(map_filter(
     ...     "data", lambda _, v: v > 30.0).alias("data_filtered")
-    ... ).show(truncate=False)
-    +--------------------------+
-    |data_filtered             |
-    +--------------------------+
-    |{baz -> 32.0, foo -> 42.0}|
-    +--------------------------+
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('baz', 32.0), ('foo', 42.0)]
     """
     return _invoke_higher_order_function("MapFilter", [col], [f])
 
@@ -9686,14 +9710,11 @@ def map_zip_with(
     ...     (1, {"IT": 24.0, "SALES": 12.00}, {"IT": 2.0, "SALES": 1.4})],
     ...     ("id", "base", "ratio")
     ... )
-    >>> df.select(map_zip_with(
+    >>> row = df.select(map_zip_with(
     ...     "base", "ratio", lambda k, v1, v2: round(v1 * v2, 2)).alias("updated_data")
-    ... ).show(truncate=False)
-    +---------------------------+
-    |updated_data               |
-    +---------------------------+
-    |{SALES -> 16.8, IT -> 48.0}|
-    +---------------------------+
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('IT', 48.0), ('SALES', 16.8)]
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
@@ -9950,7 +9971,10 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 @overload
 def udf(
-    f: Callable[..., Any], returnType: "DataTypeOrString" = StringType()
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString" = StringType(),
+    *,
+    useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     ...
 
@@ -9958,6 +9982,8 @@ def udf(
 @overload
 def udf(
     f: Optional["DataTypeOrString"] = None,
+    *,
+    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -9966,6 +9992,7 @@ def udf(
 def udf(
     *,
     returnType: "DataTypeOrString" = StringType(),
+    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -9973,6 +10000,8 @@ def udf(
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
+    *,
+    useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 
@@ -9985,6 +10014,9 @@ def udf(
     returnType : :class:`pyspark.sql.types.DataType` or str
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+    useArrow : bool or None
+        whether to use Arrow to optimize the (de)serialization. When it is None, the
+        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
 
     Examples
     --------
@@ -10063,10 +10095,15 @@ def udf(
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(
-            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+            _create_py_udf,
+            returnType=return_type,
+            evalType=PythonEvalType.SQL_BATCHED_UDF,
+            useArrow=useArrow,
         )
     else:
-        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+        return _create_py_udf(
+            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
+        )
 
 
 def _test() -> None:

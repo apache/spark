@@ -98,6 +98,7 @@ public class OneForOneStreamManagerSuite {
     Assert.assertEquals(0, manager.numStreamStates());
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void streamStatesAreFreedWhenConnectionIsClosedEvenIfBufferIteratorThrowsException() {
     OneForOneStreamManager manager = new OneForOneStreamManager();
@@ -127,6 +128,7 @@ public class OneForOneStreamManagerSuite {
     Assert.assertEquals(0, manager.numStreamStates());
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void streamStatesAreFreeOrNotWhenConnectionIsClosed() {
     OneForOneStreamManager manager = new OneForOneStreamManager();

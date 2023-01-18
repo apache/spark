@@ -387,6 +387,39 @@ package object dsl {
           .build()
       }
 
+      def corr(col1: String, col2: String, method: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCorr(
+            proto.StatCorr
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .setMethod(method)
+              .build())
+          .build()
+      }
+
+      def corr(col1: String, col2: String): Relation = corr(col1, col2, "pearson")
+
+      def approxQuantile(
+          cols: Array[String],
+          probabilities: Array[Double],
+          relativeError: Double): Relation = {
+        Relation
+          .newBuilder()
+          .setApproxQuantile(
+            proto.StatApproxQuantile
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .addAllProbabilities(probabilities.toSeq.map(Double.box).asJava)
+              .setRelativeError(relativeError)
+              .build())
+          .build()
+      }
+
       def crosstab(col1: String, col2: String): Relation = {
         Relation
           .newBuilder()
@@ -399,6 +432,26 @@ package object dsl {
               .build())
           .build()
       }
+
+      def freqItems(cols: Array[String], support: Double): Relation = {
+        Relation
+          .newBuilder()
+          .setFreqItems(
+            proto.StatFreqItems
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .setSupport(support)
+              .build())
+          .build()
+      }
+
+      def freqItems(cols: Array[String]): Relation = freqItems(cols, 0.01)
+
+      def freqItems(cols: Seq[String], support: Double): Relation =
+        freqItems(cols.toArray, support)
+
+      def freqItems(cols: Seq[String]): Relation = freqItems(cols, 0.01)
     }
 
     def select(exprs: Expression*): Relation = {
@@ -699,7 +752,11 @@ package object dsl {
             createSetOperation(logicalPlan, otherPlan, SetOpType.SET_OP_TYPE_INTERSECT, isAll))
           .build()
 
-      def union(otherPlan: Relation, isAll: Boolean = true, byName: Boolean = false): Relation =
+      def union(
+          otherPlan: Relation,
+          isAll: Boolean = true,
+          byName: Boolean = false,
+          allowMissingColumns: Boolean = false): Relation =
         Relation
           .newBuilder()
           .setSetOp(
@@ -708,7 +765,8 @@ package object dsl {
               otherPlan,
               SetOpType.SET_OP_TYPE_UNION,
               isAll,
-              byName))
+              byName,
+              allowMissingColumns))
           .build()
 
       def coalesce(num: Integer): Relation =
@@ -835,8 +893,8 @@ package object dsl {
       def toDF(columnNames: String*): Relation =
         Relation
           .newBuilder()
-          .setRenameColumnsBySameLengthNames(
-            RenameColumnsBySameLengthNames
+          .setToDf(
+            ToDF
               .newBuilder()
               .setInput(logicalPlan)
               .addAllColumnNames(columnNames.asJava))
@@ -845,8 +903,8 @@ package object dsl {
       def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
         Relation
           .newBuilder()
-          .setRenameColumnsByNameToNameMap(
-            RenameColumnsByNameToNameMap
+          .setWithColumnsRenamed(
+            WithColumnsRenamed
               .newBuilder()
               .setInput(logicalPlan)
               .putAllRenameColumnsMap(renameColumnsMap.asJava))
@@ -860,13 +918,17 @@ package object dsl {
             WithColumns
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllNameExprList(colsMap.map { case (k, v) =>
+              .addAllAliases(colsMap.map { case (k, v) =>
                 Expression.Alias.newBuilder().addName(k).setExpr(v).build()
               }.asJava))
           .build()
       }
 
       def hint(name: String, parameters: Any*): Relation = {
+        val expressions = parameters.map { parameter =>
+          proto.Expression.newBuilder().setLiteral(toConnectProtoValue(parameter)).build()
+        }
+
         Relation
           .newBuilder()
           .setHint(
@@ -874,7 +936,7 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .setName(name)
-              .addAllParameters(parameters.map(toConnectProtoValue).asJava))
+              .addAllParameters(expressions.asJava))
           .build()
       }
 
@@ -948,7 +1010,7 @@ package object dsl {
                   .setUpperBound(x(1))
                   .setWithReplacement(false)
                   .setSeed(seed)
-                  .setForceStableSort(true)
+                  .setDeterministicOrder(true)
                   .build())
               .build()
           }
@@ -963,7 +1025,8 @@ package object dsl {
           right: Relation,
           t: SetOpType,
           isAll: Boolean = true,
-          byName: Boolean = false): SetOperation.Builder = {
+          byName: Boolean = false,
+          allowMissingColumns: Boolean = false): SetOperation.Builder = {
         val setOp = SetOperation
           .newBuilder()
           .setLeftInput(left)
@@ -971,6 +1034,7 @@ package object dsl {
           .setSetOpType(t)
           .setIsAll(isAll)
           .setByName(byName)
+          .setAllowMissingColumns(allowMissingColumns)
         setOp
       }
     }
