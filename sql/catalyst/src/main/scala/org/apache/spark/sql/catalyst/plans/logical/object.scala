@@ -677,6 +677,28 @@ object CoGroup {
       left: LogicalPlan,
       right: LogicalPlan): LogicalPlan = {
     require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
+    val duplicateAttributes = right.output.filter(left.output.contains)
+      .map(a => a -> Alias(a, a.name)()).toMap
+
+    def dedup(attrs: Seq[Attribute]): Seq[NamedExpression] = {
+      if (duplicateAttributes.nonEmpty) {
+        attrs.map(attr => duplicateAttributes.getOrElse(attr, attr))
+      } else {
+        attrs
+      }
+    }
+
+    val (dedupRightGroup, dedupRightAttr, dedupRightOrder, dedupRight) =
+      if (duplicateAttributes.nonEmpty) {
+        (
+          dedup(rightGroup).map(_.toAttribute),
+          dedup(rightAttr).map(_.toAttribute),
+          rightOrder,
+          Project(dedup(right.output), right)
+        )
+      } else {
+        (rightGroup, rightAttr, rightOrder, right)
+      }
 
     val cogrouped = CoGroup(
       func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
@@ -684,16 +706,16 @@ object CoGroup {
       // resolve the `keyDeserializer` based on either of them, here we pick the left one.
       UnresolvedDeserializer(encoderFor[K].deserializer, leftGroup),
       UnresolvedDeserializer(encoderFor[L].deserializer, leftAttr),
-      UnresolvedDeserializer(encoderFor[R].deserializer, rightAttr),
+      UnresolvedDeserializer(encoderFor[R].deserializer, dedupRightAttr),
       leftGroup,
-      rightGroup,
+      dedupRightGroup,
       leftAttr,
-      rightAttr,
+      dedupRightAttr,
       leftOrder,
-      rightOrder,
+      dedupRightOrder,
       CatalystSerde.generateObjAttr[OUT],
       left,
-      right)
+      dedupRight)
     CatalystSerde.serialize[OUT](cogrouped)
   }
 }
@@ -716,6 +738,36 @@ case class CoGroup(
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {
+  def rewriteAttrs2(attrMap: AttributeMap[Attribute]): LogicalPlan = {
+    // attributes rewritten in left / right children must only be rewritten
+    // in respective deserializer, group, attr, not both
+    // note: key deserializer refers to left side
+    val (leftAttrMap, rightAttrMap) = attrMap.partition(map => left.output.contains(map._2))
+    val rewritten = super.rewriteAttrs(attrMap).asInstanceOf[CoGroup]
+    // revert attribute mappings to the wrong side
+    val revertLeftAttrMap = AttributeMap(leftAttrMap.map(m => (m._2, m._1)))
+    val revertRightAttrMap = AttributeMap(rightAttrMap.map(m => (m._2, m._1)))
+
+    def revert(revertAttrMap: AttributeMap[Attribute])(attr: Attribute): Attribute =
+      revertAttrMap.get(attr).getOrElse(attr)
+
+    CoGroup(
+      func,
+      rewritten.keyDeserializer,
+      rewritten.leftDeserializer,
+      rewritten.rightDeserializer,
+      rewritten.leftGroup.map(revert(revertRightAttrMap)),
+      rewritten.rightGroup.map(revert(revertLeftAttrMap)),
+      rewritten.leftAttr.map(revert(revertRightAttrMap)),
+      rewritten.rightAttr.map(revert(revertLeftAttrMap)),
+      rewritten.leftOrder,
+      rewritten.rightOrder,
+      rewritten.outputObjAttr,
+      rewritten.left,
+      rewritten.right
+    )
+  }
+
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }

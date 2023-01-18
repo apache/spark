@@ -2936,6 +2936,56 @@ class DataFrameSuite extends QueryTest
       parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
   }
 
+    test("groupBy.as: cogroup two grouped dataframes") {
+      val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
+        .repartition($"a", $"b").sortWithinPartitions("a", "b").cache()
+      val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
+        .repartition($"a", $"b").sortWithinPartitions("a", "b").cache()
+
+      val window = Window.partitionBy("b", "a")
+
+      implicit val valueEncoder = RowEncoder(df1.schema)
+
+      val df3 = df1.groupBy("a", "b").as[GroupByKey, Row]
+        .cogroup(df2.withColumn("c", sum($"c").over(window)).groupBy("a", "b").as[GroupByKey, Row]) { case (_, data1, data2) =>
+          data1.zip(data2).map { p =>
+            p._1.getInt(2) + p._2.getInt(2)
+          }
+        }.toDF
+      df3.show()
+      checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
+    }
+
+  test("group.by: cogroup with same plan on both sides") {
+    val df = spark.range(3)
+
+    val left_grouped_df = df.groupBy("id").as[Long, Long]
+    val right_grouped_df = df.groupBy("id").as[Long, Long]
+
+    val cogroup_df = left_grouped_df.cogroup(right_grouped_df)(
+      (key: Long, left: Iterator[Long], right: Iterator[Long]) => left
+    )
+
+    val actual = cogroup_df.sort().collect()
+    assert(actual === Seq(0, 1, 2))
+  }
+
+  test("join") {
+    withSQLConf(
+      SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "WARN",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(3).select($"id", ($"id" * 10).as("day")) // Seq(1L, 2L, 3L).toDF("id") works just fine
+      val left_df = df.withColumn("side", lit("left"))
+      val right_df = df.withColumn("side", lit("right"))
+
+      val join_df = left_df.join(right_df, Seq("id", "day"))
+      //val join_df = left_df.join(right_df, left_df("id") <=> right_df("id") && left_df("day") <=> right_df("day"))
+
+      join_df.explain()
+      assert(false)
+    }
+  }
+
   test("SPARK-40601: flatMapCoGroupsInPandas should fail with different number of keys") {
     val df1 = Seq((1, 2, "A1"), (2, 1, "A2")).toDF("key1", "key2", "value")
     val df2 = df1.filter($"value" === "A2")

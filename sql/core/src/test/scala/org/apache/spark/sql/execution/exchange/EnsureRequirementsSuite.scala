@@ -18,14 +18,15 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
-import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{CoGroupExec, DummySparkPlan, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
@@ -1156,6 +1157,41 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         assert(rightKeys === Seq(rKey, rKey2))
         assert(leftKeys.map(k => SortOrder(k, Ascending)) === leftOrder)
         assert(rightKeys.map(k => SortOrder(k, Ascending)) === rightOrder)
+      case other => fail(other.toString)
+    }
+  }
+
+  test("CoGroup") {
+    val intDeserializer = Encoders.INT.asInstanceOf[ExpressionEncoder[Int]].objDeserializer
+    val left = DummySparkPlan(
+      outputPartitioning = KeyGroupedPartitioning(Seq(
+        years(exprA), bucket(4, exprB), days(exprC)), 4)
+    )
+    val right = DummySparkPlan(
+      outputPartitioning = KeyGroupedPartitioning(Seq(
+        years(exprA), bucket(4, exprB), days(exprC)), 4)
+    )
+
+    val cogroupExec = CoGroupExec(
+      (key: Any, left: Iterator[Any], right: Iterator[Any]) => left,
+      intDeserializer,
+      intDeserializer,
+      intDeserializer,
+      Seq(AttributeReference("key", IntegerType)()),
+      Seq(AttributeReference("key", IntegerType)()),
+      Seq(AttributeReference("key", IntegerType)(), AttributeReference("value", IntegerType)()),
+      Seq(AttributeReference("key", IntegerType)(), AttributeReference("value", IntegerType)()),
+      AttributeReference("value", IntegerType)(),
+      left,
+      right)
+
+    val result = EnsureRequirements.apply(cogroupExec)
+    result match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _), _) =>
+        assert(leftKeys === Seq(exprB, exprC))
+        assert(rightKeys === Seq(exprB, exprA))
       case other => fail(other.toString)
     }
   }
