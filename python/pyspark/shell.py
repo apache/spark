@@ -88,7 +88,10 @@ print(
     % (platform.python_version(), platform.python_build()[0], platform.python_build()[1])
 )
 if is_remote():
-    print("Client connected to the Spark Connect server at %s" % urlparse(os.environ["SPARK_REMOTE"]).netloc)
+    print(
+        "Client connected to the Spark Connect server at %s"
+        % urlparse(os.environ["SPARK_REMOTE"]).netloc
+    )
 else:
     print("Spark context Web UI available at %s" % (sc.uiWebUrl))  # type: ignore[union-attr]
     print(
