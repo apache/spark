@@ -172,25 +172,25 @@ ObjectHashAggregate (35)
 
 
 (29) Scan parquet spark_catalog.default.item
-Output [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manufact_id#5]
+Output [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [Or(And(And(In(i_category, [Books                                             ,Children                                          ,Electronics                                       ]),In(i_class, [personal                                          ,portable                                          ,reference                                         ,self-help                                         ])),In(i_brand, [exportiunivamalg #6                               ,scholaramalgamalg #7                             ,scholaramalgamalg #8                              ,scholaramalgamalg #6                              ])),And(And(In(i_category, [Men                                               ,Music                                             ,Women                                             ]),In(i_class, [accessories                                       ,classical                                         ,fragrances                                        ,pants                                             ])),In(i_brand, [amalgimporto #9                                   ,edu packscholar #9                                ,exportiimporto #9                                 ,importoamalg #9                                   ]))), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string,i_manufact_id:int>
+ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string>
 
 (30) ColumnarToRow [codegen id : 1]
-Input [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manufact_id#5]
+Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 
 (31) Filter [codegen id : 1]
-Input [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manufact_id#5]
+Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Condition : ((((i_category#4 IN (Books                                             ,Children                                          ,Electronics                                       ) AND i_class#3 IN (personal                                          ,portable                                          ,reference                                         ,self-help                                         )) AND i_brand#2 IN (scholaramalgamalg #7                             ,scholaramalgamalg #8                              ,exportiunivamalg #6                               ,scholaramalgamalg #6                              )) OR ((i_category#4 IN (Women                                             ,Music                                             ,Men                                               ) AND i_class#3 IN (accessories                                       ,classical                                         ,fragrances                                        ,pants                                             )) AND i_brand#2 IN (amalgimporto #9                                   ,edu packscholar #9                                ,exportiimporto #9                                 ,importoamalg #9                                   ))) AND isnotnull(i_item_sk#1))
 
 (32) Project [codegen id : 1]
-Output [2]: [i_item_sk#1, i_manufact_id#5]
-Input [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manufact_id#5]
+Output [1]: [i_item_sk#1]
+Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 
 (33) ObjectHashAggregate
-Input [2]: [i_item_sk#1, i_manufact_id#5]
+Input [1]: [i_item_sk#1]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 30, 955, 0, 0)]
 Aggregate Attributes [1]: [buf#26]

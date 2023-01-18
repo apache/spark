@@ -743,11 +743,11 @@ Input [6]: [i_item_sk#9, i_brand_id#10, i_class_id#11, i_category_id#12, i_categ
 Condition : ((((((isnotnull(i_category#13) AND (i_category#13 = Books                                             )) AND isnotnull(i_item_sk#9)) AND isnotnull(i_brand_id#10)) AND isnotnull(i_class_id#11)) AND isnotnull(i_category_id#12)) AND isnotnull(i_manufact_id#14))
 
 (133) Project [codegen id : 1]
-Output [5]: [i_item_sk#9, i_brand_id#10, i_class_id#11, i_category_id#12, i_manufact_id#14]
+Output [1]: [i_item_sk#9]
 Input [6]: [i_item_sk#9, i_brand_id#10, i_class_id#11, i_category_id#12, i_category#13, i_manufact_id#14]
 
 (134) ObjectHashAggregate
-Input [5]: [i_item_sk#9, i_brand_id#10, i_class_id#11, i_category_id#12, i_manufact_id#14]
+Input [1]: [i_item_sk#9]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#9, 42), 20152, 368991, 0, 0)]
 Aggregate Attributes [1]: [buf#129]

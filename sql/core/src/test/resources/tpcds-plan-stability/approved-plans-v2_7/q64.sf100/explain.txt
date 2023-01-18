@@ -1156,25 +1156,25 @@ ObjectHashAggregate (216)
 
 
 (210) Scan parquet spark_catalog.default.item
-Output [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
+Output [3]: [i_item_sk#75, i_current_price#76, i_color#77]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_current_price), In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
+ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string>
 
 (211) ColumnarToRow [codegen id : 1]
-Input [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
+Input [3]: [i_item_sk#75, i_current_price#76, i_color#77]
 
 (212) Filter [codegen id : 1]
-Input [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
+Input [3]: [i_item_sk#75, i_current_price#76, i_color#77]
 Condition : ((((((isnotnull(i_current_price#76) AND i_color#77 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              )) AND (i_current_price#76 >= 64.00)) AND (i_current_price#76 <= 74.00)) AND (i_current_price#76 >= 65.00)) AND (i_current_price#76 <= 79.00)) AND isnotnull(i_item_sk#75))
 
 (213) Project [codegen id : 1]
-Output [2]: [i_item_sk#75, i_product_name#78]
-Input [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
+Output [1]: [i_item_sk#75]
+Input [3]: [i_item_sk#75, i_current_price#76, i_color#77]
 
 (214) ObjectHashAggregate
-Input [2]: [i_item_sk#75, i_product_name#78]
+Input [1]: [i_item_sk#75]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#75, 42), 1250, 30121, 0, 0)]
 Aggregate Attributes [1]: [buf#176]

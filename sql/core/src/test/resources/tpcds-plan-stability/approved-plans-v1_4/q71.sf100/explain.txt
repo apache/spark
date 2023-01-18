@@ -228,25 +228,25 @@ ObjectHashAggregate (45)
 
 
 (39) Scan parquet spark_catalog.default.item
-Output [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
+Output [2]: [i_item_sk#1, i_manager_id#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,1), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:int,i_manager_id:int>
 
 (40) ColumnarToRow [codegen id : 1]
-Input [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
+Input [2]: [i_item_sk#1, i_manager_id#4]
 
 (41) Filter [codegen id : 1]
-Input [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
+Input [2]: [i_item_sk#1, i_manager_id#4]
 Condition : ((isnotnull(i_manager_id#4) AND (i_manager_id#4 = 1)) AND isnotnull(i_item_sk#1))
 
 (42) Project [codegen id : 1]
-Output [3]: [i_item_sk#1, i_brand_id#2, i_brand#3]
-Input [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
+Output [1]: [i_item_sk#1]
+Input [2]: [i_item_sk#1, i_manager_id#4]
 
 (43) ObjectHashAggregate
-Input [3]: [i_item_sk#1, i_brand_id#2, i_brand#3]
+Input [1]: [i_item_sk#1]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 2056, 47413, 0, 0)]
 Aggregate Attributes [1]: [buf#44]
@@ -274,25 +274,25 @@ ObjectHashAggregate (52)
 
 
 (46) Scan parquet spark_catalog.default.time_dim
-Output [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
+Output [2]: [t_time_sk#34, t_meal_time#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [Or(EqualTo(t_meal_time,breakfast           ),EqualTo(t_meal_time,dinner              )), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int,t_meal_time:string>
+ReadSchema: struct<t_time_sk:int,t_meal_time:string>
 
 (47) ColumnarToRow [codegen id : 1]
-Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
+Input [2]: [t_time_sk#34, t_meal_time#37]
 
 (48) Filter [codegen id : 1]
-Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
+Input [2]: [t_time_sk#34, t_meal_time#37]
 Condition : (((t_meal_time#37 = breakfast           ) OR (t_meal_time#37 = dinner              )) AND isnotnull(t_time_sk#34))
 
 (49) Project [codegen id : 1]
-Output [3]: [t_time_sk#34, t_hour#35, t_minute#36]
-Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
+Output [1]: [t_time_sk#34]
+Input [2]: [t_time_sk#34, t_meal_time#37]
 
 (50) ObjectHashAggregate
-Input [3]: [t_time_sk#34, t_hour#35, t_minute#36]
+Input [1]: [t_time_sk#34]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#34, 42), 48001, 792207, 0, 0)]
 Aggregate Attributes [1]: [buf#48]

@@ -30,10 +30,11 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                                       Exchange #4
                                         ObjectHashAggregate [s_store_sk] [buf,buf]
                                           WholeStageCodegen (1)
-                                            Filter [s_state,s_store_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet spark_catalog.default.store [s_store_sk,s_state]
+                                            Project [s_store_sk]
+                                              Filter [s_state,s_store_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet spark_catalog.default.store [s_store_sk,s_state]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_cdemo_sk,ss_store_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt,ss_sold_date_sk]

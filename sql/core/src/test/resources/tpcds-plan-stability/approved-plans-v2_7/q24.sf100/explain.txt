@@ -441,40 +441,45 @@ Aggregate Attributes [1]: [avg(netpaid#35)#50]
 Results [1]: [(0.05 * avg(netpaid#35)#50) AS (0.05 * avg(netpaid))#51]
 
 Subquery:2 Hosting operator id = 20 Hosting Expression = Subquery scalar-subquery#21, [id=#22]
-ObjectHashAggregate (82)
-+- Exchange (81)
-   +- ObjectHashAggregate (80)
-      +- * Filter (79)
-         +- * ColumnarToRow (78)
-            +- Scan parquet spark_catalog.default.item (77)
+ObjectHashAggregate (83)
++- Exchange (82)
+   +- ObjectHashAggregate (81)
+      +- * Project (80)
+         +- * Filter (79)
+            +- * ColumnarToRow (78)
+               +- Scan parquet spark_catalog.default.item (77)
 
 
 (77) Scan parquet spark_catalog.default.item
-Output [6]: [i_item_sk#23, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
+Output [2]: [i_item_sk#23, i_color#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_color), EqualTo(i_color,pale                ), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:int,i_color:string>
 
 (78) ColumnarToRow [codegen id : 1]
-Input [6]: [i_item_sk#23, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
+Input [2]: [i_item_sk#23, i_color#26]
 
 (79) Filter [codegen id : 1]
-Input [6]: [i_item_sk#23, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
+Input [2]: [i_item_sk#23, i_color#26]
 Condition : ((isnotnull(i_color#26) AND (i_color#26 = pale                )) AND isnotnull(i_item_sk#23))
 
-(80) ObjectHashAggregate
-Input [6]: [i_item_sk#23, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
+(80) Project [codegen id : 1]
+Output [1]: [i_item_sk#23]
+Input [2]: [i_item_sk#23, i_color#26]
+
+(81) ObjectHashAggregate
+Input [1]: [i_item_sk#23]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 52773, 0, 0)]
 Aggregate Attributes [1]: [buf#52]
 Results [1]: [buf#53]
 
-(81) Exchange
+(82) Exchange
 Input [1]: [buf#53]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=15]
 
-(82) ObjectHashAggregate
+(83) ObjectHashAggregate
 Input [1]: [buf#53]
 Keys: []
 Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#23, 42), 2313, 52773, 0, 0)]

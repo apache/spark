@@ -40,7 +40,7 @@ TakeOrderedAndProject [sales_cnt_diff,prev_year,year,i_brand_id,i_class_id,i_cat
                                                                               Exchange #6
                                                                                 ObjectHashAggregate [i_item_sk] [buf,buf]
                                                                                   WholeStageCodegen (1)
-                                                                                    Project [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id]
+                                                                                    Project [i_item_sk]
                                                                                       Filter [i_category,i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id]
                                                                                         ColumnarToRow
                                                                                           InputAdapter

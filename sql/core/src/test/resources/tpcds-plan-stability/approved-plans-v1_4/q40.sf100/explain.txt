@@ -201,25 +201,25 @@ ObjectHashAggregate (40)
 
 
 (34) Scan parquet spark_catalog.default.item
-Output [3]: [i_item_sk#13, i_item_id#14, i_current_price#15]
+Output [2]: [i_item_sk#13, i_current_price#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_price,1.49), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_item_id:string,i_current_price:decimal(7,2)>
+ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2)>
 
 (35) ColumnarToRow [codegen id : 1]
-Input [3]: [i_item_sk#13, i_item_id#14, i_current_price#15]
+Input [2]: [i_item_sk#13, i_current_price#15]
 
 (36) Filter [codegen id : 1]
-Input [3]: [i_item_sk#13, i_item_id#14, i_current_price#15]
+Input [2]: [i_item_sk#13, i_current_price#15]
 Condition : (((isnotnull(i_current_price#15) AND (i_current_price#15 >= 0.99)) AND (i_current_price#15 <= 1.49)) AND isnotnull(i_item_sk#13))
 
 (37) Project [codegen id : 1]
-Output [2]: [i_item_sk#13, i_item_id#14]
-Input [3]: [i_item_sk#13, i_item_id#14, i_current_price#15]
+Output [1]: [i_item_sk#13]
+Input [2]: [i_item_sk#13, i_current_price#15]
 
 (38) ObjectHashAggregate
-Input [2]: [i_item_sk#13, i_item_id#14]
+Input [1]: [i_item_sk#13]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#13, 42), 1019, 24988, 0, 0)]
 Aggregate Attributes [1]: [buf#32]

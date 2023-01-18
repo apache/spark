@@ -136,25 +136,25 @@ ObjectHashAggregate (28)
 
 
 (22) Scan parquet spark_catalog.default.store
-Output [4]: [s_store_sk#10, s_store_id#11, s_store_name#12, s_gmt_offset#13]
+Output [2]: [s_store_sk#10, s_gmt_offset#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_gmt_offset), EqualTo(s_gmt_offset,-5.00), IsNotNull(s_store_sk)]
-ReadSchema: struct<s_store_sk:int,s_store_id:string,s_store_name:string,s_gmt_offset:decimal(5,2)>
+ReadSchema: struct<s_store_sk:int,s_gmt_offset:decimal(5,2)>
 
 (23) ColumnarToRow [codegen id : 1]
-Input [4]: [s_store_sk#10, s_store_id#11, s_store_name#12, s_gmt_offset#13]
+Input [2]: [s_store_sk#10, s_gmt_offset#13]
 
 (24) Filter [codegen id : 1]
-Input [4]: [s_store_sk#10, s_store_id#11, s_store_name#12, s_gmt_offset#13]
+Input [2]: [s_store_sk#10, s_gmt_offset#13]
 Condition : ((isnotnull(s_gmt_offset#13) AND (s_gmt_offset#13 = -5.00)) AND isnotnull(s_store_sk#10))
 
 (25) Project [codegen id : 1]
-Output [3]: [s_store_sk#10, s_store_id#11, s_store_name#12]
-Input [4]: [s_store_sk#10, s_store_id#11, s_store_name#12, s_gmt_offset#13]
+Output [1]: [s_store_sk#10]
+Input [2]: [s_store_sk#10, s_gmt_offset#13]
 
 (26) ObjectHashAggregate
-Input [3]: [s_store_sk#10, s_store_id#11, s_store_name#12]
+Input [1]: [s_store_sk#10]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#10, 42), 200, 5582, 0, 0)]
 Aggregate Attributes [1]: [buf#42]

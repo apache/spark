@@ -113,25 +113,25 @@ ObjectHashAggregate (24)
 
 
 (18) Scan parquet spark_catalog.default.item
-Output [4]: [i_item_sk#7, i_category_id#8, i_category#9, i_manager_id#10]
+Output [2]: [i_item_sk#7, i_manager_id#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,1), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_category_id:int,i_category:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:int,i_manager_id:int>
 
 (19) ColumnarToRow [codegen id : 1]
-Input [4]: [i_item_sk#7, i_category_id#8, i_category#9, i_manager_id#10]
+Input [2]: [i_item_sk#7, i_manager_id#10]
 
 (20) Filter [codegen id : 1]
-Input [4]: [i_item_sk#7, i_category_id#8, i_category#9, i_manager_id#10]
+Input [2]: [i_item_sk#7, i_manager_id#10]
 Condition : ((isnotnull(i_manager_id#10) AND (i_manager_id#10 = 1)) AND isnotnull(i_item_sk#7))
 
 (21) Project [codegen id : 1]
-Output [3]: [i_item_sk#7, i_category_id#8, i_category#9]
-Input [4]: [i_item_sk#7, i_category_id#8, i_category#9, i_manager_id#10]
+Output [1]: [i_item_sk#7]
+Input [2]: [i_item_sk#7, i_manager_id#10]
 
 (22) ObjectHashAggregate
-Input [3]: [i_item_sk#7, i_category_id#8, i_category#9]
+Input [1]: [i_item_sk#7]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#7, 42), 2056, 47413, 0, 0)]
 Aggregate Attributes [1]: [buf#17]

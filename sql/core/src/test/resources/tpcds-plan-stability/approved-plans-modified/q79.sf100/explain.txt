@@ -247,25 +247,25 @@ ObjectHashAggregate (47)
 
 
 (41) Scan parquet spark_catalog.default.store
-Output [3]: [s_store_sk#18, s_number_employees#19, s_city#20]
+Output [2]: [s_store_sk#18, s_number_employees#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_number_employees), GreaterThanOrEqual(s_number_employees,200), LessThanOrEqual(s_number_employees,295), IsNotNull(s_store_sk)]
-ReadSchema: struct<s_store_sk:int,s_number_employees:int,s_city:string>
+ReadSchema: struct<s_store_sk:int,s_number_employees:int>
 
 (42) ColumnarToRow [codegen id : 1]
-Input [3]: [s_store_sk#18, s_number_employees#19, s_city#20]
+Input [2]: [s_store_sk#18, s_number_employees#19]
 
 (43) Filter [codegen id : 1]
-Input [3]: [s_store_sk#18, s_number_employees#19, s_city#20]
+Input [2]: [s_store_sk#18, s_number_employees#19]
 Condition : (((isnotnull(s_number_employees#19) AND (s_number_employees#19 >= 200)) AND (s_number_employees#19 <= 295)) AND isnotnull(s_store_sk#18))
 
 (44) Project [codegen id : 1]
-Output [2]: [s_store_sk#18, s_city#20]
-Input [3]: [s_store_sk#18, s_number_employees#19, s_city#20]
+Output [1]: [s_store_sk#18]
+Input [2]: [s_store_sk#18, s_number_employees#19]
 
 (45) ObjectHashAggregate
-Input [2]: [s_store_sk#18, s_city#20]
+Input [1]: [s_store_sk#18]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#18, 42), 378, 10049, 0, 0)]
 Aggregate Attributes [1]: [buf#37]

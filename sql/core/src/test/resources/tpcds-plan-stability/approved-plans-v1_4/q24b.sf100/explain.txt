@@ -559,25 +559,25 @@ ObjectHashAggregate (103)
 
 
 (97) Scan parquet spark_catalog.default.store
-Output [5]: [s_store_sk#22, s_store_name#23, s_market_id#24, s_state#25, s_zip#26]
+Output [3]: [s_store_sk#22, s_market_id#24, s_zip#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
-ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
+ReadSchema: struct<s_store_sk:int,s_market_id:int,s_zip:string>
 
 (98) ColumnarToRow [codegen id : 1]
-Input [5]: [s_store_sk#22, s_store_name#23, s_market_id#24, s_state#25, s_zip#26]
+Input [3]: [s_store_sk#22, s_market_id#24, s_zip#26]
 
 (99) Filter [codegen id : 1]
-Input [5]: [s_store_sk#22, s_store_name#23, s_market_id#24, s_state#25, s_zip#26]
+Input [3]: [s_store_sk#22, s_market_id#24, s_zip#26]
 Condition : (((isnotnull(s_market_id#24) AND (s_market_id#24 = 8)) AND isnotnull(s_store_sk#22)) AND isnotnull(s_zip#26))
 
 (100) Project [codegen id : 1]
-Output [4]: [s_store_sk#22, s_store_name#23, s_state#25, s_zip#26]
-Input [5]: [s_store_sk#22, s_store_name#23, s_market_id#24, s_state#25, s_zip#26]
+Output [1]: [s_store_sk#22]
+Input [3]: [s_store_sk#22, s_market_id#24, s_zip#26]
 
 (101) ObjectHashAggregate
-Input [4]: [s_store_sk#22, s_store_name#23, s_state#25, s_zip#26]
+Input [1]: [s_store_sk#22]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 1250, 0, 0)]
 Aggregate Attributes [1]: [buf#52]
@@ -595,40 +595,45 @@ Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 125
 Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#22, 42), 40, 1250, 0, 0)#54 AS bloomFilter#55]
 
 Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
-ObjectHashAggregate (109)
-+- Exchange (108)
-   +- ObjectHashAggregate (107)
-      +- * Filter (106)
-         +- * ColumnarToRow (105)
-            +- Scan parquet spark_catalog.default.item (104)
+ObjectHashAggregate (110)
++- Exchange (109)
+   +- ObjectHashAggregate (108)
+      +- * Project (107)
+         +- * Filter (106)
+            +- * ColumnarToRow (105)
+               +- Scan parquet spark_catalog.default.item (104)
 
 
 (104) Scan parquet spark_catalog.default.item
-Output [6]: [i_item_sk#9, i_current_price#10, i_size#11, i_color#12, i_units#13, i_manager_id#14]
+Output [2]: [i_item_sk#9, i_color#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_color), EqualTo(i_color,chiffon             ), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:int,i_color:string>
 
 (105) ColumnarToRow [codegen id : 1]
-Input [6]: [i_item_sk#9, i_current_price#10, i_size#11, i_color#12, i_units#13, i_manager_id#14]
+Input [2]: [i_item_sk#9, i_color#12]
 
 (106) Filter [codegen id : 1]
-Input [6]: [i_item_sk#9, i_current_price#10, i_size#11, i_color#12, i_units#13, i_manager_id#14]
+Input [2]: [i_item_sk#9, i_color#12]
 Condition : ((isnotnull(i_color#12) AND (i_color#12 = chiffon             )) AND isnotnull(i_item_sk#9))
 
-(107) ObjectHashAggregate
-Input [6]: [i_item_sk#9, i_current_price#10, i_size#11, i_color#12, i_units#13, i_manager_id#14]
+(107) Project [codegen id : 1]
+Output [1]: [i_item_sk#9]
+Input [2]: [i_item_sk#9, i_color#12]
+
+(108) ObjectHashAggregate
+Input [1]: [i_item_sk#9]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 52773, 0, 0)]
 Aggregate Attributes [1]: [buf#56]
 Results [1]: [buf#57]
 
-(108) Exchange
+(109) Exchange
 Input [1]: [buf#57]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=20]
 
-(109) ObjectHashAggregate
+(110) ObjectHashAggregate
 Input [1]: [buf#57]
 Keys: []
 Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#9, 42), 2313, 52773, 0, 0)]
