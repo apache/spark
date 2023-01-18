@@ -321,35 +321,48 @@ trait DecimalOperation extends Serializable {
     }
     DecimalType.checkNegativeScale(scale)
     var lv = longVal
+    var dv = getAsBigDecimal()
     // First, update our lv if we can, or transfer over to using a BigDecimal
-    if (underlyingIsNull) {
+    if (dv.eq(null)) {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
-        val pow10diff = POW_10(diff)
-        // % and / always round to 0
-        val droppedDigits = lv % pow10diff
-        lv /= pow10diff
-        roundMode match {
-          case ROUND_FLOOR =>
-            if (droppedDigits < 0) {
-              lv += -1L
-            }
-          case ROUND_CEILING =>
-            if (droppedDigits > 0) {
-              lv += 1L
-            }
-          case ROUND_HALF_UP =>
-            if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              lv += (if (droppedDigits < 0) -1L else 1L)
-            }
-          case ROUND_HALF_EVEN =>
-            val doubled = math.abs(droppedDigits) * 2
-            if (doubled > pow10diff || doubled == pow10diff && lv % 2 != 0) {
-              lv += (if (droppedDigits < 0) -1L else 1L)
-            }
-          case _ =>
-            throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+        // If diff is greater than max number of digits we store in Long, then
+        // value becomes 0. Otherwise we calculate new value dividing by power of 10.
+        // In both cases we apply rounding after that.
+        if (diff > MAX_LONG_DIGITS) {
+          lv = roundMode match {
+            case ROUND_FLOOR => if (lv < 0) -1L else 0L
+            case ROUND_CEILING => if (lv > 0) 1L else 0L
+            case ROUND_HALF_UP | ROUND_HALF_EVEN => 0L
+            case _ => throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+          }
+        } else {
+          val pow10diff = POW_10(diff)
+          // % and / always round to 0
+          val droppedDigits = lv % pow10diff
+          lv /= pow10diff
+          roundMode match {
+            case ROUND_FLOOR =>
+              if (droppedDigits < 0) {
+                lv += -1L
+              }
+            case ROUND_CEILING =>
+              if (droppedDigits > 0) {
+                lv += 1L
+              }
+            case ROUND_HALF_UP =>
+              if (math.abs(droppedDigits) * 2 >= pow10diff) {
+                lv += (if (droppedDigits < 0) -1L else 1L)
+              }
+            case ROUND_HALF_EVEN =>
+              val doubled = math.abs(droppedDigits) * 2
+              if (doubled > pow10diff || doubled == pow10diff && lv % 2 != 0) {
+                lv += (if (droppedDigits < 0) -1L else 1L)
+              }
+            case _ =>
+              throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+          }
         }
       } else if (scale > _scale) {
         // We might be able to multiply lv by a power of 10 and not overflow, but if not,
@@ -361,16 +374,17 @@ trait DecimalOperation extends Serializable {
           lv *= POW_10(diff)
         } else {
           // Give up on using Longs; switch to BigDecimal, which we'll modify below
-          setUnderlyingValue(lv, _scale)
+          dv = BigDecimal(lv, _scale)
         }
       }
       // In both cases, we will check whether our precision is okay below
     }
 
-    if (underlyingIsNotNull) {
+    if (dv.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale dv to the new scale.
-      if (!rescale(precision, scale, roundMode)) {
+      dv = dv.setScale(scale, roundMode)
+      if (dv.precision > precision) {
         return false
       }
     } else {
@@ -381,6 +395,7 @@ trait DecimalOperation extends Serializable {
         return false
       }
     }
+    setUnderlyingValue(dv)
     longVal = lv
     _precision = precision
     _scale = scale
