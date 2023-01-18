@@ -188,6 +188,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
+   * This is equivalent to [[KeyValueGroupedDataset#flatMapGroups]], except for the iterator
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.4.0
    */
   def flatMapSortedGroups[S: Encoder, U : Encoder]
@@ -226,6 +231,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
+   * This is equivalent to [[KeyValueGroupedDataset#flatMapGroups]], except for the iterator
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.4.0
    */
   def flatMapSortedGroups[U : Encoder]
@@ -859,6 +869,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * from [[Dataset]] `this` and `other`.  The function can return an iterator containing elements
    * of an arbitrary type which will be returned as a new [[Dataset]].
    *
+   * This is equivalent to [[KeyValueGroupedDataset#cogroup]], except for the iterators
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.4.0
    */
   def cogroupSorted[U, R : Encoder](
@@ -896,6 +911,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * from [[Dataset]] `this` and `other`.  The function can return an iterator containing elements
    * of an arbitrary type which will be returned as a new [[Dataset]].
    *
+   * This is equivalent to [[KeyValueGroupedDataset#cogroup]], except for the iterators
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.4.0
    */
   def cogroupSorted[U, R](

@@ -424,7 +424,7 @@ object MapGroups {
 /**
  * Applies func to each unique group in `child`, based on the evaluation of `groupingAttributes`.
  * Func is invoked with an object representation of the grouping key an iterator containing the
- * object representation of all the rows with that key. Given an optional `dataOrder`, data in
+ * object representation of all the rows with that key. Given an additional `dataOrder`, data in
  * the iterator will be sorted accordingly. That sorting does not add computational complexity.
  *
  * @param keyDeserializer used to extract the key object for each group.
