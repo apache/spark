@@ -574,37 +574,7 @@ class DatasetSuite extends QueryTest
       "a", "30", "b", "3", "c", "1")
   }
 
-  test("groupBy function, flatMapSorted by func") {
-    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1)).toDS()
-    val grouped = ds.groupByKey(v => (v._1, "word"))
-    val aggregated = grouped.flatMapSortedGroups(v => v._2) { (g, iter) =>
-      Iterator(g._1, iter.mkString(", "))
-    }
-
-    checkDatasetUnorderly(
-      aggregated,
-      "a", "(a,1,10), (a,2,20)",
-      "b", "(b,1,2), (b,2,1)",
-      "c", "(c,1,1)"
-    )
-  }
-
-  test("groupBy function, flatMapSorted by func desc") {
-    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1)).toDS()
-    val grouped = ds.groupByKey(v => (v._1, "word"))
-    val aggregated = grouped.flatMapSortedGroups(v => v._2, Descending) { (g, iter) =>
-      Iterator(g._1, iter.mkString(", "))
-    }
-
-    checkDatasetUnorderly(
-      aggregated,
-      "a", "(a,2,20), (a,1,10)",
-      "b", "(b,2,1), (b,1,2)",
-      "c", "(c,1,1)"
-    )
-  }
-
-  test("groupBy function, flatMapSorted by expr") {
+  test("groupBy function, flatMapSorted") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupByKey(v => (v.getString(0), "word"))
@@ -620,7 +590,7 @@ class DatasetSuite extends QueryTest
     )
   }
 
-  test("groupBy function, flatMapSorted by expr desc") {
+  test("groupBy function, flatMapSorted desc") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupByKey(v => (v.getString(0), "word"))

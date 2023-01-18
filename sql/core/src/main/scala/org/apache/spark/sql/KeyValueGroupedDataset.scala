@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CreateStruct, Expression, SortDirection, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CreateStruct, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
@@ -170,49 +170,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def flatMapGroups[U](f: FlatMapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
     flatMapGroups((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
-
-  /**
-   * (Scala-specific)
-   * Applies the given function to each group of data.  For each unique group, the function will
-   * be passed the group key and a sorted iterator that contains all of the elements in the group.
-   * The function can return an iterator containing elements of an arbitrary type which will be
-   * returned as a new [[Dataset]].
-   *
-   * This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an
-   * `org.apache.spark.sql.expressions#Aggregator`.
-   *
-   * Internally, the implementation will spill to disk if any given group is too large to fit into
-   * memory.  However, users must take care to avoid materializing the whole iterator for a group
-   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
-   * constraints of their cluster.
-   *
-   * This is equivalent to [[KeyValueGroupedDataset#flatMapGroups]], except for the iterator
-   * to be sorted according to the given sort expressions. That sorting does not add
-   * computational complexity.
-   *
-   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
-   * @since 3.4.0
-   */
-  def flatMapSortedGroups[S: Encoder, U : Encoder]
-      (s: V => S, direction: SortDirection = Ascending)
-      (f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    val withSortKey = AppendColumns(s, dataAttributes, logicalPlan)
-    val executed = sparkSession.sessionState.executePlan(withSortKey)
-
-    Dataset[U](
-      sparkSession,
-      MapGroups(
-        f,
-        groupingAttributes,
-        dataAttributes,
-        withSortKey.newColumns.map(SortOrder(_, direction)),
-        executed.analyzed
-      )
-    )
-  }
-
 
   /**
    * (Scala-specific)
