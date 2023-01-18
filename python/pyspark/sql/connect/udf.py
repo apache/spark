@@ -21,7 +21,11 @@ import functools
 from typing import Callable, Any, TYPE_CHECKING, Optional
 
 from pyspark import cloudpickle
-from pyspark.sql.connect.expressions import ColumnReference, PythonFunction, PythonUDF
+from pyspark.sql.connect.expressions import (
+    ColumnReference,
+    PythonUDF,
+    ScalarInlineUserDefinedFunction,
+)
 from pyspark.sql.connect.column import Column
 from pyspark.sql.types import DataType, StringType
 
@@ -94,7 +98,6 @@ class UserDefinedFunction:
         self.deterministic = deterministic
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        python_func = PythonFunction(command=cloudpickle.dumps(self.func))
         arg_cols = [
             col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
         ]
@@ -102,14 +105,17 @@ class UserDefinedFunction:
         data_type_str = (
             self._returnType.json() if isinstance(self._returnType, DataType) else self._returnType
         )
+        py_udf = PythonUDF(
+            output_type=data_type_str,
+            eval_type=self.evalType,
+            command=cloudpickle.dumps(self.func),
+        )
         return Column(
-            PythonUDF(
-                name=self._name,
-                func=python_func,
-                dataType=data_type_str,
-                args=arg_exprs,
-                evalType=self.evalType,
-                udfDeterministic=self.deterministic,
+            ScalarInlineUserDefinedFunction(
+                function_name=self._name,
+                deterministic=self.deterministic,
+                arguments=arg_exprs,
+                function=py_udf,
             )
         )
 
