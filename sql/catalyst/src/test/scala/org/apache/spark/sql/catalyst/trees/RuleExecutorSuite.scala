@@ -73,11 +73,11 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("structural integrity validation - verify initial input") {
     object WithSIChecker extends RuleExecutor[Expression] {
-      override protected def validate(
+      override protected def validatePlanChanges(
           previousPlan: Expression,
-          currentPlan: Expression): Unit = currentPlan match {
-        case IntegerLiteral(_) =>
-        case _ => throw SparkException.internalError("not integer")
+          currentPlan: Expression): Option[String] = currentPlan match {
+        case IntegerLiteral(_) => None
+        case _ => Some("not integer")
       }
       val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
@@ -88,17 +88,17 @@ class RuleExecutorSuite extends SparkFunSuite {
       // The input is already invalid as determined by WithSIChecker.isPlanIntegral
       WithSIChecker.execute(Literal(10.1))
     }
-    assert(e.getMessage.contains("The structural integrity of the input plan is broken"))
-    assert(e.getCause.getMessage.contains("not integer"))
+    assert(e.getMessage.contains("The input plan of"))
+    assert(e.getMessage.contains("not integer"))
   }
 
   test("structural integrity checker - verify rule execution result") {
     object WithSICheckerForPositiveLiteral extends RuleExecutor[Expression] {
-      override protected def validate(
+      override protected def validatePlanChanges(
           previousPlan: Expression,
-          currentPlan: Expression): Unit = currentPlan match {
-        case IntegerLiteral(i) if i > 0 =>
-        case _ => throw SparkException.internalError("not positive integer")
+          currentPlan: Expression): Option[String] = currentPlan match {
+        case IntegerLiteral(i) if i > 0 => None
+        case _ => Some("not positive integer")
       }
       val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
@@ -108,8 +108,9 @@ class RuleExecutorSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       WithSICheckerForPositiveLiteral.execute(Literal(1))
     }
-    assert(e.getMessage.contains("the structural integrity of the plan is broken"))
-    assert(e.getCause.getMessage.contains("not positive integer"))
+    val ruleName = DecrementLiterals.ruleName
+    assert(e.getMessage.contains(s"Rule $ruleName in batch once generated an invalid plan"))
+    assert(e.getMessage.contains("not positive integer"))
   }
 
   test("SPARK-27243: dumpTimeSpent when no rule has run") {

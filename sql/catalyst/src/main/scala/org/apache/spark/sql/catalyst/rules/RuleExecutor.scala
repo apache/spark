@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import org.apache.spark.{SparkException, SparkThrowableHelper}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -152,14 +152,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected val excludedOnceBatches: Set[String] = Set.empty
 
   /**
-   * Defines a validate function that validates the plan after the execution of each rule, to make
-   * sure these rule still keep the structural integrity of the plan. For example, we can check
-   * whether a plan is still resolved after each rule in `Optimizer`, so we can catch rules that
-   * return invalid plans.
-   *
-   * Implementations should throw `SparkException.internalError`.
+   * Defines a validate function that validates the plan changes after the execution of each rule,
+   * to make sure these rules make valid changes to the plan. For example, we can check whether
+   * a plan is still resolved after each rule in `Optimizer`, so that we can catch rules that
+   * turn the plan into unresolved.
    */
-  protected def validate(previousPlan: TreeType, currentPlan: TreeType): Unit = {}
+  protected def validatePlanChanges(
+      previousPlan: TreeType,
+      currentPlan: TreeType): Option[String] = None
 
   /**
    * Util method for checking whether a plan remains the same if re-optimized.
@@ -194,14 +194,18 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
     val beforeMetrics = RuleExecutor.getCurrentMetrics()
 
-    // Validate the initial input
-    try {
-      validate(plan, plan)
-    } catch {
-      case e: SparkException if SparkThrowableHelper.isInternalError(e.getErrorClass) =>
-        val ruleExecutorName = this.getClass.getName.stripSuffix("$")
-        throw SparkException.internalError(
-          "The structural integrity of the input plan is broken in " + ruleExecutorName, e)
+    val enableValidation = SQLConf.get.getConf(SQLConf.PLAN_CHANGE_VALIDATION)
+    // Validate the initial input.
+    if (Utils.isTesting || enableValidation) {
+      validatePlanChanges(plan, plan) match {
+        case Some(msg) =>
+          val ruleExecutorName = this.getClass.getName.stripSuffix("$")
+          throw new SparkException(
+            errorClass = "PLAN_VALIDATION_FAILED_RULE_EXECUTOR",
+            messageParameters = Map("ruleExecutor" -> ruleExecutorName, "reason" -> msg),
+            cause = null)
+        case _ =>
+      }
     }
 
     batches.foreach { batch =>
@@ -223,24 +227,26 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
               planChangeLogger.logRule(rule.ruleName, plan, result)
+              // Run the plan changes validation after each rule.
+              if (Utils.isTesting || enableValidation) {
+                validatePlanChanges(plan, result) match {
+                  case Some(msg) =>
+                    throw new SparkException(
+                      errorClass = "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
+                      messageParameters = Map(
+                        "rule" -> rule.ruleName,
+                        "batch" -> batch.name,
+                        "reason" -> msg),
+                      cause = null)
+                  case _ =>
+                }
+              }
             }
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
 
             // Record timing information using QueryPlanningTracker
             tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
-
-            // Run the structural integrity checker against the plan after each rule.
-            if (effective) {
-              try {
-                validate(plan, result)
-              } catch {
-                case e: SparkException if SparkThrowableHelper.isInternalError(e.getErrorClass) =>
-                  throw SparkException.internalError(
-                  s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
-                    "the structural integrity of the plan is broken.", e)
-              }
-            }
 
             result
         }

@@ -190,9 +190,9 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
-  override protected def validate(
+  override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Unit = {
+      currentPlan: LogicalPlan): Option[String] = {
     LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan)
   }
 

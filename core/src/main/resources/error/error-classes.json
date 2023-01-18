@@ -1151,6 +1151,16 @@
     ],
     "sqlState" : "42K09"
   },
+  "PLAN_VALIDATION_FAILED_RULE_EXECUTOR" : {
+    "message" : [
+      "The input plan of <ruleExecutor> is invalid: <reason>"
+    ]
+  },
+  "PLAN_VALIDATION_FAILED_RULE_IN_BATCH" : {
+    "message" : [
+      "Rule <rule> in batch <batch> generated an invalid plan: <reason>"
+    ]
+  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."

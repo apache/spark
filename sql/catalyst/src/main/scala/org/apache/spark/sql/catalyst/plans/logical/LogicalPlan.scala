@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -228,7 +227,7 @@ object LogicalPlanIntegrity {
    * this method checks if the same `ExprId` refers to attributes having the same data type
    * in plan output.
    */
-  def hasUniqueExprIdsForOutput(plan: LogicalPlan): Boolean = {
+  def hasUniqueExprIdsForOutput(plan: LogicalPlan): Option[String] = {
     val exprIds = plan.collect { case p if canGetOutputAttrs(p) =>
       // NOTE: we still need to filter resolved expressions here because the output of
       // some resolved logical plans can have unresolved references,
@@ -248,7 +247,13 @@ object LogicalPlanIntegrity {
       ignoredExprIds.contains(exprId)
     }.groupBy(_._1).values.map(_.distinct)
 
-    groupedDataTypesByExprId.forall(_.length == 1)
+    groupedDataTypesByExprId.collectFirst {
+      case group if group.length > 1 =>
+        val exprId = group.head._1
+        val types = group.map(_._2.sql)
+        s"Multiple attributes have the same expression ID ${exprId.id} but different data types: " +
+          types.mkString(", ") + ". The plan tree:\n" + plan.treeString
+    }
   }
 
   /**
@@ -256,19 +261,18 @@ object LogicalPlanIntegrity {
    * For example, it returns false if plan transformers create an alias having the same `ExprId`
    * with one of reference attributes, e.g., `a#1 + 1 AS a#1`.
    */
-  def checkIfSameExprIdNotReused(plan: LogicalPlan): Boolean = {
-    plan.collect { case p if p.resolved =>
-      p.expressions.forall {
-        case a: Alias =>
-          // Even if a plan is resolved, `a.references` can return unresolved references,
-          // e.g., in `Grouping`/`GroupingID`, so we need to filter out them and
-          // check if the same `exprId` in `Alias` does not exist
-          // among reference `exprId`s.
-          !a.references.filter(_.resolved).map(_.exprId).exists(_ == a.exprId)
-        case _ =>
-          true
+  def checkIfSameExprIdNotReused(plan: LogicalPlan): Option[String] = {
+    plan.collectFirst { case p if p.resolved =>
+      p.expressions.collectFirst {
+        // Even if a plan is resolved, `a.references` can return unresolved references,
+        // e.g., in `Grouping`/`GroupingID`, so we need to filter out them and
+        // check if the same `exprId` in `Alias` does not exist
+        // among reference `exprId`s.
+        case a: Alias if a.references.filter(_.resolved).map(_.exprId).exists(_ == a.exprId) =>
+          "An alias reuses the same expression ID as previously present in an attribute, " +
+            s"which is invalid: ${a.sql}. The plan tree:\n" + plan.treeString
       }
-    }.forall(identity)
+    }.flatten
   }
 
   /**
@@ -276,36 +280,38 @@ object LogicalPlanIntegrity {
    * Some plan transformers (e.g., `RemoveNoopOperators`) rewrite logical
    * plans based on this assumption.
    */
-  def validateExprIdUniqueness(plan: LogicalPlan): Unit = {
-    if (!LogicalPlanIntegrity.checkIfSameExprIdNotReused(plan)) {
-      throw SparkException.internalError("Cannot reuse the exprId in Alias")
-    }
-    if (!LogicalPlanIntegrity.hasUniqueExprIdsForOutput(plan)) {
-      throw SparkException.internalError(
-        "Some Attributes have the same exprId but different data types")
-    }
+  def validateExprIdUniqueness(plan: LogicalPlan): Option[String] = {
+    LogicalPlanIntegrity.checkIfSameExprIdNotReused(plan).orElse(
+      LogicalPlanIntegrity.hasUniqueExprIdsForOutput(plan))
   }
 
   /**
    * Validate the structural integrity of an optimized plan.
-   * Currently we check after the execution of each rule if a plan:
+   * For example, we can check after the execution of each rule that each plan:
    * - is still resolved
    * - only host special expressions in supported operators
    * - has globally-unique attribute IDs
    * - optimized plan have same schema with previous plan.
+   * - has no dangling attribute references
    */
   def validateOptimizedPlan(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Unit = {
+      currentPlan: LogicalPlan): Option[String] = {
     if (!currentPlan.resolved) {
-      throw SparkException.internalError("The plan becomes unresolved")
-    }
-    if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
-      throw SparkException.internalError("Special expressions are placed in the wrong plan")
-    }
-    LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan)
-    if (!DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
-      throw SparkException.internalError("The plan output schema has changed")
+      Some("The plan becomes unresolved: " + currentPlan.treeString + "\nThe previous plan: " +
+        previousPlan.treeString)
+    } else if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
+      Some("Special expressions are placed in the wrong plan: " + currentPlan.treeString)
+    } else {
+      LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan).orElse {
+        if (!DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+          Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
+            currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+            "plan:\n" + currentPlan.treeString)
+        } else {
+          None
+        }
+      }
     }
   }
 }

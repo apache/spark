@@ -68,9 +68,9 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
     }
   }
 
-  override protected def validate(
+  override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Unit = {
+      currentPlan: LogicalPlan): Option[String] = {
     LogicalPlanIntegrity.validateOptimizedPlan(previousPlan, currentPlan)
   }
 }

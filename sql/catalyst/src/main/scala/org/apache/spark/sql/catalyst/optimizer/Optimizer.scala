@@ -43,9 +43,9 @@ import org.apache.spark.util.Utils
 abstract class Optimizer(catalogManager: CatalogManager)
   extends RuleExecutor[LogicalPlan] with SQLConfHelper {
 
-  override protected def validate(
+  override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Unit = {
+      currentPlan: LogicalPlan): Option[String] = {
     LogicalPlanIntegrity.validateOptimizedPlan(previousPlan, currentPlan)
   }
 
