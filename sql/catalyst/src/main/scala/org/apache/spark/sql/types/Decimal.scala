@@ -76,7 +76,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * and return it, or return null if it cannot be set due to overflow.
    */
   def setOrNull(unscaled: Long, precision: Int, scale: Int): Decimal = {
-    DecimalType.checkNegativeScale(scale)
     if (decimalOperation.setOrNull(unscaled, precision, scale) == null) {
       return null
     }
