@@ -1528,10 +1528,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "name" -> name))
   }
 
-  def malformedCSVRecordError(): SparkRuntimeException = {
+  def malformedCSVRecordError(badRecord: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2149",
-      messageParameters = Map.empty)
+      errorClass = "MALFORMED_CSV_RECORD",
+      messageParameters = Map("badRecord" -> badRecord))
   }
 
   def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
