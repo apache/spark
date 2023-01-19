@@ -215,7 +215,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
   }
 
   private Object initKeys() {
-   Object actualArray;
+    Object actualArray;
     try {
       if (this.keysArray == null || (actualArray = this.keysArray.get()) == null) {
         actualArray = idempotentializer.get(this);
@@ -238,7 +238,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
   }
 
   public Set<Object> getKeysAsSet() {
-  try {
+    try {
       return idempotentializerForSet.get(this);
     } catch(ExecutionException ee) {
       throw new RuntimeException(ee);

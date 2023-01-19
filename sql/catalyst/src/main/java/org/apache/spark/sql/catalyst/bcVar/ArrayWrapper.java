@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.catalyst.bcVar;
 
-public interface ArrayWrapper {
+public interface ArrayWrapper<T> {
   Object get(int pos);
 
   int getLength();
 
   boolean isOneDimensional();
 
-  Object[] getBaseAs1DArray();
-
-  Object[][] getBaseAs2DArray();
+  T[] getBaseArray();
 
   static ArrayWrapper wrapArray(Object source, boolean is1Dimensional, int relativeIndex) {
     return is1Dimensional ? new OneDimensionArrayWrapper((Object[]) source, relativeIndex) :
@@ -34,7 +32,7 @@ public interface ArrayWrapper {
   }
 }
 
-class OneDimensionArrayWrapper implements ArrayWrapper {
+class OneDimensionArrayWrapper implements ArrayWrapper<Object> {
   private final Object[] base;
   private final int relativeIndex;
 
@@ -59,17 +57,12 @@ class OneDimensionArrayWrapper implements ArrayWrapper {
   }
 
   @Override
-  public Object[] getBaseAs1DArray() {
+  public Object[] getBaseArray() {
     return this.base;
-  }
-
-  @Override
-  public Object[][] getBaseAs2DArray() {
-    throw new IllegalStateException("cannot cast a 1D array to 2D");
   }
 }
 
-class TwoDimensionArrayWrapper implements ArrayWrapper {
+class TwoDimensionArrayWrapper implements ArrayWrapper<Object[]> {
   private final Object[][] base;
   private final int relativeIndex;
 
@@ -94,12 +87,7 @@ class TwoDimensionArrayWrapper implements ArrayWrapper {
   }
 
   @Override
-  public Object[] getBaseAs1DArray() {
-    return this.base;
-  }
-
-  @Override
-  public Object[][] getBaseAs2DArray() {
+  public Object[][] getBaseArray() {
     return this.base;
   }
 }
