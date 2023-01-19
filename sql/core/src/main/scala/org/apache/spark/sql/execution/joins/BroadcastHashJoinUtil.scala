@@ -322,7 +322,6 @@ object BroadcastHashJoinUtil {
               _.toAttribute.canonicalized == attr.canonicalized)
             case _ => None
           }
-
           groupNamedExprOpt match {
             case Some(attribute: Attribute) => currentStreamKey = attribute
             case Some(Alias(childExpr: Attribute, _)) => currentStreamKey = childExpr
@@ -335,7 +334,6 @@ object BroadcastHashJoinUtil {
           batchScanOfInterest = (for (child <- u.children) yield {
             identifyBatchScanOfInterest(child.output(indexOfStreamCol), child,
                 buildLegsBlockingPush)
-
           }).flatten
           keepGoing = false
 
