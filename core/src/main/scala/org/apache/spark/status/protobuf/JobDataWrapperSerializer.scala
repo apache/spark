@@ -17,22 +17,17 @@
 
 package org.apache.spark.status.protobuf
 
-import collection.JavaConverters._
 import java.util.Date
 
-import org.apache.spark.JobExecutionStatus
+import collection.JavaConverters._
+
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class JobDataWrapperSerializer extends ProtobufSerDe {
+class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
 
-  override val supportClass: Class[_] = classOf[JobDataWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[JobDataWrapper])
-
-  private def serialize(j: JobDataWrapper): Array[Byte] = {
+  override def serialize(j: JobDataWrapper): Array[Byte] = {
     val jobData = serializeJobData(j.info)
     val builder = StoreTypes.JobDataWrapper.newBuilder()
     builder.setInfo(jobData)
@@ -55,7 +50,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe {
     val jobDataBuilder = StoreTypes.JobData.newBuilder()
     jobDataBuilder.setJobId(jobData.jobId.toLong)
       .setName(jobData.name)
-      .setStatus(serializeJobExecutionStatus(jobData.status))
+      .setStatus(JobExecutionStatusSerializer.serialize(jobData.status))
       .setNumTasks(jobData.numTasks)
       .setNumActiveTasks(jobData.numActiveTasks)
       .setNumCompletedTasks(jobData.numCompletedTasks)
@@ -89,7 +84,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe {
       getOptional(info.hasSubmissionTime, () => new Date(info.getSubmissionTime))
     val completionTime = getOptional(info.hasCompletionTime, () => new Date(info.getCompletionTime))
     val jobGroup = getOptional(info.hasJobGroup, info.getJobGroup)
-    val status = JobExecutionStatus.valueOf(info.getStatus.toString)
+    val status = JobExecutionStatusSerializer.deserialize(info.getStatus)
 
     new JobData(
       jobId = info.getJobId.toInt,
@@ -97,7 +92,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe {
       description = description,
       submissionTime = submissionTime,
       completionTime = completionTime,
-      stageIds = info.getStageIdsList.asScala.map(_.toInt).toSeq,
+      stageIds = info.getStageIdsList.asScala.map(_.toInt),
       jobGroup = jobGroup,
       status = status,
       numTasks = info.getNumTasks,
@@ -112,9 +107,5 @@ class JobDataWrapperSerializer extends ProtobufSerDe {
       numSkippedStages = info.getNumSkippedStages,
       numFailedStages = info.getNumFailedStages,
       killedTasksSummary = info.getKillTasksSummaryMap.asScala.mapValues(_.toInt).toMap)
-  }
-
-  private def serializeJobExecutionStatus(j: JobExecutionStatus): StoreTypes.JobExecutionStatus = {
-    StoreTypes.JobExecutionStatus.valueOf(j.toString)
   }
 }

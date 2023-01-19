@@ -84,6 +84,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
     "leftType" : "\"DECIMAL(36,0)\"",
@@ -127,6 +128,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
     "leftType" : "\"DECIMAL(36,35)\"",

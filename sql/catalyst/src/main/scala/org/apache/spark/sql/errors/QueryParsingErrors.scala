@@ -78,7 +78,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0011", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
@@ -136,7 +136,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Map(
-        "inputString" -> s"${toSQLStmt("LATERAL")} can only be used with subquery."),
+        "inputString" ->
+          s"${toSQLStmt("LATERAL")} can only be used with subquery and table-valued functions."),
       ctx)
   }
 

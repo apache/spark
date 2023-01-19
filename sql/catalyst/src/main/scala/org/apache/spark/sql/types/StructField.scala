@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
@@ -162,4 +163,7 @@ case class StructField(
     val nullString = if (nullable) "" else " NOT NULL"
     s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLComment"
   }
+
+  private[sql] def toAttribute: AttributeReference =
+    AttributeReference(name, dataType, nullable, metadata)()
 }

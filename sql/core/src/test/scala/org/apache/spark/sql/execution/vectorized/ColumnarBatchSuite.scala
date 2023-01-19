@@ -1347,10 +1347,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
           rowId += 1
           row
         }
-
-        override def remove(): Unit = {
-          throw new UnsupportedOperationException
-        }
       }
     }
   }

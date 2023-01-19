@@ -16,3 +16,5 @@
 #
 
 org.apache.spark.status.protobuf.sql.SQLExecutionUIDataSerializer
+org.apache.spark.status.protobuf.sql.SparkPlanGraphWrapperSerializer
+org.apache.spark.status.protobuf.sql.StreamingQueryDataSerializer

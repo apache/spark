@@ -836,7 +836,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(!mapFilter2_1.semanticEquals(mapFilter2_3))
   }
 
-  test("SPARK-36740: ArraySort should handle NaN greater then non-NaN value") {
+  test("SPARK-36740: ArraySort should handle NaN greater than non-NaN value") {
     checkEvaluation(arraySort(
       Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
       Seq(1d, 2d, Double.NaN, null))
@@ -851,8 +851,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     withSQLConf(
         SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT.key -> "false") {
-      checkExceptionInExpression[SparkException](
-        arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator), "The comparison result is null")
+      checkErrorInExpression[SparkException](
+        expression = arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
+        errorClass = "COMPARATOR_RETURNS_NULL",
+        parameters = Map("firstValue" -> "1", "secondValue" -> "1")
+      )
     }
 
     withSQLConf(

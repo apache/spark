@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from py4j.java_gateway import JavaObject, java_import
 
-from pyspark.sql.utils import StreamingQueryException
+from pyspark.errors import StreamingQueryException
 from pyspark.sql.streaming.listener import StreamingQueryListener
 
 __all__ = ["StreamingQuery", "StreamingQueryManager"]

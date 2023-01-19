@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
@@ -116,8 +116,8 @@ class Catalog:
             Table(
                 name=row.iloc[0],
                 catalog=row.iloc[1],
-                # If empty or None, returns None.
-                namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+                # If None, returns None.
+                namespace=None if row.iloc[2] is None else list(row.iloc[2]),
                 description=row.iloc[3],
                 tableType=row.iloc[4],
                 isTemporary=row.iloc[5],
@@ -134,8 +134,8 @@ class Catalog:
         return Table(
             name=row.iloc[0],
             catalog=row.iloc[1],
-            # If empty or None, returns None.
-            namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+            # If None, returns None.
+            namespace=None if row.iloc[2] is None else list(row.iloc[2]),
             description=row.iloc[3],
             tableType=row.iloc[4],
             isTemporary=row.iloc[5],
@@ -149,8 +149,8 @@ class Catalog:
             Function(
                 name=row.iloc[0],
                 catalog=row.iloc[1],
-                # If empty or None, returns None.
-                namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+                # If None, returns None.
+                namespace=None if row.iloc[2] is None else list(row.iloc[2]),
                 description=row.iloc[3],
                 className=row.iloc[4],
                 isTemporary=row.iloc[5],
@@ -176,8 +176,8 @@ class Catalog:
         return Function(
             name=row.iloc[0],
             catalog=row.iloc[1],
-            # If empty or None, returns None.
-            namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+            # If None, returns None.
+            namespace=None if row.iloc[2] is None else list(row.iloc[2]),
             description=row.iloc[3],
             className=row.iloc[4],
             isTemporary=row.iloc[5],
@@ -305,3 +305,66 @@ class Catalog:
         self._catalog_to_pandas(plan.RefreshByPath(path=path))
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
+
+    def isCached(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("isCached() is not implemented.")
+
+    def cacheTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cacheTable() is not implemented.")
+
+    def uncacheTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("uncacheTable() is not implemented.")
+
+    def registerFunction(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("registerFunction() is not implemented.")
+
+
+Catalog.__doc__ = PySparkCatalog.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.catalog
+
+        globs = pyspark.sql.connect.catalog.__dict__.copy()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.catalog tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+        # TODO(SPARK-41612): Support Catalog.isCached
+        # TODO(SPARK-41600): Support Catalog.cacheTable
+        del pyspark.sql.connect.catalog.Catalog.clearCache.__doc__
+        del pyspark.sql.connect.catalog.Catalog.refreshTable.__doc__
+        del pyspark.sql.connect.catalog.Catalog.refreshByPath.__doc__
+        del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.catalog,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+        globs["spark"].stop()
+
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.catalog doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

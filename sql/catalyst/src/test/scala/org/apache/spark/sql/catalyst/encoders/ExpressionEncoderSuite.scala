@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -480,13 +480,18 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(ScroogeLikeExample(1),
     "SPARK-40385 class with only a companion object constructor")
 
+  encodeDecodeTest(Array(Set(1, 2), Set(2, 3)), "array of sets")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("AnyVal class with Any fields") {
-    val exception = intercept[UnsupportedOperationException](implicitly[ExpressionEncoder[Foo]])
-    val errorMsg = exception.getMessage
-    assert(errorMsg.contains("root class: \"org.apache.spark.sql.catalyst.encoders.Foo\""))
-    assert(errorMsg.contains("No Encoder found for Any"))
+    val exception = intercept[SparkUnsupportedOperationException](
+      implicitly[ExpressionEncoder[Foo]])
+    checkError(
+      exception = exception,
+      errorClass = "ENCODER_NOT_FOUND",
+      parameters = Map("typeName" -> "Any")
+    )
   }
 
   test("nullable of encoder schema") {

@@ -38,7 +38,7 @@ import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
@@ -104,6 +104,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(java.lang.Long.MAX_VALUE)
     check(java.lang.Long.MIN_VALUE)
     check[String](null)
+    check(Array(1.toByte))
     check(Array(1, 2, 3))
     check(Array(1L, 2L, 3L))
     check(Array(1.0, 2.0, 3.0))
@@ -114,6 +115,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array('a', 'b', 'c'))
     check(Array.empty[Int])
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
+    check(Array(Array(1.toByte)))
   }
 
   test("pairs") {
@@ -170,6 +172,18 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
       mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
+  }
+
+  test("SPARK-42071: Register scala.math.Ordering$Reverse") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T): Unit = {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    // Scala 2.12.12 added a new class 'Reverse' via https://github.com/scala/scala/pull/8965
+    check(Utils.classForName("scala.math.Ordering$Reverse"))
   }
 
   test("Bug: SPARK-10251") {

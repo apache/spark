@@ -363,7 +363,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Convert a constants list into a String sequence.
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
-    ctx.constant.asScala.map(v => visitStringConstant(v, legacyNullAsString = false)).toSeq
+    ctx.constant.asScala.map(v => visitStringConstant(v)).toSeq
   }
 
   /**
@@ -751,15 +751,18 @@ class SparkSqlAstBuilder extends AstBuilder {
           (Nil, Option(name), props, recordHandler)
       }
 
-      val (inFormat, inSerdeClass, inSerdeProps, reader) =
+      // The Writer uses inFormat to feed input data into the running script and
+      // the reader uses outFormat to read the output from the running script,
+      // this behavior is same with hive.
+      val (inFormat, inSerdeClass, inSerdeProps, writer) =
         format(
-          inRowFormat, "hive.script.recordreader",
-          "org.apache.hadoop.hive.ql.exec.TextRecordReader")
-
-      val (outFormat, outSerdeClass, outSerdeProps, writer) =
-        format(
-          outRowFormat, "hive.script.recordwriter",
+          inRowFormat, "hive.script.recordwriter",
           "org.apache.hadoop.hive.ql.exec.TextRecordWriter")
+
+      val (outFormat, outSerdeClass, outSerdeProps, reader) =
+        format(
+          outRowFormat, "hive.script.recordreader",
+          "org.apache.hadoop.hive.ql.exec.TextRecordReader")
 
       ScriptInputOutputSchema(
         inFormat, outFormat,

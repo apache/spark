@@ -23,14 +23,9 @@ import org.apache.spark.status.RDDStorageInfoWrapper
 import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo, RDDStorageInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
+class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrapper] {
 
-  override val supportClass: Class[_] = classOf[RDDStorageInfoWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[RDDStorageInfoWrapper])
-
-  private def serialize(input: RDDStorageInfoWrapper): Array[Byte] = {
+  override def serialize(input: RDDStorageInfoWrapper): Array[Byte] = {
     val builder = StoreTypes.RDDStorageInfoWrapper.newBuilder()
     builder.setInfo(serializeRDDStorageInfo(input.info))
     builder.build().toByteArray
@@ -96,10 +91,10 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
         if (info.getDataDistributionList.isEmpty) {
           None
         } else {
-          Some(info.getDataDistributionList.asScala.map(deserializeRDDDataDistribution).toSeq)
+          Some(info.getDataDistributionList.asScala.map(deserializeRDDDataDistribution))
         },
       partitions =
-        Some(info.getPartitionsList.asScala.map(deserializeRDDPartitionInfo).toSeq)
+        Some(info.getPartitionsList.asScala.map(deserializeRDDPartitionInfo))
     )
   }
 
@@ -126,7 +121,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
       storageLevel = info.getStorageLevel,
       memoryUsed = info.getMemoryUsed,
       diskUsed = info.getDiskUsed,
-      executors = info.getExecutorsList.asScala.toSeq
+      executors = info.getExecutorsList.asScala
     )
   }
 }

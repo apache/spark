@@ -125,6 +125,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "firstNumColumns" : "1",
     "invalidNumColumns" : "2",

@@ -148,6 +148,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS_WITH_SUGGESTION",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : " >= 1",

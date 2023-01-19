@@ -17,21 +17,13 @@
 
 package org.apache.spark.status.protobuf
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.status.TaskDataWrapper
-import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
-class TaskDataWrapperSerializer extends ProtobufSerDe {
+class TaskDataWrapperSerializer extends ProtobufSerDe[TaskDataWrapper] {
 
-  override val supportClass: Class[_] = classOf[TaskDataWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[TaskDataWrapper])
-
-  private def serialize(input: TaskDataWrapper): Array[Byte] = {
+  override def serialize(input: TaskDataWrapper): Array[Byte] = {
     val builder = StoreTypes.TaskDataWrapper.newBuilder()
       .setTaskId(input.taskId)
       .setIndex(input.index)
@@ -67,6 +59,16 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       .setShuffleRemoteBytesReadToDisk(input.shuffleRemoteBytesReadToDisk)
       .setShuffleLocalBytesRead(input.shuffleLocalBytesRead)
       .setShuffleRecordsRead(input.shuffleRecordsRead)
+      .setShuffleCorruptMergedBlockChunks(input.shuffleCorruptMergedBlockChunks)
+      .setShuffleMergedFetchFallbackCount(input.shuffleMergedFetchFallbackCount)
+      .setShuffleMergedRemoteBlocksFetched(input.shuffleMergedRemoteBlocksFetched)
+      .setShuffleMergedLocalBlocksFetched(input.shuffleMergedLocalBlocksFetched)
+      .setShuffleMergedRemoteChunksFetched(input.shuffleMergedRemoteChunksFetched)
+      .setShuffleMergedLocalChunksFetched(input.shuffleMergedLocalChunksFetched)
+      .setShuffleMergedRemoteBytesRead(input.shuffleMergedRemoteBytesRead)
+      .setShuffleMergedLocalBytesRead(input.shuffleMergedLocalBytesRead)
+      .setShuffleRemoteReqsDuration(input.shuffleRemoteReqsDuration)
+      .setShuffleMergedRemoteReqDuration(input.shuffleMergedRemoteReqDuration)
       .setShuffleBytesWritten(input.shuffleBytesWritten)
       .setShuffleWriteTime(input.shuffleWriteTime)
       .setShuffleRecordsWritten(input.shuffleRecordsWritten)
@@ -74,21 +76,14 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       .setStageAttemptId(input.stageAttemptId)
     input.errorMessage.foreach(builder.setErrorMessage)
     input.accumulatorUpdates.foreach { update =>
-      builder.addAccumulatorUpdates(serializeAccumulableInfo(update))
+      builder.addAccumulatorUpdates(AccumulableInfoSerializer.serialize(update))
     }
     builder.build().toByteArray
   }
 
   def deserialize(bytes: Array[Byte]): TaskDataWrapper = {
     val binary = StoreTypes.TaskDataWrapper.parseFrom(bytes)
-    val accumulatorUpdates = new ArrayBuffer[AccumulableInfo]()
-    binary.getAccumulatorUpdatesList.forEach { update =>
-      accumulatorUpdates.append(new AccumulableInfo(
-        id = update.getId,
-        name = update.getName,
-        update = getOptional(update.hasUpdate, update.getUpdate),
-        value = update.getValue))
-    }
+    val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
     new TaskDataWrapper(
       taskId = binary.getTaskId,
       index = binary.getIndex,
@@ -102,7 +97,7 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       status = weakIntern(binary.getStatus),
       taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
-      accumulatorUpdates = accumulatorUpdates.toSeq,
+      accumulatorUpdates = accumulatorUpdates,
       errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
       hasMetrics = binary.getHasMetrics,
       executorDeserializeTime = binary.getExecutorDeserializeTime,
@@ -126,20 +121,21 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       shuffleRemoteBytesReadToDisk = binary.getShuffleRemoteBytesReadToDisk,
       shuffleLocalBytesRead = binary.getShuffleLocalBytesRead,
       shuffleRecordsRead = binary.getShuffleRecordsRead,
+      shuffleCorruptMergedBlockChunks = binary.getShuffleCorruptMergedBlockChunks,
+      shuffleMergedFetchFallbackCount = binary.getShuffleMergedFetchFallbackCount,
+      shuffleMergedRemoteBlocksFetched = binary.getShuffleMergedRemoteBlocksFetched,
+      shuffleMergedLocalBlocksFetched = binary.getShuffleMergedLocalBlocksFetched,
+      shuffleMergedRemoteChunksFetched = binary.getShuffleMergedRemoteChunksFetched,
+      shuffleMergedLocalChunksFetched = binary.getShuffleMergedLocalChunksFetched,
+      shuffleMergedRemoteBytesRead = binary.getShuffleMergedRemoteBytesRead,
+      shuffleMergedLocalBytesRead = binary.getShuffleMergedLocalBytesRead,
+      shuffleRemoteReqsDuration = binary.getShuffleRemoteReqsDuration,
+      shuffleMergedRemoteReqDuration = binary.getShuffleMergedRemoteReqDuration,
       shuffleBytesWritten = binary.getShuffleBytesWritten,
       shuffleWriteTime = binary.getShuffleWriteTime,
       shuffleRecordsWritten = binary.getShuffleRecordsWritten,
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId
     )
-  }
-
-  def serializeAccumulableInfo(input: AccumulableInfo): StoreTypes.AccumulableInfo = {
-    val builder = StoreTypes.AccumulableInfo.newBuilder()
-      .setId(input.id)
-      .setName(input.name)
-      .setValue(input.value)
-    input.update.foreach(builder.setUpdate)
-    builder.build()
   }
 }
