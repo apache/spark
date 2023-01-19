@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-import cloudpickle
+import cloudpickle  # type: ignore
 import collections
 import logging
 import math
@@ -193,9 +193,9 @@ class Distributor:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
                     self.logger.warning(
-                        f"'num_processes' cannot be set to a value greater than the number of "
+                        "'num_processes' cannot be set to a value greater than the number of "
                         f"available GPUs on the driver, which is {num_available_gpus}. "
-                        f"'num_processes' was reset to be equal to the number of available GPUs.",
+                        "'num_processes' was reset to be equal to the number of available GPUs.",
                     )
                     self.num_processes = num_available_gpus
         return self.num_processes
@@ -224,7 +224,8 @@ class Distributor:
             name = self.__class__.__name__
             if ignore_ssl:
                 self.logger.warning(
-                    f"""
+                    textwrap.dedent(
+                        f"""
                     This cluster has TLS encryption enabled;
                     however, {name} does not
                     support data encryption in transit.
@@ -236,11 +237,12 @@ class Distributor:
                     parameters and possibly training data to
                     be sent between nodes unencrypted.
                     """,
-                    RuntimeWarning,
+                    )
                 )
                 return
             raise RuntimeError(
-                f"""
+                textwrap.dedent(
+                    f"""
                 This cluster has TLS encryption enabled;
                 however, {name} does not support
                 data encryption in transit. To override
@@ -250,6 +252,7 @@ class Distributor:
                 will cause model parameters and possibly training
                 data to be sent between nodes unencrypted.
                 """
+                )
             )
 
 
@@ -365,12 +368,15 @@ class TorchDistributor(Distributor):
 
         args_string = list(map(str, args))  # converting all args to strings
 
-        return (
-            [sys.executable, "-m", "pyspark.ml.torch.torch_run_process_wrapper"]
-            + torchrun_args
-            + [f"--nproc_per_node={processes_per_node}"]
-            + [path_to_train_file, *args_string]
-        )
+        return [
+            sys.executable,
+            "-m",
+            "pyspark.ml.torch.torch_run_process_wrapper",
+            *torchrun_args,
+            f"--nproc_per_node={processes_per_node}",
+            path_to_train_file,
+            *args_string,
+        ]
 
     @staticmethod
     def _execute_command(
@@ -415,13 +421,13 @@ class TorchDistributor(Distributor):
                 last_n_msg = "task output is"
             task_output = "".join(tail)
             raise RuntimeError(
-                f"Command {cmd} failed with return code {task.returncode}."
+                f"Command {cmd} failed with return code {task.returncode}. "
                 f"The {last_n_msg} included below: {task_output}"
             )
 
     def _run_local_training(
         self,
-        framework_wrapper_fn: Optional[Callable],
+        framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
         *args: Any,
     ) -> Optional[Any]:
@@ -539,7 +545,7 @@ class TorchDistributor(Distributor):
 
     def _run_distributed_training(
         self,
-        framework_wrapper_fn: Optional[Callable],
+        framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
         *args: Any,
     ) -> Optional[Any]:
@@ -595,7 +601,7 @@ class TorchDistributor(Distributor):
         train_file_path = TorchDistributor._create_torchrun_train_file(
             save_dir, pickle_file_path, output_file_path
         )
-        args = []
+        args = []  # type: ignore
 
         TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
 
@@ -663,7 +669,6 @@ class TorchDistributor(Distributor):
             Returns the output of train_object called with args if train_object is a
             Callable with an expected output.
         """
-        framework_wrapper_fn = None
         if isinstance(train_object, str):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
         else:

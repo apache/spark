@@ -25,7 +25,7 @@ import sys
 import time
 import tempfile
 import threading
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, Tuple
 import unittest
 from unittest.mock import patch
 
@@ -48,10 +48,10 @@ def patch_stdout() -> StringIO:
         sys.stdout = sys_stdout
 
 
-def create_training_function() -> Callable:
+def create_training_function() -> Tuple[Callable, str]:
     import torch.nn as nn
     import torch.nn.functional as F
-    from torchvision import transforms, datasets
+    from torchvision import transforms, datasets  # type: ignore
 
     batch_size = 100
     num_epochs = 1
@@ -97,7 +97,7 @@ def create_training_function() -> Callable:
 
         train_sampler = DistributedSampler(dataset=train_dataset)
         data_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=batch_size, sampler=train_sampler
+            train_dataset, batch_size=batch_size, sampler=train_sampler  # type: ignore
         )
 
         model = Net()
