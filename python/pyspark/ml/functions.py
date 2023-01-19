@@ -522,9 +522,9 @@ def predict_batch_udf(
         only showing top 5 rows
 
     * Multiple scalar columns
-        Input DataFrame has muliple columns of scalar values.  If the user-provided `predict` function
-        expects a single input, then the user must combine the multiple columns into a single tensor
-        using `pyspark.sql.functions.array`.
+        Input DataFrame has muliple columns of scalar values.  If the user-provided `predict`
+        function expects a single input, then the user must combine the multiple columns into a
+        single tensor using `pyspark.sql.functions.array`.
 
         >>> import numpy as np
         >>> import pandas as pd
@@ -574,7 +574,10 @@ def predict_batch_udf(
         must match the number of expected inputs.
 
         >>> def make_sum_fn():
-        ...     def predict(x1: np.ndarray, x2: np.ndarray, x3: np.ndarray, x4: np.ndarray) -> np.ndarray:
+        ...     def predict(x1: np.ndarray,
+        ...                 x2: np.ndarray,
+        ...                 x3: np.ndarray,
+        ...                 x4: np.ndarray) -> np.ndarray:
         ...         # xN.shape = [batch_size]
         ...         # outputs.shape = [batch_size]
         ...         return x1 + x2 + x3 + x4
