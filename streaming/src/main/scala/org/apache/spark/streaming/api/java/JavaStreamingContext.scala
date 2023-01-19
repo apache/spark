@@ -56,7 +56,7 @@ import org.apache.spark.streaming.scheduler.StreamingListener
  *             in Spark called Structured Streaming.
  *             You should use Spark Structured Streaming for your streaming applications.
  */
-@deprecated("DStream is deprecated. Migrate to Structured Streaming", "Spark 3.4.0")
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /**

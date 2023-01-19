@@ -66,7 +66,7 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
  *             in Spark called Structured Streaming.
  *             You should use Spark Structured Streaming for your streaming applications.
  */
-@deprecated("DStream is deprecated. Migrate to Structured Streaming", "Spark 3.4.0")
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 class StreamingContext private[streaming] (
     _sc: SparkContext,
     _cp: Checkpoint,
@@ -753,7 +753,7 @@ class StreamingContext private[streaming] (
  *             in Spark called Structured Streaming.
  *             You should use Spark Structured Streaming for your streaming applications.
  */
-@deprecated("DStream is deprecated. Migrate to Structured Streaming", "Spark 3.4.0")
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 object StreamingContext extends Logging {
 
   /**
