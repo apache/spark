@@ -230,6 +230,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     }
     return actualArray;
   }
+
   public DataType getSingleKeyDataType() {
     return this.keyDataTypes[this.relativeKeyIndexInArray];
   }
