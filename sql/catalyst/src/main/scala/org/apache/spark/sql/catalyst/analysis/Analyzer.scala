@@ -1953,6 +1953,11 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
+        case f0: UnresolvedFunction if !f0.isDistinct &&
+          f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
+          f0.arguments == Seq(UnresolvedStar(None)) =>
+          // Transform COUNT(*) into COUNT(1).
+          f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
