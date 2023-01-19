@@ -60,3 +60,16 @@ select * from explode_outer(map());
 -- table-valued functions with join
 select * from range(2) join explode(array(1, 2));
 select * from range(2) join explode_outer(array());
+
+-- inline
+select * from inline(array(struct(1, 'a'), struct(2, 'b')));
+select * from inline(array(struct(1, 'a'), struct(2, 'b'))) t(x, y);
+select * from inline(array_remove(array(struct(1, 'a')), struct(1, 'a')));
+
+-- inline with erroneous input
+select * from inline(null);
+select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c);
+
+-- inline_outer
+select * from inline_outer(array(struct(1, 'a'), struct(2, 'b')));
+select * from inline_outer(array_remove(array(struct(1, 'a')), struct(1, 'a')));
