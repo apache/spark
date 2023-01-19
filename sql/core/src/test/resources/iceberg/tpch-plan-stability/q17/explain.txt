@@ -1,0 +1,127 @@
+== Physical Plan ==
+* HashAggregate (22)
++- Exchange (21)
+   +- * HashAggregate (20)
+      +- * Project (19)
+         +- * BroadcastHashJoin Inner BuildRight (18)
+            :- * Project (9)
+            :  +- * BroadcastHashJoin Inner BuildRight (8)
+            :     :- * Project (3)
+            :     :  +- * Filter (2)
+            :     :     +- BatchScan spark_catalog.default.lineitem (1)
+            :     +- BroadcastExchange (7)
+            :        +- * Project (6)
+            :           +- * Filter (5)
+            :              +- BatchScan spark_catalog.default.part (4)
+            +- BroadcastExchange (17)
+               +- * Filter (16)
+                  +- * HashAggregate (15)
+                     +- Exchange (14)
+                        +- * HashAggregate (13)
+                           +- * Project (12)
+                              +- * Filter (11)
+                                 +- BatchScan spark_catalog.default.lineitem (10)
+
+
+(1) BatchScan spark_catalog.default.lineitem
+Output [3]: [l_partkey#1, l_quantity#2, l_extendedprice#3]
+spark_catalog.default.lineitem [scan class = SparkBatchQueryScan] [filters=l_partkey IS NOT NULL, l_quantity IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 4]
+Input [3]: [l_partkey#1, l_quantity#2, l_extendedprice#3]
+Condition : (isnotnull(l_partkey#1) AND isnotnull(l_quantity#2))
+
+(3) Project [codegen id : 4]
+Output [3]: [l_partkey#1, l_quantity#2, l_extendedprice#3]
+Input [3]: [l_partkey#1, l_quantity#2, l_extendedprice#3]
+
+(4) BatchScan spark_catalog.default.part
+Output [3]: [p_partkey#4, p_brand#5, p_container#6]
+spark_catalog.default.part [scan class = SparkBatchQueryScan] [filters=p_brand IS NOT NULL, p_container IS NOT NULL, p_brand = 'Brand#7', p_container = 'MED BOX', p_partkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [3]: [p_partkey#4, p_brand#5, p_container#6]
+Condition : ((((isnotnull(p_brand#5) AND isnotnull(p_container#6)) AND (p_brand#5 = Brand#7)) AND (p_container#6 = MED BOX)) AND isnotnull(p_partkey#4))
+
+(6) Project [codegen id : 1]
+Output [1]: [p_partkey#4]
+Input [3]: [p_partkey#4, p_brand#5, p_container#6]
+
+(7) BroadcastExchange
+Input [1]: [p_partkey#4]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [l_partkey#1]
+Right keys [1]: [p_partkey#4]
+Join condition: None
+
+(9) Project [codegen id : 4]
+Output [3]: [l_quantity#2, l_extendedprice#3, p_partkey#4]
+Input [4]: [l_partkey#1, l_quantity#2, l_extendedprice#3, p_partkey#4]
+
+(10) BatchScan spark_catalog.default.lineitem
+Output [2]: [l_partkey#8, l_quantity#9]
+spark_catalog.default.lineitem [scan class = SparkBatchQueryScan] [filters=], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(11) Filter [codegen id : 2]
+Input [2]: [l_partkey#8, l_quantity#9]
+Condition : isnotnull(l_partkey#8)
+
+(12) Project [codegen id : 2]
+Output [2]: [l_partkey#8, l_quantity#9]
+Input [2]: [l_partkey#8, l_quantity#9]
+
+(13) HashAggregate [codegen id : 2]
+Input [2]: [l_partkey#8, l_quantity#9]
+Keys [1]: [l_partkey#8]
+Functions [1]: [partial_avg(UnscaledValue(l_quantity#9))]
+Aggregate Attributes [2]: [sum#10, count#11]
+Results [3]: [l_partkey#8, sum#12, count#13]
+
+(14) Exchange
+Input [3]: [l_partkey#8, sum#12, count#13]
+Arguments: hashpartitioning(l_partkey#8, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(15) HashAggregate [codegen id : 3]
+Input [3]: [l_partkey#8, sum#12, count#13]
+Keys [1]: [l_partkey#8]
+Functions [1]: [avg(UnscaledValue(l_quantity#9))]
+Aggregate Attributes [1]: [avg(UnscaledValue(l_quantity#9))#14]
+Results [2]: [CheckOverflow((0.2000 * promote_precision(cast((avg(UnscaledValue(l_quantity#9))#14 / 1.0) as decimal(14,4)))), DecimalType(16,5)) AS (0.2 * avg(l_quantity))#15, l_partkey#8]
+
+(16) Filter [codegen id : 3]
+Input [2]: [(0.2 * avg(l_quantity))#15, l_partkey#8]
+Condition : isnotnull((0.2 * avg(l_quantity))#15)
+
+(17) BroadcastExchange
+Input [2]: [(0.2 * avg(l_quantity))#15, l_partkey#8]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [plan_id=3]
+
+(18) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [p_partkey#4]
+Right keys [1]: [l_partkey#8]
+Join condition: (cast(l_quantity#2 as decimal(16,5)) < (0.2 * avg(l_quantity))#15)
+
+(19) Project [codegen id : 4]
+Output [1]: [l_extendedprice#3]
+Input [5]: [l_quantity#2, l_extendedprice#3, p_partkey#4, (0.2 * avg(l_quantity))#15, l_partkey#8]
+
+(20) HashAggregate [codegen id : 4]
+Input [1]: [l_extendedprice#3]
+Keys: []
+Functions [1]: [partial_sum(l_extendedprice#3)]
+Aggregate Attributes [2]: [sum#16, isEmpty#17]
+Results [2]: [sum#18, isEmpty#19]
+
+(21) Exchange
+Input [2]: [sum#18, isEmpty#19]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
+
+(22) HashAggregate [codegen id : 5]
+Input [2]: [sum#18, isEmpty#19]
+Keys: []
+Functions [1]: [sum(l_extendedprice#3)]
+Aggregate Attributes [1]: [sum(l_extendedprice#3)#20]
+Results [1]: [CheckOverflow((promote_precision(cast(sum(l_extendedprice#3)#20 as decimal(21,1))) / 7.0), DecimalType(27,6)) AS avg_yearly#21]
+

@@ -17,13 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.internal.SQLConf
-
-
 trait TPCHIcebergBase extends TPCHBase with IcebergSharedSparkSession {
   override lazy val format = "iceberg"
-
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
 }

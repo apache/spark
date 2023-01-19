@@ -91,6 +91,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/iceberg</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>

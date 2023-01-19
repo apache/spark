@@ -1,0 +1,178 @@
+== Physical Plan ==
+TakeOrderedAndProject (28)
++- * HashAggregate (27)
+   +- Exchange (26)
+      +- * HashAggregate (25)
+         +- * Project (24)
+            +- * BroadcastHashJoin Inner BuildRight (23)
+               :- * Project (18)
+               :  +- * BroadcastHashJoin Inner BuildRight (17)
+               :     :- * Project (12)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (11)
+               :     :     :- * Project (9)
+               :     :     :  +- * BroadcastHashJoin Inner BuildRight (8)
+               :     :     :     :- * Project (3)
+               :     :     :     :  +- * Filter (2)
+               :     :     :     :     +- BatchScan spark_catalog.default.store_sales (1)
+               :     :     :     +- BroadcastExchange (7)
+               :     :     :        +- * Project (6)
+               :     :     :           +- * Filter (5)
+               :     :     :              +- BatchScan spark_catalog.default.customer_demographics (4)
+               :     :     +- ReusedExchange (10)
+               :     +- BroadcastExchange (16)
+               :        +- * Project (15)
+               :           +- * Filter (14)
+               :              +- BatchScan spark_catalog.default.item (13)
+               +- BroadcastExchange (22)
+                  +- * Project (21)
+                     +- * Filter (20)
+                        +- BatchScan spark_catalog.default.promotion (19)
+
+
+(1) BatchScan spark_catalog.default.store_sales
+Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_sold_date_sk IS NOT NULL, ss_sold_date_sk >= 2450815, ss_sold_date_sk <= 2451179, ss_cdemo_sk IS NOT NULL, ss_item_sk IS NOT NULL, ss_promo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 5]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Condition : (((((isnotnull(ss_sold_date_sk#1) AND (ss_sold_date_sk#1 >= 2450815)) AND (ss_sold_date_sk#1 <= 2451179)) AND isnotnull(ss_cdemo_sk#3)) AND isnotnull(ss_item_sk#2)) AND isnotnull(ss_promo_sk#4))
+
+(3) Project [codegen id : 5]
+Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+
+(4) BatchScan spark_catalog.default.customer_demographics
+Output [4]: [cd_demo_sk#9, cd_gender#10, cd_marital_status#11, cd_education_status#12]
+spark_catalog.default.customer_demographics [scan class = SparkBatchQueryScan] [filters=cd_gender IS NOT NULL, cd_marital_status IS NOT NULL, cd_education_status IS NOT NULL, cd_gender = 'F', cd_marital_status = 'W', cd_education_status = 'Primary', cd_demo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [4]: [cd_demo_sk#9, cd_gender#10, cd_marital_status#11, cd_education_status#12]
+Condition : ((((((isnotnull(cd_gender#10) AND isnotnull(cd_marital_status#11)) AND isnotnull(cd_education_status#12)) AND (cd_gender#10 = F)) AND (cd_marital_status#11 = W)) AND (cd_education_status#12 = Primary)) AND isnotnull(cd_demo_sk#9))
+
+(6) Project [codegen id : 1]
+Output [1]: [cd_demo_sk#9]
+Input [4]: [cd_demo_sk#9, cd_gender#10, cd_marital_status#11, cd_education_status#12]
+
+(7) BroadcastExchange
+Input [1]: [cd_demo_sk#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_cdemo_sk#3]
+Right keys [1]: [cd_demo_sk#9]
+Join condition: None
+
+(9) Project [codegen id : 5]
+Output [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [9]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, cd_demo_sk#9]
+
+(10) ReusedExchange [Reuses operator id: 32]
+Output [1]: [d_date_sk#13]
+
+(11) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#13]
+Join condition: None
+
+(12) Project [codegen id : 5]
+Output [6]: [ss_item_sk#2, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, d_date_sk#13]
+
+(13) BatchScan spark_catalog.default.item
+Output [2]: [i_item_sk#14, i_item_id#15]
+spark_catalog.default.item [scan class = SparkBatchQueryScan] [filters=i_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(14) Filter [codegen id : 3]
+Input [2]: [i_item_sk#14, i_item_id#15]
+Condition : isnotnull(i_item_sk#14)
+
+(15) Project [codegen id : 3]
+Output [2]: [i_item_sk#14, i_item_id#15]
+Input [2]: [i_item_sk#14, i_item_id#15]
+
+(16) BroadcastExchange
+Input [2]: [i_item_sk#14, i_item_id#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(17) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_item_sk#2]
+Right keys [1]: [i_item_sk#14]
+Join condition: None
+
+(18) Project [codegen id : 5]
+Output [6]: [ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i_item_id#15]
+Input [8]: [ss_item_sk#2, ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i_item_sk#14, i_item_id#15]
+
+(19) BatchScan spark_catalog.default.promotion
+Output [3]: [p_promo_sk#16, p_channel_email#17, p_channel_event#18]
+spark_catalog.default.promotion [scan class = SparkBatchQueryScan] [filters=(p_channel_email = 'N' OR p_channel_event = 'N'), p_promo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(20) Filter [codegen id : 4]
+Input [3]: [p_promo_sk#16, p_channel_email#17, p_channel_event#18]
+Condition : (((p_channel_email#17 = N) OR (p_channel_event#18 = N)) AND isnotnull(p_promo_sk#16))
+
+(21) Project [codegen id : 4]
+Output [1]: [p_promo_sk#16]
+Input [3]: [p_promo_sk#16, p_channel_email#17, p_channel_event#18]
+
+(22) BroadcastExchange
+Input [1]: [p_promo_sk#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(23) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_promo_sk#4]
+Right keys [1]: [p_promo_sk#16]
+Join condition: None
+
+(24) Project [codegen id : 5]
+Output [5]: [ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i_item_id#15]
+Input [7]: [ss_promo_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i_item_id#15, p_promo_sk#16]
+
+(25) HashAggregate [codegen id : 5]
+Input [5]: [ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i_item_id#15]
+Keys [1]: [i_item_id#15]
+Functions [4]: [partial_avg(ss_quantity#5), partial_avg(UnscaledValue(ss_list_price#6)), partial_avg(UnscaledValue(ss_coupon_amt#8)), partial_avg(UnscaledValue(ss_sales_price#7))]
+Aggregate Attributes [8]: [sum#19, count#20, sum#21, count#22, sum#23, count#24, sum#25, count#26]
+Results [9]: [i_item_id#15, sum#27, count#28, sum#29, count#30, sum#31, count#32, sum#33, count#34]
+
+(26) Exchange
+Input [9]: [i_item_id#15, sum#27, count#28, sum#29, count#30, sum#31, count#32, sum#33, count#34]
+Arguments: hashpartitioning(i_item_id#15, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(27) HashAggregate [codegen id : 6]
+Input [9]: [i_item_id#15, sum#27, count#28, sum#29, count#30, sum#31, count#32, sum#33, count#34]
+Keys [1]: [i_item_id#15]
+Functions [4]: [avg(ss_quantity#5), avg(UnscaledValue(ss_list_price#6)), avg(UnscaledValue(ss_coupon_amt#8)), avg(UnscaledValue(ss_sales_price#7))]
+Aggregate Attributes [4]: [avg(ss_quantity#5)#35, avg(UnscaledValue(ss_list_price#6))#36, avg(UnscaledValue(ss_coupon_amt#8))#37, avg(UnscaledValue(ss_sales_price#7))#38]
+Results [5]: [i_item_id#15, avg(ss_quantity#5)#35 AS agg1#39, cast((avg(UnscaledValue(ss_list_price#6))#36 / 100.0) as decimal(11,6)) AS agg2#40, cast((avg(UnscaledValue(ss_coupon_amt#8))#37 / 100.0) as decimal(11,6)) AS agg3#41, cast((avg(UnscaledValue(ss_sales_price#7))#38 / 100.0) as decimal(11,6)) AS agg4#42]
+
+(28) TakeOrderedAndProject
+Input [5]: [i_item_id#15, agg1#39, agg2#40, agg3#41, agg4#42]
+Arguments: 100, [i_item_id#15 ASC NULLS FIRST], [i_item_id#15, agg1#39, agg2#40, agg3#41, agg4#42]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#1 IN dynamicpruning#43
+BroadcastExchange (32)
++- * Project (31)
+   +- * Filter (30)
+      +- BatchScan spark_catalog.default.date_dim (29)
+
+
+(29) BatchScan spark_catalog.default.date_dim
+Output [2]: [d_date_sk#13, d_year#44]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_year IS NOT NULL, d_year = 1998, d_date_sk >= 2450815, d_date_sk <= 2451179, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(30) Filter [codegen id : 1]
+Input [2]: [d_date_sk#13, d_year#44]
+Condition : ((((isnotnull(d_year#44) AND (d_year#44 = 1998)) AND (d_date_sk#13 >= 2450815)) AND (d_date_sk#13 <= 2451179)) AND isnotnull(d_date_sk#13))
+
+(31) Project [codegen id : 1]
+Output [1]: [d_date_sk#13]
+Input [2]: [d_date_sk#13, d_year#44]
+
+(32) BroadcastExchange
+Input [1]: [d_date_sk#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+
