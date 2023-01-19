@@ -51,16 +51,18 @@ case class BatchScanExec(
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
       val commonEquality = this.runtimeFilters == other.runtimeFilters &&
-        this.proxyForPushedBroadcastVar == other.proxyForPushedBroadcastVar
+          this.proxyForPushedBroadcastVar == other.proxyForPushedBroadcastVar
       if (commonEquality) {
         (this, other) match {
           case (sr1: SupportsRuntimeFiltering, sr2: SupportsRuntimeFiltering) =>
             sr1.equalToIgnoreRuntimeFilters(sr2)
+
           case (sr1, sr2) => sr1.batch == sr2.batch
         }
       } else {
         false
       }
+
     case _ => false
   }
 
@@ -70,24 +72,21 @@ case class BatchScanExec(
       case _ => batch.hashCode()
     }
     Objects.hashCode(Integer.valueOf(batchHashCode), runtimeFilters,
-      this.proxyForPushedBroadcastVar)
+        this.proxyForPushedBroadcastVar)
   }
 
   @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
    private def initFilteredPartitions(): Unit = {
-
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceStrategy.translateRuntimeFilter(e)
       case _ => None
     }
-
     val pushFiltersAndRefreshIter = dataSourceFilters.nonEmpty ||
-      (scan.isInstanceOf[SupportsRuntimeFiltering]
-      && scan.asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter)
+        (scan.isInstanceOf[SupportsRuntimeFiltering]  &&
+          scan.asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter)
     if (pushFiltersAndRefreshIter) {
       val originalPartitioning = outputPartitioning
-
       // the cast is safe as runtime filters are only assigned if the scan can be filtered
       val filterableScan = scan.asInstanceOf[SupportsRuntimeFiltering]
       if (dataSourceFilters.nonEmpty) {
@@ -96,7 +95,6 @@ case class BatchScanExec(
       filterableScan.callbackBeforeOpeningIterator()
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
-
       val newGroupedPartitions = originalPartitioning match {
         case p: KeyGroupedPartitioning =>
           if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
@@ -104,23 +102,19 @@ case class BatchScanExec(
                 "during runtime filtering: not all partitions implement HasPartitionKey after " +
                 "filtering")
           }
-
           val newRows = new InternalRowSet(p.expressions.map(_.dataType))
           newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
           val oldRows = p.partitionValuesOpt.get
-
           if (oldRows.size != newRows.size) {
             throw new SparkException("Data source must have preserved the original partitioning " +
                 "during runtime filtering: the number of unique partition values obtained " +
                 s"through HasPartitionKey changed: before ${oldRows.size}, after ${newRows.size}")
           }
-
           if (!oldRows.forall(newRows.contains)) {
             throw new SparkException("Data source must have preserved the original partitioning " +
                 "during runtime filtering: the number of unique partition values obtained " +
                 s"through HasPartitionKey remain the same but do not exactly match")
           }
-
           groupPartitions(newPartitions).get.map(_._2)
 
         case _ =>

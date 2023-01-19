@@ -275,6 +275,7 @@ class InMemoryTable(
     extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics
         with SupportsReportPartitioning {
     private var broadcastVarFilters: Seq[Filter] = Seq.empty
+
     override def toBatch: Batch = this
 
     override def estimateStatistics(): Statistics = {
@@ -317,30 +318,31 @@ class InMemoryTable(
 
     override def filter(filters: Array[Filter]): Unit = {
       filters.foreach { f =>
-          val colName = f.references.head
-          val partitionColNames = partitioning.flatMap(t => t.references().map(ne => ne.fieldNames()
+        val colName = f.references.head
+        val partitionColNames = partitioning.flatMap(t => t.references().map(ne => ne.fieldNames()
             .reduce(_ + "." + _)))
-          if (partitioning.length == 1 && partitionColNames.exists(_ == colName)) {
-            f match {
-              case In(attrName, valueArray) if valueArray.length == 1 && valueArray(0).
-                getClass.getName.indexOf("BroadcastedJoinKeysWrapperImpl") != -1 =>
-                // scalastyle:off classforname
-                val broadcastVarClass = Class.forName(BROADCASTED_JOIN_KEYS_WRAPPER_CLASS)
-                // scalastyle:on classforname
-                val getKeysMthd = broadcastVarClass.getMethod("getKeysAsSet")
-                import scala.collection.JavaConverters._
-                val matchingKeys = getKeysMthd.invoke(valueArray(0)).
-                  asInstanceOf[java.util.Set[Any]].asScala.map(_.toString)
-                data = data.filter(partition => {
-                  val key = partition.asInstanceOf[BufferedRows].keyString
-                  matchingKeys.contains(key)
-                })
-              case In(attrName, values) if attrName == colName =>
-                val matchingKeys = values.map(_.toString).toSet
-                data = data.filter(partition => {
-                  val key = partition.asInstanceOf[BufferedRows].keyString
-                  matchingKeys.contains(key)
-                })
+        if (partitioning.length == 1 && partitionColNames.exists(_ == colName)) {
+          f match {
+            case In(attrName, valueArray) if valueArray.length == 1 && valueArray(0).
+              getClass.getName.indexOf("BroadcastedJoinKeysWrapperImpl") != -1 =>
+              // scalastyle:off classforname
+              val broadcastVarClass = Class.forName(BROADCASTED_JOIN_KEYS_WRAPPER_CLASS)
+              // scalastyle:on classforname
+              val getKeysMthd = broadcastVarClass.getMethod("getKeysAsSet")
+              import scala.collection.JavaConverters._
+              val matchingKeys = getKeysMthd.invoke(valueArray(0)).
+                asInstanceOf[java.util.Set[Any]].asScala.map(_.toString)
+              data = data.filter(partition => {
+                val key = partition.asInstanceOf[BufferedRows].keyString
+                matchingKeys.contains(key)
+              })
+
+            case In(attrName, values) if attrName == colName =>
+              val matchingKeys = values.map(_.toString).toSet
+              data = data.filter(partition => {
+                val key = partition.asInstanceOf[BufferedRows].keyString
+                matchingKeys.contains(key)
+              })
 
               case _ => // skip
             }
@@ -376,6 +378,7 @@ class InMemoryTable(
         this.broadcastVarFilters = this.broadcastVarFilters ++ filters.filter {
           case In(_, values) if values.length == 1 && values(0).getClass.getName.
             indexOf("BroadcastedJoinKeysWrapperImpl") != -1 => true
+
           case _ => false
         }
       }
@@ -553,9 +556,12 @@ class InMemoryTable(
 
 object InMemoryTable {
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
+
   val BROADCASTED_JOIN_KEYS_WRAPPER_CLASS =
     "org.apache.spark.sql.catalyst.bcVar.BroadcastedJoinKeysWrapper"
+
   val ARRAY_WRAPPER_CLASS = "org.apache.spark.sql.catalyst.bcVar.ArrayWrapper"
+
   def filtersToKeys(
       keys: Iterable[Seq[Any]],
       partitionNames: Seq[String],

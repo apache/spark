@@ -58,7 +58,6 @@ case class InsertAdaptiveSparkPlan(
           // we are using broadcast filter push down for partition pruning
           val planToUse = AdaptiveSparkPlanExec.applyPhysicalRules(plan,
             Seq(BroadcastFilterPushdown))
-
           val subqueryMap = buildSubqueryMap(planToUse)
           val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
           val preprocessingRules = Seq(planSubqueriesRule)

@@ -187,16 +187,13 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     assert(canBroadcastBySize(right, SQLConf.get) === true)
   }
 
-  test("getBroadcastBuildSide (hintOnly = false) preference to existing" +
-    " broadcast buildside") {
+  test("getBroadcastBuildSide (hintOnly = false) preference to existing broadcast buildside") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100000000") {
       val smallerLeg = right
       val biggerLeg = left
       val biggerLegOuter = SubqueryAlias("outerLeg", biggerLeg)
       val join1 = SubqueryAlias("j1", Join(smallerLeg, biggerLeg, Inner, Some('a === 'd),
         JoinHint.NONE))
-      val query = Join(biggerLegOuter, join1, Inner, Some("outerLeg.a".attr === "j1.c".attr),
-        JoinHint.NONE)
       val broadCastExchangePlans = mutable.Set[LogicalPlan]()
       val broadcastSideOuterJoin = getBroadcastBuildSide(
         biggerLegOuter,
@@ -213,7 +210,6 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       }
       assert(broadCastExchangePlans.size == 1)
       assert(biggerLeg.canonicalized == broadCastExchangePlans.head)
-
       val broadcastSideInnerJoin = getBroadcastBuildSide(
         smallerLeg,
         biggerLeg,

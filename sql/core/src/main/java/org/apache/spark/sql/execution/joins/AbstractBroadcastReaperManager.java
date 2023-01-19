@@ -7,11 +7,10 @@ import org.apache.spark.broadcast.BroadcastManager;
 import org.apache.spark.scheduler.SparkListener;
 import org.apache.spark.scheduler.SparkListenerApplicationEnd;
 
-
-
 public abstract class AbstractBroadcastReaperManager extends SparkListener implements
     BroadcastLifeCycleListener {
   private volatile BroadcastManager bcmInUse;
+
   private volatile boolean isRegistered = false;
 
   private volatile boolean isDriverSide = false;
@@ -21,12 +20,16 @@ public abstract class AbstractBroadcastReaperManager extends SparkListener imple
     this.clearAll();
   }
 
-
   // TODO: Asif see if this will suffice at executor end as executors will not get application end
-
   @Override
   public void onBroadcastManagerStop() {
     this.clearAll();
+  }
+
+  public void customCleanupOnApplicationEnd() {}
+
+  public boolean isDriverSide() {
+    return this.isDriverSide;
   }
 
   private void clearAll() {
@@ -34,15 +37,7 @@ public abstract class AbstractBroadcastReaperManager extends SparkListener imple
     this.customCleanupOnApplicationEnd();
   }
 
-  public void customCleanupOnApplicationEnd() {
-  }
-
-  public boolean isDriverSide() {
-    return this.isDriverSide;
-  }
-
   protected void checkInstanceInitialized() {
-
     if (!this.isRegistered) {
       synchronized (this) {
         if (!this.isRegistered) {

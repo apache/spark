@@ -51,149 +51,135 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
   private int relativeKeyIndexInArray = 0;
 
   private int[] indexesOfInterest;
+
   private transient volatile WeakReference<Object> keysArray = null;
 
   private int totalJoinKeys = 0;
 
+  private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Set<Object>>
+    idempotentializerForSet = Caffeine.newBuilder().expireAfterWrite(
+      Duration.ofSeconds(CACHE_EXPIRY)).maximumSize(CACHE_SIZE).weakValues().
+        build(bcjk -> {
+          // this will register the Reaper on the driver side as well as executor side to get
+          // application life cycle events and removal of broadcast var event
+          BroadcastJoinKeysReaper.checkInitialized();
+          ArrayWrapper keys = bcjk.getKeysArray();
+          int len = keys.getLength();
+          Set<Object> set = new HashSet<>();
+          for(int i = 0; i < len; ++i) {
+            set.add(keys.get(i));
+          }
+        return set;
+      });
+
   private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Object> idempotentializer =
-      Caffeine.newBuilder().expireAfterWrite(Duration.ofSeconds(CACHE_EXPIRY))
-          .maximumSize(CACHE_SIZE).weakValues().build(bcjk -> {
-            // this will register the Reaper on the driver side as well as executor side to get
-            // application life cycle events and removal of broadcast var event
-            BroadcastJoinKeysReaper.checkInitialized();
-            Broadcast<HashedRelation> bcVar = bcjk.bcVar;
-            if (bcVar.getValue() instanceof LongHashedRelation) {
-              LongHashedRelation lhr = (LongHashedRelation) bcVar.getValue();
-              if (bcjk.totalJoinKeys == 1) {
-                if (bcjk.keyDataTypes[0].equals(LongType$.MODULE$)) {
-                  return JavaConverters.asJavaCollection(lhr.keys().map(f -> f.get(
-                          0, LongType$.MODULE$)).toList()).toArray();
-                } else if (bcjk.keyDataTypes[0].equals(IntegerType$.MODULE$)) {
-                  return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
-                      0, LongType$.MODULE$)).intValue()).toList()).toArray();
+    Caffeine.newBuilder().expireAfterWrite(Duration.ofSeconds(CACHE_EXPIRY))
+      .maximumSize(CACHE_SIZE).weakValues().build(bcjk -> {
+      // this will register the Reaper on the driver side as well as executor side to get
+      // application life cycle events and removal of broadcast var event
+      BroadcastJoinKeysReaper.checkInitialized();
+      Broadcast<HashedRelation> bcVar = bcjk.bcVar;
+      if (bcVar.getValue() instanceof LongHashedRelation) {
+        LongHashedRelation lhr = (LongHashedRelation) bcVar.getValue();
+        if (bcjk.totalJoinKeys == 1) {
+          if (bcjk.keyDataTypes[0].equals(LongType$.MODULE$)) {
+            return JavaConverters.asJavaCollection(lhr.keys().map(f -> f.get(
+           0, LongType$.MODULE$)).toList()).toArray();
+          } else if (bcjk.keyDataTypes[0].equals(IntegerType$.MODULE$)) {
+            return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
+             0, LongType$.MODULE$)).intValue()).toList()).toArray();
+          } else if (bcjk.keyDataTypes[0].equals(ShortType$.MODULE$)) {
+            return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
+             0, LongType$.MODULE$)).shortValue()).toList()).toArray();
+          } else {
+            return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
+           0, LongType$.MODULE$)).byteValue()).toList()).toArray();
+          }
+        } else {
+          if (bcjk.indexesOfInterest.length == 1) {
+            return JavaConverters.asJavaCollection(
+              lhr.keys().map(ir -> {
+                long hashedKey = ir.getLong(0);
+                int actualkey;
+                if (bcjk.indexesOfInterest[0] == 0) {
+                  actualkey = (int) (hashedKey >> 32);
+                } else {
+                  actualkey = (int) (hashedKey & 0xffffffffL);
+                }
+                if (bcjk.keyDataTypes[0].equals(IntegerType$.MODULE$)) {
+                  return actualkey;
                 } else if (bcjk.keyDataTypes[0].equals(ShortType$.MODULE$)) {
-                  return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
-                      0, LongType$.MODULE$)).shortValue()).toList()).toArray();
+                  return (short)actualkey;
                 } else {
-                  return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
-                      0, LongType$.MODULE$)).byteValue()).toList()).toArray();
+                  return (byte)actualkey;
                 }
-              } else {
-                if (bcjk.indexesOfInterest.length == 1) {
-                  return JavaConverters.asJavaCollection(
-                      lhr.keys().map(ir -> {
-                        long hashedKey = ir.getLong(0);
-                        int actualkey;
-                        if (bcjk.indexesOfInterest[0] == 0) {
-                          actualkey = (int) (hashedKey >> 32);
-                        } else {
-                          actualkey = (int) (hashedKey & 0xffffffffL);
-                        }
-                         if (bcjk.keyDataTypes[0].equals(IntegerType$.MODULE$)) {
-                          return actualkey;
-                        } else if (bcjk.keyDataTypes[0].equals(ShortType$.MODULE$)) {
-                          return (short)actualkey;
-                        } else {
-                          return (byte)actualkey;
-                        }
-                      }).toList()).toArray();
-                } else {
-                  return getObjects(lhr, bcjk);
-                }
-              }
-            } else {
-              Iterator<InternalRow> keysIter = bcVar.getValue().keys();
-              if (bcjk.indexesOfInterest.length == 1) {
-                int actualIndex = bcjk.indexesOfInterest[0];
-                DataType keyDataType = bcjk.keyDataTypes[0];
-                Function1<Object, Object> toScalaConverter = 
-                    CatalystTypeConverters.createToScalaConverter(keyDataType);
-                Iterator<Object> keysAsScala = keysIter.map(f -> {
-                  Object x = f.get(actualIndex, keyDataType);
-                  return toScalaConverter.apply(x);
-                });
-                return JavaConverters.asJavaCollection(keysAsScala.toList()).toArray();
-              } else {
-                Function1<Object, Object>[] toScalaConverters =
-                    new Function1[bcjk.indexesOfInterest.length];
-                for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
-                  DataType keyDataType = bcjk.keyDataTypes[i];
-                  toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(keyDataType);
-                }
-                
-                Iterator<Object[]> keysAsScala = keysIter.map(f -> {
-                  Object[] arr = new Object[bcjk.indexesOfInterest.length];
-                  for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
-                    int actualIndex = bcjk.indexesOfInterest[i];
-                    DataType keyDataType = bcjk.keyDataTypes[i];
-                    Object x = f.get(actualIndex, keyDataType);
-                    arr[i] = toScalaConverters[i].apply(x);
-                  }
-                  return arr;
-                });
-                return JavaConverters.asJavaCollection(keysAsScala.toList()).toArray(
-                  new Object[0][]);
-              }
-            }
+              }).toList()).toArray();
+          } else {
+            return getObjects(lhr, bcjk);
+          }
+        }
+      } else {
+        Iterator<InternalRow> keysIter = bcVar.getValue().keys();
+        if (bcjk.indexesOfInterest.length == 1) {
+          int actualIndex = bcjk.indexesOfInterest[0];
+          DataType keyDataType = bcjk.keyDataTypes[0];
+          Function1<Object, Object> toScalaConverter =
+            CatalystTypeConverters.createToScalaConverter(keyDataType);
+          Iterator<Object> keysAsScala = keysIter.map(f -> {
+            Object x = f.get(actualIndex, keyDataType);
+              return toScalaConverter.apply(x);
           });
+          return JavaConverters.asJavaCollection(keysAsScala.toList()).toArray();
+        } else {
+          Function1<Object, Object>[] toScalaConverters =
+            new Function1[bcjk.indexesOfInterest.length];
+          for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
+            DataType keyDataType = bcjk.keyDataTypes[i];
+            toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(keyDataType);
+          }
+          Iterator<Object[]> keysAsScala = keysIter.map(f -> {
+            Object[] arr = new Object[bcjk.indexesOfInterest.length];
+            for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
+              int actualIndex = bcjk.indexesOfInterest[i];
+              DataType keyDataType = bcjk.keyDataTypes[i];
+              Object x = f.get(actualIndex, keyDataType);
+              arr[i] = toScalaConverters[i].apply(x);
+            }
+            return arr;
+          });
+          return JavaConverters.asJavaCollection(keysAsScala.toList()).toArray(
+            new Object[0][]);
+        }
+      }
+    });
 
   private static Object[][] getObjects(LongHashedRelation lhr,
       BroadcastedJoinKeysWrapperImpl bcjk ) {
     int totalKeysPresent = bcjk.totalJoinKeys;
     final UnsafeRow unsafeRow = new UnsafeRow(totalKeysPresent);
     final ByteBuffer buff = ByteBuffer.allocate(8);
-    Function1<Object, Object>[] toScalaConverters =
-        new Function1[bcjk.indexesOfInterest.length];
+    Function1<Object, Object>[] toScalaConverters = new Function1[bcjk.indexesOfInterest.length];
     for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
       DataType keyDataType = bcjk.keyDataTypes[i];
       toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(keyDataType);
     }
     return JavaConverters.asJavaCollection(
-        lhr.keys().map(ir -> {
-          long hashedKey = Long.reverse(ir.getLong(0));
-          buff.putLong(0, hashedKey);
-          byte[] arr = buff.array();
-          unsafeRow.pointTo(arr, arr.length);
-          Object[] actualkeys = new Object[bcjk.indexesOfInterest.length];
-          for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
-            DataType keyDataType = bcjk.keyDataTypes[i];
-            Object temp = unsafeRow.get(bcjk.indexesOfInterest[i], keyDataType);
-            actualkeys[i] =  toScalaConverters[i].apply(temp);
-          }
-          return actualkeys;
-        }).toList()).toArray(new Object[0][]);
-    /*
-    return JavaConverters.asJavaCollection(
-        lhr.keys().map(ir -> {
-          long hashedKey = ir.getLong(0);
-          Object[] actualkeys = new Object[2];
-          actualkeys[0] = (int) (hashedKey >> 32);
-          actualkeys[1] = (int) (hashedKey & 0xffffffffL);
-
-          return actualkeys;
-        }).toList()).toArray(new Object[0][]);
-
-     */
+      lhr.keys().map(ir -> {
+        long hashedKey = Long.reverse(ir.getLong(0));
+        buff.putLong(0, hashedKey);
+        byte[] arr = buff.array();
+        unsafeRow.pointTo(arr, arr.length);
+        Object[] actualkeys = new Object[bcjk.indexesOfInterest.length];
+        for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
+          DataType keyDataType = bcjk.keyDataTypes[i];
+          Object temp = unsafeRow.get(bcjk.indexesOfInterest[i], keyDataType);
+          actualkeys[i] =  toScalaConverters[i].apply(temp);
+        }
+        return actualkeys;
+      }).toList()).toArray(new Object[0][]);
   }
 
-  private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Set<Object>>
-      idempotentializerForSet = Caffeine.newBuilder().expireAfterWrite(
-          Duration.ofSeconds(CACHE_EXPIRY)).maximumSize(CACHE_SIZE).weakValues().
-      build(bcjk -> {
-            // this will register the Reaper on the driver side as well as executor side to get
-            // application life cycle events and removal of broadcast var event
-            BroadcastJoinKeysReaper.checkInitialized();
-            ArrayWrapper keys = bcjk.getKeysArray();
-            int len = keys.getLength();
-            Set<Object> set = new HashSet<>();
-            for(int i = 0; i < len; ++i) {
-             set.add(keys.get(i));
-            }
-            return set;
-          });
-
-  public BroadcastedJoinKeysWrapperImpl() {
-  }
+  public BroadcastedJoinKeysWrapperImpl() {}
 
   public BroadcastedJoinKeysWrapperImpl(Broadcast<HashedRelation> bcVar, DataType[] keyDataTypes,
       int relativeKeyIndexInArray, int[] indexArray, int totalJoinKeys) {
@@ -287,10 +273,10 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
   static void removeBroadcast(long id) {
     idempotentializer.asMap().keySet().stream()
-        .filter( bcVar -> bcVar.getBroadcastVarId() == id).forEach(idempotentializer::invalidate);
+      .filter( bcVar -> bcVar.getBroadcastVarId() == id).forEach(idempotentializer::invalidate);
     idempotentializerForSet.asMap().keySet().stream()
-        .filter( bcVar -> bcVar.getBroadcastVarId() == id).forEach(
-            idempotentializerForSet::invalidate);
+      .filter( bcVar -> bcVar.getBroadcastVarId() == id).forEach(
+        idempotentializerForSet::invalidate);
   }
 
   static void invalidateBroadcastCache() {

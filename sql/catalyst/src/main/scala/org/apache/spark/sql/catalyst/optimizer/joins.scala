@@ -310,9 +310,10 @@ trait JoinSelectionHelper {
   }
 
   def getSmallerSide(
-    left: LogicalPlan,
-    right: LogicalPlan,
-    broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan]): BuildSide = {
+      left: LogicalPlan,
+      right: LogicalPlan,
+      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan]):
+  BuildSide = {
     val containsLeft = broadcastedCanonicalizedSubplans.contains(left.canonicalized)
     val containsRight = broadcastedCanonicalizedSubplans.contains(right.canonicalized)
     if ((containsLeft && containsRight) || !(containsLeft || containsRight)) {

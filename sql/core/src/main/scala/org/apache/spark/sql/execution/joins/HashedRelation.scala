@@ -230,6 +230,13 @@ private[joins] class UnsafeHashedRelation(
     private var binaryMap: BytesToBytesMap,
     private var isForSingleThreadUse: Boolean = false)
   extends HashedRelation with Externalizable with KryoSerializable {
+  @transient
+  private var (locationLookUpVar, lastLookedKey) = if (isForSingleThreadUse) {
+    val map = this.binaryMap
+    new map.Location -> new UnsafeRow(numFields)
+  } else {
+    (null, null)
+  }
 
   @transient
   private var (locationLookUpVar, lastLookedKey) = if (isForSingleThreadUse) {
@@ -264,13 +271,13 @@ private[joins] class UnsafeHashedRelation(
       val temp = this.locationLookUpVar
       if (lastK.eq(null) || !lastK.equals(unsafeKey)) {
         binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-          unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
+            unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
       }
       temp
     } else {
       val temp = new map.Location // this could be allocated in stack
       binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
+          unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
       temp
     }
     if (loc.isDefined) {
@@ -297,13 +304,13 @@ private[joins] class UnsafeHashedRelation(
       val temp = this.locationLookUpVar
       if (lastK.eq(null) || !lastK.equals(unsafeKey)) {
         binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-          unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
+            unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
       }
       temp
     } else {
       val temp = new map.Location // this could be allocated in stack
       binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
+          unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
       temp
     }
     if (loc.isDefined) {
@@ -324,7 +331,7 @@ private[joins] class UnsafeHashedRelation(
       new map.Location // this could be allocated in stack
     }
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
+        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (singleThreadUse) {
       if (loc.isDefined) {
         var temp = this.lastLookedKey
@@ -367,7 +374,7 @@ private[joins] class UnsafeHashedRelation(
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location  // this could be allocated in stack
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
+        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       valueRowWithKeyIndex.update(loc.getKeyIndex, resultRow)
@@ -524,7 +531,6 @@ private[joins] class UnsafeHashedRelation(
       }
       i += 1
     }
-
     if (isForSingleThreadUse) {
       val map = binaryMap
       this.locationLookUpVar = new map.Location

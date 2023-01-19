@@ -52,6 +52,8 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
   def excludedTpcdsV2_7_0Queries: Set[String] = Set.empty
 
   def excludedTpcdsV2_7_0Queries: Set[String] = Set.empty
+
+  def excludedTpcdsV2_7_0Queries: Set[String] = Set.empty
   
   val tpcdsQueries: Seq[String] = tpcdsAllQueries.filterNot(excludedTpcdsQueries.contains)
 

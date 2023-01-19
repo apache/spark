@@ -37,15 +37,15 @@ import org.apache.spark.sql.types.DataType
 
 
 object BroadcastHashJoinUtil {
- def canPushBroadcastedKeysAsFilter(conf: SQLConf, streamJoinKeys: Seq[Expression],
+  def canPushBroadcastedKeysAsFilter(conf: SQLConf, streamJoinKeys: Seq[Expression],
       buildJoinKeys: Seq[Expression], streamPlan: SparkPlan, buildPlan: SparkPlan,
       batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _],
       buildLegsBlockingPushFromAncestors: java.util.IdentityHashMap[SparkPlan, _]):
-   Seq[BroadcastVarPushDownData] = {
-    if (conf.pushBroadcastedJoinKeysASFilterToScan && isBuildPlanPrunable(buildPlan,
-      batchScansSelectedForBCPush)) {
+    Seq[BroadcastVarPushDownData] = {
+      if (conf.pushBroadcastedJoinKeysASFilterToScan && isBuildPlanPrunable(buildPlan,
+          batchScansSelectedForBCPush)) {
       getPushDownDataSkipBuildSideCheck(conf, streamJoinKeys, buildJoinKeys, streamPlan, buildPlan,
-        buildLegsBlockingPushFromAncestors)
+          buildLegsBlockingPushFromAncestors)
     } else {
       Seq.empty
     }
@@ -55,13 +55,12 @@ object BroadcastHashJoinUtil {
       bcRelation: Broadcast[HashedRelation],
       buildKeys: Seq[Expression],
       pushDownData: Seq[BroadcastVarPushDownData]): Unit = {
-
     val actualIndexToRelativeIndexAndDataTypeMap = mutable.Map[Integer, (Integer, DataType)]()
     var currentRelativeIndex = 0
     pushDownData.foreach { bcData =>
       if (!actualIndexToRelativeIndexAndDataTypeMap.contains(bcData.joinKeyIndexInJoiningKeys)) {
         actualIndexToRelativeIndexAndDataTypeMap += ((bcData.joinKeyIndexInJoiningKeys,
-          (currentRelativeIndex, bcData.joiningColDataType)))
+            (currentRelativeIndex, bcData.joiningColDataType)))
         currentRelativeIndex += 1
       }
     }
@@ -76,15 +75,14 @@ object BroadcastHashJoinUtil {
     pushDownData.foreach {
       bcData =>
         val relativeIndex = actualIndexToRelativeIndexAndDataTypeMap.get(
-          bcData.joinKeyIndexInJoiningKeys).map(_._1).
-          getOrElse(
-            throw new IllegalStateException("missing actual index key from map"))
+            bcData.joinKeyIndexInJoiningKeys).map(_._1).getOrElse(
+                throw new IllegalStateException("missing actual index key from map"))
         val streamJoinLeafColName = getColNameFromUnderlyingScan(
-          bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeFiltering], bcData
-            .streamsideLeafJoinAttribIndex)
+            bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeFiltering],
+            bcData.streamsideLeafJoinAttribIndex)
         val filter = org.apache.spark.sql.sources.In(streamJoinLeafColName,
-          Array(new BroadcastedJoinKeysWrapperImpl(bcRelation, dataTypesArray, relativeIndex,
-            indexesOfInterestArray, totalJoinKeys)))
+            Array(new BroadcastedJoinKeysWrapperImpl(bcRelation, dataTypesArray, relativeIndex,
+                indexesOfInterestArray, totalJoinKeys)))
         bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeFiltering].filter(Array(filter))
         bcData.targetBatchScanExec.resetFilteredPartitionsAndInputRdd()
     }
@@ -99,7 +97,7 @@ object BroadcastHashJoinUtil {
       stage: QueryStageExec,
       cachedBatchScans: mutable.Map[Int, Seq[BatchScanExec]]):
   (Seq[BatchScanExec], Seq[BatchScanExec]) = cachedBatchScans.getOrElseUpdate(stage.id,
-    getAllBatchScansForStage(stage)).partition(isBatchScanReady)
+      getAllBatchScansForStage(stage)).partition(isBatchScanReady)
 
   // Not to be invoked for Stage. this is used only for join condition
   // identification. it goes below a query stage it it encounters one
@@ -115,7 +113,7 @@ object BroadcastHashJoinUtil {
       stage: QueryStageExec,
       cachedBatchScans: mutable.Map[Int, Seq[BatchScanExec]]): Boolean =
     cachedBatchScans.getOrElseUpdate(stage.id, getAllBatchScansForStage(stage)).
-      forall(isBatchScanReady)
+        forall(isBatchScanReady)
 
   def getPushdownDataForBatchScansUsingJoinKeys(
       buildKeys: Seq[Expression],
@@ -125,16 +123,19 @@ object BroadcastHashJoinUtil {
     val (buildLp, buildLegProxies) = buildPlanAndProxies
     streamPlan.collectLeaves().flatMap {
       case bs: BatchScanExec => Seq(bs)
+
       case _ => Seq.empty
     }.filter(bs => bs.proxyForPushedBroadcastVar.isDefined && !isBatchScanReady(bs)).flatMap(
       bs => {
         val jkdsOfInterest = bs.proxyForPushedBroadcastVar.get.collect {
           case proxy if (proxy.buildLegPlan.eq(buildLp) || proxy.buildLegPlan.canonicalized ==
-            buildLp.canonicalized) && (proxy.buildLegProxyBroadcastVarAndStageIdentifiers.isEmpty ||
-            (buildLegProxies.size == proxy.buildLegProxyBroadcastVarAndStageIdentifiers.size &&
-              buildLegProxies.forall(proxy.buildLegProxyBroadcastVarAndStageIdentifiers.contains)))
-          => proxy.joiningKeysData.filter(jkd => buildKeys.exists(_.canonicalized ==
-              jkd.buildSideJoinKeyAtJoin.canonicalized))
+              buildLp.canonicalized) && (proxy.buildLegProxyBroadcastVarAndStageIdentifiers
+                  .isEmpty || (buildLegProxies.size == proxy
+                      .buildLegProxyBroadcastVarAndStageIdentifiers.size &&
+                          buildLegProxies.forall(proxy.buildLegProxyBroadcastVarAndStageIdentifiers
+                              .contains)))
+            => proxy.joiningKeysData.filter(jkd => buildKeys.exists(_.canonicalized ==
+                   jkd.buildSideJoinKeyAtJoin.canonicalized))
         }.flatten
         jkdsOfInterest.map(jkd => BroadcastVarPushDownData(jkd.streamsideLeafJoinAttribIndex,
           bs, jkd.joiningColDataType, jkd.joinKeyIndexInJoiningKeys))
@@ -147,12 +148,13 @@ object BroadcastHashJoinUtil {
         case (num, proxy) => num + proxy.joiningKeysData.size
       })
       totalBCVars <= sr.getPushedBroadcastFiltersCount()
+
     case _ => true
   }
 
   def convertJoinKeyDataToPushDownData(bs: BatchScanExec, jkd: JoiningKeyData):
-  BroadcastVarPushDownData = BroadcastVarPushDownData(jkd.streamsideLeafJoinAttribIndex,
-    bs, jkd.joiningColDataType, jkd.joinKeyIndexInJoiningKeys)
+    BroadcastVarPushDownData = BroadcastVarPushDownData(jkd.streamsideLeafJoinAttribIndex,
+        bs, jkd.joiningColDataType, jkd.joinKeyIndexInJoiningKeys)
 
   def convertNameReferencesToString(ref: NamedReference): String = {
     val seq = ref.fieldNames.toSeq
@@ -186,37 +188,37 @@ object BroadcastHashJoinUtil {
     (for ((streamKeyStartExp, joinKeyIndex) <- streamKeysStart) yield {
       val streamKeyStart = streamKeyStartExp.asInstanceOf[Attribute]
       val batchScansOfInterest = identifyBatchScanOfInterest(streamKeyStart, streamPlan,
-        buildLegsBlockingPush)
+          buildLegsBlockingPush)
       val filteredBatchScansOfInterest = batchScansOfInterest.flatMap {
         case (currentStreamKey, runtimeFilteringBatchScan) =>
           val underlyingRuntimeFilteringScan = runtimeFilteringBatchScan.scan.
-            asInstanceOf[SupportsRuntimeFiltering]
+              asInstanceOf[SupportsRuntimeFiltering]
           val streamKey = currentStreamKey
           val streamsideLeafJoinAttribIndex = runtimeFilteringBatchScan.output.indexWhere(
-            _.canonicalized == streamKey.canonicalized)
+              _.canonicalized == streamKey.canonicalized)
           if (underlyingRuntimeFilteringScan.allAttributes().nonEmpty) {
             val streamsideJoinColName = getColNameFromUnderlyingScan(underlyingRuntimeFilteringScan,
-              streamsideLeafJoinAttribIndex)
-
+                streamsideLeafJoinAttribIndex)
             if (runtimeFilteringBatchScan.runtimeFilters.isEmpty) {
               Seq(BroadcastVarPushDownData(streamsideLeafJoinAttribIndex, runtimeFilteringBatchScan,
-                buildJoinKeys(joinKeyIndex).dataType, joinKeyIndex, false))
+                  buildJoinKeys(joinKeyIndex).dataType, joinKeyIndex, false))
             } else if (conf.preferBroadcastVarPushdownOverDPP) {
               // TODO: Asif :because of bug in spark where if a union node contains two tables,
               // one partitioned and another non partitioned, spark assumes both are partitioned
               // and pushes run time filter (dynamic expression) on both.
               // so we need to tackle this here.
               val partitionCols = underlyingRuntimeFilteringScan.filterAttributes().map(
-                convertNameReferencesToString)
+                  convertNameReferencesToString)
               // we are here means runtime filters added to batchscanexec is non empty
               val removeDpp = partitionCols.contains(streamsideJoinColName) ||
-                partitionCols.isEmpty
+                  partitionCols.isEmpty
               Seq(BroadcastVarPushDownData(streamsideLeafJoinAttribIndex, runtimeFilteringBatchScan,
-                buildJoinKeys(joinKeyIndex).dataType, joinKeyIndex, removeDpp))
+                  buildJoinKeys(joinKeyIndex).dataType, joinKeyIndex, removeDpp))
             } else if (!underlyingRuntimeFilteringScan.filterAttributes().map(
-              convertNameReferencesToString).contains(streamsideJoinColName)) {
-              Seq(BroadcastVarPushDownData(streamsideLeafJoinAttribIndex, runtimeFilteringBatchScan,
-                buildJoinKeys(joinKeyIndex).dataType, joinKeyIndex, false))
+                convertNameReferencesToString).contains(streamsideJoinColName)) {
+                  Seq(BroadcastVarPushDownData(streamsideLeafJoinAttribIndex,
+                      runtimeFilteringBatchScan, buildJoinKeys(joinKeyIndex).dataType,
+                      joinKeyIndex, false))
             } else {
               Seq.empty
             }
@@ -229,7 +231,7 @@ object BroadcastHashJoinUtil {
   }
 
   private def isBuildPlanPrunable(buildPlan: SparkPlan,
-        batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _]): Boolean = {
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _]): Boolean = {
     val plansToCheck = mutable.ListBuffer[SparkPlan](buildPlan)
     var isBuildPlanPrunable = false
     while (plansToCheck.nonEmpty &&  !isBuildPlanPrunable) {
@@ -237,15 +239,22 @@ object BroadcastHashJoinUtil {
       planToCheck match {
         case FilterExec(expr, _) if PartitionPruning.isLikelySelective(expr) =>
           isBuildPlanPrunable = true
+
         case bs: BatchScanExec if bs.proxyForPushedBroadcastVar.isDefined ||
           (batchScansSelectedForBCPush.ne(null) && batchScansSelectedForBCPush.containsKey(bs)) =>
           isBuildPlanPrunable = true
+
         case _: BaseAggregateExec => isBuildPlanPrunable = true
+
         case j: BaseJoinExec if j.joinType == LeftSemi || j.joinType == Inner =>
           isBuildPlanPrunable = true
+
         case ree: ReusedExchangeExec => plansToCheck.prepend(ree.child)
+
         case x: QueryStageExec => plansToCheck.prepend(x.plan)
+
         case x: AdaptiveSparkPlanExec => plansToCheck.prepend(x.inputPlan)
+
         case rest => plansToCheck.prepend(rest.children: _*)
       }
     }
@@ -263,8 +272,8 @@ object BroadcastHashJoinUtil {
     var keepGoing = true
     while (keepGoing) {
       currentStreamPlan match {
-
         case plan if buildLegsBlockingPush.containsKey(plan) => keepGoing = false
+
         case _: WindowExec => keepGoing = false
 
         case batchScanExec: BatchScanExec =>
@@ -283,15 +292,16 @@ object BroadcastHashJoinUtil {
           val indx = ree.output.indexWhere(_.canonicalized == currentStreamKey.canonicalized)
           currentStreamKey = ree.child.output(indx) */
 
-
-        case aspe: AdaptiveSparkPlanExec => keepGoing = false
+        case _: AdaptiveSparkPlanExec => keepGoing = false
 
         case _: LeafExecNode => keepGoing = false
+
         /*
         case j: BaseJoinExec if !(j.joinType == LeftSemi || j.joinType == Inner) =>
                     keepGoing = false
 
          */
+
         case proj: ProjectExec =>
           proj.projectList.find(_.toAttribute.canonicalized ==
             currentStreamKey.canonicalized) match {
@@ -321,23 +331,23 @@ object BroadcastHashJoinUtil {
           currentStreamPlan = agg.child
 
         case u: UnionExec => val indexOfStreamCol = u.output.indexWhere(
-          _.canonicalized == currentStreamKey.canonicalized)
+            _.canonicalized == currentStreamKey.canonicalized)
           batchScanOfInterest = (for (child <- u.children) yield {
             identifyBatchScanOfInterest(child.output(indexOfStreamCol), child,
-              buildLegsBlockingPush)
+                buildLegsBlockingPush)
+
           }).flatten
           keepGoing = false
 
         case somePlan => currentStreamPlan = somePlan.children.find(
-          _.output.exists(_.canonicalized == currentStreamKey.canonicalized)).getOrElse({
-          keepGoing = false
-          null
-        })
+            _.output.exists(_.canonicalized == currentStreamKey.canonicalized)).getOrElse({
+                keepGoing = false
+                null
+            })
       }
     }
     batchScanOfInterest
   }
-
 
   // This function will not go below a QueryStageExec if it exists in a tree and
   // it does not have to as the batch scans below a query stage under a top stage are

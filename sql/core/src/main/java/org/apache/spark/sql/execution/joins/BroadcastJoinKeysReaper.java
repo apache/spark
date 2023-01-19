@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.execution.joins;
 
-
 public class BroadcastJoinKeysReaper extends AbstractBroadcastReaperManager {
-
   private static final BroadcastJoinKeysReaper singleTon ;
+
   static {
     singleTon = new BroadcastJoinKeysReaper();
   }
 
-  private BroadcastJoinKeysReaper() {
-  }
+  private BroadcastJoinKeysReaper() {}
 
   @Override
   public void customCleanupOnApplicationEnd() {
     BroadcastedJoinKeysWrapperImpl.invalidateBroadcastCache();
   }
+
   @Override
   public void onDestroy(long bcId) {
     BroadcastedJoinKeysWrapperImpl.removeBroadcast(bcId);

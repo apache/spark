@@ -36,7 +36,7 @@ import org.apache.spark.internal.Logging
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean, conf: SparkConf) extends Logging {
-
+  private val broadcastLifeCycleListeners = new CopyOnWriteArraySet[BroadcastLifeCycleListener]()
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
 
@@ -86,13 +86,10 @@ private[spark] class BroadcastManager(
     broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
   }
 
-  private val broadcastLifeCycleListeners = new CopyOnWriteArraySet[BroadcastLifeCycleListener]()
-
   def registerBroadcastLifeCycleListener(listener: BroadcastLifeCycleListener): Unit = {
     broadcastLifeCycleListeners.add(listener)
   }
 
   def invokeBroadcastLifeCycleListeners(destroyedBroadcast: Long): Unit =
     this.broadcastLifeCycleListeners.forEach(_.onDestroy(destroyedBroadcast))
-
 }

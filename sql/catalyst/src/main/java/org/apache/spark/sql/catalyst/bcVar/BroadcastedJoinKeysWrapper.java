@@ -22,9 +22,12 @@ import java.io.Externalizable;
 import java.util.Set;
 import org.apache.spark.sql.types.DataType;
 
+
 public interface BroadcastedJoinKeysWrapper extends Externalizable {
   DataType getSingleKeyDataType();
+
   ArrayWrapper getKeysArray();
+
   long getBroadcastVarId();
 
    int getRelativeKeyIndex();
@@ -39,12 +42,15 @@ public interface BroadcastedJoinKeysWrapper extends Externalizable {
 
    // set via system properties
    String CACHED_KEYS_EXPIRY_IN_SECONDS_KEY = "spark.bhj.cachedKeys.expiry";
+
    String CACHED_KEYS_EXPIRY_DEFAULT = "90";  //seconds
 
    String CACHE_SIZE_KEY = "spark.bhj.cachedKeys.size";
+
    String CACHE_SIZE_DEFAULT = "30";
 
-   int CACHE_SIZE =  Integer.parseInt(System.getProperty(CACHE_SIZE_KEY, CACHE_SIZE_DEFAULT));
+   int CACHE_SIZE = Integer.parseInt(System.getProperty(CACHE_SIZE_KEY, CACHE_SIZE_DEFAULT));
+
    long CACHE_EXPIRY = Long.parseLong(System.getProperty(CACHED_KEYS_EXPIRY_IN_SECONDS_KEY,
        CACHED_KEYS_EXPIRY_DEFAULT));
 }

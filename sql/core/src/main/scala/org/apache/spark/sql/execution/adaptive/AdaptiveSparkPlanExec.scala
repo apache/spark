@@ -234,7 +234,6 @@ case class AdaptiveSparkPlanExec(
 
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (isFinalPlan) return currentPhysicalPlan
-
     // TODO: Asif: try to find a clean solution to this:
     /**
      * right now  a case like:
@@ -251,10 +250,6 @@ case class AdaptiveSparkPlanExec(
      *
      *
      */
-
-
-
-
     // In case of this adaptive plan being executed out of `withActive` scoped functions, e.g.,
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
@@ -273,7 +268,6 @@ case class AdaptiveSparkPlanExec(
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
-
       var delayedStages = Set[Int]()
       var orphanBatchScans = Set[BatchScanExec]()
       var result = createQueryStages(currentPhysicalPlan, stageIdToBuildsideJoinKeys,
@@ -339,15 +333,10 @@ case class AdaptiveSparkPlanExec(
           scheduleStagesForMaterialization(stagesToMaterialize, events)
           delayedStages --= stagesToMaterialize.map(_.id)
         }
-
-
         val (stagedIdsBatchProcessed, errorsList) = waitForNextStageToMaterialize(events)
         errors ++= errorsList
-
-
-          allStageIdsProcessed ++= stagedIdsBatchProcessed
-
-          pushBroadcastVarToDelayedStages(allStages, stageIdToBuildsideJoinKeys.toMap,
+        allStageIdsProcessed ++= stagedIdsBatchProcessed
+        pushBroadcastVarToDelayedStages(allStages, stageIdToBuildsideJoinKeys.toMap,
             allStageIdsProcessed, delayedStages, cachedBatchScansForStage, orphanBatchScans)
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
@@ -382,7 +371,6 @@ case class AdaptiveSparkPlanExec(
             case 1 => delayedStages.isEmpty
             case 2 => delayedStages.isEmpty && allStageIdsProcessed.size == allStages.size
           }))
-
         if (reoptimizeConditionsMet) {
           val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
           val afterReOptimize = reOptimize(logicalPlan)
@@ -410,7 +398,6 @@ case class AdaptiveSparkPlanExec(
         result = createQueryStages(currentPhysicalPlan, stageIdToBuildsideJoinKeys, collectOrphans)
         collectOrphans = OrphanBSCollect.no_collect
       }
-
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
         optimizeQueryStage(result.newPlan, isFinalStage = true),
@@ -431,8 +418,7 @@ case class AdaptiveSparkPlanExec(
         stgsReadyForMat.exists(_.id == reuseId))
     })
 
-  private def scheduleStagesForMaterialization(
-      stagesToMaterialize: Seq[QueryStageExec],
+  private def scheduleStagesForMaterialization(stagesToMaterialize: Seq[QueryStageExec],
       events: LinkedBlockingQueue[StageMaterializationEvent]): Unit = {
     val reorderedNewStages = stagesToMaterialize
       .sortWith {
@@ -440,7 +426,6 @@ case class AdaptiveSparkPlanExec(
         case (_: BroadcastQueryStageExec, _) => true
         case _ => false
       }
-
     // Start materialization of all new stages and fail fast if any stages failed eagerly
     reorderedNewStages.foreach { stage =>
       try {
@@ -457,7 +442,6 @@ case class AdaptiveSparkPlanExec(
       }
     }
   }
-
 
   private def pushBroadcastVarToDelayedStages(
       allStages: Map[Int, QueryStageExec],
@@ -479,7 +463,7 @@ case class AdaptiveSparkPlanExec(
   private def getDelayedStagesNowReady(
       allStages: Map[Int, QueryStageExec],
       cachedBatchScansForStage: mutable.Map[Int, Seq[BatchScanExec]],
-      delayedStages: Set[Int]): Seq[QueryStageExec] = {
+      delayedStages: Set[Int]): Seq[QueryStageExec] =
     delayedStages.flatMap(id => {
       val stage = allStages(id)
       if (BroadcastHashJoinUtil.isStageReadyForMaterialization(stage, cachedBatchScansForStage)
@@ -489,7 +473,6 @@ case class AdaptiveSparkPlanExec(
         Seq.empty
       }
     }).toSeq
-  }
 
   private def waitForNextStageToMaterialize(events: LinkedBlockingQueue[StageMaterializationEvent]):
   (Set[Int], Seq[Throwable]) = {
@@ -515,10 +498,10 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def pushBroadcastVarToUnreadyBatchScans(
-       allUnreadyBatchScans: Seq[BatchScanExec],
+      allUnreadyBatchScans: Seq[BatchScanExec],
       stageIdToBuildsideJoinKeys: Map[Int, (LogicalPlan,
         Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
-       allStages: Map[Int, QueryStageExec],
+      allStages: Map[Int, QueryStageExec],
       allProcessedStageIds: Set[Int]): Unit = {
     val identityHashMap = new util.IdentityHashMap[BatchScanExec, java.util.Set[java.lang.Long]]()
     allUnreadyBatchScans.map(bs =>
@@ -530,36 +513,38 @@ case class AdaptiveSparkPlanExec(
         val joinLegAndKeysOpt = stageIdToBuildsideJoinKeys.get(id)
         val batchScansToPush = allUnreadyBatchScans.flatMap(bs => {
           if (!identityHashMap.get(bs).contains(java.lang.Long.valueOf(id)))  {
-          val proxyVars = bs.proxyForPushedBroadcastVar.get
-          proxyVars.flatMap(proxy => {
-            val buildLegPlan = proxy.buildLegPlan
-              if (joinLegAndKeysOpt.fold(false) {
-                case(buildLp, buildProxies, _) =>
-                (buildLp.eq(buildLegPlan) || buildLp.canonicalized == buildLegPlan.canonicalized) &&
-                (proxy.buildLegProxyBroadcastVarAndStageIdentifiers.isEmpty ||
-                  (buildProxies.size == proxy.buildLegProxyBroadcastVarAndStageIdentifiers.size &&
-                    buildProxies.forall(
-                      proxy.buildLegProxyBroadcastVarAndStageIdentifiers.contains)))
-              }
-            ) {
-              proxy.joiningKeysData.flatMap {
-                jkd =>
-                  joinLegAndKeysOpt.fold(
-                    Seq.empty[(BatchScanExec, JoiningKeyData)]) {
-                    case (_, _, exprs) =>
-                      if (exprs.exists(_.canonicalized ==
-                        jkd.buildSideJoinKeyAtJoin.canonicalized)) {
-                        Seq(bs -> jkd)
-                      } else {
-                        Seq.empty
-                      }
+            val proxyVars = bs.proxyForPushedBroadcastVar.get
+            proxyVars.flatMap(proxy => {
+              val buildLegPlan = proxy.buildLegPlan
+                if (joinLegAndKeysOpt.fold(false) {
+                  case(buildLp, buildProxies, _) =>
+                    (buildLp.eq(buildLegPlan) || buildLp.canonicalized == buildLegPlan
+                     .canonicalized) &&
+                    (proxy.buildLegProxyBroadcastVarAndStageIdentifiers.isEmpty ||
+                      (buildProxies.size ==
+                        proxy.buildLegProxyBroadcastVarAndStageIdentifiers.size &&
+                        buildProxies.forall(
+                          proxy.buildLegProxyBroadcastVarAndStageIdentifiers.contains)
+                      )
+                    )
+                }
+              ) {
+                  proxy.joiningKeysData.flatMap {jkd =>
+                    joinLegAndKeysOpt.fold(Seq.empty[(BatchScanExec, JoiningKeyData)]) {
+                      case (_, _, exprs) =>
+                        if (exprs.exists(_.canonicalized ==
+                            jkd.buildSideJoinKeyAtJoin.canonicalized)) {
+                          Seq(bs -> jkd)
+                        } else {
+                          Seq.empty
+                        }
+                    }
                   }
+              } else {
+                Seq.empty
               }
-            } else {
-              Seq.empty
-            }
-          })
-        } else {
+            })
+          } else {
             Seq.empty
           }
         })
@@ -572,13 +557,13 @@ case class AdaptiveSparkPlanExec(
           val hashedRelation = allStages.getOrElse(stageId,
             context.stageCache.find(_._2.id == stageId).getOrElse(
               throw new IllegalStateException(s"Stage with id = $stageId not found"))).
-            asInstanceOf[BroadcastQueryStageExec].
-            broadcast.relationFuture.get().asInstanceOf[Broadcast[HashedRelation]]
-          val pushData = data.map {
-            case (bs, jkd) => BroadcastHashJoinUtil.convertJoinKeyDataToPushDownData(bs, jkd)
-          }
-          BroadcastHashJoinUtil.pushBroadcastVar(hashedRelation,
-            stageIdToBuildsideJoinKeys(stageId)._3, pushData)
+                asInstanceOf[BroadcastQueryStageExec].
+              broadcast.relationFuture.get().asInstanceOf[Broadcast[HashedRelation]]
+              val pushData = data.map {
+                case (bs, jkd) => BroadcastHashJoinUtil.convertJoinKeyDataToPushDownData(bs, jkd)
+              }
+            BroadcastHashJoinUtil.pushBroadcastVar(hashedRelation,
+              stageIdToBuildsideJoinKeys(stageId)._3, pushData)
         }
     }
   }
@@ -681,7 +666,6 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
-
   private def generateTreeStringWithHeader(
       header: String,
       plan: SparkPlan,
@@ -710,7 +694,6 @@ case class AdaptiveSparkPlanExec(
     if (!obj.isInstanceOf[AdaptiveSparkPlanExec]) {
       return false
     }
-
     this.inputPlan == obj.asInstanceOf[AdaptiveSparkPlanExec].inputPlan
   }
 
@@ -743,7 +726,6 @@ case class AdaptiveSparkPlanExec(
             )
 
         case _ =>
-
           val result = createQueryStages(e.child, stageIdToBuildsideJoinKeys,
             orphanBSCollect match {
               case OrphanBSCollect.no_collect => orphanBSCollect
@@ -821,7 +803,22 @@ case class AdaptiveSparkPlanExec(
           BroadcastHashJoinUtil.pushBroadcastVar(hashedRelation, buildKeys, pushDownData)
         }
       }
+      val results = Seq(buildSideStageResult, streamsideStageResult)
+      val (leftPlan, rightPlan) = getLeftAndRightPlan(streamsideStageResult, buildSideStageResult,
+        bhj)
+      val newBhj = bhj.copy(left = leftPlan, right = rightPlan)
+      newBhj.copyTagsFrom(bhj)
+      CreateStageResult(
+        newPlan = newBhj,
+        allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
+        newStages = results.flatMap(_.newStages),
+        orphanBatchScansWithProxyVar = results.flatMap(_.orphanBatchScansWithProxyVar)
+      )
 
+    case bs: BatchScanExec if bs.proxyForPushedBroadcastVar.isDefined && orphanBSCollect ==
+      OrphanBSCollect.orphan =>
+      CreateStageResult(newPlan = plan, allChildStagesMaterialized = true,
+        newStages = Seq.empty, orphanBatchScansWithProxyVar = Seq(bs))
       val results = Seq(buildSideStageResult, streamsideStageResult)
       val (leftPlan, rightPlan) = getLeftAndRightPlan(streamsideStageResult,
         buildSideStageResult, bhj)
@@ -854,14 +851,12 @@ case class AdaptiveSparkPlanExec(
       }
   }
 
-
   def getLeftAndRightPlan(streamStageResult: CreateStageResult,
-    buildStageResult: CreateStageResult, bhj: BroadcastHashJoinExec): (SparkPlan, SparkPlan) =
+      buildStageResult: CreateStageResult, bhj: BroadcastHashJoinExec): (SparkPlan, SparkPlan) =
     bhj.buildSide match {
       case BuildRight => (streamStageResult.newPlan, buildStageResult.newPlan)
       case BuildLeft => (buildStageResult.newPlan, streamStageResult.newPlan)
     }
-
 
   private def newQueryStage(e: Exchange): QueryStageExec = {
     val optimizedPlan = optimizeQueryStage(e.child, isFinalStage = false)
@@ -990,7 +985,6 @@ case class AdaptiveSparkPlanExec(
         sparkPlan,
         preprocessingRules ++ queryStagePreparationRules,
         Some((planChangeLogger, "AQE Replanning")))
-
       // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
       // add the `BroadcastExchangeExec` node manually in the DPP subquery,
       // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
@@ -1003,7 +997,6 @@ case class AdaptiveSparkPlanExec(
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
         case _ => newPlan
       }
-
       Some((finalPlan, optimized))
     } catch {
       case e: InvalidAQEPlanException[_] =>
