@@ -987,10 +987,10 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown generates all alternatives") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => Stream(Literal(10), Literal(20), Literal(30))
+      case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
+      case StringLiteral("b") => Seq(Literal(10), Literal(20), Literal(30))
       case Add(StringLiteral("c"), StringLiteral("d"), _) =>
-        Stream(Literal(100), Literal(200), Literal(300))
+        Seq(Literal(100), Literal(200), Literal(300))
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200), Literal(300))
@@ -1003,7 +1003,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown is lazy") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3))
+      case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
       case StringLiteral("b") => newErrorAfterStream(Literal(10))
       case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
     }
@@ -1017,8 +1017,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     }
 
     val transformed2 = e.multiTransformDown {
-      case StringLiteral("a") => Stream(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => Stream(Literal(10), Literal(20), Literal(30))
+      case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
+      case StringLiteral("b") => Seq(Literal(10), Literal(20), Literal(30))
       case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
     }
     val expected2 = for {
@@ -1035,10 +1035,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown rule return this") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case s @ StringLiteral("a") => Stream(Literal(1), Literal(2), s)
-      case s @ StringLiteral("b") => Stream(Literal(10), Literal(20), s)
-      case a @ Add(StringLiteral("c"), StringLiteral("d"), _) =>
-        Stream(Literal(100), Literal(200), a)
+      case s @ StringLiteral("a") => Seq(Literal(1), Literal(2), s)
+      case s @ StringLiteral("b") => Seq(Literal(10), Literal(20), s)
+      case a @ Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200), a)
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200), Add(Literal("c"), Literal("d")))
@@ -1053,10 +1052,10 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
       case a @ Add(StringLiteral("a"), StringLiteral("b"), _) =>
-        Stream(Literal(11), Literal(12), Literal(21), Literal(22), a)
-      case StringLiteral("a") => Stream(Literal(1), Literal(2))
-      case StringLiteral("b") => Stream(Literal(10), Literal(20))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => Stream(Literal(100), Literal(200))
+        Seq(Literal(11), Literal(12), Literal(21), Literal(22), a)
+      case StringLiteral("a") => Seq(Literal(1), Literal(2))
+      case StringLiteral("b") => Seq(Literal(10), Literal(20))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200))
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200))
@@ -1072,12 +1071,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown can prune") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case StringLiteral("a") => Stream.empty
+      case StringLiteral("a") => Seq.empty
     }
     assert(transformed.isEmpty)
 
     val transformed2 = e.multiTransformDown {
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => Stream.empty
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq.empty
     }
     assert(transformed2.isEmpty)
   }
