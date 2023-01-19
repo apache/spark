@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.LongAccumulator;
-import scala.collection.JavaConverters;
 
 import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
@@ -328,11 +327,11 @@ public class JavaDatasetSuite implements Serializable {
           }
           return Collections.singletonList(sb.toString()).iterator();
         },
-      Encoders.STRING());
+        Encoders.STRING());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped.collectAsList()));
     Dataset<String> flatMapSorted = grouped.flatMapSortedGroups(
-        JavaConverters.iterableAsScalaIterable(Collections.singletonList(ds.col("value"))).toSeq(),
+        new Column[] { ds.col("value") },
         (FlatMapGroupsFunction<Integer, String, String>) (key, values) -> {
           StringBuilder sb = new StringBuilder(key.toString());
           while (values.hasNext()) {
@@ -340,7 +339,7 @@ public class JavaDatasetSuite implements Serializable {
           }
           return Collections.singletonList(sb.toString()).iterator();
         },
-      Encoders.STRING());
+        Encoders.STRING());
 
     Assert.assertEquals(asSet("1a", "3barfoo"), toSet(flatMapSorted.collectAsList()));
 
@@ -365,10 +364,10 @@ public class JavaDatasetSuite implements Serializable {
           }
           return Collections.singletonList(sb.toString()).iterator();
         },
-      OutputMode.Append(),
-      Encoders.LONG(),
-      Encoders.STRING(),
-      GroupStateTimeout.NoTimeout());
+        OutputMode.Append(),
+        Encoders.LONG(),
+        Encoders.STRING(),
+        GroupStateTimeout.NoTimeout());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 
@@ -404,9 +403,8 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<String> cogroupSorted = grouped.cogroupSorted(
       grouped2,
-      JavaConverters.iterableAsScalaIterable(Collections.singletonList(ds.col("value"))).toSeq(),
-      JavaConverters.iterableAsScalaIterable(
-        Collections.singletonList(ds2.col("value").desc())).toSeq(),
+      new Column[] { ds.col("value") },
+      new Column[] { ds2.col("value").desc() },
       (CoGroupFunction<Integer, String, Integer, String>) (key, left, right) -> {
         StringBuilder sb = new StringBuilder(key.toString());
         while (left.hasNext()) {
@@ -418,8 +416,7 @@ public class JavaDatasetSuite implements Serializable {
         }
         return Collections.singletonList(sb.toString()).iterator();
       },
-      Encoders.STRING()
-    );
+      Encoders.STRING());
 
     Assert.assertEquals(asSet("1a#2", "3barfoo#76", "5#10"), toSet(cogroupSorted.collectAsList()));
   }
