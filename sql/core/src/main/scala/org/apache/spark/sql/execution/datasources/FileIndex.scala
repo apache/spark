@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs._
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
@@ -62,7 +63,7 @@ trait FileIndex {
    * Returns the list of files that will be read when scanning this relation. This call may be
    * very expensive for large tables.
    */
-  def inputFiles: Array[String]
+  def inputFiles: Array[SparkPath]
 
   /** Refresh any cached file listings */
   def refresh(): Unit
