@@ -366,7 +366,7 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _execute_command(
-        cmd: list[str],
+        cmd: List[str],
         _prctl: bool = True,
         redirect_to_stdout: bool = True,
         log_streaming_client: Optional[LogStreamingClient] = None,
@@ -551,12 +551,15 @@ class TorchDistributor(Distributor):
         self.logger.info(
             f"Started distributed training with {self.num_processes} executor proceses"
         )
-        result = (
-            self.sc.parallelize(range(self.num_tasks), self.num_tasks)
-            .barrier()
-            .mapPartitions(spark_task_function)
-            .collect()[0]
-        )
+        try:
+            result = (
+                self.sc.parallelize(range(self.num_tasks), self.num_tasks)
+                .barrier()
+                .mapPartitions(spark_task_function)
+                .collect()[0]
+            )
+        finally:
+            log_streaming_server.shutdown()
         self.logger.info(
             f"Finished distributed training with {self.num_processes} executor proceses"
         )

@@ -17,6 +17,9 @@
 
 from __future__ import absolute_import, division, print_function
 
+import contextlib
+from six import StringIO  # type: ignore
+import sys
 import time
 from typing import Any, Callable
 import unittest
@@ -26,10 +29,20 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingServer,
     LogStreamingClient,
     LogStreamingClientBase,
-    _SEP_CHAR,
     _SERVER_POLL_INTERVAL,
 )
-from pyspark.ml.torch.tests.test_distributor import patch_stdout
+
+
+@contextlib.contextmanager
+def patch_stderr() -> StringIO:
+    """patch stdout and give an output"""
+    sys_stderr = sys.stderr
+    io_out = StringIO()
+    sys.stderr = io_out
+    try:
+        yield io_out
+    finally:
+        sys.stderr = sys_stderr
 
 
 class LogStreamingServiceTestCase(unittest.TestCase):
@@ -49,7 +62,7 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         server.start()
         time.sleep(1)
         client = LogStreamingClient("localhost", server.port)
-        with patch_stdout() as output:
+        with patch_stderr() as output:
             client.send("msg 001")
             client.send("msg 002")
             time.sleep(_SERVER_POLL_INTERVAL + 1)
@@ -70,7 +83,7 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         time.sleep(1)
         client1 = LogStreamingClient("localhost", server.port)
         client2 = LogStreamingClient("localhost", server.port)
-        with patch_stdout() as output:
+        with patch_stderr() as output:
             client1.send("c1 msg1")
             time.sleep(_SERVER_POLL_INTERVAL + 1)
             client2.send("c2 msg1")
@@ -103,16 +116,16 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         server.start()
         time.sleep(1)
         client = LogStreamingClient("localhost", server.port)
-        with patch_stdout() as output:
+        with patch_stderr() as output:
             client._connect()
             # test client send half message first
-            client.sock.sendall(b"msg part1 ")
+            client.send("msg part1")
             time.sleep(_SERVER_POLL_INTERVAL + 1)
             # test client send another half message
-            client.sock.sendall(b"msg part2" + _SEP_CHAR)
+            client.send(" msg part2")
             time.sleep(_SERVER_POLL_INTERVAL + 1)
             output = output.getvalue()
-            self.assertIn("msg part1 msg part2\n", output)
+            self.assertIn("msg part1\n msg part2\n", output)
         client.close()
         server.shutdown()
 

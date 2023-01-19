@@ -16,9 +16,11 @@
 #
 # type: ignore
 
+from contextlib import closing
 import time
 import socket
 import socketserver
+from struct import pack, unpack
 import sys
 import threading
 import traceback
@@ -27,7 +29,6 @@ import warnings
 from pyspark.context import SparkContext
 
 # Use b'\x00' as separator instead of b'\n', because the bytes are encoded in utf-8
-_SEP_CHAR = b"\x00"
 _SERVER_POLL_INTERVAL = 0.1
 _TRUNCATE_MSG_LEN = 4000
 
@@ -45,24 +46,21 @@ def _get_log_print_lock() -> threading.Lock:
 
 class WriteLogToStdout(socketserver.StreamRequestHandler):
     def _read_bline(self) -> Generator[bytes, None, None]:
-        remaining_data = b""
         while self.server.is_active:
-            new_data = self.rfile.read1(4096)
-            if not new_data:
+            packed_number_bytes = self.rfile.read1(4)
+            if not packed_number_bytes:
                 time.sleep(_SERVER_POLL_INTERVAL)
                 continue
-            blines = new_data.split(_SEP_CHAR)
-            blines[0] = remaining_data + blines[0]
-            for i in range(len(blines) - 1):
-                yield blines[i]
-            # The last line in blines is a half line.
-            remaining_data = blines[-1]  # pylint: disable=attribute-defined-outside-init
+            number_bytes = unpack("@i", packed_number_bytes)[0]
+            message = self.rfile.read1(number_bytes)
+            yield message
 
     def handle(self) -> None:
         self.request.setblocking(0)  # non-blocking mode
         for bline in self._read_bline():
             with _get_log_print_lock():
-                sys.stdout.write(bline.decode("utf-8") + "\n")
+                sys.stderr.write(bline.decode("utf-8") + "\n")
+                sys.stderr.flush()
 
 
 # What is run on the local driver
@@ -74,10 +72,9 @@ class LogStreamingServer:
 
     @staticmethod
     def _get_free_port() -> int:
-        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tcp.bind(("", 0))
-        _, port = tcp.getsockname()
-        tcp.close()
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as tcp:
+            tcp.bind(("", 0))
+            _, port = tcp.getsockname()
         return port
 
     def start(self) -> None:
@@ -85,7 +82,7 @@ class LogStreamingServer:
             raise RuntimeError("Cannot start the server twice.")
 
         def serve_task(port: int) -> None:
-            with socketserver.ThreadingTCPServer(("", port), WriteLogToStdout) as server:
+            with socketserver.ThreadingTCPServer(("0.0.0.0", port), WriteLogToStdout) as server:
                 self.server = server
                 server.is_active = True
                 server.serve_forever(poll_interval=_SERVER_POLL_INTERVAL)
@@ -188,7 +185,10 @@ class LogStreamingClient(LogStreamingClientBase):
                     #  1) addressing issue: idle TCP connection might get disconnected by
                     #     cloud provider
                     #  2) sendall may block when server is busy handling data.
-                    self.sock.sendall(bytes(message, "utf-8") + _SEP_CHAR)
+                    binary_message = message.encode("utf-8")
+                    packed_number_bytes = pack("@i", len(binary_message))
+                    self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    self.sock.sendall(packed_number_bytes + binary_message)
                 except Exception:  # pylint: disable=broad-except
                     self._fail("Error sending logs to driver, stopping log streaming")
 
