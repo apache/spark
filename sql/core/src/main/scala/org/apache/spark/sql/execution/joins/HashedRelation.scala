@@ -122,6 +122,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def close(): Unit
 
   /**
+   * @param reusableLocation
    * @param key
    * @return
    */

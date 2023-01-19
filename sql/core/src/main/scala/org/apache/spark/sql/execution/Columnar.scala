@@ -196,6 +196,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
                |$termClass $localTerm = $refTerm.$funcToCall();
                |""".stripMargin
         }.mkString("\n")
+
         // TODO: Asif:. Do not evaluate filter for the bottom most broadcast hash join as if
         // the tuple is filtered to be selected, then it would unnecessary be again have to be
         // evaluated.

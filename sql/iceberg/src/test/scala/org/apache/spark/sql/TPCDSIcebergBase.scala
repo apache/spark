@@ -32,7 +32,4 @@ trait TPCDSIcebergBase extends TPCDSBase with IcebergSharedSparkSession {
          |${options.mkString("\n")}
      """.stripMargin)
   }
-
-  override protected  def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
 }

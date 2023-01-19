@@ -44,8 +44,9 @@ case class BatchScanExec(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     @transient table: Table,
     @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] = None)
-    extends DataSourceV2ScanExecBase {
+  extends DataSourceV2ScanExecBase {
   @transient @volatile private var filteredPartitions: Seq[Seq[InputPartition]] = null
+
   @transient lazy val batch = scan.toBatch
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
@@ -77,6 +78,7 @@ case class BatchScanExec(
   @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
    private def initFilteredPartitions(): Unit = {
+
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceStrategy.translateRuntimeFilter(e)
       case _ => None
