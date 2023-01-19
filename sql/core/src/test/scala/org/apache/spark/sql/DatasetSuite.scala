@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -577,9 +578,9 @@ class DatasetSuite extends QueryTest
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupByKey(v => (v.getString(0), "word"))
-    val aggregated = grouped.flatMapSortedGroups($"seq", expr("length(key)")) { (g, iter) =>
-      Iterator(g._1, iter.mkString(", "))
-    }
+    val aggregated = grouped.flatMapSortedGroups($"seq", expr("length(key)"))(
+      (g, iter) => asJavaIterator(Iterator(g._1, iter.asScala.mkString(", ")))
+    )(Encoders.STRING)
 
     checkDatasetUnorderly(
       aggregated,
@@ -593,9 +594,9 @@ class DatasetSuite extends QueryTest
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupByKey(v => (v.getString(0), "word"))
-    val aggregated = grouped.flatMapSortedGroups($"seq".desc, expr("length(key)")) { (g, iter) =>
-      Iterator(g._1, iter.mkString(", "))
-    }
+    val aggregated = grouped.flatMapSortedGroups($"seq".desc, expr("length(key)"))(
+      (g, iter) => asJavaIterator(Iterator(g._1, iter.asScala.mkString(", ")))
+    )(Encoders.STRING)
 
     checkDatasetUnorderly(
       aggregated,
@@ -785,11 +786,11 @@ class DatasetSuite extends QueryTest
       ("both desc", leftDescOrder, rightDescOrder, bothDescSortedExpected)
     ).foreach { case (label, leftOrder, rightOrder, expected) =>
       withClue(s"$label sorted") {
-        val cogrouped = groupedLeft
-          .cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*) {
-            case (key, left, right) =>
-              Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
-          }
+        val cogrouped = groupedLeft.cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*)(
+          (key, left, right) => asJavaIterator(Iterator(
+            key -> (left.asScala.map(_._2).mkString + "#" + right.asScala.map(_._2).mkString)
+          ))
+        )
 
         checkDatasetUnorderly(cogrouped, expected.toList: _*)
       }
