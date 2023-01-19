@@ -105,7 +105,7 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrap
       getOptional(binary.hasPeakMemoryMetrics,
         () => ExecutorMetricsSerializer.deserialize(binary.getPeakMemoryMetrics))
     val removeTime = getOptional(binary.hasRemoveTime, () => new Date(binary.getRemoveTime))
-    val removeReason = getOptional(binary.hasRemoveReason, binary.getRemoveReason)
+    val removeReason = getOptional(binary.hasRemoveReason, () => binary.getRemoveReason)
     val memoryMetrics =
       getOptional(binary.hasMemoryMetrics,
         () => deserializeMemoryMetrics(binary.getMemoryMetrics))

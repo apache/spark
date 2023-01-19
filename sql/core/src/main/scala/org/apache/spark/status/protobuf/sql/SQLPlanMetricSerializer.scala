@@ -19,7 +19,6 @@ package org.apache.spark.status.protobuf.sql
 
 import org.apache.spark.sql.execution.ui.SQLPlanMetric
 import org.apache.spark.status.protobuf.StoreTypes
-import org.apache.spark.util.Utils.weakIntern
 
 object SQLPlanMetricSerializer {
 
@@ -32,7 +31,6 @@ object SQLPlanMetricSerializer {
   }
 
   def deserialize(metrics: StoreTypes.SQLPlanMetric): SQLPlanMetric = {
-    SQLPlanMetric(weakIntern(metrics.getName), metrics.getAccumulatorId,
-      weakIntern(metrics.getMetricType))
+    SQLPlanMetric(metrics.getName, metrics.getAccumulatorId, metrics.getMetricType)
   }
 }

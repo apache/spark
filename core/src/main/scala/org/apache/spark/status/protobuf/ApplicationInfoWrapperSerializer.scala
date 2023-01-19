@@ -25,6 +25,7 @@ import org.apache.spark.status.ApplicationInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
+
 class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrapper] {
 
   override def serialize(j: ApplicationInfoWrapper): Array[Byte] = {

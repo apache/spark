@@ -42,10 +42,9 @@ private[protobuf] object AccumulableInfoSerializer {
       accumulatorUpdates.append(new AccumulableInfo(
         id = update.getId,
         name = weakIntern(update.getName),
-        update = getOptional(update.hasUpdate, () => update.getUpdate),
+        update = getOptional(update.hasUpdate, update.getUpdate),
         value = update.getValue))
     }
-
     accumulatorUpdates
   }
 }

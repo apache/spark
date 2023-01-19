@@ -40,7 +40,7 @@ class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
   override def deserialize(bytes: Array[Byte]): StreamingQueryData = {
     val data = StoreTypes.StreamingQueryData.parseFrom(bytes)
     val exception =
-      getOptional(data.hasException, data.getException)
+      getOptional(data.hasException, () => data.getException)
     val endTimestamp =
       getOptional(data.hasEndTimestamp, () => data.getEndTimestamp)
     new StreamingQueryData(
