@@ -50,7 +50,6 @@ import org.apache.spark.streaming.scheduler.StreamingListener
  * computation can be started and stopped using `context.start()` and `context.stop()`,
  * respectively. `context.awaitTermination()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
- * @since 3.4.0
  * @deprecated This is deprecated as of Spark 3.4.0.
  *             There are no longer updates to DStream and it’s a legacy project.
  *             There is a newer and easier to use streaming engine
