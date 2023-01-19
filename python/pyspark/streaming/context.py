@@ -52,7 +52,7 @@ class StreamingContext:
         data will be divided into batches
     .. deprecated:: Spark 3.4.0
        This is deprecated as of Spark 3.4.0.
-       There are no longer updates to DStream and it’s a legacy project.
+       There are no longer updates to DStream and it's a legacy project.
        There is a newer and easier to use streaming engine in Spark called Structured Streaming.
        You should use Spark Structured Streaming for your streaming applications.
     """
