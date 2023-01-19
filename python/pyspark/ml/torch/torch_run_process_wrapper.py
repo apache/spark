@@ -52,8 +52,6 @@ if __name__ == "__main__":
     cmd = [sys.executable, "-m", "torch.distributed.run", *args]
     task = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
         stdin=subprocess.PIPE,
         env=os.environ,
     )

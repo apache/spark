@@ -22,6 +22,7 @@ import java.net.URI
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions._
@@ -94,7 +95,7 @@ class CatalogFileIndex(
     }
   }
 
-  override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
+  override def inputFiles: Array[SparkPath] = filterPartitions(Nil).inputFiles
 
   // `CatalogFileIndex` may be a member of `HadoopFsRelation`, `HadoopFsRelation` may be a member
   // of `LogicalRelation`, and `LogicalRelation` may be used as the cache key. So we need to
