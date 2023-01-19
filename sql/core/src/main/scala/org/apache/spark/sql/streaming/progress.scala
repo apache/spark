@@ -52,6 +52,8 @@ class StateOperatorProgress private[spark](
     val numRowsDroppedByWatermark: Long,
     val numShufflePartitions: Long,
     val numStateStoreInstances: Long,
+    // If `customMetrics` is no longer read-only, need change
+    // `StateOperatorProgressSerializer#deserialize` to return mutable Java Map
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
@@ -133,6 +135,8 @@ class StreamingQueryProgress private[spark](
   val batchId: Long,
   val batchDuration: Long,
   val durationMs: ju.Map[String, JLong],
+  // If `eventTime` is no longer read-only, need change
+  // `StreamingQueryProgressSerializer#deserialize` to return mutable Java Map
   val eventTime: ju.Map[String, String],
   val stateOperators: Array[StateOperatorProgress],
   val sources: Array[SourceProgress],
@@ -198,6 +202,8 @@ class SourceProgress protected[spark](
   val numInputRows: Long,
   val inputRowsPerSecond: Double,
   val processedRowsPerSecond: Double,
+  // If `metrics` is no longer read-only, need change
+  // `StateOperatorProgressSerializer#deserialize` to return mutable Java Map
   val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -239,6 +245,8 @@ class SourceProgress protected[spark](
 class SinkProgress protected[spark](
     val description: String,
     val numOutputRows: Long,
+    // If `metrics` is no longer read-only, need change
+    // `SinkProgressSerializer#deserialize` to return mutable Java Map
     val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {
 
   /** SinkProgress without custom metrics. */
