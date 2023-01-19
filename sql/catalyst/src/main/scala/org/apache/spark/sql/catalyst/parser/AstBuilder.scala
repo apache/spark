@@ -507,6 +507,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val legacyNullAsString =
       conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
+    val keepPartitionSpecAsString =
+      conf.getConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL)
+
     val parts = ctx.partitionVal.asScala.map { pVal =>
       // Check if the query attempted to refer to a DEFAULT column value within the PARTITION clause
       // and return a specific error to help guide the user, since this is not allowed.
@@ -514,7 +517,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         throw QueryParsingErrors.defaultColumnReferencesNotAllowedInPartitionSpec(ctx)
       }
       val name = pVal.identifier.getText
-      val value = Option(pVal.constant).map(v => visitStringConstant(v, legacyNullAsString))
+      val value = Option(pVal.constant).map(v => {
+        visitStringConstant(v, legacyNullAsString, keepPartitionSpecAsString)
+      })
       name -> value
     }
     // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
@@ -546,14 +551,19 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   protected def visitStringConstant(
       ctx: ConstantContext,
-      legacyNullAsString: Boolean): String = withOrigin(ctx) {
+      legacyNullAsString: Boolean = false,
+      keepPartitionSpecAsString: Boolean = false): String = withOrigin(ctx) {
     expression(ctx) match {
       case Literal(null, _) if !legacyNullAsString => null
       case l @ Literal(null, _) => l.toString
       case l: Literal =>
-        // TODO For v2 commands, we will cast the string back to its actual value,
-        //  which is a waste and can be improved in the future.
-        Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
+        if (keepPartitionSpecAsString && !ctx.isInstanceOf[StringLiteralContext]) {
+          ctx.getText
+        } else {
+          // TODO For v2 commands, we will cast the string back to its actual value,
+          //  which is a waste and can be improved in the future.
+          Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
+        }
       case other =>
         throw new IllegalArgumentException(s"Only literals are allowed in the " +
           s"partition spec, but got ${other.sql}")

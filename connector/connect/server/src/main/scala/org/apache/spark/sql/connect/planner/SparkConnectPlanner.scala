@@ -101,10 +101,10 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.SAMPLE_BY =>
         transformStatSampleBy(rel.getSampleBy)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
-      case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
-        transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
-      case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
-        transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
+      case proto.Relation.RelTypeCase.TO_DF =>
+        transformToDF(rel.getToDf)
+      case proto.Relation.RelTypeCase.WITH_COLUMNS_RENAMED =>
+        transformWithColumnsRenamed(rel.getWithColumnsRenamed)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
@@ -450,19 +450,17 @@ class SparkConnectPlanner(session: SparkSession) {
       .logicalPlan
   }
 
-  private def transformRenameColumnsBySamelenghtNames(
-      rel: proto.RenameColumnsBySameLengthNames): LogicalPlan = {
+  private def transformToDF(rel: proto.ToDF): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
       .logicalPlan
   }
 
-  private def transformRenameColumnsByNameToNameMap(
-      rel: proto.RenameColumnsByNameToNameMap): LogicalPlan = {
+  private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .withColumnsRenamed(rel.getRenameColumnsMap)
+      .withColumnsRenamed(rel.getRenameColumnsMapMap)
       .logicalPlan
   }
 
@@ -735,6 +733,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
       case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
         transformLambdaFunction(exp.getLambdaFunction)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_NAMED_LAMBDA_VARIABLE =>
+        transformUnresolvedNamedLambdaVariable(exp.getUnresolvedNamedLambdaVariable)
       case proto.Expression.ExprTypeCase.WINDOW =>
         transformWindowExpression(exp.getWindow)
       case proto.Expression.ExprTypeCase.EXTENSION =>
@@ -818,26 +818,19 @@ class SparkConnectPlanner(session: SparkSession) {
           s"but got ${lambda.getArgumentsCount} ones!")
     }
 
-    val variableNames = lambda.getArgumentsList.asScala.toSeq
+    LambdaFunction(
+      function = transformExpression(lambda.getFunction),
+      arguments = lambda.getArgumentsList.asScala.toSeq
+        .map(transformUnresolvedNamedLambdaVariable))
+  }
 
-    // generate unique variable names: Map(x -> x_0, y -> y_1)
-    val newVariables = variableNames.map { name =>
-      val uniqueName = UnresolvedNamedLambdaVariable.freshVarName(name)
-      (name, UnresolvedNamedLambdaVariable(Seq(uniqueName)))
-    }.toMap
-
-    val function = transformExpression(lambda.getFunction)
-
-    // rewrite function by replacing UnresolvedAttribute with UnresolvedNamedLambdaVariable
-    val newFunction = function transform {
-      case variable: UnresolvedAttribute
-          if variable.nameParts.length == 1 &&
-            newVariables.contains(variable.nameParts.head) =>
-        newVariables(variable.nameParts.head)
+  private def transformUnresolvedNamedLambdaVariable(
+      variable: proto.Expression.UnresolvedNamedLambdaVariable): UnresolvedNamedLambdaVariable = {
+    if (variable.getNamePartsCount == 0) {
+      throw InvalidPlanInput("UnresolvedNamedLambdaVariable requires at least one name part!")
     }
 
-    // LambdaFunction["x_0, y_1 -> x_0 < y_1", ["x_0", "y_1"]]
-    LambdaFunction(function = newFunction, arguments = variableNames.map(newVariables))
+    UnresolvedNamedLambdaVariable(variable.getNamePartsList.asScala.toSeq)
   }
 
   /**

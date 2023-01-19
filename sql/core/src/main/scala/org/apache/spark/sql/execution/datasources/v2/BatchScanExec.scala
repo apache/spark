@@ -84,7 +84,7 @@ case class BatchScanExec(
           val newRows = new InternalRowSet(p.expressions.map(_.dataType))
           newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
 
-          val oldRows = p.partitionValuesOpt.get.toSet
+          val oldRows = p.partitionValues.toSet
           // We require the new number of partition keys to be equal or less than the old number
           // of partition keys here. In the case of less than, empty partitions will be added for
           // those missing keys that are not present in the new input partitions.
@@ -116,7 +116,7 @@ case class BatchScanExec(
     super.outputPartitioning match {
       case k: KeyGroupedPartitioning if commonPartitionValues.isDefined =>
         val values = commonPartitionValues.get
-        k.copy(numPartitions = values.length, partitionValuesOpt = Some(values))
+        k.copy(numPartitions = values.length, partitionValues = values)
       case p => p
     }
   }
@@ -134,7 +134,7 @@ case class BatchScanExec(
         case p: KeyGroupedPartitioning =>
           val partitionMapping = finalPartitions.map(s =>
             s.head.asInstanceOf[HasPartitionKey].partitionKey() -> s).toMap
-          finalPartitions = p.partitionValuesOpt.get.map { partValue =>
+          finalPartitions = p.partitionValues.map { partValue =>
             // Use empty partition for those partition values that are not present
             partitionMapping.getOrElse(partValue, Seq.empty)
           }

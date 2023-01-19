@@ -223,7 +223,13 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
-          case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
+          case "42P07" =>
+            // The message is: Failed to create index indexName in tableName
+            val regex = "(?s)Failed to create index (.*) in (.*)".r
+            val indexName = regex.findFirstMatchIn(message).get.group(1)
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new IndexAlreadyExistsException(
+              indexName = indexName, tableName = tableName, cause = Some(e))
           case "42704" => throw new NoSuchIndexException(message, cause = Some(e))
           case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
           case _ => super.classifyException(message, e)

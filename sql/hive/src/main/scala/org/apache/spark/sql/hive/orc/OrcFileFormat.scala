@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.net.URI
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -152,7 +151,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
-      val filePath = new Path(new URI(file.filePath))
+      val filePath = file.toPath
 
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
@@ -166,7 +165,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
-          FileInputFormat.setInputPaths(job, file.filePath)
+          FileInputFormat.setInputPaths(job, file.urlEncodedPath)
 
           // Custom OrcRecordReader is used to get
           // ObjectInspector during recordReader creation itself and can

@@ -965,7 +965,7 @@ class ToSchema(LogicalPlan):
         return plan
 
 
-class RenameColumnsNameByName(LogicalPlan):
+class WithColumnsRenamed(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], colsMap: Mapping[str, str]) -> None:
         super().__init__(child)
         self._colsMap = colsMap
@@ -974,9 +974,9 @@ class RenameColumnsNameByName(LogicalPlan):
         assert self._child is not None
 
         plan = proto.Relation()
-        plan.rename_columns_by_name_to_name_map.input.CopyFrom(self._child.plan(session))
+        plan.with_columns_renamed.input.CopyFrom(self._child.plan(session))
         for k, v in self._colsMap.items():
-            plan.rename_columns_by_name_to_name_map.rename_columns_map[k] = v
+            plan.with_columns_renamed.rename_columns_map[k] = v
         return plan
 
 
@@ -1293,7 +1293,7 @@ class StatCorr(LogicalPlan):
         return plan
 
 
-class RenameColumns(LogicalPlan):
+class ToDF(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], cols: Sequence[str]) -> None:
         super().__init__(child)
         self._cols = cols
@@ -1302,8 +1302,8 @@ class RenameColumns(LogicalPlan):
         assert self._child is not None
 
         plan = proto.Relation()
-        plan.rename_columns_by_same_length_names.input.CopyFrom(self._child.plan(session))
-        plan.rename_columns_by_same_length_names.column_names.extend(self._cols)
+        plan.to_df.input.CopyFrom(self._child.plan(session))
+        plan.to_df.column_names.extend(self._cols)
         return plan
 
 

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.URI
 
 import scala.util.control.NonFatal
 
@@ -96,9 +95,9 @@ private[sql] class AvroFileFormat extends FileFormat
       // Doing input file filtering is improper because we may generate empty tasks that process no
       // input files but stress the scheduler. We should probably add a more general input file
       // filtering mechanism for `FileFormat` data sources. See SPARK-16317.
-      if (parsedOptions.ignoreExtension || file.filePath.endsWith(".avro")) {
+      if (parsedOptions.ignoreExtension || file.urlEncodedPath.endsWith(".avro")) {
         val reader = {
-          val in = new FsInput(new Path(new URI(file.filePath)), conf)
+          val in = new FsInput(file.toPath, conf)
           try {
             val datumReader = userProvidedSchema match {
               case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)

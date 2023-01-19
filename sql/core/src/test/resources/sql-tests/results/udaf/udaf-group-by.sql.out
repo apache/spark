@@ -17,6 +17,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -54,7 +55,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
     "expressionAnyValue" : "\"any_value(a)\""
@@ -117,7 +118,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
     "expressionAnyValue" : "\"any_value(a)\""
@@ -145,6 +146,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -201,7 +203,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`non_existing`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
@@ -233,7 +235,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"k\"",
     "expressionAnyValue" : "\"any_value(k)\""
@@ -257,7 +259,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
@@ -318,7 +320,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`id`",
     "proposal" : "`1`"
@@ -354,6 +356,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -368,6 +371,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -382,6 +386,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }
@@ -396,6 +401,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
   }

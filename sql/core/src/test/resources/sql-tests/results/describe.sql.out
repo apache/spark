@@ -364,7 +364,7 @@ struct<>
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
   "errorClass" : "PARTITIONS_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "428FT",
   "messageParameters" : {
     "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
     "tableName" : "`default`.`t`"
@@ -485,6 +485,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
+  "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`temp_v`",
     "objectType" : "TEMPORARY VIEW",
@@ -571,6 +572,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
+  "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`v`",
     "objectType" : "VIEW",

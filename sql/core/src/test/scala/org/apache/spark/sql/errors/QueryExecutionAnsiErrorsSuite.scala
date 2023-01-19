@@ -41,7 +41,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "sourceType" -> "\"TIMESTAMP\"",
         "targetType" -> "\"INT\"",
         "ansiConfig" -> ansiConf),
-      sqlState = "22005")
+      sqlState = "22003")
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
@@ -82,7 +82,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
-      sqlState = "22005",
+      sqlState = "22003",
       parameters = Map(
         "value" -> "66666666666666.666",
         "precision" -> "8",

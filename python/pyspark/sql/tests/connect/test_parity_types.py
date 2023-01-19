@@ -39,11 +39,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_apply_schema_with_udt(self):
         super().test_apply_schema_with_udt()
 
-    # TODO(SPARK-42021): createDataFrame with array.array
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_array_types(self):
-        super().test_array_types()
-
     # TODO(SPARK-42020): createDataFrame with UDT
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_cast_to_string_with_udt(self):
@@ -105,7 +100,7 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_infer_schema_not_enough_names(self):
         super().test_infer_schema_not_enough_names()
 
-    # TODO(SPARK-42021): createDataFrame with array.array
+    # TODO(SPARK-42020): createDataFrame with UDT
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_infer_schema_specification(self):
         super().test_infer_schema_specification()
