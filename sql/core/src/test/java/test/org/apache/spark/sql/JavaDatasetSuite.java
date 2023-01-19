@@ -405,7 +405,8 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> cogroupSorted = grouped.cogroupSorted(
       grouped2,
       JavaConverters.iterableAsScalaIterable(Collections.singletonList(ds.col("value"))).toSeq(),
-      JavaConverters.iterableAsScalaIterable(Collections.singletonList(ds2.col("value").desc())).toSeq(),
+      JavaConverters.iterableAsScalaIterable(
+        Collections.singletonList(ds2.col("value").desc())).toSeq(),
       (CoGroupFunction<Integer, String, Integer, String>) (key, left, right) -> {
         StringBuilder sb = new StringBuilder(key.toString());
         while (left.hasNext()) {
