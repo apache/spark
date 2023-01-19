@@ -61,7 +61,10 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
  * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
  */
-@deprecated
+@deprecated("This is deprecated as of Spark 3.4.0." +
+  " There are no longer updates to DStream and it's a legacy project." +
+  " There is a newer and easier to use streaming engine in Spark called Structured Streaming." +
+  " You should use Spark Structured Streaming for your streaming applications.", "Spark 3.4.0")
 class StreamingContext private[streaming] (
     _sc: SparkContext,
     _cp: Checkpoint,
@@ -742,7 +745,10 @@ class StreamingContext private[streaming] (
  * StreamingContext object contains a number of utility functions related to the
  * StreamingContext class.
  */
-
+@deprecated("This is deprecated as of Spark 3.4.0." +
+  " There are no longer updates to DStream and it's a legacy project." +
+  " There is a newer and easier to use streaming engine in Spark called Structured Streaming." +
+  " You should use Spark Structured Streaming for your streaming applications.", "Spark 3.4.0")
 object StreamingContext extends Logging {
 
   /**
