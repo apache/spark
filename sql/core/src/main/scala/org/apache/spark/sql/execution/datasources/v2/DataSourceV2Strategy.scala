@@ -312,6 +312,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // use the original relation to refresh the cache
       ReplaceDataExec(planLater(query), refreshCache(r), write) :: Nil
 
+    case WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
+        Some(write)) =>
+      // use the original relation to refresh the cache
+      WriteDeltaExec(planLater(query), refreshCache(r), projections, write) :: Nil
+
     case WriteToContinuousDataSource(writer, query, customMetrics) =>
       WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil
 
