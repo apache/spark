@@ -75,17 +75,6 @@ case class BroadcastHashJoinExec(
 
   @volatile @transient private var broadcastVar: Option[Broadcast[HashedRelation]] = None
 
-  override def getLocationVarTerm: Option[String] = if (broadcastVar.isDefined) {
-    val id = broadcastVar.get.id
-    if (LocationCache.shouldUseLocationVar(id)) {
-      Option(LocationCache.getBroadcastLocationVar(id))
-    } else {
-      None
-    }
-  } else {
-    None
-  }
-
   def pushBroadcastVar(): Unit = if (this.bcVarPushNode == SELF_PUSH ) {
     val pushDownData = BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(buildKeys,
       this.streamedPlan, BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan) ->

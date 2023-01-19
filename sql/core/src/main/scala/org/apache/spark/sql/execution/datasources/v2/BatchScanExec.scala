@@ -67,7 +67,7 @@ case class BatchScanExec(
 
   override def hashCode(): Int = {
     val batchHashCode = batch match {
-     case sr: SupportsRuntimeFiltering => sr.hashCodeIgnoreRuntimeFilters()
+      case sr: SupportsRuntimeFiltering => sr.hashCodeIgnoreRuntimeFilters()
       case _ => batch.hashCode()
     }
     Objects.hashCode(Integer.valueOf(batchHashCode), runtimeFilters,
@@ -76,15 +76,15 @@ case class BatchScanExec(
 
   @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
-  private def initFilteredPartitions(): Unit = {
+   private def initFilteredPartitions(): Unit = {
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceStrategy.translateRuntimeFilter(e)
       case _ => None
     }
 
     val pushFiltersAndRefreshIter = dataSourceFilters.nonEmpty ||
-      (scan.isInstanceOf[SupportsRuntimeFiltering] &&
-        scan.asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter)
+      (scan.isInstanceOf[SupportsRuntimeFiltering]
+      && scan.asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter)
     if (pushFiltersAndRefreshIter) {
       val originalPartitioning = outputPartitioning
 
@@ -183,6 +183,13 @@ case class BatchScanExec(
     val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString" +
       s" $broadcastVarFiltersString"
     redact(result)
+  }
+
+  def resetFilteredPartitionsAndInputRdd(): Unit = {
+    this.synchronized {
+      this.filteredPartitions = null
+      this.inputRDDCached = null
+    }
   }
 
   def resetFilteredPartitionsAndInputRdd(): Unit = {

@@ -1263,8 +1263,7 @@ case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapp
         if (CatalystTypeConverters.isPrimitive(child.dataType)) {
           s"""
             |if(!${keyTerm.isNull}) {
-            |  $resultTerm = $localInsetVarTerm.containsKey(${keyTerm.value}, ${LocationCache
-            .getBroadcastLocationVar(bcVar.getBroadcastVarId)});
+            |  $resultTerm = $localInsetVarTerm.containsKey(${keyTerm.value});
             |}
             |""".stripMargin
         } else {
@@ -1278,8 +1277,7 @@ case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapp
              |if(!${keyTerm.isNull}) {
              |  $singleKeyUnsafeRowWriter.reset();
              |  $fieldWritingCode
-             |  $resultTerm = $localInsetVarTerm.containsKey($singleKeyUnsafeRowWriter.getRow(),
-             |  ${LocationCache.getBroadcastLocationVar(bcVar.getBroadcastVarId)});
+             |  $resultTerm = $localInsetVarTerm.containsKey($singleKeyUnsafeRowWriter.getRow());
              |}
              |""".stripMargin
         }

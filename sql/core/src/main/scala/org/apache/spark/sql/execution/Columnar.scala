@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{broadcast, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BindReferences, Expression, InWithBroadcastVar, LocationCache, SortOrder, SpecializedGetters, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BindReferences, Expression, InWithBroadcastVar, SortOrder, SpecializedGetters, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -76,7 +76,6 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   private var processedBCVar: Boolean = false
   private var filterCountCorrectionTerm: Option[String] = None
   private var localSetOrHashedRelInitCode: String = ""
-  private var localLocationVariablesToDeclareCode: String = ""
   private var commonSingleFieldUnsafeRowWriterVar = ""
   override def output: Seq[Attribute] = child.output
 
@@ -117,7 +116,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
         InWithBroadcastVar(attribute, bcData.bcVar, "", "", "")
       }).reduce[Expression](And(_, _))
       val boundExpr = BindReferences.bindReference(newFilterCondn, this.output)
-      retVal.mapPartitionsWithIndexInternal { (index, iter) =>
+      retVal.mapPartitionsWithIndexInternal { (_, iter) =>
         iter.filter { row =>
           val r = boundExpr.eval(row).asInstanceOf[Boolean]
           if (!r) numOutputRows.set(numOutputRows.value - 1)
@@ -197,27 +196,6 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
                |$termClass $localTerm = $refTerm.$funcToCall();
                |""".stripMargin
         }.mkString("\n")
-        val bcIdToLocalHashRelationVar = broadcastVarTermsFieldVarsToBCData.
-          zip(localBroadcastVarTerms).map {
-          case ((bcData, _), localVar) => bcData.bcVar.getBroadcastVarId -> localVar
-        }.toMap
-        val broadcastIdsWithLocalLocation = pushedBroadcastFilters.filter(pushedData =>
-          pushedData.bcVar.getTotalJoinKeys == 1).map(_.bcVar.getBroadcastVarId)
-        broadcastIdsWithLocalLocation.foreach(
-          bcId => ctx.addMutableState("Object", LocationCache.getBroadcastLocationVar(bcId),
-            v => s"this.$v = null;", forceInline = true, useFreshName = false))
-        this.localLocationVariablesToDeclareCode = broadcastIdsWithLocalLocation.map(bcId =>
-        s"""
-             |
-             |if (this.${LocationCache.getBroadcastLocationVar(bcId)} == null) {
-             |  this.${LocationCache.getBroadcastLocationVar(bcId)} = ${bcIdToLocalHashRelationVar(
-          bcId)}.getReusableLocation();
-             |}
-             |Object ${LocationCache.getBroadcastLocationVar(bcId)} = this.${LocationCache
-          .getBroadcastLocationVar(bcId)};
-             |""".stripMargin
-         ).mkString("\n")
-        LocationCache.addBroadcastIDsForLocationVar(broadcastIdsWithLocalLocation)
         // TODO: Asif:. Do not evaluate filter for the bottom most broadcast hash join as if
         // the tuple is filtered to be selected, then it would unnecessary be again have to be
         // evaluated.
@@ -366,7 +344,6 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
        |}
        |$filterCountInitCode;
        |$localSetOrHashedRelInitCode
-       |$localLocationVariablesToDeclareCode
        |$unsafeRowWriterInitCode
        |while ($limitNotReachedCond $batch != null) {
        |  int $numRows = $batch.numRows();

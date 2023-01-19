@@ -17,12 +17,32 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
+import org.scalatest.Suite
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSessionBase
+import org.apache.spark.util.Utils
 
-trait TPCHIcebergBase extends TPCHBase with IcebergSharedSparkSession {
-  override lazy val format = "iceberg"
 
+trait IcebergSharedSparkSession extends SharedSparkSessionBase{
+  self: Suite =>
+  
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+    super.sparkConf.set("spark.sql.extensions",
+      "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions").
+      set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog").
+      set("spark.sql.catalog.spark_catalog.type", "hadoop").
+      set(SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key, "false").
+      set(SQLConf.PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN.key, "true").
+      set("spark.sql.catalog.spark_catalog.warehouse", makeWarehouseDir().toURI.getPath)
+
+
+  def makeWarehouseDir(): File = {
+    val warehouseDir = Utils.createTempDir(namePrefix = "iceberg_warehouse")
+    warehouseDir.delete()
+    warehouseDir
+  }
 }

@@ -221,7 +221,6 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     this.indexesOfInterest = (int[])in.readObject();
     this.keyDataTypes = (DataType[])in.readObject();
   }
-
   private Object initKeys() {
     Object actualArray = null;
     if (this.keysArray == null || (actualArray = this.keysArray.get()) == null) {
@@ -230,21 +229,17 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     }
     return actualArray;
   }
-
   public DataType getSingleKeyDataType() {
     return this.keyDataTypes[this.relativeKeyIndexInArray];
   }
-
   public ArrayWrapper getKeysArray() {
     Object array = this.initKeys();
     return new ArrayWrapper(array, this.relativeKeyIndexInArray,
         this.indexesOfInterest.length == 1);
   }
-
   public Set<Object> getKeysAsSet() {
     return idempotentializerForSet.get(this);
   }
-
   @Override
   public boolean equals(Object other) {
     if (other != null) {
@@ -275,16 +270,13 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
   public int getTotalJoinKeys() {
     return this.totalJoinKeys;
   }
-
   public HashedRelation getUnderlyingRelation() {
     return this.bcVar.getValue();
   }
-
   @Override
   public void invalidateSelf() {
     removeBroadcast(this.bcVar.id());
   }
-
   static void removeBroadcast(long id) {
     idempotentializer.asMap().keySet().stream()
         .filter( bcVar -> bcVar.getBroadcastVarId() == id).forEach(idempotentializer::invalidate);
@@ -292,7 +284,6 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
         .filter( bcVar -> bcVar.getBroadcastVarId() == id).forEach(
             idempotentializerForSet::invalidate);
   }
-
   static void invalidateBroadcastCache() {
     idempotentializerForSet.invalidateAll();
     idempotentializer.invalidateAll();

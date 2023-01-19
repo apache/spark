@@ -421,7 +421,6 @@ trait HashJoin extends JoinCodegenSupport {
     } else {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
-      val locationVarTermOpt = getLocationVarTerm
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -553,7 +552,6 @@ trait HashJoin extends JoinCodegenSupport {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
-      val locationVarTermOpt = getLocationVarTerm
       s"""
          |// generate join key for stream side
          |${keyEv.code}

@@ -17,22 +17,8 @@
 
 package org.apache.spark.sql
 
-trait TPCDSIcebergBase extends TPCDSBase with IcebergSharedSparkSession {
+import org.apache.spark.tags.ExtendedSQLTest
 
-  override def createTable(
-                            spark: SparkSession,
-                            tableName: String,
-                            format: String = "iceberg",
-                            options: Seq[String] = Nil): Unit = {
-    spark.sql(
-      s"""
-         |CREATE TABLE `$tableName` (${tableColumns(tableName)})
-         |USING $format
-         |${partitionedByClause(tableName)}
-         |${options.mkString("\n")}
-     """.stripMargin)
-  }
-
-  override protected  def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
-}
+@ExtendedSQLTest
+class IcebergSQLQuerySuite extends SQLQuerySuite with IcebergSharedSparkSession with
+  IcebergSQLTestData

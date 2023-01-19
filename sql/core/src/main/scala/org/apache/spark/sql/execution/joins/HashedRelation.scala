@@ -122,11 +122,10 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def close(): Unit
 
   /**
-   * @param reusableLocation
    * @param key
    * @return
    */
-  def containsKey(key: InternalRow, reusableLocation: AnyRef): Boolean = {
+  def containsKey(key: InternalRow): Boolean = {
     throw new UnsupportedOperationException
   }
 
@@ -135,11 +134,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * @param key
    * @return
    */
-  def containsKey(key: Long, reusableLocation: AnyRef): Boolean = {
-    throw new UnsupportedOperationException
-  }
-
-  def getReusableLocation: AnyRef = {
+  def containsKey(key: Long): Boolean = {
     throw new UnsupportedOperationException
   }
 }
@@ -253,14 +248,9 @@ private[joins] class UnsafeHashedRelation(
   override def get(key: InternalRow, location: AnyRef): Iterator[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap  // avoid the compiler error
-    val loc = if (location eq null) {
-      val newLoc = new map.Location // this could be allocated in stack
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, newLoc, unsafeKey.hashCode())
-      newLoc
-    } else {
-      location.asInstanceOf[map.Location]
-    }
+    val loc = new map.Location // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       new Iterator[UnsafeRow] {
         private var _hasNext = true
@@ -279,15 +269,9 @@ private[joins] class UnsafeHashedRelation(
   def getValue(key: InternalRow, location: AnyRef): InternalRow = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap  // avoid the compiler error
-    val loc = if (location eq null) {
-      val newLoc = new map.Location // this could be allocated in stack
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, newLoc, unsafeKey.hashCode())
-      newLoc
-    } else {
-      location.asInstanceOf[map.Location]
-    }
-
+    val loc = new map.Location // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       resultRow
@@ -296,22 +280,13 @@ private[joins] class UnsafeHashedRelation(
     }
   }
 
-  override def containsKey(key: InternalRow, reusableLocation: AnyRef): Boolean = {
+  override def containsKey(key: InternalRow): Boolean = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap // avoid the compiler error
-    val loc = if (reusableLocation == null) {
-      new map.Location // this could be allocated in stack
-    } else {
-      reusableLocation.asInstanceOf[map.Location]
-    }
+    val loc = new map.Location // this could be allocated in stack
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
       unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     loc.isDefined
-  }
-
-  override def getReusableLocation: AnyRef = {
-    val map = binaryMap
-    new map.Location
   }
 
   override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
@@ -727,22 +702,16 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     null
   }
 
-  def containsKey(key: Long, reusableLocation: LongLocationWrapper): Boolean = {
+  def containsKey(key: Long): Boolean = {
     if (isDense) {
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
-        if (reusableLocation ne null) {
-          reusableLocation.setLocation(value)
-        }
         return value > 0
       }
     } else {
       var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
-          if (reusableLocation ne null) {
-            reusableLocation.setLocation(array(pos + 1))
-          }
           return true
         }
         pos = nextSlot(pos)
@@ -1095,14 +1064,13 @@ class LongHashedRelation(
 
   override def keyIsUnique: Boolean = map.keyIsUnique
 
-  override def containsKey(key: Long, reusableLocation: AnyRef): Boolean =
-    map.containsKey(key, reusableLocation.asInstanceOf[LongLocationWrapper])
+  override def containsKey(key: Long): Boolean = map.containsKey(key)
 
-  override def containsKey(key: InternalRow, reusableLocation: AnyRef): Boolean = {
+  override def containsKey(key: InternalRow): Boolean = {
     if (key.isNullAt(0)) {
       false
     } else {
-      containsKey(key.getLong(0), reusableLocation)
+      containsKey(key.getLong(0))
     }
   }
 
@@ -1125,6 +1093,7 @@ class LongHashedRelation(
 
   /**
    * Returns an iterator for keys of InternalRow type.
+   * @return
    */
   override def keys(): Iterator[InternalRow] = map.keys()
 
