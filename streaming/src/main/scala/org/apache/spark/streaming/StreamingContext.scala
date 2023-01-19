@@ -60,11 +60,14 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
  * using `context.start()` and `context.stop()`, respectively.
  * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
+ * @since 3.4.0
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it’s a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
-@deprecated("This is deprecated as of Spark 3.4.0." +
-  " There are no longer updates to DStream and it's a legacy project." +
-  " There is a newer and easier to use streaming engine in Spark called Structured Streaming." +
-  " You should use Spark Structured Streaming for your streaming applications.", "Spark 3.4.0")
+@deprecated("DStream is deprecated. Migrate to Structured Streaming", "Spark 3.4.0")
 class StreamingContext private[streaming] (
     _sc: SparkContext,
     _cp: Checkpoint,
@@ -744,16 +747,21 @@ class StreamingContext private[streaming] (
 /**
  * StreamingContext object contains a number of utility functions related to the
  * StreamingContext class.
+ *
+ * @since 3.4.0
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it’s a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
-@deprecated("This is deprecated as of Spark 3.4.0." +
-  " There are no longer updates to DStream and it's a legacy project." +
-  " There is a newer and easier to use streaming engine in Spark called Structured Streaming." +
-  " You should use Spark Structured Streaming for your streaming applications.", "Spark 3.4.0")
+@deprecated("DStream is deprecated. Migrate to Structured Streaming", "Spark 3.4.0")
 object StreamingContext extends Logging {
 
   /**
    * Lock that guards activation of a StreamingContext as well as access to the singleton active
    * StreamingContext in getActiveOrCreate().
+   *
    */
   private val ACTIVATION_LOCK = new Object()
 
