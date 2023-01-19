@@ -19,8 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.util.Locale
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.ErrorMsg
-import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, SparkSession}
@@ -32,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 trait V1WritesHiveUtils {
+
   def getPartitionSpec(partition: Map[String, Option[String]]): Map[String, String] = {
     partition.map {
       case (key, Some(null)) => key -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME
@@ -104,5 +106,34 @@ trait V1WritesHiveUtils {
     bucketSpec
       .map(_ => Map(BucketingUtils.optionForHiveCompatibleBucketWrite -> "true"))
       .getOrElse(Map.empty)
+  }
+
+  def setupHadoopConfForCompression(
+      fileSinkConf: FileSinkDesc,
+      hadoopConf: Configuration,
+      sparkSession: SparkSession): Unit = {
+    val isCompressed =
+      fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
+        case formatName if formatName.endsWith("orcoutputformat") =>
+          // For ORC,"mapreduce.output.fileoutputformat.compress",
+          // "mapreduce.output.fileoutputformat.compress.codec", and
+          // "mapreduce.output.fileoutputformat.compress.type"
+          // have no impact because it uses table properties to store compression information.
+          false
+        case _ => hadoopConf.get("hive.exec.compress.output", "false").toBoolean
+      }
+
+    if (isCompressed) {
+      hadoopConf.set("mapreduce.output.fileoutputformat.compress", "true")
+      fileSinkConf.setCompressed(true)
+      fileSinkConf.setCompressCodec(hadoopConf
+        .get("mapreduce.output.fileoutputformat.compress.codec"))
+      fileSinkConf.setCompressType(hadoopConf
+        .get("mapreduce.output.fileoutputformat.compress.type"))
+    } else {
+      // Set compression by priority
+      HiveOptions.getHiveWriteCompression(fileSinkConf.getTableInfo, sparkSession.sessionState.conf)
+        .foreach { case (compression, codec) => hadoopConf.set(compression, codec) }
+    }
   }
 }

@@ -208,7 +208,12 @@ private[sql] object H2Dialect extends JdbcDialect {
               messageParameters = Map("schemaName" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
           case 42111 =>
-            throw new IndexAlreadyExistsException(message, cause = Some(e))
+            // The message is: Failed to create index indexName in tableName
+            val regex = "(?s)Failed to create index (.*) in (.*)".r
+            val indexName = regex.findFirstMatchIn(message).get.group(1)
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new IndexAlreadyExistsException(
+              indexName = indexName, tableName = tableName, cause = Some(e))
           // INDEX_NOT_FOUND_1
           case 42112 =>
             throw new NoSuchIndexException(message, cause = Some(e))

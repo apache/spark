@@ -106,7 +106,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           sql(query).collect()
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        sqlState = "42000",
+        sqlState = "42703",
         parameters = Map(
           "objectName" -> "`key1`",
           "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
@@ -137,7 +137,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
             sql(query).collect()
           },
           errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-          sqlState = "42000",
+          sqlState = "42703",
           parameters = Map(
             "objectName" -> "`KEY`",
             "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),

@@ -102,7 +102,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "array<int>",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "IntersectAll",
+    "operator" : "INTERSECT ALL",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -125,11 +125,12 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
+    "firstNumColumns" : "1",
     "invalidNumColumns" : "2",
     "invalidOrdinalNum" : "second",
-    "operator" : "INTERSECTALL",
-    "refNumColumns" : "1"
+    "operator" : "INTERSECT ALL"
   },
   "queryContext" : [ {
     "objectType" : "",

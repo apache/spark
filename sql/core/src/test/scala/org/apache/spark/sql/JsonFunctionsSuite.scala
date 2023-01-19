@@ -22,8 +22,9 @@ import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
 import collection.JavaConverters._
+import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.functions._
@@ -457,7 +458,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df3.selectExpr("""from_json(value, 'time InvalidType')""")
       },
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map(
         "error" -> "'InvalidType'",
         "hint" -> ": extra input 'InvalidType'"
@@ -774,15 +775,21 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
         Row(Row(null, 11, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
-      val errMsg = intercept[SparkException] {
+      val exception = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
+      }
 
-      assert(errMsg.contains(
+      assert(exception.getMessage.contains(
         "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
-      assert(errMsg.contains(
-        "Failed to parse field name a, field value 1, " +
-          "[VALUE_STRING] to target spark data type [IntegerType]."))
+      checkError(
+        exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+        errorClass = "CANNOT_PARSE_JSON_FIELD",
+        parameters = Map(
+          "fieldName" -> "a",
+          "fieldValue" -> "1",
+          "jsonType" -> "VALUE_STRING",
+          "dataType" -> "\"INT\"")
+      )
     }
   }
 
@@ -920,8 +927,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
     val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
     checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
-    val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
-    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
+    }
+
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
   }
@@ -933,10 +949,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // "c2" is expected to be an array of structs but it is a struct in the data.
     val df = Seq("""[{"c2": {"a": 1}, "c1": "abc"}]""").toDF("c0")
-    checkAnswer(
-      df.select(from_json($"c0", ArrayType(st))),
-      Row(Array(Row("abc", null)))
-    )
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(Array(Row("abc", null)))
+      )
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(null)
+      )
+    }
   }
 
   test("SPARK-40646: return partial results for JSON maps") {
@@ -946,10 +972,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // Map "c2" has "k2" key that is a string, not an integer.
     val df = Seq("""{"c1": {"k1": 1, "k2": "A", "k3": 3}, "c2": "abc"}""").toDF("c0")
-    checkAnswer(
-      df.select(from_json($"c0", st)),
-      Row(Row(null, "abc"))
-    )
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(
+        df.select(from_json($"c0", st)),
+        Row(Row(null, "abc"))
+      )
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(
+        df.select(from_json($"c0", st)),
+        Row(Row(null, null))
+      )
+    }
   }
 
   test("SPARK-40646: return partial results for JSON arrays") {
@@ -990,10 +1026,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     // Value "a" cannot be parsed as an integer,
     // the error cascades to "c2", thus making its value null.
     val df = Seq("""[{"c1": [{"c2": ["a"]}]}]""").toDF("c0")
-    checkAnswer(
-      df.select(from_json($"c0", ArrayType(st))),
-      Row(Array(Row(null)))
-    )
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(Array(Row(null)))
+      )
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(null)
+      )
+    }
   }
 
   test("SPARK-33270: infers schema for JSON field with spaces and pass them to from_json") {

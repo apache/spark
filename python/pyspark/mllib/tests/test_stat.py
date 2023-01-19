@@ -24,7 +24,7 @@ from pyspark.mllib.linalg import Vectors, Matrices
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
-from pyspark.sql.utils import IllegalArgumentException
+from pyspark.errors import IllegalArgumentException
 from pyspark.testing.mllibutils import MLlibTestCase
 
 
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     from pyspark.mllib.tests.test_stat import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

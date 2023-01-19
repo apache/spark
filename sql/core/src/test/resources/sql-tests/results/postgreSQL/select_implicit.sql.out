@@ -121,7 +121,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(1)`"
@@ -216,7 +216,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
@@ -241,6 +241,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",
     "referenceNames" : "[`x`.`b`, `y`.`b`]"
@@ -367,7 +368,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(a)`"
@@ -444,6 +445,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",
     "referenceNames" : "[`x`.`b`, `y`.`b`]"
@@ -481,6 +483,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",
     "referenceNames" : "[`x`.`b`, `y`.`b`]"

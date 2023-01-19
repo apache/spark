@@ -17,7 +17,7 @@
 #
 
 from pyspark.sql.functions import sha2
-from pyspark.sql.utils import (
+from pyspark.errors import (
     AnalysisException,
     ParseException,
     IllegalArgumentException,
@@ -73,7 +73,7 @@ class UtilsTests(ReusedSQLTestCase):
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
             self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-            self.assertEquals(e.getSqlState(), "42000")
+            self.assertEquals(e.getSqlState(), "42703")
 
 
 if __name__ == "__main__":
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_utils import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

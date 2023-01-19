@@ -89,7 +89,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         df.write.sortBy("j").saveAsTable("tt")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1311",
+      errorClass = "SORT_BY_WITHOUT_BUCKETING",
       parameters = Map.empty)
   }
 

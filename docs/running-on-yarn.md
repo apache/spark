@@ -730,7 +730,7 @@ Please make sure to have read the Custom Resource Scheduling and Configuration O
 YARN needs to be configured to support any resources the user wants to use with Spark. Resource scheduling on YARN was added in YARN 3.1.0. See the YARN documentation for more information on configuring resources and properly setting up isolation. Ideally the resources are setup isolated so that an executor can only see the resources it was allocated. If you do not have isolation enabled, the user is responsible for creating a discovery script that ensures the resource is not shared between executors.
 
 YARN supports user defined resource types but has built in types for GPU (<code>yarn.io/gpu</code>) and FPGA (<code>yarn.io/fpga</code>). For that reason, if you are using either of those resources, Spark can translate your request for spark resources into YARN resources and you only have to specify the <code>spark.{driver/executor}.resource.</code> configs. Note, if you are using a custom resource type for GPUs or FPGAs with YARN you can change the Spark mapping using <code>spark.yarn.resourceGpuDeviceName</code> and <code>spark.yarn.resourceFpgaDeviceName</code>.
- If you are using a resource other then FPGA or GPU, the user is responsible for specifying the configs for both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>).
+ If you are using a resource other than FPGA or GPU, the user is responsible for specifying the configs for both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>).
 
 For example, the user wants to request 2 GPUs for each executor. The user can just specify <code>spark.executor.resource.gpu.amount=2</code> and Spark will handle requesting <code>yarn.io/gpu</code> resource type from YARN.
 
@@ -800,7 +800,7 @@ staging directory of the Spark application.
   <td><code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems</code></td>
   <td>(none)</td>
   <td>
-    A comma-separated list of Hadoop filesystems for whose hosts will be excluded from from delegation
+    A comma-separated list of Hadoop filesystems for whose hosts will be excluded from delegation
     token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
     hdfs://nn2.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
     Note that as resource scheduler does not renew token, so any application running longer than the original token expiration that tries

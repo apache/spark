@@ -154,6 +154,19 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  val emptySchemaSupportedDataSources = Seq("orc", "csv", "json")
+  emptySchemaSupportedDataSources.foreach { format =>
+    val emptySchemaValidationConf = SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES.key
+    test("SPARK-38651 allow writing empty schema files " +
+      s"using $format when ${emptySchemaValidationConf} is enabled") {
+      withSQLConf(emptySchemaValidationConf -> "true") {
+        withTempPath { outputPath =>
+          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
+        }
+      }
+    }
+  }
+
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-22146 read files containing special characters using $format") {
       withTempDir { dir =>
@@ -861,7 +874,7 @@ class FileBasedDataSourceSuite extends QueryTest
           })
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
@@ -901,7 +914,7 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(filterCondition.isDefined)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)

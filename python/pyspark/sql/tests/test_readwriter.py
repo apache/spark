@@ -25,7 +25,7 @@ from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class ReadwriterTests(ReusedSQLTestCase):
+class ReadwriterTestsMixin:
     def test_save_and_load(self):
         df = self.df
         tmpPath = tempfile.mkdtemp()
@@ -179,7 +179,7 @@ class ReadwriterTests(ReusedSQLTestCase):
             self.assertEqual(6, self.spark.sql("select * from test_table").count())
 
 
-class ReadwriterV2Tests(ReusedSQLTestCase):
+class ReadwriterV2TestsMixin:
     def test_api(self):
         df = self.df
         writer = df.writeTo("testcat.t")
@@ -212,12 +212,20 @@ class ReadwriterV2Tests(ReusedSQLTestCase):
         )
 
 
+class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
+    pass
+
+
+class ReadwriterV2Tests(ReadwriterV2TestsMixin, ReusedSQLTestCase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_readwriter import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

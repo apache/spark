@@ -33,7 +33,8 @@ import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
  * SparkPlan tree, and each edge represents a parent-child relationship between two nodes.
  */
 case class SparkPlanGraph(
-    nodes: Seq[SparkPlanGraphNode], edges: Seq[SparkPlanGraphEdge]) {
+    nodes: collection.Seq[SparkPlanGraphNode],
+    edges: collection.Seq[SparkPlanGraphEdge]) {
 
   def makeDotFile(metrics: Map[Long, String]): String = {
     val dotFile = new StringBuilder
@@ -47,7 +48,7 @@ case class SparkPlanGraph(
   /**
    * All the SparkPlanGraphNodes, including those inside of WholeStageCodegen.
    */
-  val allNodes: Seq[SparkPlanGraphNode] = {
+  val allNodes: collection.Seq[SparkPlanGraphNode] = {
     nodes.flatMap {
       case cluster: SparkPlanGraphCluster => cluster.nodes :+ cluster
       case node => Seq(node)
@@ -157,7 +158,7 @@ class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
-    val metrics: Seq[SQLPlanMetric]) {
+    val metrics: collection.Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
     val builder = new mutable.StringBuilder("<b>" + name + "</b>")
@@ -198,7 +199,7 @@ class SparkPlanGraphCluster(
     name: String,
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
-    metrics: Seq[SQLPlanMetric])
+    metrics: collection.Seq[SQLPlanMetric])
   extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {

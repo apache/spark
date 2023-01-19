@@ -44,17 +44,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "(avg(t2.t2b) AS avg)",
-    "sqlExpr" : "t2.t2b"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 109,
-    "stopIndex" : 111,
-    "fragment" : "t2b"
+    "startIndex" : 100,
+    "stopIndex" : 203,
+    "fragment" : "SELECT   t2b, avg(t2b) avg\n                      FROM     t2\n                      WHERE    t2a = t1.t1b"
   } ]
 }
 
@@ -102,6 +99,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "function" : "min((outer(t1.t1a) + t2.t2a))"
   },
@@ -130,6 +128,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "function" : "min((outer(t2.t2a) + t3.t3a))"
   },
@@ -155,9 +154,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "Aggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]\n+- SubqueryAlias t3\n   +- View (`t3`, [t3a#x,t3b#x,t3c#x])\n      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]\n         +- Project [t3a#x, t3b#x, t3c#x]\n            +- SubqueryAlias t3\n               +- LocalRelation [t3a#x, t3b#x, t3c#x]\n"
+    "sqlExprs" : "\"min(t2a) AS `min(outer(t2.t2a))`\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -190,7 +190,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1a`",
     "proposal" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"

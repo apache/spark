@@ -38,20 +38,18 @@ from typing import (
 )
 
 from pyspark import SparkContext
+from pyspark.errors import PySparkException
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
+from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
-from pyspark.sql.utils import to_str, has_numpy
-
-if has_numpy:
-    import numpy as np
+from pyspark.sql.utils import to_str, has_numpy, try_remote_functions
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -61,12 +59,14 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
 
+if has_numpy:
+    import numpy as np
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
-# Namely, if columns are referred as arguments, they can be always both Column or string,
+# Namely, if columns are referred as arguments, they can always be both Column or string,
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
-# since it requires to make every single overridden definition.
+# since it requires making every single overridden definition.
 
 
 def _get_jvm_function(name: str, sc: SparkContext) -> Callable:
@@ -126,11 +126,15 @@ def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, Optio
     return {}
 
 
+@try_remote_functions
 def lit(col: Any) -> Column:
     """
     Creates a :class:`~pyspark.sql.Column` of literal value.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -169,7 +173,9 @@ def lit(col: Any) -> Column:
         return col
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
-            raise ValueError("lit does not allow a column in a list")
+            raise PySparkException(
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+            )
         return array(*[lit(item) for item in col])
     else:
         if has_numpy and isinstance(col, np.generic):
@@ -179,11 +185,15 @@ def lit(col: Any) -> Column:
         return _invoke_function("lit", col)
 
 
+@try_remote_functions
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -208,11 +218,15 @@ def col(col: str) -> Column:
 column = col
 
 
+@try_remote_functions
 def asc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given column name.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -257,11 +271,15 @@ def asc(col: "ColumnOrName") -> Column:
     return col.asc() if isinstance(col, Column) else _invoke_function("asc", col)
 
 
+@try_remote_functions
 def desc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given column name.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -291,11 +309,15 @@ def desc(col: "ColumnOrName") -> Column:
     return col.desc() if isinstance(col, Column) else _invoke_function("desc", col)
 
 
+@try_remote_functions
 def sqrt(col: "ColumnOrName") -> Column:
     """
     Computes the square root of the specified float value.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -320,11 +342,15 @@ def sqrt(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sqrt", col)
 
 
+@try_remote_functions
 def abs(col: "ColumnOrName") -> Column:
     """
     Computes the absolute value.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -349,11 +375,15 @@ def abs(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("abs", col)
 
 
+@try_remote_functions
 def mode(col: "ColumnOrName") -> Column:
     """
     Returns the most frequent value in a group.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -383,11 +413,15 @@ def mode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("mode", col)
 
 
+@try_remote_functions
 def max(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the maximum value of the expression in a group.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -412,11 +446,15 @@ def max(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("max", col)
 
 
+@try_remote_functions
 def min(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the minimum value of the expression in a group.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -441,11 +479,15 @@ def min(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("min", col)
 
 
+@try_remote_functions
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the maximum value of ord.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -476,11 +518,15 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("max_by", col, ord)
 
 
+@try_remote_functions
 def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the minimum value of ord.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -511,11 +557,15 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("min_by", col, ord)
 
 
+@try_remote_functions
 def count(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the number of items in a group.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -542,11 +592,15 @@ def count(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("count", col)
 
 
+@try_remote_functions
 def sum(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of all values in the expression.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -571,11 +625,15 @@ def sum(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sum", col)
 
 
+@try_remote_functions
 def avg(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -600,12 +658,16 @@ def avg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("avg", col)
 
 
+@try_remote_functions
 def mean(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
     An alias of :func:`avg`.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -630,11 +692,15 @@ def mean(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("mean", col)
 
 
+@try_remote_functions
 def median(col: "ColumnOrName") -> Column:
     """
     Returns the median of the values in a group.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -664,11 +730,15 @@ def median(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("median", col)
 
 
+@try_remote_functions
 def sumDistinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`sum_distinct` instead.
@@ -677,11 +747,15 @@ def sumDistinct(col: "ColumnOrName") -> Column:
     return sum_distinct(col)
 
 
+@try_remote_functions
 def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -706,11 +780,15 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sum_distinct", col)
 
 
+@try_remote_functions
 def product(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the product of the values in a group.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -738,11 +816,15 @@ def product(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("product", col)
 
 
+@try_remote_functions
 def acos(col: "ColumnOrName") -> Column:
     """
     Computes inverse cosine of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -768,11 +850,15 @@ def acos(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("acos", col)
 
 
+@try_remote_functions
 def acosh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic cosine of the input column.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -798,11 +884,15 @@ def acosh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("acosh", col)
 
 
+@try_remote_functions
 def asin(col: "ColumnOrName") -> Column:
     """
     Computes inverse sine of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -828,11 +918,15 @@ def asin(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("asin", col)
 
 
+@try_remote_functions
 def asinh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic sine of the input column.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -857,11 +951,15 @@ def asinh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("asinh", col)
 
 
+@try_remote_functions
 def atan(col: "ColumnOrName") -> Column:
     """
     Compute inverse tangent of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -886,11 +984,15 @@ def atan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("atan", col)
 
 
+@try_remote_functions
 def atanh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic tangent of the input column.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -916,11 +1018,15 @@ def atanh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("atanh", col)
 
 
+@try_remote_functions
 def cbrt(col: "ColumnOrName") -> Column:
     """
     Computes the cube-root of the given value.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -945,11 +1051,15 @@ def cbrt(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cbrt", col)
 
 
+@try_remote_functions
 def ceil(col: "ColumnOrName") -> Column:
     """
     Computes the ceiling of the given value.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -974,11 +1084,15 @@ def ceil(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ceil", col)
 
 
+@try_remote_functions
 def cos(col: "ColumnOrName") -> Column:
     """
     Computes cosine of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1000,11 +1114,15 @@ def cos(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cos", col)
 
 
+@try_remote_functions
 def cosh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic cosine of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1025,11 +1143,15 @@ def cosh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cosh", col)
 
 
+@try_remote_functions
 def cot(col: "ColumnOrName") -> Column:
     """
     Computes cotangent of the input column.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1051,11 +1173,15 @@ def cot(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cot", col)
 
 
+@try_remote_functions
 def csc(col: "ColumnOrName") -> Column:
     """
     Computes cosecant of the input column.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1077,11 +1203,15 @@ def csc(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("csc", col)
 
 
+@try_remote_functions
 def exp(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1106,11 +1236,15 @@ def exp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("exp", col)
 
 
+@try_remote_functions
 def expm1(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value minus one.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1131,11 +1265,15 @@ def expm1(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("expm1", col)
 
 
+@try_remote_functions
 def floor(col: "ColumnOrName") -> Column:
     """
     Computes the floor of the given value.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1145,7 +1283,7 @@ def floor(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        neares integer that is less than or equal to given value.
+        nearest integer that is less than or equal to given value.
 
     Examples
     --------
@@ -1160,11 +1298,15 @@ def floor(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("floor", col)
 
 
+@try_remote_functions
 def log(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the given value.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1186,11 +1328,15 @@ def log(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log", col)
 
 
+@try_remote_functions
 def log10(col: "ColumnOrName") -> Column:
     """
     Computes the logarithm of the given value in Base 10.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1215,11 +1361,15 @@ def log10(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log10", col)
 
 
+@try_remote_functions
 def log1p(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the "given value plus one".
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1246,12 +1396,16 @@ def log1p(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log1p", col)
 
 
+@try_remote_functions
 def rint(col: "ColumnOrName") -> Column:
     """
     Returns the double value that is closest in value to the argument and
     is equal to a mathematical integer.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1283,11 +1437,15 @@ def rint(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("rint", col)
 
 
+@try_remote_functions
 def sec(col: "ColumnOrName") -> Column:
     """
     Computes secant of the input column.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1308,11 +1466,15 @@ def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
 
+@try_remote_functions
 def signum(col: "ColumnOrName") -> Column:
     """
     Computes the signum of the given value.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1344,11 +1506,15 @@ def signum(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("signum", col)
 
 
+@try_remote_functions
 def sin(col: "ColumnOrName") -> Column:
     """
     Computes sine of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1370,11 +1536,15 @@ def sin(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sin", col)
 
 
+@try_remote_functions
 def sinh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic sine of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1396,11 +1566,15 @@ def sinh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sinh", col)
 
 
+@try_remote_functions
 def tan(col: "ColumnOrName") -> Column:
     """
     Computes tangent of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1422,11 +1596,15 @@ def tan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tan", col)
 
 
+@try_remote_functions
 def tanh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic tangent of the input column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1449,9 +1627,13 @@ def tanh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tanh", col)
 
 
+@try_remote_functions
 def toDegrees(col: "ColumnOrName") -> Column:
     """
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 2.1.0
         Use :func:`degrees` instead.
@@ -1460,9 +1642,13 @@ def toDegrees(col: "ColumnOrName") -> Column:
     return degrees(col)
 
 
+@try_remote_functions
 def toRadians(col: "ColumnOrName") -> Column:
     """
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 2.1.0
         Use :func:`radians` instead.
@@ -1471,11 +1657,15 @@ def toRadians(col: "ColumnOrName") -> Column:
     return radians(col)
 
 
+@try_remote_functions
 def bitwiseNOT(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`bitwise_not` instead.
@@ -1484,11 +1674,15 @@ def bitwiseNOT(col: "ColumnOrName") -> Column:
     return bitwise_not(col)
 
 
+@try_remote_functions
 def bitwise_not(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1519,12 +1713,16 @@ def bitwise_not(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitwise_not", col)
 
 
+@try_remote_functions
 def asc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
     column name, and null values return before non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1558,12 +1756,16 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def asc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
     column name, and null values appear after non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1595,12 +1797,16 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def desc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1634,12 +1840,16 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def desc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1673,11 +1883,15 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def stddev(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for stddev_samp.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1698,12 +1912,16 @@ def stddev(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("stddev", col)
 
 
+@try_remote_functions
 def stddev_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample standard deviation of
     the expression in a group.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1724,12 +1942,16 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("stddev_samp", col)
 
 
+@try_remote_functions
 def stddev_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns population standard deviation of
     the expression in a group.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1750,11 +1972,15 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("stddev_pop", col)
 
 
+@try_remote_functions
 def variance(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for var_samp
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1779,12 +2005,16 @@ def variance(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("variance", col)
 
 
+@try_remote_functions
 def var_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample variance of
     the values in a group.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1809,11 +2039,15 @@ def var_samp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("var_samp", col)
 
 
+@try_remote_functions
 def var_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the population variance of the values in a group.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1834,11 +2068,15 @@ def var_pop(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("var_pop", col)
 
 
+@try_remote_functions
 def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1859,11 +2097,15 @@ def skewness(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("skewness", col)
 
 
+@try_remote_functions
 def kurtosis(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the kurtosis of the values in a group.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1888,11 +2130,15 @@ def kurtosis(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("kurtosis", col)
 
 
+@try_remote_functions
 def collect_list(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a list of objects with duplicates.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -1918,11 +2164,15 @@ def collect_list(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collect_list", col)
 
 
+@try_remote_functions
 def collect_set(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -1948,12 +2198,16 @@ def collect_set(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collect_set", col)
 
 
+@try_remote_functions
 def degrees(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in radians to an approximately equivalent angle
     measured in degrees.
 
     .. versionadded:: 2.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -1975,12 +2229,16 @@ def degrees(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("degrees", col)
 
 
+@try_remote_functions
 def radians(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in degrees to an approximately equivalent angle
     measured in radians.
 
     .. versionadded:: 2.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2001,9 +2259,13 @@ def radians(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("radians", col)
 
 
+@try_remote_functions
 def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2030,11 +2292,15 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     return _invoke_binary_math_function("atan2", col1, col2)
 
 
+@try_remote_functions
 def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2057,11 +2323,15 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     return _invoke_binary_math_function("hypot", col1, col2)
 
 
+@try_remote_functions
 def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Returns the value of the first argument raised to the power of the second argument.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2084,11 +2354,15 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     return _invoke_binary_math_function("pow", col1, col2)
 
 
+@try_remote_functions
 def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", float]) -> Column:
     """
     Returns the positive value of dividend mod divisor.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2128,11 +2402,15 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     return _invoke_binary_math_function("pmod", dividend, divisor)
 
 
+@try_remote_functions
 def row_number() -> Column:
     """
     Window function: returns a sequential number starting at 1 within a window partition.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -2156,6 +2434,7 @@ def row_number() -> Column:
     return _invoke_function("row_number")
 
 
+@try_remote_functions
 def dense_rank() -> Column:
     """
     Window function: returns the rank of rows within a window partition, without any gaps.
@@ -2169,6 +2448,9 @@ def dense_rank() -> Column:
     This is equivalent to the DENSE_RANK function in SQL.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -2195,6 +2477,7 @@ def dense_rank() -> Column:
     return _invoke_function("dense_rank")
 
 
+@try_remote_functions
 def rank() -> Column:
     """
     Window function: returns the rank of rows within a window partition.
@@ -2208,6 +2491,9 @@ def rank() -> Column:
     This is equivalent to the RANK function in SQL.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -2234,12 +2520,16 @@ def rank() -> Column:
     return _invoke_function("rank")
 
 
+@try_remote_functions
 def cume_dist() -> Column:
     """
     Window function: returns the cumulative distribution of values within a window partition,
     i.e. the fraction of rows that are below the current row.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -2265,11 +2555,15 @@ def cume_dist() -> Column:
     return _invoke_function("cume_dist")
 
 
+@try_remote_functions
 def percent_rank() -> Column:
     """
     Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -2296,9 +2590,13 @@ def percent_rank() -> Column:
     return _invoke_function("percent_rank")
 
 
+@try_remote_functions
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 2.1.0
         Use :func:`approx_count_distinct` instead.
@@ -2307,11 +2605,18 @@ def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Col
     return approx_count_distinct(col, rsd)
 
 
+@try_remote_functions
 def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """Aggregate function: returns a new :class:`~pyspark.sql.Column` for approximate distinct count
     of column `col`.
 
     .. versionadded:: 2.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2341,11 +2646,15 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
         return _invoke_function("approx_count_distinct", _to_java_column(col), rsd)
 
 
+@try_remote_functions
 def broadcast(df: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -2372,10 +2681,14 @@ def broadcast(df: DataFrame) -> DataFrame:
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
 
 
+@try_remote_functions
 def coalesce(*cols: "ColumnOrName") -> Column:
     """Returns the first column that is not null.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2420,11 +2733,15 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("coalesce", cols)
 
 
+@try_remote_functions
 def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the Pearson Correlation Coefficient for
     ``col1`` and ``col2``.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2449,11 +2766,15 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("corr", col1, col2)
 
 
+@try_remote_functions
 def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the population covariance of ``col1`` and
     ``col2``.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2478,11 +2799,15 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("covar_pop", col1, col2)
 
 
+@try_remote_functions
 def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the sample covariance of ``col1`` and
     ``col2``.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2507,6 +2832,7 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("covar_samp", col1, col2)
 
 
+@try_remote_functions
 def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
 
@@ -2514,14 +2840,21 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     directly.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
     return count_distinct(col, *cols)
 
 
+@try_remote_functions
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2565,6 +2898,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """Aggregate function: returns the first value in a group.
 
@@ -2572,6 +2906,9 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -2615,12 +2952,16 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 
 
+@try_remote_functions
 def grouping(col: "ColumnOrName") -> Column:
     """
     Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
     or not, returns 1 for aggregated or 0 for not aggregated in the result set.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2647,6 +2988,7 @@ def grouping(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("grouping", col)
 
 
+@try_remote_functions
 def grouping_id(*cols: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the level of grouping, equals to
@@ -2654,6 +2996,9 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
        (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -2691,11 +3036,15 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("grouping_id", cols)
 
 
+@try_remote_functions
 def input_file_name() -> Column:
     """
     Creates a string column for the file name of the current Spark task.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -2713,10 +3062,14 @@ def input_file_name() -> Column:
     return _invoke_function("input_file_name")
 
 
+@try_remote_functions
 def isnan(col: "ColumnOrName") -> Column:
     """An expression that returns true if the column is NaN.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2742,10 +3095,14 @@ def isnan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("isnan", col)
 
 
+@try_remote_functions
 def isnull(col: "ColumnOrName") -> Column:
     """An expression that returns true if the column is null.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2771,6 +3128,7 @@ def isnull(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("isnull", col)
 
 
+@try_remote_functions
 def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """Aggregate function: returns the last value in a group.
 
@@ -2778,6 +3136,9 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -2821,6 +3182,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     return _invoke_function("last", _to_java_column(col), ignorenulls)
 
 
+@try_remote_functions
 def monotonically_increasing_id() -> Column:
     """A column that generates monotonically increasing 64-bit integers.
 
@@ -2830,6 +3192,9 @@ def monotonically_increasing_id() -> Column:
     less than 1 billion partitions, and each partition has less than 8 billion records.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -2853,12 +3218,16 @@ def monotonically_increasing_id() -> Column:
     return _invoke_function("monotonically_increasing_id")
 
 
+@try_remote_functions
 def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
     Both inputs should be floating point columns (:class:`DoubleType` or :class:`FloatType`).
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2881,6 +3250,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("nanvl", col1, col2)
 
 
+@try_remote_functions
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
@@ -2892,6 +3262,9 @@ def percentile_approx(
 
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -2955,11 +3328,15 @@ def percentile_approx(
     return _invoke_function("percentile_approx", _to_java_column(col), percentage, accuracy)
 
 
+@try_remote_functions
 def rand(seed: Optional[int] = None) -> Column:
     """Generates a random column with independent and identically distributed (i.i.d.) samples
     uniformly distributed in [0.0, 1.0).
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -2992,11 +3369,15 @@ def rand(seed: Optional[int] = None) -> Column:
         return _invoke_function("rand")
 
 
+@try_remote_functions
 def randn(seed: Optional[int] = None) -> Column:
     """Generates a column with independent and identically distributed (i.i.d.) samples from
     the standard normal distribution.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -3029,12 +3410,16 @@ def randn(seed: Optional[int] = None) -> Column:
         return _invoke_function("randn")
 
 
+@try_remote_functions
 def round(col: "ColumnOrName", scale: int = 0) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3056,12 +3441,16 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
     return _invoke_function("round", _to_java_column(col), scale)
 
 
+@try_remote_functions
 def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3083,10 +3472,14 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     return _invoke_function("bround", _to_java_column(col), scale)
 
 
+@try_remote_functions
 def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
     """Shift the given value numBits left.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`shiftleft` instead.
@@ -3095,10 +3488,14 @@ def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
     return shiftleft(col, numBits)
 
 
+@try_remote_functions
 def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     """Shift the given value numBits left.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3120,10 +3517,14 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftleft", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
     """(Signed) shift the given value numBits right.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`shiftright` instead.
@@ -3132,10 +3533,14 @@ def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
     return shiftright(col, numBits)
 
 
+@try_remote_functions
 def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     """(Signed) shift the given value numBits right.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3157,10 +3562,14 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftright", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
     """Unsigned shift the given value numBits right.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`shiftrightunsigned` instead.
@@ -3169,10 +3578,14 @@ def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
     return shiftrightunsigned(col, numBits)
 
 
+@try_remote_functions
 def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     """Unsigned shift the given value numBits right.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3195,10 +3608,14 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftrightunsigned", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def spark_partition_id() -> Column:
     """A column for partition ID.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -3218,10 +3635,14 @@ def spark_partition_id() -> Column:
     return _invoke_function("spark_partition_id")
 
 
+@try_remote_functions
 def expr(str: str) -> Column:
     """Parses the expression string into the column that it represents
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3257,12 +3678,16 @@ def struct(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) ->
     ...
 
 
+@try_remote_functions
 def struct(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Creates a new struct column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3287,12 +3712,16 @@ def struct(
     return _invoke_function_over_seq_of_columns("struct", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def greatest(*cols: "ColumnOrName") -> Column:
     """
     Returns the greatest value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null if all parameters are null.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3315,12 +3744,16 @@ def greatest(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("greatest", cols)
 
 
+@try_remote_functions
 def least(*cols: "ColumnOrName") -> Column:
     """
     Returns the least value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null if all parameters are null.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3343,12 +3776,16 @@ def least(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("least", cols)
 
 
+@try_remote_functions
 def when(condition: Column, value: Any) -> Column:
     """Evaluates a list of conditions and returns one of multiple possible result expressions.
     If :func:`pyspark.sql.Column.otherwise` is not invoked, None is returned for unmatched
     conditions.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3401,12 +3838,16 @@ def log(arg1: float, arg2: "ColumnOrName") -> Column:
     ...
 
 
+@try_remote_functions
 def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = None) -> Column:
     """Returns the first argument-based logarithm of the second argument.
 
     If there is only one argument, then this takes the natural logarithm of the argument.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3449,10 +3890,14 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
         return _invoke_function("log", arg1, _to_java_column(arg2))
 
 
+@try_remote_functions
 def log2(col: "ColumnOrName") -> Column:
     """Returns the base-2 logarithm of the argument.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3477,11 +3922,15 @@ def log2(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log2", col)
 
 
+@try_remote_functions
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     """
     Convert a number in a string column from one base to another.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3506,11 +3955,15 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     return _invoke_function("conv", _to_java_column(col), fromBase, toBase)
 
 
+@try_remote_functions
 def factorial(col: "ColumnOrName") -> Column:
     """
     Computes the factorial of the given value.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3534,6 +3987,7 @@ def factorial(col: "ColumnOrName") -> Column:
 # ---------------  Window functions ------------------------
 
 
+@try_remote_functions
 def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
     Window function: returns the value that is `offset` rows before the current row, and
@@ -3543,6 +3997,9 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     This is equivalent to the LAG function in SQL.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3611,6 +4068,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     return _invoke_function("lag", _to_java_column(col), offset, default)
 
 
+@try_remote_functions
 def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
     Window function: returns the value that is `offset` rows after the current row, and
@@ -3620,6 +4078,9 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     This is equivalent to the LEAD function in SQL.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3688,6 +4149,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     return _invoke_function("lead", _to_java_column(col), offset, default)
 
 
+@try_remote_functions
 def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False) -> Column:
     """
     Window function: returns the value that is the `offset`\\th row of the window frame
@@ -3699,6 +4161,9 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     This is equivalent to the nth_value function in SQL.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3758,6 +4223,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     return _invoke_function("nth_value", _to_java_column(col), offset, ignoreNulls)
 
 
+@try_remote_functions
 def ntile(n: int) -> Column:
     """
     Window function: returns the ntile group id (from 1 to `n` inclusive)
@@ -3768,6 +4234,9 @@ def ntile(n: int) -> Column:
     This is equivalent to the NTILE function in SQL.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3815,12 +4284,16 @@ def ntile(n: int) -> Column:
 # ---------------------- Date/Timestamp functions ------------------------------
 
 
+@try_remote_functions
 def current_date() -> Column:
     """
     Returns the current date at the start of query evaluation as a :class:`DateType` column.
     All calls of current_date within the same query return the same value.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -3840,12 +4313,16 @@ def current_date() -> Column:
     return _invoke_function("current_date")
 
 
+@try_remote_functions
 def current_timestamp() -> Column:
     """
     Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
     column. All calls of current_timestamp within the same query return the same value.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -3865,6 +4342,7 @@ def current_timestamp() -> Column:
     return _invoke_function("current_timestamp")
 
 
+@try_remote_functions
 def localtimestamp() -> Column:
     """
     Returns the current timestamp without time zone at the start of query evaluation
@@ -3872,6 +4350,9 @@ def localtimestamp() -> Column:
     same query return the same value.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -3891,6 +4372,7 @@ def localtimestamp() -> Column:
     return _invoke_function("localtimestamp")
 
 
+@try_remote_functions
 def date_format(date: "ColumnOrName", format: str) -> Column:
     """
     Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -3902,6 +4384,9 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -3928,11 +4413,15 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     return _invoke_function("date_format", _to_java_column(date), format)
 
 
+@try_remote_functions
 def year(col: "ColumnOrName") -> Column:
     """
     Extract the year of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3953,11 +4442,15 @@ def year(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("year", col)
 
 
+@try_remote_functions
 def quarter(col: "ColumnOrName") -> Column:
     """
     Extract the quarter of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -3978,11 +4471,15 @@ def quarter(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("quarter", col)
 
 
+@try_remote_functions
 def month(col: "ColumnOrName") -> Column:
     """
     Extract the month of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4003,12 +4500,16 @@ def month(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("month", col)
 
 
+@try_remote_functions
 def dayofweek(col: "ColumnOrName") -> Column:
     """
     Extract the day of the week of a given date/timestamp as integer.
     Ranges from 1 for a Sunday through to 7 for a Saturday
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4029,11 +4530,15 @@ def dayofweek(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("dayofweek", col)
 
 
+@try_remote_functions
 def dayofmonth(col: "ColumnOrName") -> Column:
     """
     Extract the day of the month of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4054,11 +4559,15 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("dayofmonth", col)
 
 
+@try_remote_functions
 def dayofyear(col: "ColumnOrName") -> Column:
     """
     Extract the day of the year of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4079,11 +4588,15 @@ def dayofyear(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("dayofyear", col)
 
 
+@try_remote_functions
 def hour(col: "ColumnOrName") -> Column:
     """
     Extract the hours of a given timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4105,11 +4618,15 @@ def hour(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("hour", col)
 
 
+@try_remote_functions
 def minute(col: "ColumnOrName") -> Column:
     """
     Extract the minutes of a given timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4131,11 +4648,15 @@ def minute(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("minute", col)
 
 
+@try_remote_functions
 def second(col: "ColumnOrName") -> Column:
     """
     Extract the seconds of a given date as integer.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4157,6 +4678,7 @@ def second(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("second", col)
 
 
+@try_remote_functions
 def weekofyear(col: "ColumnOrName") -> Column:
     """
     Extract the week number of a given date as integer.
@@ -4164,6 +4686,9 @@ def weekofyear(col: "ColumnOrName") -> Column:
     as defined by ISO 8601
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4184,11 +4709,15 @@ def weekofyear(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("weekofyear", col)
 
 
+@try_remote_functions
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
     """
     Returns a column with a date built from the year, month and day columns.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4213,12 +4742,16 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     return _invoke_function_over_columns("make_date", year, month, day)
 
 
+@try_remote_functions
 def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days after `start`. If `days` is a negative value
     then these amount of days will be deducted from `start`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4247,12 +4780,16 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     return _invoke_function_over_columns("date_add", start, days)
 
 
+@try_remote_functions
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days before `start`. If `days` is a negative value
     then these amount of days will be added to `start`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4281,11 +4818,15 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     return _invoke_function_over_columns("date_sub", start, days)
 
 
+@try_remote_functions
 def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     """
     Returns the number of days from `start` to `end`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4308,12 +4849,16 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("datediff", end, start)
 
 
+@try_remote_functions
 def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `months` months after `start`. If `months` is a negative value
     then these amount of months will be deducted from the `start`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4342,6 +4887,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     return _invoke_function_over_columns("add_months", start, months)
 
 
+@try_remote_functions
 def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True) -> Column:
     """
     Returns number of months between dates date1 and date2.
@@ -4379,6 +4925,7 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     )
 
 
+@try_remote_functions
 def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
@@ -4388,6 +4935,9 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     .. versionadded:: 2.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4427,6 +4977,7 @@ def to_timestamp(col: "ColumnOrName", format: str) -> Column:
     ...
 
 
+@try_remote_functions
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
@@ -4436,6 +4987,9 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     .. versionadded:: 2.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4465,11 +5019,15 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
 
 
+@try_remote_functions
 def trunc(date: "ColumnOrName", format: str) -> Column:
     """
     Returns date truncated to the unit specified by the format.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4496,11 +5054,15 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     return _invoke_function("trunc", _to_java_column(date), format)
 
 
+@try_remote_functions
 def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     """
     Returns timestamp truncated to the unit specified by the format.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4529,12 +5091,16 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     return _invoke_function("date_trunc", format, _to_java_column(timestamp))
 
 
+@try_remote_functions
 def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     """
     Returns the first date which is later than the value of the date column
     based on second `week day` argument.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4558,11 +5124,15 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     return _invoke_function("next_day", _to_java_column(date), dayOfWeek)
 
 
+@try_remote_functions
 def last_day(date: "ColumnOrName") -> Column:
     """
     Returns the last day of the month which the given date belongs to.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4583,6 +5153,7 @@ def last_day(date: "ColumnOrName") -> Column:
     return _invoke_function("last_day", _to_java_column(date))
 
 
+@try_remote_functions
 def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss") -> Column:
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
@@ -4590,6 +5161,9 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     format.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4624,6 +5198,7 @@ def unix_timestamp() -> Column:
     ...
 
 
+@try_remote_functions
 def unix_timestamp(
     timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
 ) -> Column:
@@ -4635,6 +5210,9 @@ def unix_timestamp(
     if `timestamp` is None, then it returns current timestamp.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4661,6 +5239,7 @@ def unix_timestamp(
     return _invoke_function("unix_timestamp", _to_java_column(timestamp), format)
 
 
+@try_remote_functions
 def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
@@ -4677,6 +5256,9 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     timestamp to string according to the session local timezone.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4711,6 +5293,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     return _invoke_function("from_utc_timestamp", _to_java_column(timestamp), tz)
 
 
+@try_remote_functions
 def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
@@ -4727,6 +5310,9 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     timestamp to string according to the session local timezone.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4761,12 +5347,16 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     return _invoke_function("to_utc_timestamp", _to_java_column(timestamp), tz)
 
 
+@try_remote_functions
 def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
     Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
     to a timestamp.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -4798,6 +5388,7 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("timestamp_seconds", col)
 
 
+@try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -4884,6 +5475,7 @@ def window(
         return _invoke_function("window", time_col, windowDuration)
 
 
+@try_remote_functions
 def window_time(
     windowColumn: "ColumnOrName",
 ) -> Column:
@@ -4930,6 +5522,7 @@ def window_time(
     return _invoke_function("window_time", window_col)
 
 
+@try_remote_functions
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     """
     Generates session window given a timestamp specifying column.
@@ -4991,10 +5584,14 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 # ---------------------------- misc functions ----------------------------------
 
 
+@try_remote_functions
 def crc32(col: "ColumnOrName") -> Column:
     """
     Calculates the cyclic redundancy check value  (CRC32) of a binary column and
     returns the value as a bigint.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5016,10 +5613,14 @@ def crc32(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("crc32", col)
 
 
+@try_remote_functions
 def md5(col: "ColumnOrName") -> Column:
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5039,10 +5640,14 @@ def md5(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("md5", col)
 
 
+@try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5062,12 +5667,16 @@ def sha1(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sha1", col)
 
 
+@try_remote_functions
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
     value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5096,10 +5705,14 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("sha2", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def hash(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns, and returns the result as an int column.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5136,11 +5749,15 @@ def hash(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("hash", cols)
 
 
+@try_remote_functions
 def xxhash64(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
     and returns the result as a long column. The hash computation uses an initial seed of 42.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5177,12 +5794,16 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("xxhash64", cols)
 
 
+@try_remote_functions
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
     """
     Returns `null` if the input column is `true`; throws an exception
     with the provided error message otherwise.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5221,11 +5842,15 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     return _invoke_function("assert_true", _to_java_column(col), errMsg)
 
 
+@try_remote_functions
 def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     Throws an exception with the provided error message.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5257,11 +5882,15 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
 # ---------------------- String/Binary functions ------------------------------
 
 
+@try_remote_functions
 def upper(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to upper case.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5288,11 +5917,15 @@ def upper(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("upper", col)
 
 
+@try_remote_functions
 def lower(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to lower case.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5319,11 +5952,15 @@ def lower(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("lower", col)
 
 
+@try_remote_functions
 def ascii(col: "ColumnOrName") -> Column:
     """
     Computes the numeric value of the first character of the string column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5350,11 +5987,15 @@ def ascii(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ascii", col)
 
 
+@try_remote_functions
 def base64(col: "ColumnOrName") -> Column:
     """
     Computes the BASE64 encoding of a binary column and returns it as a string column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5381,11 +6022,15 @@ def base64(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("base64", col)
 
 
+@try_remote_functions
 def unbase64(col: "ColumnOrName") -> Column:
     """
     Decodes a BASE64 encoded string column and returns it as a binary column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5414,11 +6059,15 @@ def unbase64(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unbase64", col)
 
 
+@try_remote_functions
 def ltrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from left end for the specified string value.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5445,11 +6094,15 @@ def ltrim(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ltrim", col)
 
 
+@try_remote_functions
 def rtrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from right end for the specified string value.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5476,11 +6129,15 @@ def rtrim(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("rtrim", col)
 
 
+@try_remote_functions
 def trim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from both ends for the specified string column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5507,12 +6164,16 @@ def trim(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("trim", col)
 
 
+@try_remote_functions
 def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input string columns together into a single string column,
     using the given separator.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5537,12 +6198,16 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("concat_ws", sep, _to_seq(sc, cols, _to_java_column))
 
 
+@try_remote_functions
 def decode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a string from a binary using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5560,21 +6225,25 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     --------
     >>> df = spark.createDataFrame([('abcd',)], ['a'])
     >>> df.select(decode("a", "UTF-8")).show()
-    +----------------------+
-    |stringdecode(a, UTF-8)|
-    +----------------------+
-    |                  abcd|
-    +----------------------+
+    +----------------+
+    |decode(a, UTF-8)|
+    +----------------+
+    |            abcd|
+    +----------------+
     """
     return _invoke_function("decode", _to_java_column(col), charset)
 
 
+@try_remote_functions
 def encode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a binary from a string using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5601,6 +6270,7 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     return _invoke_function("encode", _to_java_column(col), charset)
 
 
+@try_remote_functions
 def format_number(col: "ColumnOrName", d: int) -> Column:
     """
     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
@@ -5626,11 +6296,15 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     return _invoke_function("format_number", _to_java_column(col), d)
 
 
+@try_remote_functions
 def format_string(format: str, *cols: "ColumnOrName") -> Column:
     """
     Formats the arguments in printf-style and returns the result as a string column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5655,12 +6329,16 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("format_string", format, _to_seq(sc, cols, _to_java_column))
 
 
+@try_remote_functions
 def instr(str: "ColumnOrName", substr: str) -> Column:
     """
     Locate the position of the first occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -5688,6 +6366,7 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
     return _invoke_function("instr", _to_java_column(str), substr)
 
 
+@try_remote_functions
 def overlay(
     src: "ColumnOrName",
     replace: "ColumnOrName",
@@ -5699,6 +6378,9 @@ def overlay(
     starting from byte position `pos` of `src` and proceeding for `len` bytes.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5742,6 +6424,7 @@ def overlay(
     return _invoke_function("overlay", _to_java_column(src), _to_java_column(replace), pos, len)
 
 
+@try_remote_functions
 def sentences(
     string: "ColumnOrName",
     language: Optional["ColumnOrName"] = None,
@@ -5752,6 +6435,9 @@ def sentences(
     The 'language' and 'country' arguments are optional, and if omitted, the default locale is used.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5792,6 +6478,7 @@ def sentences(
     return _invoke_function_over_columns("sentences", string, language, country)
 
 
+@try_remote_functions
 def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -5799,6 +6486,9 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     when str is Binary type.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -5827,6 +6517,7 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
+@try_remote_functions
 def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     """
     Returns the substring from string str before count occurrences of the delimiter delim.
@@ -5835,6 +6526,9 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     right) is returned. substring_index performs a case-sensitive match when searching for delim.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5861,10 +6555,14 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     return _invoke_function("substring_index", _to_java_column(str), delim, count)
 
 
+@try_remote_functions
 def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """Computes the Levenshtein distance of the two given strings.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5887,11 +6585,15 @@ def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("levenshtein", left, right)
 
 
+@try_remote_functions
 def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5921,11 +6623,15 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     return _invoke_function("locate", substr, _to_java_column(str), pos)
 
 
+@try_remote_functions
 def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     Left-pad the string column to width `len` with `pad`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5950,11 +6656,15 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     return _invoke_function("lpad", _to_java_column(col), len, pad)
 
 
+@try_remote_functions
 def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     Right-pad the string column to width `len` with `pad`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5979,11 +6689,15 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     return _invoke_function("rpad", _to_java_column(col), len, pad)
 
 
+@try_remote_functions
 def repeat(col: "ColumnOrName", n: int) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6006,11 +6720,15 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
     return _invoke_function("repeat", _to_java_column(col), n)
 
 
+@try_remote_functions
 def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     """
     Splits str around matches of the given pattern.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6047,11 +6765,15 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     return _invoke_function("split", _to_java_column(str), pattern, limit)
 
 
+@try_remote_functions
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     r"""Extract a specific group matched by a Java regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6082,12 +6804,16 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
 
+@try_remote_functions
 def regexp_replace(
     string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
 ) -> Column:
     r"""Replace all substrings of the specified string value that match regexp with replacement.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6122,10 +6848,14 @@ def regexp_replace(
     return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
 
 
+@try_remote_functions
 def initcap(col: "ColumnOrName") -> Column:
     """Translate the first letter of each word to upper case in the sentence.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6145,11 +6875,15 @@ def initcap(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("initcap", col)
 
 
+@try_remote_functions
 def soundex(col: "ColumnOrName") -> Column:
     """
     Returns the SoundEx encoding for a string
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6170,10 +6904,14 @@ def soundex(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("soundex", col)
 
 
+@try_remote_functions
 def bin(col: "ColumnOrName") -> Column:
     """Returns the string representation of the binary value of the given column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6194,12 +6932,16 @@ def bin(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bin", col)
 
 
+@try_remote_functions
 def hex(col: "ColumnOrName") -> Column:
     """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
     :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
     :class:`pyspark.sql.types.LongType`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6219,11 +6961,15 @@ def hex(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("hex", col)
 
 
+@try_remote_functions
 def unhex(col: "ColumnOrName") -> Column:
     """Inverse of hex. Interprets each pair of characters as a hexadecimal number
     and converts to the byte representation of number.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6243,12 +6989,16 @@ def unhex(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unhex", col)
 
 
+@try_remote_functions
 def length(col: "ColumnOrName") -> Column:
     """Computes the character length of string data or number of bytes of binary data.
     The length of character data includes the trailing spaces. The length of binary data
     includes binary zeros.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6268,11 +7018,15 @@ def length(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("length", col)
 
 
+@try_remote_functions
 def octet_length(col: "ColumnOrName") -> Column:
     """
     Calculates the byte length for the specified string column.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6294,11 +7048,15 @@ def octet_length(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("octet_length", col)
 
 
+@try_remote_functions
 def bit_length(col: "ColumnOrName") -> Column:
     """
     Calculates the bit length for the specified string column.
 
     .. versionadded:: 3.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6320,6 +7078,7 @@ def bit_length(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bit_length", col)
 
 
+@try_remote_functions
 def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     """A function translate any character in the `srcCol` by a character in `matching`.
     The characters in `replace` is corresponding to the characters in `matching`.
@@ -6327,6 +7086,9 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     in the `matching`.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6365,12 +7127,16 @@ def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]
     ...
 
 
+@try_remote_functions
 def create_map(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Creates a new map column.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6391,10 +7157,14 @@ def create_map(
     return _invoke_function_over_seq_of_columns("map", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Creates a new map from two arrays.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6437,12 +7207,16 @@ def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> 
     ...
 
 
+@try_remote_functions
 def array(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Creates a new array column.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6472,12 +7246,16 @@ def array(
     return _invoke_function_over_seq_of_columns("array", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: returns null if the array is null, true if the array contains the
     given value, and false otherwise.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6503,6 +7281,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_contains", _to_java_column(col), value)
 
 
+@try_remote_functions
 def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     """
     Collection function: returns true if the arrays contain any common non-null element; if not,
@@ -6510,6 +7289,9 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     false otherwise.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Returns
     -------
@@ -6525,6 +7307,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("arrays_overlap", a1, a2)
 
 
+@try_remote_functions
 def slice(
     x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
@@ -6533,6 +7316,9 @@ def slice(
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6560,6 +7346,7 @@ def slice(
     return _invoke_function_over_columns("slice", x, start, length)
 
 
+@try_remote_functions
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
@@ -6568,6 +7355,9 @@ def array_join(
     `null_replacement` if set, otherwise they are ignored.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6599,12 +7389,16 @@ def array_join(
         return _invoke_function("array_join", _to_java_column(col), delimiter, null_replacement)
 
 
+@try_remote_functions
 def concat(*cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input columns together into a single column.
     The function works with strings, numeric, binary and compatible array columns.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6639,12 +7433,16 @@ def concat(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("concat", cols)
 
 
+@try_remote_functions
 def array_position(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: Locates the position of the first occurrence of the given value
     in the given array. Returns null if either of the arguments are null.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -6672,6 +7470,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_position", _to_java_column(col), value)
 
 
+@try_remote_functions
 def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     """
     Collection function: Returns element of array at given index in `extraction` if col is array.
@@ -6680,6 +7479,9 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     array boundaries then None will be returned.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6716,6 +7518,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     return _invoke_function_over_columns("element_at", col, lit(extraction))
 
 
+@try_remote_functions
 def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: Returns element of array at given (0-based) index.
@@ -6723,6 +7526,9 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     returns NULL.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6787,11 +7593,15 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     return _invoke_function_over_columns("get", col, index)
 
 
+@try_remote_functions
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
     """
     Collection function: Remove all elements that equal to element from the given array.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6814,11 +7624,15 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     return _invoke_function("array_remove", _to_java_column(col), element)
 
 
+@try_remote_functions
 def array_distinct(col: "ColumnOrName") -> Column:
     """
     Collection function: removes duplicate values from the array.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6839,12 +7653,16 @@ def array_distinct(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_distinct", col)
 
 
+@try_remote_functions
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the intersection of col1 and col2,
     without duplicates.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6868,12 +7686,16 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_intersect", col1, col2)
 
 
+@try_remote_functions
 def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
     without duplicates.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6897,12 +7719,16 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_union", col1, col2)
 
 
+@try_remote_functions
 def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in col1 but not in col2,
     without duplicates.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6926,6 +7752,63 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_except", col1, col2)
 
 
+@try_remote_functions
+def array_compact(col: "ColumnOrName") -> Column:
+    """
+    Collection function: removes null values from the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array by exluding the null values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([1, None, 2, 3],), ([4, 5, None, 4],)], ['data'])
+    >>> df.select(array_compact(df.data)).collect()
+    [Row(array_compact(data)=[1, 2, 3]), Row(array_compact(data)=[4, 5, 4])]
+    """
+    return _invoke_function_over_columns("array_compact", col)
+
+
+@try_remote_functions
+def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Collection function: returns an array of the elements in col1 along
+    with the added element in col2 at the last of the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing element
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values from first array along with the element.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
+    >>> df.select(array_append(df.c1, df.c2)).collect()
+    [Row(array_append(c1, c2)=['b', 'a', 'c', 'c'])]
+    """
+    return _invoke_function_over_columns("array_append", col1, col2)
+
+
+@try_remote_functions
 def explode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -6933,6 +7816,9 @@ def explode(col: "ColumnOrName") -> Column:
     `key` and `value` for elements in the map unless specified otherwise.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6967,6 +7853,7 @@ def explode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("explode", col)
 
 
+@try_remote_functions
 def posexplode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element with position in the given array or map.
@@ -6974,6 +7861,9 @@ def posexplode(col: "ColumnOrName") -> Column:
     array and `key` and `value` for elements in the map unless specified otherwise.
 
     .. versionadded:: 2.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7002,11 +7892,15 @@ def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
 
+@try_remote_functions
 def inline(col: "ColumnOrName") -> Column:
     """
     Explodes an array of structs into a table.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7037,6 +7931,7 @@ def inline(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("inline", col)
 
 
+@try_remote_functions
 def explode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -7045,6 +7940,9 @@ def explode_outer(col: "ColumnOrName") -> Column:
     `key` and `value` for elements in the map unless specified otherwise.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7084,6 +7982,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("explode_outer", col)
 
 
+@try_remote_functions
 def posexplode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element with position in the given array or map.
@@ -7092,6 +7991,9 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     array and `key` and `value` for elements in the map unless specified otherwise.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7130,12 +8032,16 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode_outer", col)
 
 
+@try_remote_functions
 def inline_outer(col: "ColumnOrName") -> Column:
     """
     Explodes an array of structs into a table.
     Unlike inline, if the array is null or empty then null is produced for each nested column.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7171,12 +8077,16 @@ def inline_outer(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("inline_outer", col)
 
 
+@try_remote_functions
 def get_json_object(col: "ColumnOrName", path: str) -> Column:
     """
     Extracts json object from a json string based on json `path` specified, and returns json string
     of the extracted json object. It will return null if the input json string is invalid.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7201,10 +8111,14 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     return _invoke_function("get_json_object", _to_java_column(col), path)
 
 
+@try_remote_functions
 def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     """Creates a new row for a json column according to the given field names.
 
     .. versionadded:: 1.6.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7230,6 +8144,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
 
+@try_remote_functions
 def from_json(
     col: "ColumnOrName",
     schema: Union[ArrayType, StructType, Column, str],
@@ -7242,6 +8157,9 @@ def from_json(
 
     .. versionadded:: 2.1.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -7252,7 +8170,7 @@ def from_json(
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -7295,12 +8213,16 @@ def from_json(
     return _invoke_function("from_json", _to_java_column(col), schema, _options_to_str(options))
 
 
+@try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 2.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7309,7 +8231,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     options : dict, optional
         options to control converting. accepts the same options as the JSON datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
         Additionally the function supports the `pretty` option which enables
         pretty JSON generation.
 
@@ -7349,11 +8271,15 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     return _invoke_function("to_json", _to_java_column(col), _options_to_str(options))
 
 
+@try_remote_functions
 def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a JSON string and infers its schema in DDL format.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7362,11 +8288,11 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     options : dict, optional
         options to control parsing. accepts the same options as the JSON datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
-        .. versionchanged:: 3.0
+        .. versionchanged:: 3.0.0
            It accepts `options` parameter to control schema inferring.
 
     Returns
@@ -7393,11 +8319,15 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     return _invoke_function("schema_of_json", col, _options_to_str(options))
 
 
+@try_remote_functions
 def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7406,7 +8336,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -7433,12 +8363,16 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     return _invoke_function("schema_of_csv", col, _options_to_str(options))
 
 
+@try_remote_functions
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7447,7 +8381,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     options: dict, optional
         options to control converting. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -7468,11 +8402,15 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     return _invoke_function("to_csv", _to_java_column(col), _options_to_str(options))
 
 
+@try_remote_functions
 def size(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the length of the array or map stored in the column.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7493,11 +8431,15 @@ def size(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("size", col)
 
 
+@try_remote_functions
 def array_min(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the minimum value of the array.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7518,11 +8460,15 @@ def array_min(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_min", col)
 
 
+@try_remote_functions
 def array_max(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the maximum value of the array.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7543,6 +8489,7 @@ def array_max(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_max", col)
 
 
+@try_remote_functions
 def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     """
     Collection function: sorts the input array in ascending or descending order according
@@ -7551,6 +8498,9 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     order.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7576,6 +8526,7 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     return _invoke_function("sort_array", _to_java_column(col), asc)
 
 
+@try_remote_functions
 def array_sort(
     col: "ColumnOrName", comparator: Optional[Callable[[Column, Column], Column]] = None
 ) -> Column:
@@ -7584,8 +8535,12 @@ def array_sort(
     must be orderable. Null elements will be placed at the end of the returned array.
 
     .. versionadded:: 2.4.0
+
     .. versionchanged:: 3.4.0
         Can take a `comparator` function.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7621,11 +8576,15 @@ def array_sort(
         return _invoke_higher_order_function("ArraySort", [col], [comparator])
 
 
+@try_remote_functions
 def shuffle(col: "ColumnOrName") -> Column:
     """
     Collection function: Generates a random permutation of the given array.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -7650,11 +8609,15 @@ def shuffle(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("shuffle", col)
 
 
+@try_remote_functions
 def reverse(col: "ColumnOrName") -> Column:
     """
     Collection function: returns a reversed string or an array with reverse order of elements.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7678,6 +8641,7 @@ def reverse(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("reverse", col)
 
 
+@try_remote_functions
 def flatten(col: "ColumnOrName") -> Column:
     """
     Collection function: creates a single array from an array of arrays.
@@ -7685,6 +8649,9 @@ def flatten(col: "ColumnOrName") -> Column:
     only one level of nesting is removed.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7717,11 +8684,15 @@ def flatten(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("flatten", col)
 
 
+@try_remote_functions
 def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     """
     Returns true if the map contains the key.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7755,11 +8726,15 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("map_contains_key", _to_java_column(col), value)
 
 
+@try_remote_functions
 def map_keys(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array containing the keys of the map.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7785,11 +8760,15 @@ def map_keys(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_keys", col)
 
 
+@try_remote_functions
 def map_values(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array containing the values of the map.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7815,11 +8794,15 @@ def map_values(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_values", col)
 
 
+@try_remote_functions
 def map_entries(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array of all entries in the given map.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7829,7 +8812,7 @@ def map_entries(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        ar array of key value pairs as a struct type
+        an array of key value pairs as a struct type
 
     Examples
     --------
@@ -7852,12 +8835,16 @@ def map_entries(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_entries", col)
 
 
+@try_remote_functions
 def map_from_entries(col: "ColumnOrName") -> Column:
     """
     Collection function: Converts an array of entries (key value struct types) to a map
     of values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7883,11 +8870,15 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_from_entries", col)
 
 
+@try_remote_functions
 def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: creates an array containing a column repeated count times.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7912,6 +8903,7 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     return _invoke_function_over_columns("array_repeat", col, count)
 
 
+@try_remote_functions
 def arrays_zip(*cols: "ColumnOrName") -> Column:
     """
     Collection function: Returns a merged array of structs in which the N-th struct contains all
@@ -7919,6 +8911,9 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     resulting struct type value will be a `null` for missing elements.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7962,12 +8957,16 @@ def map_concat(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]
     ...
 
 
+@try_remote_functions
 def map_concat(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Returns the union of all the given maps.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7995,6 +8994,7 @@ def map_concat(
     return _invoke_function_over_seq_of_columns("map_concat", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def sequence(
     start: "ColumnOrName", stop: "ColumnOrName", step: Optional["ColumnOrName"] = None
 ) -> Column:
@@ -8034,9 +9034,10 @@ def sequence(
         return _invoke_function_over_columns("sequence", start, stop, step)
 
 
+@try_remote_functions
 def from_csv(
     col: "ColumnOrName",
-    schema: Union[StructType, Column, str],
+    schema: Union[Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
@@ -8044,6 +9045,9 @@ def from_csv(
     Returns `null`, in the case of an unparseable string.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8054,7 +9058,7 @@ def from_csv(
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -8095,6 +9099,9 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     """
     Create `o.a.s.sql.expressions.UnresolvedNamedLambdaVariable`,
     convert it to o.s.sql.Column and wrap in Python `Column`
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8207,6 +9214,7 @@ def transform(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Col
     ...
 
 
+@try_remote_functions
 def transform(
     col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
@@ -8215,6 +9223,9 @@ def transform(
     Returns an array of elements after applying a transformation to each element in the input array.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8260,11 +9271,15 @@ def transform(
     return _invoke_higher_order_function("ArrayTransform", [col], [f])
 
 
+@try_remote_functions
 def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns whether a predicate holds for one or more elements in the array.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8297,11 +9312,15 @@ def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     return _invoke_higher_order_function("ArrayExists", [col], [f])
 
 
+@try_remote_functions
 def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns whether a predicate holds for every element in the array.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8348,6 +9367,7 @@ def filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column
     ...
 
 
+@try_remote_functions
 def filter(
     col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
@@ -8356,6 +9376,9 @@ def filter(
     Returns an array of elements for which a predicate holds in a given array.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8400,6 +9423,7 @@ def filter(
     return _invoke_higher_order_function("ArrayFilter", [col], [f])
 
 
+@try_remote_functions
 def aggregate(
     col: "ColumnOrName",
     initialValue: "ColumnOrName",
@@ -8417,6 +9441,9 @@ def aggregate(
     (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8471,6 +9498,7 @@ def aggregate(
         return _invoke_higher_order_function("ArrayAggregate", [col, initialValue], [merge])
 
 
+@try_remote_functions
 def zip_with(
     left: "ColumnOrName",
     right: "ColumnOrName",
@@ -8482,6 +9510,9 @@ def zip_with(
     array, before applying the function.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8522,12 +9553,16 @@ def zip_with(
     return _invoke_higher_order_function("ZipWith", [left, right], [f])
 
 
+@try_remote_functions
 def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
     a map with the results of those applications as the new keys for the pairs.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8549,24 +9584,25 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": -2.0, "bar": 2.0})], ("id", "data"))
-    >>> df.select(transform_keys(
+    >>> row = df.select(transform_keys(
     ...     "data", lambda k, _: upper(k)).alias("data_upper")
-    ... ).show(truncate=False)
-    +-------------------------+
-    |data_upper               |
-    +-------------------------+
-    |{BAR -> 2.0, FOO -> -2.0}|
-    +-------------------------+
+    ... ).head()
+    >>> sorted(row["data_upper"].items())
+    [('BAR', 2.0), ('FOO', -2.0)]
     """
     return _invoke_higher_order_function("TransformKeys", [col], [f])
 
 
+@try_remote_functions
 def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
     a map with the results of those applications as the new values for the pairs.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8588,23 +9624,24 @@ def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column])
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"IT": 10.0, "SALES": 2.0, "OPS": 24.0})], ("id", "data"))
-    >>> df.select(transform_values(
+    >>> row = df.select(transform_values(
     ...     "data", lambda k, v: when(k.isin("IT", "OPS"), v + 10.0).otherwise(v)
-    ... ).alias("new_data")).show(truncate=False)
-    +---------------------------------------+
-    |new_data                               |
-    +---------------------------------------+
-    |{OPS -> 34.0, IT -> 20.0, SALES -> 2.0}|
-    +---------------------------------------+
+    ... ).alias("new_data")).head()
+    >>> sorted(row["new_data"].items())
+    [('IT', 20.0), ('OPS', 34.0), ('SALES', 2.0)]
     """
     return _invoke_higher_order_function("TransformValues", [col], [f])
 
 
+@try_remote_functions
 def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Returns a map whose key-value pairs satisfy a predicate.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8625,18 +9662,16 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-    >>> df.select(map_filter(
+    >>> row = df.select(map_filter(
     ...     "data", lambda _, v: v > 30.0).alias("data_filtered")
-    ... ).show(truncate=False)
-    +--------------------------+
-    |data_filtered             |
-    +--------------------------+
-    |{baz -> 32.0, foo -> 42.0}|
-    +--------------------------+
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('baz', 32.0), ('foo', 42.0)]
     """
     return _invoke_higher_order_function("MapFilter", [col], [f])
 
 
+@try_remote_functions
 def map_zip_with(
     col1: "ColumnOrName",
     col2: "ColumnOrName",
@@ -8646,6 +9681,9 @@ def map_zip_with(
     Merge two given maps, key-wise into a single map using a function.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8672,14 +9710,11 @@ def map_zip_with(
     ...     (1, {"IT": 24.0, "SALES": 12.00}, {"IT": 2.0, "SALES": 1.4})],
     ...     ("id", "base", "ratio")
     ... )
-    >>> df.select(map_zip_with(
+    >>> row = df.select(map_zip_with(
     ...     "base", "ratio", lambda k, v1, v2: round(v1 * v2, 2)).alias("updated_data")
-    ... ).show(truncate=False)
-    +---------------------------+
-    |updated_data               |
-    +---------------------------+
-    |{SALES -> 16.8, IT -> 48.0}|
-    +---------------------------+
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('IT', 48.0), ('SALES', 16.8)]
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
@@ -8687,6 +9722,7 @@ def map_zip_with(
 # ---------------------- Partition transform functions --------------------------------
 
 
+@try_remote_functions
 def years(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
@@ -8720,12 +9756,16 @@ def years(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("years", col)
 
 
+@try_remote_functions
 def months(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into months.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -8753,6 +9793,7 @@ def months(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("months", col)
 
 
+@try_remote_functions
 def days(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
@@ -8786,6 +9827,7 @@ def days(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("days", col)
 
 
+@try_remote_functions
 def hours(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps
@@ -8819,6 +9861,7 @@ def hours(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("hours", col)
 
 
+@try_remote_functions
 def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for any type that partitions
@@ -8862,6 +9905,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
 
 
+@try_remote_functions
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     """
     Call an user-defined function.
@@ -8909,12 +9953,15 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
 
 
+@try_remote_functions
 def unwrap_udt(col: "ColumnOrName") -> Column:
     """
     Unwrap UDT data type column into its underlying type.
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
@@ -8924,7 +9971,10 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 @overload
 def udf(
-    f: Callable[..., Any], returnType: "DataTypeOrString" = StringType()
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString" = StringType(),
+    *,
+    useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     ...
 
@@ -8932,6 +9982,8 @@ def udf(
 @overload
 def udf(
     f: Optional["DataTypeOrString"] = None,
+    *,
+    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -8940,6 +9992,7 @@ def udf(
 def udf(
     *,
     returnType: "DataTypeOrString" = StringType(),
+    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -8947,6 +10000,8 @@ def udf(
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
+    *,
+    useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 
@@ -8959,6 +10014,9 @@ def udf(
     returnType : :class:`pyspark.sql.types.DataType` or str
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+    useArrow : bool or None
+        whether to use Arrow to optimize the (de)serialization. When it is None, the
+        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
 
     Examples
     --------
@@ -9037,10 +10095,15 @@ def udf(
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(
-            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+            _create_py_udf,
+            returnType=return_type,
+            evalType=PythonEvalType.SQL_BATCHED_UDF,
+            useArrow=useArrow,
         )
     else:
-        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+        return _create_py_udf(
+            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
+        )
 
 
 def _test() -> None:

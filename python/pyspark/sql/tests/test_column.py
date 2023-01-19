@@ -18,11 +18,11 @@
 
 from pyspark.sql import Column, Row
 from pyspark.sql.types import StructType, StructField, LongType
-from pyspark.sql.utils import AnalysisException
+from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class ColumnTests(ReusedSQLTestCase):
+class ColumnTestsMixin:
     def test_column_name_encoding(self):
         """Ensure that created columns has `str` type consistently."""
         columns = self.spark.createDataFrame([("Alice", 1)], ["name", "age"]).columns
@@ -125,7 +125,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertTrue(columnName in repr(df[columnName]))
 
     def test_field_accessor(self):
-        df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
+        df = self.spark.createDataFrame([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})])
         self.assertEqual(1, df.select(df.l[0]).first()[0])
         self.assertEqual(1, df.select(df.r["a"]).first()[0])
         self.assertEqual(1, df.select(df["r.a"]).first()[0])
@@ -187,12 +187,16 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertTrue("e" not in result["a2"]["d"] and "f" in result["a2"]["d"])
 
 
+class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_column import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

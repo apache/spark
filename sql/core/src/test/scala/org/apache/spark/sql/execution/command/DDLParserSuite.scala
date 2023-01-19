@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunc, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -695,8 +695,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("DROP FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
-      UnresolvedFunc(name, "DROP FUNCTION", true,
+    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
+      UnresolvedFunctionName(name, "DROP FUNCTION", true,
         Some("Please use fully qualified identifier to drop the persistent function."))
     }
     comparePlans(
