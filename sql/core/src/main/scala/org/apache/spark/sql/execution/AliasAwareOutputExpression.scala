@@ -29,37 +29,41 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
 trait AliasAwareOutputPartitioning extends UnaryExecNode
   with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
-    val normalizedOutputPartitioning = if (hasAlias) {
-      child.outputPartitioning match {
-        case e: Expression =>
-          val normalized = normalizeExpression(e)
-          normalized.asInstanceOf[Seq[Partitioning]] match {
-            case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
-            case Seq(p) => p
-            case ps => PartitioningCollection(ps)
+    if (hasAlias) {
+      flattenPartitioning(child.outputPartitioning).flatMap {
+        case p: PartitioningCollection =>
+          val (exprPartitionings, nonExprPartitionings) = p.partitionings.partition {
+            case _: Expression => true
+            case _ => false
           }
-        case other => other
+          // We need unique partitionings but if the input partitioning is
+          // `HashPartitioning(Seq(id + id))` and we have `id -> a` and `id -> b` aliases then after
+          // the projection we have 4 partitionings:
+          // `HashPartitioning(Seq(a + a))`, `HashPartitioning(Seq(a + b))`,
+          // `HashPartitioning(Seq(b + a))`, `HashPartitioning(Seq(b + b))`, but
+          // `HashPartitioning(Seq(a + b))` is the same as `HashPartitioning(Seq(b + a))`.
+          val partitioningSet = mutable.Set.empty[Expression]
+          val projectedExprPartitionings =
+            exprPartitionings.asInstanceOf[Seq[Expression]].toStream
+              .flatMap(projectExpression)
+              .filter(e => partitioningSet.add(e.canonicalized))
+              .take(aliasCandidateLimit)
+              .asInstanceOf[Stream[Partitioning]]
+          nonExprPartitionings ++ projectedExprPartitionings
+        case e: Expression =>
+          val partitioningSet = mutable.Set.empty[Expression]
+          projectExpression(e)
+            .filter(e => partitioningSet.add(e.canonicalized))
+            .take(aliasCandidateLimit)
+            .asInstanceOf[Stream[Partitioning]]
+        case o => Seq(o)
+      } match {
+        case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+        case Seq(p) => p
+        case ps => PartitioningCollection(ps)
       }
     } else {
       child.outputPartitioning
-    }
-
-    // We need unique `Partitioning`s but `normalizedOutputPartitioning` might not contain unique
-    // elements.
-    // E.g. if the input partitioning is `HashPartitioning(Seq(id + id))` and we have `id -> a` and
-    // `id -> b` as alias mappings in a projection node. After the mapping
-    // `normalizedOutputPartitioning` contains 4 elements:
-    // `HashPartitioning(Seq(a + a))`, `HashPartitioning(Seq(a + b))`,
-    // `HashPartitioning(Seq(b + a))`, `HashPartitioning(Seq(b + b))`, but
-    // `HashPartitioning(Seq(a + b))` is the same as `HashPartitioning(Seq(b + a))`.
-    val expressionPartitionings = mutable.Set.empty[Expression]
-    flattenPartitioning(normalizedOutputPartitioning).filter {
-      case e: Expression => expressionPartitionings.add(e.canonicalized)
-      case _ => true
-    } match {
-      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
-      case Seq(singlePartitioning) => singlePartitioning
-      case seqWithMultiplePartitionings => PartitioningCollection(seqWithMultiplePartitionings)
     }
   }
 
@@ -73,4 +77,5 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode
   }
 }
 
-trait AliasAwareOutputOrdering extends UnaryExecNode with AliasAwareQueryOutputOrdering[SparkPlan]
+trait OrderPreservingUnaryExecNode
+  extends UnaryExecNode with AliasAwareQueryOutputOrdering[SparkPlan]

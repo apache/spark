@@ -43,7 +43,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
     with CodegenSupport
     with AliasAwareOutputPartitioning
-    with AliasAwareOutputOrdering {
+    with OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 

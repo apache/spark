@@ -21,15 +21,13 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
-import org.apache.spark.sql.catalyst.trees.MultiTransformHelper
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A trait that provides functionality to handle aliases in the `outputExpressions`.
  */
-trait AliasAwareOutputExpression extends SQLConfHelper with MultiTransformHelper {
-  private val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
+trait AliasAwareOutputExpression extends SQLConfHelper {
+  protected val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
   protected def outputExpressions: Seq[NamedExpression]
   /**
    * This method can be used to strip expression which does not affect the result, for example:
@@ -37,81 +35,49 @@ trait AliasAwareOutputExpression extends SQLConfHelper with MultiTransformHelper
    */
   protected def strip(expr: Expression): Expression = expr
 
-  // Split the alias map into 2 maps, the first contains `Expression` -> `Attribute` mappings where
-  // any children of the `Expression` contains any other mapping. This because during
-  // `normalizeExpression()` we will need to handle those maps separately and don't stop generating
-  // alternatives at the `Expression` but we also need to traverse down to its children.
-  private lazy val (exprAliasMap, attrAliasMap) = {
-    val aliases = mutable.Map[Expression, mutable.ListBuffer[Attribute]]()
-    // Add aliases to the map. If multiple alias is defined for a source attribute then add all.
-    outputExpressions.foreach {
+  // Build an `Expression` -> `Attribute` alias map.
+  // There can be multiple alias defined for the same expressions but it doesn't make sense to store
+  // more than `aliasCandidateLimit` attributes for an expression. In those cases the old logic
+  // handled only the last alias so we need to make sure that we give precedence to that.
+  // If the `outputExpressions` contain simple attributes we need to add those too to the map.
+  private lazy val aliasMap = {
+    val aliases = mutable.Map[Expression, mutable.ArrayBuffer[Attribute]]()
+    outputExpressions.reverse.foreach {
       case a @ Alias(child, _) =>
-        // This prepend is needed to make the first element of the `ListBuffer` point to the last
-        // occurrence of an aliased child. This is to keep the previous behavior and give precedence
-        // the last Alias during `normalizeExpression()` to avoid any kind of regression.
-        a.toAttribute +=:
-          aliases.getOrElseUpdate(strip(child.canonicalized), mutable.ListBuffer.empty)
+        val buffer = aliases.getOrElseUpdate(strip(child.canonicalized), mutable.ArrayBuffer.empty)
+        if (buffer.size < aliasCandidateLimit) {
+          buffer += a.toAttribute
+        }
       case _ =>
     }
-    // Append identity mapping of an attribute to the map if both the attribute and its aliased
-    // version can be found in `outputExpressions`.
     outputExpressions.foreach {
-      case a: Attribute if aliases.contains(a.canonicalized) => aliases(a.canonicalized) += a
+      case a: Attribute if aliases.contains(a.canonicalized) =>
+        val buffer = aliases(a.canonicalized)
+        if (buffer.size < aliasCandidateLimit) {
+          buffer += a
+        }
       case _ =>
     }
-
-    aliases.partition { case (expr, _) => expr.children.exists(_.exists(aliases.contains)) }
+    aliases
   }
 
-  protected def hasAlias: Boolean = attrAliasMap.nonEmpty
+  protected def hasAlias: Boolean = aliasMap.nonEmpty
 
   /**
    * Return a set of Expression which normalize the original expression to the aliased.
    */
-  protected def normalizeExpression(expr: Expression): Seq[Expression] = {
+  protected def projectExpression(expr: Expression): Stream[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
-
-    def f: PartialFunction[Expression, Stream[Expression]] = {
+    expr.multiTransformDown {
       // Mapping with aliases
-      case e: Expression if exprAliasMap.contains(e.canonicalized) =>
-        (exprAliasMap(e.canonicalized) :+ e).toStream
-      case e: Expression if attrAliasMap.contains(e.canonicalized) =>
-        attrAliasMap(e.canonicalized).toStream
+      case e: Expression if aliasMap.contains(e.canonicalized) =>
+        aliasMap(e.canonicalized) ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
 
       // Prune if we encounter an attribute that we can't map and it is not in output set.
       // This prune will go up to the closest `multiTransformDown()` call and returns `Stream.empty`
       // there.
-      case a: Attribute if !outputSet.contains(a) => Stream.empty
-
-      // Remove `PartitioningCollection` elements that are expressions and contain an attribute that
-      // can't be mapped and the node's output set doesn't contain the attribute.
-      // To achieve this we need to "restart" `multiTransformDown()` for each expression child and
-      // filter out empty streams due to the above attribute pruning case.
-      // The child streams can be then combined using `generateChildrenSeq()` into one stream as
-      // `multiTransformDown()` would also do (but without filtering empty streams).
-      case p: PartitioningCollection =>
-        val childrenStreams = p.partitionings.map {
-          case e: Expression => e.multiTransformDown(f).asInstanceOf[Stream[Partitioning]]
-          case o => Stream(o)
-        }.filter(_.nonEmpty)
-        generateChildrenSeq(childrenStreams).flatMap {
-          case Nil => None
-          // We might have an expression type partitioning that doesn't need
-          // `PartitioningCollection`
-          case (p: Expression) :: Nil => Some(p)
-          case p :: Nil => Some(PartitioningCollection(Seq(p)))
-          case ps => Some(PartitioningCollection(ps))
-        }
-
-      // Filter `SortOrder` children similarly to `PartitioningCollection` elements
-      case s: SortOrder =>
-        val childrenStreams = s.children.map(_.multiTransformDown(f)).filter(_.nonEmpty)
-        generateChildrenSeq(childrenStreams)
-          .filter(_.nonEmpty)
-          .map(es => s.copy(child = es.head, sameOrderExpressions = es.tail))
+      case a: Attribute if !outputSet.contains(a) => Seq.empty
     }
-
-    expr.multiTransformDown(f).take(aliasCandidateLimit)
   }
 }
 
@@ -131,13 +97,14 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
   override final def outputOrdering: Seq[SortOrder] = {
     if (hasAlias) {
       orderingExpressions.flatMap { sortOrder =>
-        val normalized = normalizeExpression(sortOrder)
-        val allOrderingExpressions = normalized.flatMap(_.asInstanceOf[SortOrder].children)
-        if (allOrderingExpressions.isEmpty) {
-          None
+        val equalOrderings = sortOrder.children.toStream
+          .flatMap(projectExpression)
+          .take(aliasCandidateLimit)
+        if (equalOrderings.nonEmpty) {
+          Some(sortOrder.copy(child = equalOrderings.head,
+            sameOrderExpressions = equalOrderings.tail))
         } else {
-          Some(sortOrder.copy(child = allOrderingExpressions.head,
-            sameOrderExpressions = allOrderingExpressions.tail))
+          None
         }
       }
     } else {
