@@ -179,7 +179,8 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
 
 class PySparkErrorTestUtils:
     """
-    This util provide functions to accurate and consistent error testing based on PySpark error classes.
+    This util provide functions to accurate and consistent error testing
+    based on PySpark error classes.
     """
 
     def check_error(
