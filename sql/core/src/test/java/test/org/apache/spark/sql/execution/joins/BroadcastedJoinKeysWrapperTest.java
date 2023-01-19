@@ -249,8 +249,7 @@ public class BroadcastedJoinKeysWrapperTest {
     BroadcastedJoinKeysWrapper wrapper =
         new BroadcastedJoinKeysWrapperImpl(this.bc, new DataType[]{dataType},
             0, new int[]{0}, 1);
-
-    ArrayWrapper keys = wrapper.getKeysArray();
+    ArrayWrapper<? extends Object> keys = wrapper.getKeysArray();
     assert (keys.getLength() == expectedObjArrLengt);
     HashSet<Object> uniqueKeys =  new HashSet<>(Arrays.asList(keys.getBaseArray()));
     assert(uniqueKeys.size() == expectedKeys.size());

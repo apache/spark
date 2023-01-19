@@ -26,7 +26,8 @@ public interface ArrayWrapper<T> {
 
   T[] getBaseArray();
 
-  static ArrayWrapper wrapArray(Object source, boolean is1Dimensional, int relativeIndex) {
+  static  ArrayWrapper<? extends Object> wrapArray(Object source, boolean is1Dimensional,
+      int relativeIndex) {
     return is1Dimensional ? new OneDimensionArrayWrapper((Object[]) source, relativeIndex) :
       new TwoDimensionArrayWrapper((Object[][]) source, relativeIndex);
   }

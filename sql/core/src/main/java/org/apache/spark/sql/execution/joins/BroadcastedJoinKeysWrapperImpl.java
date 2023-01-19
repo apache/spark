@@ -65,7 +65,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
           new CacheLoader<BroadcastedJoinKeysWrapperImpl, Set<Object>>() {
             public Set<Object> load(BroadcastedJoinKeysWrapperImpl bcjk) {
                 BroadcastJoinKeysReaper.checkInitialized();
-                ArrayWrapper keys = bcjk.getKeysArray();
+                ArrayWrapper<? extends Object> keys = bcjk.getKeysArray();
                 int len = keys.getLength();
                 Set<Object> set = new HashSet<>();
                 for(int i = 0; i < len; ++i) {
@@ -231,7 +231,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     return this.keyDataTypes[this.relativeKeyIndexInArray];
   }
 
-  public ArrayWrapper getKeysArray() {
+  public ArrayWrapper<? extends Object> getKeysArray() {
     Object array = this.initKeys();
     return ArrayWrapper.wrapArray(array, this.indexesOfInterest.length == 1,
         this.relativeKeyIndexInArray);

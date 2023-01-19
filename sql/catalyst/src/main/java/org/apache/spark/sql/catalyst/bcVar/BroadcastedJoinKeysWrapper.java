@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.DataType;
 public interface BroadcastedJoinKeysWrapper extends Externalizable {
   DataType getSingleKeyDataType();
 
-  ArrayWrapper getKeysArray();
+  ArrayWrapper<? extends Object> getKeysArray();
 
   long getBroadcastVarId();
 
