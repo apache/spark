@@ -626,7 +626,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * @return     the stream of alternatives
    */
   def multiTransformDown(
-      rule: PartialFunction[BaseType, Stream[BaseType]]): Stream[BaseType] = {
+      rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[BaseType] = {
     multiTransformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
@@ -639,10 +639,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * as a lazy `Stream` to be able to limit the number of alternatives generated at the caller side
    * as needed.
    *
-   * The rule should not apply or can return a one element stream of original node to indicate that
+   * The purpose of this function to access the returned alternatives by the rule only if they are
+   * needed so the rule can return a `Stream` whose elements are also lazily calculated.
+   * E.g. `multiTransform*` calls can be nested with the help of
+   * `MultiTransform.generateCartesianProduct()`.
+   *
+   * The rule should not apply or can return a one element `Seq` of original node to indicate that
    * the original node without any transformation is a valid alternative.
    *
-   * The rule can return `Stream.empty` to indicate that the original node should be pruned. In this
+   * The rule can return `Seq.empty` to indicate that the original node should be pruned. In this
    * case `multiTransform()` returns an empty `Stream`.
    *
    * Please consider the following examples of `input.multiTransformDown(rule)`:
@@ -652,9 +657,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *
    * 1.
    * We have a simple rule:
-   *   `a` => `Stream(1, 2)`
-   *   `b` => `Stream(10, 20)`
-   *   `Add(a, b)` => `Stream(11, 12, 21, 22)`
+   *   `a` => `Seq(1, 2)`
+   *   `b` => `Seq(10, 20)`
+   *   `Add(a, b)` => `Seq(11, 12, 21, 22)`
    *
    * The output is:
    *   `Stream(11, 12, 21, 22)`
@@ -662,9 +667,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * 2.
    * In the previous example if we want to generate alternatives of `a` and `b` too then we need to
    * explicitly add the original `Add(a, b)` expression to the rule:
-   *   `a` => `Stream(1, 2)`
-   *   `b` => `Stream(10, 20)`
-   *   `Add(a, b)` => `Stream(11, 12, 21, 22, Add(a, b))`
+   *   `a` => `Seq(1, 2)`
+   *   `b` => `Seq(10, 20)`
+   *   `Add(a, b)` => `Seq(11, 12, 21, 22, Add(a, b))`
    *
    * The output is:
    *   `Stream(11, 12, 21, 22, Add(1, 10), Add(2, 10), Add(1, 20), Add(2, 20))`
@@ -683,25 +688,25 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   def multiTransformDownWithPruning(
       cond: TreePatternBits => Boolean,
       ruleId: RuleId = UnknownRuleId
-    )(rule: PartialFunction[BaseType, Stream[BaseType]]): Stream[BaseType] = {
+    )(rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[BaseType] = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return Stream(this)
     }
 
-    // We could return `Stream(this)` if the `rule` doesn't apply and handle both
+    // We could return `Seq(this)` if the `rule` doesn't apply and handle both
     // - the doesn't apply
-    // - and the rule returns a one element `Stream(originalNode)`
-    // cases together. But, unfortunately it doesn't seem like there is a way to match on a one
-    // element stream without eagerly computing the tail head. So this contradicts with the purpose
-    // of only taking the necessary elements from the alternatives. I.e. the
-    // "multiTransformDown is lazy" test case in `TreeNodeSuite` would fail.
+    // - and the rule returns a one element `Seq(originalNode)`
+    // cases together. The returned `Seq` can be a `Stream` and unfortunately it doesn't seem like
+    // there is a way to match on a one element stream without eagerly computing the tail's head.
+    // This contradicts with the purpose of only taking the necessary elements from the
+    // alternatives. I.e. the "multiTransformDown is lazy" test case in `TreeNodeSuite` would fail.
     // Please note that this behaviour has a downside as well that we can only mark the rule on the
     // original node ineffective if the rule didn't match.
     var ruleApplied = true
     val afterRules = CurrentOrigin.withOrigin(origin) {
       rule.applyOrElse(this, (_: BaseType) => {
         ruleApplied = false
-        Stream.empty
+        Seq.empty
       })
     }
 
@@ -716,7 +721,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       }
     } else {
       // If the rule was applied then use the returned alternatives
-      afterRules.map { afterRule =>
+      afterRules.toStream.map { afterRule =>
         if (this fastEquals afterRule) {
           this
         } else {
@@ -728,22 +733,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 
     afterRulesStream.flatMap { afterRule =>
       if (afterRule.containsChild.nonEmpty) {
-        generateChildrenSeq(
+        MultiTransform.generateCartesianProduct(
             afterRule.children.map(_.multiTransformDownWithPruning(cond, ruleId)(rule)))
           .map(afterRule.withNewChildren)
       } else {
         Stream(afterRule)
       }
     }
-  }
-
-  private def generateChildrenSeq[T](childrenStreams: Seq[Stream[T]]): Stream[Seq[T]] = {
-    childrenStreams.foldRight(Stream(Seq.empty[T]))((childrenStream, childrenSeqStream) =>
-      for {
-        childrenSeq <- childrenSeqStream
-        child <- childrenStream
-      } yield child +: childrenSeq
-    )
   }
 
   /**
@@ -1367,4 +1363,22 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   }
 
   protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
+}
+
+object MultiTransform {
+
+  /**
+   * Returns the stream of `Seq` elements by generating the cartesian product of sequences.
+   *
+   * @param elementSeqs a list of sequences to build the cartesian product from
+   * @return            the stream of generated `Seq` elements
+   */
+  def generateCartesianProduct[T](elementSeqs: Seq[Seq[T]]): Stream[Seq[T]] = {
+    elementSeqs.foldRight(Stream(Seq.empty[T]))((elements, elementTails) =>
+      for {
+        elementTail <- elementTails
+        element <- elements
+      } yield element +: elementTail
+    )
+  }
 }
