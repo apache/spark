@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.status.ProcessSummaryWrapper
 import org.apache.spark.status.api.v1.ProcessSummary
 import org.apache.spark.status.protobuf.Utils.getOptional
-import org.apache.spark.util.Utils.weakIntern
 
 class ProcessSummaryWrapperSerializer extends ProtobufSerDe[ProcessSummaryWrapper] {
 
@@ -60,8 +59,8 @@ class ProcessSummaryWrapperSerializer extends ProtobufSerDe[ProcessSummaryWrappe
   private def deserializeProcessSummary(info: StoreTypes.ProcessSummary): ProcessSummary = {
     val removeTime = getOptional(info.hasRemoveTime, () => new Date(info.getRemoveTime))
     new ProcessSummary(
-      id = weakIntern(info.getId),
-      hostPort = weakIntern(info.getHostPort),
+      id = info.getId,
+      hostPort = info.getHostPort,
       isActive = info.getIsActive,
       totalCores = info.getTotalCores,
       addTime = new Date(info.getAddTime),

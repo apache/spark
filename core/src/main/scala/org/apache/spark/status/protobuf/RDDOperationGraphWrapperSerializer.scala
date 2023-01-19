@@ -23,7 +23,6 @@ import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWrapper}
 import org.apache.spark.status.protobuf.StoreTypes.{DeterministicLevel => GDeterministicLevel}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
-import org.apache.spark.util.Utils.weakIntern
 
 class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraphWrapper] {
 
@@ -71,8 +70,8 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraph
   private def deserializeRDDOperationClusterWrapper(op: StoreTypes.RDDOperationClusterWrapper):
     RDDOperationClusterWrapper = {
     new RDDOperationClusterWrapper(
-      id = weakIntern(op.getId),
-      name = weakIntern(op.getName),
+      id = op.getId,
+      name = op.getName,
       childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode),
       childClusters =
         op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper)
@@ -95,10 +94,10 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraph
   private def deserializeRDDOperationNode(node: StoreTypes.RDDOperationNode): RDDOperationNode = {
     RDDOperationNode(
       id = node.getId,
-      name = weakIntern(node.getName),
+      name = node.getName,
       cached = node.getCached,
       barrier = node.getBarrier,
-      callsite = weakIntern(node.getCallsite),
+      callsite = node.getCallsite,
       outputDeterministicLevel = DeterministicLevelSerializer.deserialize(
         node.getOutputDeterministicLevel)
     )

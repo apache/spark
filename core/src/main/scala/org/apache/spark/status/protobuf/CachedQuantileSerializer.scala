@@ -18,7 +18,6 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.CachedQuantile
-import org.apache.spark.util.Utils.weakIntern
 
 class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
 
@@ -74,7 +73,7 @@ class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
     new CachedQuantile(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
-      quantile = weakIntern(binary.getQuantile),
+      quantile = binary.getQuantile,
       taskCount = binary.getTaskCount,
       duration = binary.getDuration,
       executorDeserializeTime = binary.getExecutorDeserializeTime,

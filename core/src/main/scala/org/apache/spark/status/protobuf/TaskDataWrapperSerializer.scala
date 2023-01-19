@@ -98,7 +98,7 @@ class TaskDataWrapperSerializer extends ProtobufSerDe[TaskDataWrapper] {
       taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
       accumulatorUpdates = accumulatorUpdates,
-      errorMessage = getOptional(binary.hasErrorMessage, () => weakIntern(binary.getErrorMessage)),
+      errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
       hasMetrics = binary.getHasMetrics,
       executorDeserializeTime = binary.getExecutorDeserializeTime,
       executorDeserializeCpuTime = binary.getExecutorDeserializeCpuTime,

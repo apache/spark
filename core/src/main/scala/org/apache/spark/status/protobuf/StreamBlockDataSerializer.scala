@@ -39,7 +39,7 @@ class StreamBlockDataSerializer extends ProtobufSerDe[StreamBlockData] {
   override def deserialize(bytes: Array[Byte]): StreamBlockData = {
     val binary = StoreTypes.StreamBlockData.parseFrom(bytes)
     new StreamBlockData(
-      name = weakIntern(binary.getName),
+      name = binary.getName,
       executorId = weakIntern(binary.getExecutorId),
       hostPort = weakIntern(binary.getHostPort),
       storageLevel = weakIntern(binary.getStorageLevel),

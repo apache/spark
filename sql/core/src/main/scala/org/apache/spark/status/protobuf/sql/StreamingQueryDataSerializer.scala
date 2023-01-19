@@ -22,7 +22,6 @@ import java.util.UUID
 import org.apache.spark.sql.streaming.ui.StreamingQueryData
 import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils.getOptional
-import org.apache.spark.util.Utils.weakIntern
 
 class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
 
@@ -41,13 +40,13 @@ class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
   override def deserialize(bytes: Array[Byte]): StreamingQueryData = {
     val data = StoreTypes.StreamingQueryData.parseFrom(bytes)
     val exception =
-      getOptional(data.hasException, () => weakIntern(data.getException))
+      getOptional(data.hasException, data.getException)
     val endTimestamp =
       getOptional(data.hasEndTimestamp, () => data.getEndTimestamp)
     new StreamingQueryData(
-      name = weakIntern(data.getName),
+      name = data.getName,
       id = UUID.fromString(data.getId),
-      runId = weakIntern(data.getRunId),
+      runId = data.getRunId,
       isActive = data.getIsActive,
       exception = exception,
       startTimestamp = data.getStartTimestamp,

@@ -22,7 +22,6 @@ import collection.JavaConverters._
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfileInfo, RuntimeInfo}
-import org.apache.spark.util.Utils.weakIntern
 
 class ApplicationEnvironmentInfoWrapperSerializer
   extends ProtobufSerDe[ApplicationEnvironmentInfoWrapper] {
@@ -74,9 +73,9 @@ class ApplicationEnvironmentInfoWrapperSerializer
   private def deserializeApplicationEnvironmentInfo(info: StoreTypes.ApplicationEnvironmentInfo):
     ApplicationEnvironmentInfo = {
     val runtime = new RuntimeInfo (
-      javaVersion = weakIntern(info.getRuntime.getJavaVersion),
-      javaHome = weakIntern(info.getRuntime.getJavaHome),
-      scalaVersion = weakIntern(info.getRuntime.getScalaVersion)
+      javaVersion = info.getRuntime.getJavaVersion,
+      javaHome = info.getRuntime.getJavaHome,
+      scalaVersion = info.getRuntime.getScalaVersion
     )
     val pairSSToTuple = (pair: StoreTypes.PairStrings) => {
       (pair.getValue1, pair.getValue2)
@@ -135,16 +134,15 @@ class ApplicationEnvironmentInfoWrapperSerializer
   private def deserializeExecutorResourceRequest(info: StoreTypes.ExecutorResourceRequest):
     ExecutorResourceRequest = {
     new ExecutorResourceRequest(
-      resourceName = weakIntern(info.getResourceName),
+      resourceName = info.getResourceName,
       amount = info.getAmount,
-      discoveryScript = weakIntern(info.getDiscoveryScript),
-      vendor = weakIntern(info.getVendor)
+      discoveryScript = info.getDiscoveryScript,
+      vendor = info.getVendor
     )
   }
 
   private def deserializeTaskResourceRequest(info: StoreTypes.TaskResourceRequest):
     TaskResourceRequest = {
-    new TaskResourceRequest(resourceName = weakIntern(info.getResourceName),
-      amount = info.getAmount)
+    new TaskResourceRequest(resourceName = info.getResourceName, amount = info.getAmount)
   }
 }
