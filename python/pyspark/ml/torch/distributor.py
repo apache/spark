@@ -16,6 +16,7 @@
 #
 
 import cloudpickle  # type: ignore
+from contextlib import contextmanager
 import collections
 import logging
 import math
@@ -28,7 +29,7 @@ import sys
 import tempfile
 import textwrap
 import time
-from typing import Union, Callable, List, Dict, Optional, Any
+from typing import Union, Callable, List, Dict, Optional, Any, Tuple
 
 from pyspark.sql import SparkSession
 from pyspark.ml.torch.log_communication import (  # type: ignore
@@ -591,22 +592,28 @@ class TorchDistributor(Distributor):
             training_command, log_streaming_client=log_streaming_client
         )
 
+    @contextmanager
     @staticmethod
-    def _run_training_on_pytorch_function(
-        input_params: dict[str, Any], train_fn: Callable, *args: Any
-    ) -> Any:
+    def _setup_files(train_fn: Callable, *args: Any) -> Tuple[str, str]:
         save_dir = TorchDistributor._create_save_dir()
         pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args)
         output_file_path = os.path.join(save_dir, TorchDistributor.PICKLED_OUTPUT_FILE)
         train_file_path = TorchDistributor._create_torchrun_train_file(
             save_dir, pickle_file_path, output_file_path
         )
-        args = []  # type: ignore
+        try:
+            yield (train_file_path, output_file_path)
+        finally:
+            TorchDistributor._cleanup_files(save_dir)
 
-        TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
-
-        output = TorchDistributor._get_pickled_output(output_file_path)
-        TorchDistributor._cleanup_files(save_dir)
+    @staticmethod
+    def _run_training_on_pytorch_function(
+        input_params: dict[str, Any], train_fn: Callable, *args: Any  # TODO: change dict to Dict
+    ) -> Any:
+        with TorchDistributor._setup_files(train_fn, *args) as (train_file_path, output_file_path):
+            args = []  # type: ignore
+            TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
+            output = TorchDistributor._get_pickled_output(output_file_path)
         return output
 
     @staticmethod

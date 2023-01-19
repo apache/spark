@@ -25,7 +25,7 @@ import sys
 import time
 import tempfile
 import threading
-from typing import Callable, Dict, Any, Tuple
+from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
@@ -48,7 +48,7 @@ def patch_stdout() -> StringIO:
         sys.stdout = sys_stdout
 
 
-def create_training_function() -> Tuple[Callable, str]:
+def create_training_function(mnist_dir_path: str) -> Callable:
     import torch.nn as nn
     import torch.nn.functional as F
     from torchvision import transforms, datasets  # type: ignore
@@ -57,10 +57,8 @@ def create_training_function() -> Tuple[Callable, str]:
     num_epochs = 1
     momentum = 0.5
 
-    temp_directory_path = tempfile.mkdtemp()
-
     train_dataset = datasets.MNIST(
-        temp_directory_path,
+        mnist_dir_path,
         train=True,
         download=True,
         transform=transforms.Compose(
@@ -113,7 +111,9 @@ def create_training_function() -> Tuple[Callable, str]:
                 optimizer.step()
             print(f"epoch {epoch} finished.")
 
-    return train_fn, temp_directory_path
+        return "success"
+
+    return train_fn
 
 
 class TorchDistributorBaselineUnitTests(unittest.TestCase):
@@ -293,8 +293,10 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 
         self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
         self.spark = SparkSession(self.sc)
+        self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
+        shutil.rmtree(self.mnist_dir_path)
         os.unlink(self.tempFile.name)
         self.spark.stop()
 
@@ -366,9 +368,11 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
         )
 
     def test_end_to_end_run_locally(self) -> None:
-        train_fn, temp_directory_path = create_training_function()
-        TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(train_fn, 0.001)
-        shutil.rmtree(temp_directory_path)
+        train_fn = create_training_function(self.mnist_dir_path)
+        output = TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
+            train_fn, 0.001
+        )
+        self.assertEqual(output, "success")
 
 
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
@@ -396,8 +400,10 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
 
         self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
         self.spark = SparkSession(self.sc)
+        self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
+        shutil.rmtree(self.mnist_dir_path)
         os.unlink(self.tempFile.name)
         self.spark.stop()
 
@@ -439,9 +445,11 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
         )
 
     def test_end_to_end_run_distributedly(self) -> None:
-        train_fn, temp_directory_path = create_training_function()
-        TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(train_fn, 0.001)
-        shutil.rmtree(temp_directory_path)
+        train_fn = create_training_function(self.mnist_dir_path)
+        output = TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
+            train_fn, 0.001
+        )
+        self.assertEqual(output, "success")
 
 
 class TorchWrapperUnitTests(unittest.TestCase):
