@@ -22,6 +22,7 @@ import functools
 import unittest
 
 from pyspark import Row
+from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -162,7 +163,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils):
+class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUtils):
     """
     Spark Connect version of :class:`pyspark.testing.sqlutils.ReusedSQLTestCase`.
     """

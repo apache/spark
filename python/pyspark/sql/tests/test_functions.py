@@ -1110,11 +1110,11 @@ class FunctionsTestsMixin:
         with self.assertRaises(PySparkException) as pe:
             lit([df.id, df.id])
 
-            self.check_error(
-                exception=pe.exception,
-                error_class="COLUMN_IN_LIST",
-                message_parameters={"funcName": "lit"},
-            )
+        self.check_error(
+            exception=pe.exception,
+            error_class="COLUMN_IN_LIST",
+            message_parameters={"func_name": "lit"},
+        )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
