@@ -26,6 +26,8 @@ from pyspark.streaming.dstream import DStream
 from pyspark.streaming.listener import StreamingListener
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
 
+import warnings
+
 __all__ = ["StreamingContext"]
 
 T = TypeVar("T")
