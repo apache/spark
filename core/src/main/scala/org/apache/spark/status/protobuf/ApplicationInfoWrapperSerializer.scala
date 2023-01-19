@@ -24,7 +24,6 @@ import collection.JavaConverters._
 import org.apache.spark.status.ApplicationInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
-import org.apache.spark.util.Utils.weakIntern
 
 class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrapper] {
 
@@ -71,8 +70,8 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrap
     val memoryPerExecutorMB = getOptional(info.hasMemoryPerExecutorMb, info.getMemoryPerExecutorMb)
     val attempts = info.getAttemptsList.asScala.map(deserializeApplicationAttemptInfo)
     ApplicationInfo(
-      id = weakIntern(info.getId),
-      name = weakIntern(info.getName),
+      id = info.getId,
+      name = info.getName,
       coresGranted = coresGranted,
       maxCores = maxCores,
       coresPerExecutor = coresPerExecutor,
@@ -99,7 +98,7 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrap
 
   private def deserializeApplicationAttemptInfo(info: StoreTypes.ApplicationAttemptInfo):
     ApplicationAttemptInfo = {
-    val attemptId = getOptional(info.hasAttemptId, () => weakIntern(info.getAttemptId))
+    val attemptId = getOptional(info.hasAttemptId, info.getAttemptId)
 
     ApplicationAttemptInfo(
       attemptId = attemptId,
@@ -107,9 +106,9 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrap
       endTime = new Date(info.getEndTime),
       lastUpdated = new Date(info.getLastUpdated),
       duration = info.getDuration,
-      sparkUser = weakIntern(info.getSparkUser),
+      sparkUser = info.getSparkUser,
       completed = info.getCompleted,
-      appSparkVersion = weakIntern(info.getAppSparkVersion)
+      appSparkVersion = info.getAppSparkVersion
     )
   }
 }

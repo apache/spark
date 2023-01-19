@@ -393,10 +393,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
       getOptional(binary.hasFirstTaskLaunchedTime, () => new Date(binary.getFirstTaskLaunchedTime))
     val completionTime =
       getOptional(binary.hasCompletionTime, () => new Date(binary.getCompletionTime))
-    val failureReason =
-      getOptional(binary.hasFailureReason, () => weakIntern(binary.getFailureReason))
-    val description =
-      getOptional(binary.hasDescription, () => weakIntern(binary.getDescription))
+    val failureReason = getOptional(binary.hasFailureReason, binary.getFailureReason)
+    val description = getOptional(binary.hasDescription, binary.getDescription)
     val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
     val tasks = if (MapUtils.isNotEmpty(binary.getTasksMap)) {
       Some(binary.getTasksMap.asScala.map(
