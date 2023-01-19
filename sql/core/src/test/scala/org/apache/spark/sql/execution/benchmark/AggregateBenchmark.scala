@@ -539,7 +539,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           i = 0
           while (i < N) {
             val key = i % 100000
-            if (map.getValue(key, value) != null) {
+            if (map.getValue(key, value, null) != null) {
               s += 1
             }
             i += 1

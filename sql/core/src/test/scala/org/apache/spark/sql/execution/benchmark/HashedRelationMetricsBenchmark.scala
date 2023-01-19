@@ -64,7 +64,7 @@ object HashedRelationMetricsBenchmark extends SqlBasedBenchmark {
             override def run: Unit = {
               val row = unsafeProj(InternalRow(0L)).copy()
               keys.foreach { k =>
-                assert(map.getValue(k, row) eq row)
+                assert(map.getValue(k, row, null) eq row)
                 assert(row.getLong(0) == k)
               }
             }

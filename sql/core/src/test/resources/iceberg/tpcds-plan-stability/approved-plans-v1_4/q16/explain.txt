@@ -1,0 +1,195 @@
+== Physical Plan ==
+* HashAggregate (35)
++- * HashAggregate (34)
+   +- * HashAggregate (33)
+      +- Exchange (32)
+         +- * HashAggregate (31)
+            +- * Project (30)
+               +- * BroadcastHashJoin Inner BuildRight (29)
+                  :- * Project (24)
+                  :  +- * BroadcastHashJoin Inner BuildRight (23)
+                  :     :- * Project (18)
+                  :     :  +- * BroadcastHashJoin Inner BuildRight (17)
+                  :     :     :- * BroadcastHashJoin LeftAnti BuildRight (12)
+                  :     :     :  :- * Project (8)
+                  :     :     :  :  +- * BroadcastHashJoin LeftSemi BuildRight (7)
+                  :     :     :  :     :- * Project (3)
+                  :     :     :  :     :  +- * Filter (2)
+                  :     :     :  :     :     +- BatchScan spark_catalog.default.catalog_sales (1)
+                  :     :     :  :     +- BroadcastExchange (6)
+                  :     :     :  :        +- * Project (5)
+                  :     :     :  :           +- BatchScan spark_catalog.default.catalog_sales (4)
+                  :     :     :  +- BroadcastExchange (11)
+                  :     :     :     +- * Project (10)
+                  :     :     :        +- BatchScan spark_catalog.default.catalog_returns (9)
+                  :     :     +- BroadcastExchange (16)
+                  :     :        +- * Project (15)
+                  :     :           +- * Filter (14)
+                  :     :              +- BatchScan spark_catalog.default.date_dim (13)
+                  :     +- BroadcastExchange (22)
+                  :        +- * Project (21)
+                  :           +- * Filter (20)
+                  :              +- BatchScan spark_catalog.default.customer_address (19)
+                  +- BroadcastExchange (28)
+                     +- * Project (27)
+                        +- * Filter (26)
+                           +- BatchScan spark_catalog.default.call_center (25)
+
+
+(1) BatchScan spark_catalog.default.catalog_sales
+Output [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+spark_catalog.default.catalog_sales [scan class = SparkBatchQueryScan] [filters=cs_ship_date_sk IS NOT NULL, cs_ship_addr_sk IS NOT NULL, cs_call_center_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 6]
+Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Condition : ((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND isnotnull(cs_call_center_sk#3))
+
+(3) Project [codegen id : 6]
+Output [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+
+(4) BatchScan spark_catalog.default.catalog_sales
+Output [34]: [cs_sold_date_sk#8, cs_sold_time_sk#9, cs_ship_date_sk#10, cs_bill_customer_sk#11, cs_bill_cdemo_sk#12, cs_bill_hdemo_sk#13, cs_bill_addr_sk#14, cs_ship_customer_sk#15, cs_ship_cdemo_sk#16, cs_ship_hdemo_sk#17, cs_ship_addr_sk#18, cs_call_center_sk#19, cs_catalog_page_sk#20, cs_ship_mode_sk#21, cs_warehouse_sk#22, cs_item_sk#23, cs_promo_sk#24, cs_order_number#25, cs_quantity#26, cs_wholesale_cost#27, cs_list_price#28, cs_sales_price#29, cs_ext_discount_amt#30, cs_ext_sales_price#31, cs_ext_wholesale_cost#32, cs_ext_list_price#33, cs_ext_tax#34, cs_coupon_amt#35, cs_ext_ship_cost#36, cs_net_paid#37, cs_net_paid_inc_tax#38, cs_net_paid_inc_ship#39, cs_net_paid_inc_ship_tax#40, cs_net_profit#41]
+spark_catalog.default.catalog_sales [scan class = SparkBatchQueryScan] [filters=], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Project [codegen id : 1]
+Output [2]: [cs_warehouse_sk#22, cs_order_number#25]
+Input [34]: [cs_sold_date_sk#8, cs_sold_time_sk#9, cs_ship_date_sk#10, cs_bill_customer_sk#11, cs_bill_cdemo_sk#12, cs_bill_hdemo_sk#13, cs_bill_addr_sk#14, cs_ship_customer_sk#15, cs_ship_cdemo_sk#16, cs_ship_hdemo_sk#17, cs_ship_addr_sk#18, cs_call_center_sk#19, cs_catalog_page_sk#20, cs_ship_mode_sk#21, cs_warehouse_sk#22, cs_item_sk#23, cs_promo_sk#24, cs_order_number#25, cs_quantity#26, cs_wholesale_cost#27, cs_list_price#28, cs_sales_price#29, cs_ext_discount_amt#30, cs_ext_sales_price#31, cs_ext_wholesale_cost#32, cs_ext_list_price#33, cs_ext_tax#34, cs_coupon_amt#35, cs_ext_ship_cost#36, cs_net_paid#37, cs_net_paid_inc_tax#38, cs_net_paid_inc_ship#39, cs_net_paid_inc_ship_tax#40, cs_net_profit#41]
+
+(6) BroadcastExchange
+Input [2]: [cs_warehouse_sk#22, cs_order_number#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=1]
+
+(7) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cs_order_number#5]
+Right keys [1]: [cs_order_number#25]
+Join condition: NOT (cs_warehouse_sk#4 = cs_warehouse_sk#22)
+
+(8) Project [codegen id : 6]
+Output [6]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+
+(9) BatchScan spark_catalog.default.catalog_returns
+Output [27]: [cr_returned_date_sk#42, cr_returned_time_sk#43, cr_item_sk#44, cr_refunded_customer_sk#45, cr_refunded_cdemo_sk#46, cr_refunded_hdemo_sk#47, cr_refunded_addr_sk#48, cr_returning_customer_sk#49, cr_returning_cdemo_sk#50, cr_returning_hdemo_sk#51, cr_returning_addr_sk#52, cr_call_center_sk#53, cr_catalog_page_sk#54, cr_ship_mode_sk#55, cr_warehouse_sk#56, cr_reason_sk#57, cr_order_number#58, cr_return_quantity#59, cr_return_amount#60, cr_return_tax#61, cr_return_amt_inc_tax#62, cr_fee#63, cr_return_ship_cost#64, cr_refunded_cash#65, cr_reversed_charge#66, cr_store_credit#67, cr_net_loss#68]
+spark_catalog.default.catalog_returns [scan class = SparkBatchQueryScan] [filters=], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(10) Project [codegen id : 2]
+Output [1]: [cr_order_number#58]
+Input [27]: [cr_returned_date_sk#42, cr_returned_time_sk#43, cr_item_sk#44, cr_refunded_customer_sk#45, cr_refunded_cdemo_sk#46, cr_refunded_hdemo_sk#47, cr_refunded_addr_sk#48, cr_returning_customer_sk#49, cr_returning_cdemo_sk#50, cr_returning_hdemo_sk#51, cr_returning_addr_sk#52, cr_call_center_sk#53, cr_catalog_page_sk#54, cr_ship_mode_sk#55, cr_warehouse_sk#56, cr_reason_sk#57, cr_order_number#58, cr_return_quantity#59, cr_return_amount#60, cr_return_tax#61, cr_return_amt_inc_tax#62, cr_fee#63, cr_return_ship_cost#64, cr_refunded_cash#65, cr_reversed_charge#66, cr_store_credit#67, cr_net_loss#68]
+
+(11) BroadcastExchange
+Input [1]: [cr_order_number#58]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(12) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cs_order_number#5]
+Right keys [1]: [cr_order_number#58]
+Join condition: None
+
+(13) BatchScan spark_catalog.default.date_dim
+Output [2]: [d_date_sk#69, d_date#70]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_date IS NOT NULL, d_date >= 11719, d_date <= 11779, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(14) Filter [codegen id : 3]
+Input [2]: [d_date_sk#69, d_date#70]
+Condition : (((isnotnull(d_date#70) AND (d_date#70 >= 2002-02-01)) AND (d_date#70 <= 2002-04-02)) AND isnotnull(d_date_sk#69))
+
+(15) Project [codegen id : 3]
+Output [1]: [d_date_sk#69]
+Input [2]: [d_date_sk#69, d_date#70]
+
+(16) BroadcastExchange
+Input [1]: [d_date_sk#69]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(17) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cs_ship_date_sk#1]
+Right keys [1]: [d_date_sk#69]
+Join condition: None
+
+(18) Project [codegen id : 6]
+Output [5]: [cs_ship_addr_sk#2, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, d_date_sk#69]
+
+(19) BatchScan spark_catalog.default.customer_address
+Output [2]: [ca_address_sk#71, ca_state#72]
+spark_catalog.default.customer_address [scan class = SparkBatchQueryScan] [filters=ca_state IS NOT NULL, ca_state = 'GA', ca_address_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(20) Filter [codegen id : 4]
+Input [2]: [ca_address_sk#71, ca_state#72]
+Condition : ((isnotnull(ca_state#72) AND (ca_state#72 = GA)) AND isnotnull(ca_address_sk#71))
+
+(21) Project [codegen id : 4]
+Output [1]: [ca_address_sk#71]
+Input [2]: [ca_address_sk#71, ca_state#72]
+
+(22) BroadcastExchange
+Input [1]: [ca_address_sk#71]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(23) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cs_ship_addr_sk#2]
+Right keys [1]: [ca_address_sk#71]
+Join condition: None
+
+(24) Project [codegen id : 6]
+Output [4]: [cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Input [6]: [cs_ship_addr_sk#2, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, ca_address_sk#71]
+
+(25) BatchScan spark_catalog.default.call_center
+Output [2]: [cc_call_center_sk#73, cc_county#74]
+spark_catalog.default.call_center [scan class = SparkBatchQueryScan] [filters=cc_county IS NOT NULL, cc_county = 'Williamson County', cc_call_center_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(26) Filter [codegen id : 5]
+Input [2]: [cc_call_center_sk#73, cc_county#74]
+Condition : ((isnotnull(cc_county#74) AND (cc_county#74 = Williamson County)) AND isnotnull(cc_call_center_sk#73))
+
+(27) Project [codegen id : 5]
+Output [1]: [cc_call_center_sk#73]
+Input [2]: [cc_call_center_sk#73, cc_county#74]
+
+(28) BroadcastExchange
+Input [1]: [cc_call_center_sk#73]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+(29) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cs_call_center_sk#3]
+Right keys [1]: [cc_call_center_sk#73]
+Join condition: None
+
+(30) Project [codegen id : 6]
+Output [3]: [cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Input [5]: [cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, cc_call_center_sk#73]
+
+(31) HashAggregate [codegen id : 6]
+Input [3]: [cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Keys [1]: [cs_order_number#5]
+Functions [2]: [partial_sum(UnscaledValue(cs_ext_ship_cost#6)), partial_sum(UnscaledValue(cs_net_profit#7))]
+Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_ship_cost#6))#75, sum(UnscaledValue(cs_net_profit#7))#76]
+Results [3]: [cs_order_number#5, sum#77, sum#78]
+
+(32) Exchange
+Input [3]: [cs_order_number#5, sum#77, sum#78]
+Arguments: hashpartitioning(cs_order_number#5, 1), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(33) HashAggregate [codegen id : 7]
+Input [3]: [cs_order_number#5, sum#77, sum#78]
+Keys [1]: [cs_order_number#5]
+Functions [2]: [merge_sum(UnscaledValue(cs_ext_ship_cost#6)), merge_sum(UnscaledValue(cs_net_profit#7))]
+Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_ship_cost#6))#75, sum(UnscaledValue(cs_net_profit#7))#76]
+Results [3]: [cs_order_number#5, sum#77, sum#78]
+
+(34) HashAggregate [codegen id : 7]
+Input [3]: [cs_order_number#5, sum#77, sum#78]
+Keys: []
+Functions [3]: [merge_sum(UnscaledValue(cs_ext_ship_cost#6)), merge_sum(UnscaledValue(cs_net_profit#7)), partial_count(distinct cs_order_number#5)]
+Aggregate Attributes [3]: [sum(UnscaledValue(cs_ext_ship_cost#6))#75, sum(UnscaledValue(cs_net_profit#7))#76, count(cs_order_number#5)#79]
+Results [3]: [sum#77, sum#78, count#80]
+
+(35) HashAggregate [codegen id : 7]
+Input [3]: [sum#77, sum#78, count#80]
+Keys: []
+Functions [3]: [sum(UnscaledValue(cs_ext_ship_cost#6)), sum(UnscaledValue(cs_net_profit#7)), count(distinct cs_order_number#5)]
+Aggregate Attributes [3]: [sum(UnscaledValue(cs_ext_ship_cost#6))#75, sum(UnscaledValue(cs_net_profit#7))#76, count(cs_order_number#5)#79]
+Results [3]: [count(cs_order_number#5)#79 AS order count #81, MakeDecimal(sum(UnscaledValue(cs_ext_ship_cost#6))#75,17,2) AS total shipping cost #82, MakeDecimal(sum(UnscaledValue(cs_net_profit#7))#76,17,2) AS total net profit #83]
+

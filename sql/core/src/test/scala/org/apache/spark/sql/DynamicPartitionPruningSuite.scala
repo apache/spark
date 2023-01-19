@@ -1790,7 +1790,8 @@ abstract class BroadcastVarPushdownV2Suite extends DynamicPartitionPruningV2Suit
           }
           BroadcastHashJoinUtil.canPushBroadcastedKeysAsFilter(df.sqlContext.conf,
             streamKeys, buildKeys, streamPlan, buildPlan,
-            new java.util.IdentityHashMap[BatchScanExec, Any]()).nonEmpty
+            new java.util.IdentityHashMap[BatchScanExec, Any](),
+            new java.util.IdentityHashMap[SparkPlan, Any]()).nonEmpty
         } else {
           false
         }

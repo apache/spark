@@ -1,0 +1,184 @@
+== Physical Plan ==
+TakeOrderedAndProject (34)
++- * HashAggregate (33)
+   +- Exchange (32)
+      +- * HashAggregate (31)
+         +- * Project (30)
+            +- * BroadcastHashJoin Inner BuildRight (29)
+               :- * Project (24)
+               :  +- * BroadcastHashJoin Inner BuildRight (23)
+               :     :- * Project (18)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (17)
+               :     :     :- * Project (3)
+               :     :     :  +- * Filter (2)
+               :     :     :     +- BatchScan spark_catalog.default.supplier (1)
+               :     :     +- BroadcastExchange (16)
+               :     :        +- * BroadcastHashJoin LeftAnti BuildRight (15)
+               :     :           :- * BroadcastHashJoin LeftSemi BuildRight (10)
+               :     :           :  :- * Project (6)
+               :     :           :  :  +- * Filter (5)
+               :     :           :  :     +- BatchScan spark_catalog.default.lineitem (4)
+               :     :           :  +- BroadcastExchange (9)
+               :     :           :     +- * Project (8)
+               :     :           :        +- BatchScan spark_catalog.default.lineitem (7)
+               :     :           +- BroadcastExchange (14)
+               :     :              +- * Project (13)
+               :     :                 +- * Filter (12)
+               :     :                    +- BatchScan spark_catalog.default.lineitem (11)
+               :     +- BroadcastExchange (22)
+               :        +- * Project (21)
+               :           +- * Filter (20)
+               :              +- BatchScan spark_catalog.default.orders (19)
+               +- BroadcastExchange (28)
+                  +- * Project (27)
+                     +- * Filter (26)
+                        +- BatchScan spark_catalog.default.nation (25)
+
+
+(1) BatchScan spark_catalog.default.supplier
+Output [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
+spark_catalog.default.supplier [scan class = SparkBatchQueryScan] [filters=s_suppkey IS NOT NULL, s_nationkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 6]
+Input [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
+Condition : (isnotnull(s_suppkey#1) AND isnotnull(s_nationkey#3))
+
+(3) Project [codegen id : 6]
+Output [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
+Input [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
+
+(4) BatchScan spark_catalog.default.lineitem
+Output [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
+spark_catalog.default.lineitem [scan class = SparkBatchQueryScan] [filters=l_receiptdate IS NOT NULL, l_commitdate IS NOT NULL, l_suppkey IS NOT NULL, l_orderkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 3]
+Input [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
+Condition : (((((l_receiptdate#7 > l_commitdate#6) AND isnotnull(l_receiptdate#7)) AND isnotnull(l_commitdate#6)) AND isnotnull(l_suppkey#5)) AND isnotnull(l_orderkey#4))
+
+(6) Project [codegen id : 3]
+Output [2]: [l_orderkey#4, l_suppkey#5]
+Input [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
+
+(7) BatchScan spark_catalog.default.lineitem
+Output [16]: [l_orderkey#8, l_partkey#9, l_suppkey#10, l_linenumber#11, l_quantity#12, l_extendedprice#13, l_discount#14, l_tax#15, l_returnflag#16, l_linestatus#17, l_shipdate#18, l_commitdate#19, l_receiptdate#20, l_shipinstruct#21, l_shipmode#22, l_comment#23]
+spark_catalog.default.lineitem [scan class = SparkBatchQueryScan] [filters=], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(8) Project [codegen id : 1]
+Output [2]: [l_orderkey#8, l_suppkey#10]
+Input [16]: [l_orderkey#8, l_partkey#9, l_suppkey#10, l_linenumber#11, l_quantity#12, l_extendedprice#13, l_discount#14, l_tax#15, l_returnflag#16, l_linestatus#17, l_shipdate#18, l_commitdate#19, l_receiptdate#20, l_shipinstruct#21, l_shipmode#22, l_comment#23]
+
+(9) BroadcastExchange
+Input [2]: [l_orderkey#8, l_suppkey#10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
+
+(10) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [l_orderkey#4]
+Right keys [1]: [l_orderkey#8]
+Join condition: NOT (l_suppkey#10 = l_suppkey#5)
+
+(11) BatchScan spark_catalog.default.lineitem
+Output [16]: [l_orderkey#24, l_partkey#25, l_suppkey#26, l_linenumber#27, l_quantity#28, l_extendedprice#29, l_discount#30, l_tax#31, l_returnflag#32, l_linestatus#33, l_shipdate#34, l_commitdate#35, l_receiptdate#36, l_shipinstruct#37, l_shipmode#38, l_comment#39]
+spark_catalog.default.lineitem [scan class = SparkBatchQueryScan] [filters=l_receiptdate IS NOT NULL, l_commitdate IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(12) Filter [codegen id : 2]
+Input [16]: [l_orderkey#24, l_partkey#25, l_suppkey#26, l_linenumber#27, l_quantity#28, l_extendedprice#29, l_discount#30, l_tax#31, l_returnflag#32, l_linestatus#33, l_shipdate#34, l_commitdate#35, l_receiptdate#36, l_shipinstruct#37, l_shipmode#38, l_comment#39]
+Condition : (((l_receiptdate#36 > l_commitdate#35) AND isnotnull(l_receiptdate#36)) AND isnotnull(l_commitdate#35))
+
+(13) Project [codegen id : 2]
+Output [2]: [l_orderkey#24, l_suppkey#26]
+Input [16]: [l_orderkey#24, l_partkey#25, l_suppkey#26, l_linenumber#27, l_quantity#28, l_extendedprice#29, l_discount#30, l_tax#31, l_returnflag#32, l_linestatus#33, l_shipdate#34, l_commitdate#35, l_receiptdate#36, l_shipinstruct#37, l_shipmode#38, l_comment#39]
+
+(14) BroadcastExchange
+Input [2]: [l_orderkey#24, l_suppkey#26]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [l_orderkey#4]
+Right keys [1]: [l_orderkey#24]
+Join condition: NOT (l_suppkey#26 = l_suppkey#5)
+
+(16) BroadcastExchange
+Input [2]: [l_orderkey#4, l_suppkey#5]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [plan_id=3]
+
+(17) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [s_suppkey#1]
+Right keys [1]: [l_suppkey#5]
+Join condition: None
+
+(18) Project [codegen id : 6]
+Output [3]: [s_name#2, s_nationkey#3, l_orderkey#4]
+Input [5]: [s_suppkey#1, s_name#2, s_nationkey#3, l_orderkey#4, l_suppkey#5]
+
+(19) BatchScan spark_catalog.default.orders
+Output [2]: [o_orderkey#40, o_orderstatus#41]
+spark_catalog.default.orders [scan class = SparkBatchQueryScan] [filters=o_orderstatus IS NOT NULL, o_orderstatus = 'F', o_orderkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(20) Filter [codegen id : 4]
+Input [2]: [o_orderkey#40, o_orderstatus#41]
+Condition : ((isnotnull(o_orderstatus#41) AND (o_orderstatus#41 = F)) AND isnotnull(o_orderkey#40))
+
+(21) Project [codegen id : 4]
+Output [1]: [o_orderkey#40]
+Input [2]: [o_orderkey#40, o_orderstatus#41]
+
+(22) BroadcastExchange
+Input [1]: [o_orderkey#40]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=4]
+
+(23) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [l_orderkey#4]
+Right keys [1]: [o_orderkey#40]
+Join condition: None
+
+(24) Project [codegen id : 6]
+Output [2]: [s_name#2, s_nationkey#3]
+Input [4]: [s_name#2, s_nationkey#3, l_orderkey#4, o_orderkey#40]
+
+(25) BatchScan spark_catalog.default.nation
+Output [2]: [n_nationkey#42, n_name#43]
+spark_catalog.default.nation [scan class = SparkBatchQueryScan] [filters=n_name IS NOT NULL, n_name = 'SAUDI ARABIA', n_nationkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(26) Filter [codegen id : 5]
+Input [2]: [n_nationkey#42, n_name#43]
+Condition : ((isnotnull(n_name#43) AND (n_name#43 = SAUDI ARABIA)) AND isnotnull(n_nationkey#42))
+
+(27) Project [codegen id : 5]
+Output [1]: [n_nationkey#42]
+Input [2]: [n_nationkey#42, n_name#43]
+
+(28) BroadcastExchange
+Input [1]: [n_nationkey#42]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=5]
+
+(29) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [s_nationkey#3]
+Right keys [1]: [n_nationkey#42]
+Join condition: None
+
+(30) Project [codegen id : 6]
+Output [1]: [s_name#2]
+Input [3]: [s_name#2, s_nationkey#3, n_nationkey#42]
+
+(31) HashAggregate [codegen id : 6]
+Input [1]: [s_name#2]
+Keys [1]: [s_name#2]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#44]
+Results [2]: [s_name#2, count#45]
+
+(32) Exchange
+Input [2]: [s_name#2, count#45]
+Arguments: hashpartitioning(s_name#2, 1), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(33) HashAggregate [codegen id : 7]
+Input [2]: [s_name#2, count#45]
+Keys [1]: [s_name#2]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#46]
+Results [2]: [s_name#2, count(1)#46 AS numwait#47]
+
+(34) TakeOrderedAndProject
+Input [2]: [s_name#2, numwait#47]
+Arguments: 100, [numwait#47 DESC NULLS LAST, s_name#2 ASC NULLS FIRST], [s_name#2, numwait#47]
+

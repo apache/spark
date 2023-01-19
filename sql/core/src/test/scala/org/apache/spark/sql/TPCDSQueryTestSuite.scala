@@ -57,7 +57,7 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelper {
 
-  private val tpcdsDataPath = sys.env.get("SPARK_TPCDS_DATA")
+  protected val tpcdsDataPath = sys.env.get("SPARK_TPCDS_DATA")
   private val regenerateGoldenFiles = sys.env.get("SPARK_GENERATE_GOLDEN_FILES").exists(_ == "1")
 
   // To make output results deterministic

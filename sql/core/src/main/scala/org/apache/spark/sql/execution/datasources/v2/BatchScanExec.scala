@@ -85,7 +85,6 @@ case class BatchScanExec(
     val pushFiltersAndRefreshIter = dataSourceFilters.nonEmpty ||
       (scan.isInstanceOf[SupportsRuntimeFiltering] &&
         scan.asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter)
-
     if (pushFiltersAndRefreshIter) {
       val originalPartitioning = outputPartitioning
 
@@ -181,10 +180,16 @@ case class BatchScanExec(
           s" ${jkd.streamSideJoinKeyAtJoin}").mkString(";")
         s"for this buildleg : join col and streaming col = $joinKeysStr"
       }).mkString("\n"))
-
     val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString" +
       s" $broadcastVarFiltersString"
     redact(result)
+  }
+
+  def resetFilteredPartitionsAndInputRdd(): Unit = {
+    this.synchronized {
+      this.filteredPartitions = null
+      this.inputRDDCached = null
+    }
   }
 
   def resetFilteredPartitionsAndInputRdd(): Unit = {

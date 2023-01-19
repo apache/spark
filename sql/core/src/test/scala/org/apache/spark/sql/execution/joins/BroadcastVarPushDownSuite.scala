@@ -27,18 +27,25 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 
 class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils {
 
-  test("test identification of batchscans for broadcast variables on simple join") {
+  test("test broadcast variables push on simple join") {
     val planToTest = () => non_part_table1.where('c1_1.attr > 10).join(non_part_table2, Inner,
         Option("c1_2".attr === "c2_2".attr))
 
     runTest(planToTest)
   }
 
-  test("test identification of batchscans for broadcast variables on nested joins") {
+  test("test  broadcast variables push on nested joins") {
     val planToTest = () => non_part_table1.where('c1_2.attr > 10).join(non_part_table2, Inner,
       Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr)).join(non_part_table3.
       where('c3_1.attr > 1), Inner, Option("c2_1".attr === "c3_2".attr))
 
+    runTest(planToTest)
+  }
+
+  test("test broadcast var push with multi target batch scan") {
+    val planToTest = () => non_part_table1.where('c1_2.attr > 10).join(non_part_table2, Inner,
+        Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr)).join(non_part_table3.
+        where('c3_1.attr > 1), Inner, Option("c1_1".attr === "c3_2".attr))
     runTest(planToTest)
   }
 
@@ -71,7 +78,8 @@ class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils
     val pairedBatchScansWithBCVarToWthoutBCVar = batchScansWithBCVar.filter(
       x => x.scan.isInstanceOf[SupportsRuntimeFiltering] && x.scan
         .asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter).map(bs =>
-      batchScansWithoutBCVar.find(x => x.schema == bs.schema).map(bs -> _).get)
+      batchScansWithoutBCVar.find(x => x.table.name == bs.table.name && x.schema == bs.schema).
+        map(bs -> _).get)
     assert(pairedBatchScansWithBCVarToWthoutBCVar.nonEmpty)
     assert(pairedBatchScansWithBCVarToWthoutBCVar.forall {
       case (withBc, withoutBC) => withBc.metrics("numOutputRows").value <

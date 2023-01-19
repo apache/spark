@@ -184,7 +184,13 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
       None, None)
   }
 
+  def createNonPartTable(name: String, schema: StructType, data: BufferedRows): DataSourceV2Relation
+  = DataSourceV2Relation.create(new InMemoryTable(
+      name, schema, Array.empty, Map.empty[String, String].asJava).withData(Array(data)),
+      None, None)
+
   val emptyBatchScanToBuildLegMap = new java.util.IdentityHashMap[BatchScanExec, Any]()
+  val emptyBuildLegsBlockingPushFromAncestors = new java.util.IdentityHashMap[SparkPlan, Any]()
 
   def assertPushdownData(sparkPlan: SparkPlan, expected: Seq[BroadcastVarPushDownData]): Unit
   = {
@@ -195,7 +201,7 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
     val bhjsData = bhjs.map(getComponents)
     val result = bhjsData.flatMap(bhjData => BroadcastHashJoinUtil.canPushBroadcastedKeysAsFilter(
         conf, bhjData.streamKeys, bhjData.buildKeys, bhjData.streamPlan, bhjData.buildPlan,
-        emptyBatchScanToBuildLegMap))
+        emptyBatchScanToBuildLegMap, emptyBuildLegsBlockingPushFromAncestors))
     assertResult(expected.size)(result.size)
     val mutableExpected = scala.collection.mutable.ListBuffer.apply(expected: _*)
     result.foreach(x => {

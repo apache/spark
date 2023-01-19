@@ -1,0 +1,58 @@
+TakeOrderedAndProject [rnk,best_performing,worst_performing]
+  WholeStageCodegen (8)
+    Project [rnk,i_product_name,i_product_name]
+      BroadcastHashJoin [item_sk,i_item_sk]
+        Project [rnk,item_sk,i_product_name]
+          BroadcastHashJoin [item_sk,i_item_sk]
+            Project [item_sk,rnk,item_sk]
+              BroadcastHashJoin [rnk,rnk]
+                Project [item_sk,rnk]
+                  Filter [rnk,item_sk]
+                    InputAdapter
+                      Window [rank_col]
+                        WholeStageCodegen (2)
+                          Sort [rank_col]
+                            Filter [rank_col]
+                              Subquery #1
+                                WholeStageCodegen (2)
+                                  HashAggregate [ss_store_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),rank_col,sum,count]
+                                    InputAdapter
+                                      Exchange [ss_store_sk] #2
+                                        WholeStageCodegen (1)
+                                          HashAggregate [ss_store_sk,ss_net_profit] [sum,count,sum,count]
+                                            Project [ss_store_sk,ss_net_profit]
+                                              Filter [ss_store_sk,ss_addr_sk]
+                                                InputAdapter
+                                                  BatchScan spark_catalog.default.store_sales [ss_addr_sk,ss_store_sk,ss_net_profit]
+                              HashAggregate [ss_item_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),item_sk,rank_col,sum,count]
+                                InputAdapter
+                                  Exchange [ss_item_sk] #1
+                                    WholeStageCodegen (1)
+                                      HashAggregate [ss_item_sk,ss_net_profit] [sum,count,sum,count]
+                                        Project [ss_item_sk,ss_net_profit]
+                                          Filter [ss_store_sk]
+                                            InputAdapter
+                                              BatchScan spark_catalog.default.store_sales [ss_item_sk,ss_store_sk,ss_net_profit]
+                InputAdapter
+                  BroadcastExchange #3
+                    WholeStageCodegen (5)
+                      Project [item_sk,rnk]
+                        Filter [rnk,item_sk]
+                          InputAdapter
+                            Window [rank_col]
+                              WholeStageCodegen (4)
+                                Sort [rank_col]
+                                  Filter [rank_col]
+                                    ReusedSubquery [rank_col] #1
+                                    HashAggregate [ss_item_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),item_sk,rank_col,sum,count]
+                                      InputAdapter
+                                        ReusedExchange [ss_item_sk,sum,count] #1
+            InputAdapter
+              BroadcastExchange #4
+                WholeStageCodegen (6)
+                  Project [i_item_sk,i_product_name]
+                    Filter [i_item_sk]
+                      InputAdapter
+                        BatchScan spark_catalog.default.item [i_item_sk,i_product_name]
+        InputAdapter
+          ReusedExchange [i_item_sk,i_product_name] #4

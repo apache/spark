@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.commons.io.FileUtils
 
@@ -31,6 +32,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
+
 
 // scalastyle:off line.size.limit
 /**
@@ -73,7 +75,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  protected val baseResourcePath = {
+  protected lazy val baseResourcePath = {
     // use the same way as `SQLQueryTestSuite` to get the resource path
     getWorkspaceFilePath("sql", "core", "src", "test", "resources", "tpcds-plan-stability").toFile
   }
@@ -101,10 +103,11 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 
   private def isApproved(
-      dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean = {
-    val simplifiedFile = new File(dir, "simplified.txt")
+      dir: File, actualSimplifiedPlan: String, actualExplain: String, queryName: String): Boolean
+  = {
+    val simplifiedFile = new File(dir, getAppropriateFileName(queryName, "simplified.txt"))
     val expectedSimplified = FileUtils.readFileToString(simplifiedFile, StandardCharsets.UTF_8)
-    lazy val explainFile = new File(dir, "explain.txt")
+    lazy val explainFile = new File(dir, getAppropriateFileName(queryName, "explain.txt"))
     lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
     expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
   }
@@ -121,33 +124,42 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
+    val foundMatch = dir.exists() && Try {isApproved(dir, simplified, explain, name)}.
+      getOrElse(false)
 
     if (!foundMatch) {
-      FileUtils.deleteDirectory(dir)
-      assert(dir.mkdirs())
-
-      val file = new File(dir, "simplified.txt")
+      val file = new File(dir, getAppropriateFileName(name, "simplified.txt"))
+      val fileOriginalPlan = new File(dir, getAppropriateFileName(name, "explain.txt"))
+      // FileUtils.deleteDirectory(dir)
+      FileUtils.deleteQuietly(file)
+      FileUtils.deleteQuietly(fileOriginalPlan)
+      dir.mkdirs()
+      // assert(dir.mkdirs())
       FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
-      val fileOriginalPlan = new File(dir, "explain.txt")
       FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
       logDebug(s"APPROVED: $file $fileOriginalPlan")
     }
   }
 
+  protected def getAppropriateFileName(queryName: String, suggestedFileName: String): String =
+    suggestedFileName
+
+
   private def checkWithApproved(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val actualSimplified = getSimplifiedPlan(plan)
-    val foundMatch = isApproved(dir, actualSimplified, explain)
+    val foundMatch = isApproved(dir, actualSimplified, explain, name)
 
     if (!foundMatch) {
       // show diff with last approved
-      val approvedSimplifiedFile = new File(dir, "simplified.txt")
-      val approvedExplainFile = new File(dir, "explain.txt")
+      val approvedSimplifiedFile = new File(dir, getAppropriateFileName(name, "simplified.txt"))
+      val approvedExplainFile = new File(dir, getAppropriateFileName(name, "explain.txt"))
 
-      val actualSimplifiedFile = new File(tempDir, s"$name.actual.simplified.txt")
-      val actualExplainFile = new File(tempDir, s"$name.actual.explain.txt")
+      val actualSimplifiedFile = new File(tempDir, getAppropriateFileName(name,
+        s"$name.actual.simplified.txt"))
+      val actualExplainFile = new File(tempDir, getAppropriateFileName(name,
+        s"$name.actual.explain.txt"))
 
       val approvedSimplified = FileUtils.readFileToString(
         approvedSimplifiedFile, StandardCharsets.UTF_8)

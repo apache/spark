@@ -1,0 +1,245 @@
+== Physical Plan ==
+* Sort (41)
++- Exchange (40)
+   +- * HashAggregate (39)
+      +- Exchange (38)
+         +- * HashAggregate (37)
+            +- * Project (36)
+               +- * BroadcastHashJoin Inner BuildRight (35)
+                  :- * Project (30)
+                  :  +- * BroadcastHashJoin Inner BuildRight (29)
+                  :     :- * Project (24)
+                  :     :  +- * BroadcastHashJoin Inner BuildRight (23)
+                  :     :     :- * Project (18)
+                  :     :     :  +- * BroadcastHashJoin Inner BuildRight (17)
+                  :     :     :     :- * Project (12)
+                  :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (11)
+                  :     :     :     :     :- * Project (9)
+                  :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (8)
+                  :     :     :     :     :     :- * Project (3)
+                  :     :     :     :     :     :  +- * Filter (2)
+                  :     :     :     :     :     :     +- BatchScan spark_catalog.default.call_center (1)
+                  :     :     :     :     :     +- BroadcastExchange (7)
+                  :     :     :     :     :        +- * Project (6)
+                  :     :     :     :     :           +- * Filter (5)
+                  :     :     :     :     :              +- BatchScan spark_catalog.default.catalog_returns (4)
+                  :     :     :     :     +- ReusedExchange (10)
+                  :     :     :     +- BroadcastExchange (16)
+                  :     :     :        +- * Project (15)
+                  :     :     :           +- * Filter (14)
+                  :     :     :              +- BatchScan spark_catalog.default.customer (13)
+                  :     :     +- BroadcastExchange (22)
+                  :     :        +- * Project (21)
+                  :     :           +- * Filter (20)
+                  :     :              +- BatchScan spark_catalog.default.customer_address (19)
+                  :     +- BroadcastExchange (28)
+                  :        +- * Project (27)
+                  :           +- * Filter (26)
+                  :              +- BatchScan spark_catalog.default.customer_demographics (25)
+                  +- BroadcastExchange (34)
+                     +- * Project (33)
+                        +- * Filter (32)
+                           +- BatchScan spark_catalog.default.household_demographics (31)
+
+
+(1) BatchScan spark_catalog.default.call_center
+Output [4]: [cc_call_center_sk#1, cc_call_center_id#2, cc_name#3, cc_manager#4]
+spark_catalog.default.call_center [scan class = SparkBatchQueryScan] [filters=cc_call_center_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 7]
+Input [4]: [cc_call_center_sk#1, cc_call_center_id#2, cc_name#3, cc_manager#4]
+Condition : isnotnull(cc_call_center_sk#1)
+
+(3) Project [codegen id : 7]
+Output [4]: [cc_call_center_sk#1, cc_call_center_id#2, cc_name#3, cc_manager#4]
+Input [4]: [cc_call_center_sk#1, cc_call_center_id#2, cc_name#3, cc_manager#4]
+
+(4) BatchScan spark_catalog.default.catalog_returns
+Output [4]: [cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_call_center_sk#7, cr_net_loss#8]
+spark_catalog.default.catalog_returns [scan class = SparkBatchQueryScan] [filters=cr_call_center_sk IS NOT NULL, cr_returned_date_sk IS NOT NULL, cr_returning_customer_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [4]: [cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_call_center_sk#7, cr_net_loss#8]
+Condition : ((isnotnull(cr_call_center_sk#7) AND isnotnull(cr_returned_date_sk#5)) AND isnotnull(cr_returning_customer_sk#6))
+
+(6) Project [codegen id : 1]
+Output [4]: [cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_call_center_sk#7, cr_net_loss#8]
+Input [4]: [cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_call_center_sk#7, cr_net_loss#8]
+
+(7) BroadcastExchange
+Input [4]: [cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_call_center_sk#7, cr_net_loss#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [cc_call_center_sk#1]
+Right keys [1]: [cr_call_center_sk#7]
+Join condition: None
+
+(9) Project [codegen id : 7]
+Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_net_loss#8]
+Input [8]: [cc_call_center_sk#1, cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_call_center_sk#7, cr_net_loss#8]
+
+(10) ReusedExchange [Reuses operator id: 45]
+Output [1]: [d_date_sk#9]
+
+(11) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [cr_returned_date_sk#5]
+Right keys [1]: [d_date_sk#9]
+Join condition: None
+
+(12) Project [codegen id : 7]
+Output [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#6, cr_net_loss#8]
+Input [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returned_date_sk#5, cr_returning_customer_sk#6, cr_net_loss#8, d_date_sk#9]
+
+(13) BatchScan spark_catalog.default.customer
+Output [4]: [c_customer_sk#10, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13]
+spark_catalog.default.customer [scan class = SparkBatchQueryScan] [filters=c_customer_sk IS NOT NULL, c_current_addr_sk IS NOT NULL, c_current_cdemo_sk IS NOT NULL, c_current_hdemo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(14) Filter [codegen id : 3]
+Input [4]: [c_customer_sk#10, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13]
+Condition : (((isnotnull(c_customer_sk#10) AND isnotnull(c_current_addr_sk#13)) AND isnotnull(c_current_cdemo_sk#11)) AND isnotnull(c_current_hdemo_sk#12))
+
+(15) Project [codegen id : 3]
+Output [4]: [c_customer_sk#10, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13]
+Input [4]: [c_customer_sk#10, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13]
+
+(16) BroadcastExchange
+Input [4]: [c_customer_sk#10, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(17) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [cr_returning_customer_sk#6]
+Right keys [1]: [c_customer_sk#10]
+Join condition: None
+
+(18) Project [codegen id : 7]
+Output [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13]
+Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#6, cr_net_loss#8, c_customer_sk#10, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13]
+
+(19) BatchScan spark_catalog.default.customer_address
+Output [2]: [ca_address_sk#14, ca_gmt_offset#15]
+spark_catalog.default.customer_address [scan class = SparkBatchQueryScan] [filters=ca_gmt_offset IS NOT NULL, ca_gmt_offset = -7.00, ca_address_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(20) Filter [codegen id : 4]
+Input [2]: [ca_address_sk#14, ca_gmt_offset#15]
+Condition : ((isnotnull(ca_gmt_offset#15) AND (ca_gmt_offset#15 = -7.00)) AND isnotnull(ca_address_sk#14))
+
+(21) Project [codegen id : 4]
+Output [1]: [ca_address_sk#14]
+Input [2]: [ca_address_sk#14, ca_gmt_offset#15]
+
+(22) BroadcastExchange
+Input [1]: [ca_address_sk#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(23) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [c_current_addr_sk#13]
+Right keys [1]: [ca_address_sk#14]
+Join condition: None
+
+(24) Project [codegen id : 7]
+Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, c_current_cdemo_sk#11, c_current_hdemo_sk#12]
+Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, c_current_cdemo_sk#11, c_current_hdemo_sk#12, c_current_addr_sk#13, ca_address_sk#14]
+
+(25) BatchScan spark_catalog.default.customer_demographics
+Output [3]: [cd_demo_sk#16, cd_marital_status#17, cd_education_status#18]
+spark_catalog.default.customer_demographics [scan class = SparkBatchQueryScan] [filters=((cd_marital_status = 'M' AND cd_education_status = 'Unknown') OR (cd_marital_status = 'W' AND cd_education_status = 'Advanced Degree')), cd_demo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(26) Filter [codegen id : 5]
+Input [3]: [cd_demo_sk#16, cd_marital_status#17, cd_education_status#18]
+Condition : ((((cd_marital_status#17 = M) AND (cd_education_status#18 = Unknown)) OR ((cd_marital_status#17 = W) AND (cd_education_status#18 = Advanced Degree))) AND isnotnull(cd_demo_sk#16))
+
+(27) Project [codegen id : 5]
+Output [3]: [cd_demo_sk#16, cd_marital_status#17, cd_education_status#18]
+Input [3]: [cd_demo_sk#16, cd_marital_status#17, cd_education_status#18]
+
+(28) BroadcastExchange
+Input [3]: [cd_demo_sk#16, cd_marital_status#17, cd_education_status#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(29) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [c_current_cdemo_sk#11]
+Right keys [1]: [cd_demo_sk#16]
+Join condition: None
+
+(30) Project [codegen id : 7]
+Output [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, c_current_hdemo_sk#12, cd_marital_status#17, cd_education_status#18]
+Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, c_current_cdemo_sk#11, c_current_hdemo_sk#12, cd_demo_sk#16, cd_marital_status#17, cd_education_status#18]
+
+(31) BatchScan spark_catalog.default.household_demographics
+Output [2]: [hd_demo_sk#19, hd_buy_potential#20]
+spark_catalog.default.household_demographics [scan class = SparkBatchQueryScan] [filters=hd_buy_potential IS NOT NULL, hd_buy_potential LIKE '"Unknown"%', hd_demo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(32) Filter [codegen id : 6]
+Input [2]: [hd_demo_sk#19, hd_buy_potential#20]
+Condition : ((isnotnull(hd_buy_potential#20) AND StartsWith(hd_buy_potential#20, Unknown)) AND isnotnull(hd_demo_sk#19))
+
+(33) Project [codegen id : 6]
+Output [1]: [hd_demo_sk#19]
+Input [2]: [hd_demo_sk#19, hd_buy_potential#20]
+
+(34) BroadcastExchange
+Input [1]: [hd_demo_sk#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+(35) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [c_current_hdemo_sk#12]
+Right keys [1]: [hd_demo_sk#19]
+Join condition: None
+
+(36) Project [codegen id : 7]
+Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, cd_marital_status#17, cd_education_status#18]
+Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, c_current_hdemo_sk#12, cd_marital_status#17, cd_education_status#18, hd_demo_sk#19]
+
+(37) HashAggregate [codegen id : 7]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#8, cd_marital_status#17, cd_education_status#18]
+Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#17, cd_education_status#18]
+Functions [1]: [partial_sum(UnscaledValue(cr_net_loss#8))]
+Aggregate Attributes [1]: [sum#21]
+Results [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#17, cd_education_status#18, sum#22]
+
+(38) Exchange
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#17, cd_education_status#18, sum#22]
+Arguments: hashpartitioning(cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#17, cd_education_status#18, 1), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(39) HashAggregate [codegen id : 8]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#17, cd_education_status#18, sum#22]
+Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#17, cd_education_status#18]
+Functions [1]: [sum(UnscaledValue(cr_net_loss#8))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cr_net_loss#8))#23]
+Results [4]: [cc_call_center_id#2 AS Call_Center#24, cc_name#3 AS Call_Center_Name#25, cc_manager#4 AS Manager#26, MakeDecimal(sum(UnscaledValue(cr_net_loss#8))#23,17,2) AS Returns_Loss#27]
+
+(40) Exchange
+Input [4]: [Call_Center#24, Call_Center_Name#25, Manager#26, Returns_Loss#27]
+Arguments: rangepartitioning(Returns_Loss#27 DESC NULLS LAST, 1), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(41) Sort [codegen id : 9]
+Input [4]: [Call_Center#24, Call_Center_Name#25, Manager#26, Returns_Loss#27]
+Arguments: [Returns_Loss#27 DESC NULLS LAST], true, 0
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 4 Hosting Expression = cr_returned_date_sk#5 IN dynamicpruning#28
+BroadcastExchange (45)
++- * Project (44)
+   +- * Filter (43)
+      +- BatchScan spark_catalog.default.date_dim (42)
+
+
+(42) BatchScan spark_catalog.default.date_dim
+Output [3]: [d_date_sk#9, d_year#29, d_moy#30]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_year IS NOT NULL, d_moy IS NOT NULL, d_year = 1998, d_moy = 11, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(43) Filter [codegen id : 1]
+Input [3]: [d_date_sk#9, d_year#29, d_moy#30]
+Condition : ((((isnotnull(d_year#29) AND isnotnull(d_moy#30)) AND (d_year#29 = 1998)) AND (d_moy#30 = 11)) AND isnotnull(d_date_sk#9))
+
+(44) Project [codegen id : 1]
+Output [1]: [d_date_sk#9]
+Input [3]: [d_date_sk#9, d_year#29, d_moy#30]
+
+(45) BroadcastExchange
+Input [1]: [d_date_sk#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
+
+

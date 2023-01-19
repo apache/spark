@@ -75,6 +75,17 @@ case class BroadcastHashJoinExec(
 
   @volatile @transient private var broadcastVar: Option[Broadcast[HashedRelation]] = None
 
+  override def getLocationVarTerm: Option[String] = if (broadcastVar.isDefined) {
+    val id = broadcastVar.get.id
+    if (LocationCache.shouldUseLocationVar(id)) {
+      Option(LocationCache.getBroadcastLocationVar(id))
+    } else {
+      None
+    }
+  } else {
+    None
+  }
+
   def pushBroadcastVar(): Unit = if (this.bcVarPushNode == SELF_PUSH ) {
     val pushDownData = BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(buildKeys,
       this.streamedPlan, BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan) ->
@@ -200,7 +211,7 @@ case class BroadcastHashJoinExec(
               false
             } else {
               // Anti Join: Drop the row on the streamed side if it is a match on the build
-              hashed.get(lookupKey) == null
+              hashed.get(lookupKey, null) == null
             }
           })
         }
@@ -287,7 +298,7 @@ case class BroadcastHashJoinExec(
         s"""
            |// generate join key for stream side
            |${keyEv.code}
-           |if (!$anyNull && $relationTerm.getValue(${keyEv.value}) == null) {
+           |if (!$anyNull && $relationTerm.getValue(${keyEv.value}, null) == null) {
            |  $numOutput.add(1);
            |  ${consume(ctx, input)}
            |}

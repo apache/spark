@@ -1,0 +1,447 @@
+== Physical Plan ==
+TakeOrderedAndProject (72)
++- * Project (71)
+   +- * BroadcastHashJoin Inner BuildRight (70)
+      :- * Project (53)
+      :  +- * BroadcastHashJoin Inner BuildRight (52)
+      :     :- * Project (34)
+      :     :  +- * BroadcastHashJoin Inner BuildRight (33)
+      :     :     :- * Filter (16)
+      :     :     :  +- * HashAggregate (15)
+      :     :     :     +- Exchange (14)
+      :     :     :        +- * HashAggregate (13)
+      :     :     :           +- * Project (12)
+      :     :     :              +- * BroadcastHashJoin Inner BuildRight (11)
+      :     :     :                 :- * Project (9)
+      :     :     :                 :  +- * BroadcastHashJoin Inner BuildRight (8)
+      :     :     :                 :     :- * Project (3)
+      :     :     :                 :     :  +- * Filter (2)
+      :     :     :                 :     :     +- BatchScan spark_catalog.default.customer (1)
+      :     :     :                 :     +- BroadcastExchange (7)
+      :     :     :                 :        +- * Project (6)
+      :     :     :                 :           +- * Filter (5)
+      :     :     :                 :              +- BatchScan spark_catalog.default.store_sales (4)
+      :     :     :                 +- ReusedExchange (10)
+      :     :     +- BroadcastExchange (32)
+      :     :        +- * HashAggregate (31)
+      :     :           +- Exchange (30)
+      :     :              +- * HashAggregate (29)
+      :     :                 +- * Project (28)
+      :     :                    +- * BroadcastHashJoin Inner BuildRight (27)
+      :     :                       :- * Project (25)
+      :     :                       :  +- * BroadcastHashJoin Inner BuildRight (24)
+      :     :                       :     :- * Project (19)
+      :     :                       :     :  +- * Filter (18)
+      :     :                       :     :     +- BatchScan spark_catalog.default.customer (17)
+      :     :                       :     +- BroadcastExchange (23)
+      :     :                       :        +- * Project (22)
+      :     :                       :           +- * Filter (21)
+      :     :                       :              +- BatchScan spark_catalog.default.store_sales (20)
+      :     :                       +- ReusedExchange (26)
+      :     +- BroadcastExchange (51)
+      :        +- * Filter (50)
+      :           +- * HashAggregate (49)
+      :              +- Exchange (48)
+      :                 +- * HashAggregate (47)
+      :                    +- * Project (46)
+      :                       +- * BroadcastHashJoin Inner BuildRight (45)
+      :                          :- * Project (43)
+      :                          :  +- * BroadcastHashJoin Inner BuildRight (42)
+      :                          :     :- * Project (37)
+      :                          :     :  +- * Filter (36)
+      :                          :     :     +- BatchScan spark_catalog.default.customer (35)
+      :                          :     +- BroadcastExchange (41)
+      :                          :        +- * Project (40)
+      :                          :           +- * Filter (39)
+      :                          :              +- BatchScan spark_catalog.default.web_sales (38)
+      :                          +- ReusedExchange (44)
+      +- BroadcastExchange (69)
+         +- * HashAggregate (68)
+            +- Exchange (67)
+               +- * HashAggregate (66)
+                  +- * Project (65)
+                     +- * BroadcastHashJoin Inner BuildRight (64)
+                        :- * Project (62)
+                        :  +- * BroadcastHashJoin Inner BuildRight (61)
+                        :     :- * Project (56)
+                        :     :  +- * Filter (55)
+                        :     :     +- BatchScan spark_catalog.default.customer (54)
+                        :     +- BroadcastExchange (60)
+                        :        +- * Project (59)
+                        :           +- * Filter (58)
+                        :              +- BatchScan spark_catalog.default.web_sales (57)
+                        +- ReusedExchange (63)
+
+
+(1) BatchScan spark_catalog.default.customer
+Output [8]: [c_customer_sk#1, c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8]
+spark_catalog.default.customer [scan class = SparkBatchQueryScan] [filters=c_customer_sk IS NOT NULL, c_customer_id IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 3]
+Input [8]: [c_customer_sk#1, c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8]
+Condition : (isnotnull(c_customer_sk#1) AND isnotnull(c_customer_id#2))
+
+(3) Project [codegen id : 3]
+Output [8]: [c_customer_sk#1, c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8]
+Input [8]: [c_customer_sk#1, c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8]
+
+(4) BatchScan spark_catalog.default.store_sales
+Output [4]: [ss_sold_date_sk#9, ss_customer_sk#10, ss_ext_discount_amt#11, ss_ext_list_price#12]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_customer_sk IS NOT NULL, ss_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [4]: [ss_sold_date_sk#9, ss_customer_sk#10, ss_ext_discount_amt#11, ss_ext_list_price#12]
+Condition : (isnotnull(ss_customer_sk#10) AND isnotnull(ss_sold_date_sk#9))
+
+(6) Project [codegen id : 1]
+Output [4]: [ss_sold_date_sk#9, ss_customer_sk#10, ss_ext_discount_amt#11, ss_ext_list_price#12]
+Input [4]: [ss_sold_date_sk#9, ss_customer_sk#10, ss_ext_discount_amt#11, ss_ext_list_price#12]
+
+(7) BroadcastExchange
+Input [4]: [ss_sold_date_sk#9, ss_customer_sk#10, ss_ext_discount_amt#11, ss_ext_list_price#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [c_customer_sk#1]
+Right keys [1]: [ss_customer_sk#10]
+Join condition: None
+
+(9) Project [codegen id : 3]
+Output [10]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, ss_sold_date_sk#9, ss_ext_discount_amt#11, ss_ext_list_price#12]
+Input [12]: [c_customer_sk#1, c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, ss_sold_date_sk#9, ss_customer_sk#10, ss_ext_discount_amt#11, ss_ext_list_price#12]
+
+(10) ReusedExchange [Reuses operator id: 76]
+Output [2]: [d_date_sk#13, d_year#14]
+
+(11) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_sold_date_sk#9]
+Right keys [1]: [d_date_sk#13]
+Join condition: None
+
+(12) Project [codegen id : 3]
+Output [10]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, ss_ext_discount_amt#11, ss_ext_list_price#12, d_year#14]
+Input [12]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, ss_sold_date_sk#9, ss_ext_discount_amt#11, ss_ext_list_price#12, d_date_sk#13, d_year#14]
+
+(13) HashAggregate [codegen id : 3]
+Input [10]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, ss_ext_discount_amt#11, ss_ext_list_price#12, d_year#14]
+Keys [8]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#14, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8]
+Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#12 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#11 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum#15]
+Results [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#14, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, sum#16]
+
+(14) Exchange
+Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#14, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, sum#16]
+Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#14, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, 1), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(15) HashAggregate [codegen id : 16]
+Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#14, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, sum#16]
+Keys [8]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#14, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8]
+Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#12 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#11 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#12 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#11 as decimal(8,2)))), DecimalType(8,2))))#17]
+Results [2]: [c_customer_id#2 AS customer_id#18, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#12 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#11 as decimal(8,2)))), DecimalType(8,2))))#17,18,2) AS year_total#19]
+
+(16) Filter [codegen id : 16]
+Input [2]: [customer_id#18, year_total#19]
+Condition : (isnotnull(year_total#19) AND (year_total#19 > 0.00))
+
+(17) BatchScan spark_catalog.default.customer
+Output [8]: [c_customer_sk#20, c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27]
+spark_catalog.default.customer [scan class = SparkBatchQueryScan] [filters=c_customer_sk IS NOT NULL, c_customer_id IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(18) Filter [codegen id : 6]
+Input [8]: [c_customer_sk#20, c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27]
+Condition : (isnotnull(c_customer_sk#20) AND isnotnull(c_customer_id#21))
+
+(19) Project [codegen id : 6]
+Output [8]: [c_customer_sk#20, c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27]
+Input [8]: [c_customer_sk#20, c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27]
+
+(20) BatchScan spark_catalog.default.store_sales
+Output [4]: [ss_sold_date_sk#28, ss_customer_sk#29, ss_ext_discount_amt#30, ss_ext_list_price#31]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_customer_sk IS NOT NULL, ss_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(21) Filter [codegen id : 4]
+Input [4]: [ss_sold_date_sk#28, ss_customer_sk#29, ss_ext_discount_amt#30, ss_ext_list_price#31]
+Condition : (isnotnull(ss_customer_sk#29) AND isnotnull(ss_sold_date_sk#28))
+
+(22) Project [codegen id : 4]
+Output [4]: [ss_sold_date_sk#28, ss_customer_sk#29, ss_ext_discount_amt#30, ss_ext_list_price#31]
+Input [4]: [ss_sold_date_sk#28, ss_customer_sk#29, ss_ext_discount_amt#30, ss_ext_list_price#31]
+
+(23) BroadcastExchange
+Input [4]: [ss_sold_date_sk#28, ss_customer_sk#29, ss_ext_discount_amt#30, ss_ext_list_price#31]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=3]
+
+(24) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [c_customer_sk#20]
+Right keys [1]: [ss_customer_sk#29]
+Join condition: None
+
+(25) Project [codegen id : 6]
+Output [10]: [c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, ss_sold_date_sk#28, ss_ext_discount_amt#30, ss_ext_list_price#31]
+Input [12]: [c_customer_sk#20, c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, ss_sold_date_sk#28, ss_customer_sk#29, ss_ext_discount_amt#30, ss_ext_list_price#31]
+
+(26) ReusedExchange [Reuses operator id: 80]
+Output [2]: [d_date_sk#32, d_year#33]
+
+(27) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ss_sold_date_sk#28]
+Right keys [1]: [d_date_sk#32]
+Join condition: None
+
+(28) Project [codegen id : 6]
+Output [10]: [c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, ss_ext_discount_amt#30, ss_ext_list_price#31, d_year#33]
+Input [12]: [c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, ss_sold_date_sk#28, ss_ext_discount_amt#30, ss_ext_list_price#31, d_date_sk#32, d_year#33]
+
+(29) HashAggregate [codegen id : 6]
+Input [10]: [c_customer_id#21, c_first_name#22, c_last_name#23, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, ss_ext_discount_amt#30, ss_ext_list_price#31, d_year#33]
+Keys [8]: [c_customer_id#21, c_first_name#22, c_last_name#23, d_year#33, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27]
+Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#31 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum#34]
+Results [9]: [c_customer_id#21, c_first_name#22, c_last_name#23, d_year#33, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, sum#35]
+
+(30) Exchange
+Input [9]: [c_customer_id#21, c_first_name#22, c_last_name#23, d_year#33, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, sum#35]
+Arguments: hashpartitioning(c_customer_id#21, c_first_name#22, c_last_name#23, d_year#33, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, 1), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(31) HashAggregate [codegen id : 7]
+Input [9]: [c_customer_id#21, c_first_name#22, c_last_name#23, d_year#33, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27, sum#35]
+Keys [8]: [c_customer_id#21, c_first_name#22, c_last_name#23, d_year#33, c_preferred_cust_flag#24, c_birth_country#25, c_login#26, c_email_address#27]
+Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#31 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#31 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(8,2)))), DecimalType(8,2))))#17]
+Results [3]: [c_customer_id#21 AS customer_id#36, c_preferred_cust_flag#24 AS customer_preferred_cust_flag#37, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#31 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(8,2)))), DecimalType(8,2))))#17,18,2) AS year_total#38]
+
+(32) BroadcastExchange
+Input [3]: [customer_id#36, customer_preferred_cust_flag#37, year_total#38]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [plan_id=5]
+
+(33) BroadcastHashJoin [codegen id : 16]
+Left keys [1]: [customer_id#18]
+Right keys [1]: [customer_id#36]
+Join condition: None
+
+(34) Project [codegen id : 16]
+Output [4]: [customer_id#18, year_total#19, customer_preferred_cust_flag#37, year_total#38]
+Input [5]: [customer_id#18, year_total#19, customer_id#36, customer_preferred_cust_flag#37, year_total#38]
+
+(35) BatchScan spark_catalog.default.customer
+Output [8]: [c_customer_sk#39, c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46]
+spark_catalog.default.customer [scan class = SparkBatchQueryScan] [filters=c_customer_sk IS NOT NULL, c_customer_id IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(36) Filter [codegen id : 10]
+Input [8]: [c_customer_sk#39, c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46]
+Condition : (isnotnull(c_customer_sk#39) AND isnotnull(c_customer_id#40))
+
+(37) Project [codegen id : 10]
+Output [8]: [c_customer_sk#39, c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46]
+Input [8]: [c_customer_sk#39, c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46]
+
+(38) BatchScan spark_catalog.default.web_sales
+Output [4]: [ws_sold_date_sk#47, ws_bill_customer_sk#48, ws_ext_discount_amt#49, ws_ext_list_price#50]
+spark_catalog.default.web_sales [scan class = SparkBatchQueryScan] [filters=ws_bill_customer_sk IS NOT NULL, ws_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(39) Filter [codegen id : 8]
+Input [4]: [ws_sold_date_sk#47, ws_bill_customer_sk#48, ws_ext_discount_amt#49, ws_ext_list_price#50]
+Condition : (isnotnull(ws_bill_customer_sk#48) AND isnotnull(ws_sold_date_sk#47))
+
+(40) Project [codegen id : 8]
+Output [4]: [ws_sold_date_sk#47, ws_bill_customer_sk#48, ws_ext_discount_amt#49, ws_ext_list_price#50]
+Input [4]: [ws_sold_date_sk#47, ws_bill_customer_sk#48, ws_ext_discount_amt#49, ws_ext_list_price#50]
+
+(41) BroadcastExchange
+Input [4]: [ws_sold_date_sk#47, ws_bill_customer_sk#48, ws_ext_discount_amt#49, ws_ext_list_price#50]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=6]
+
+(42) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [c_customer_sk#39]
+Right keys [1]: [ws_bill_customer_sk#48]
+Join condition: None
+
+(43) Project [codegen id : 10]
+Output [10]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, ws_sold_date_sk#47, ws_ext_discount_amt#49, ws_ext_list_price#50]
+Input [12]: [c_customer_sk#39, c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, ws_sold_date_sk#47, ws_bill_customer_sk#48, ws_ext_discount_amt#49, ws_ext_list_price#50]
+
+(44) ReusedExchange [Reuses operator id: 76]
+Output [2]: [d_date_sk#51, d_year#52]
+
+(45) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [ws_sold_date_sk#47]
+Right keys [1]: [d_date_sk#51]
+Join condition: None
+
+(46) Project [codegen id : 10]
+Output [10]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, ws_ext_discount_amt#49, ws_ext_list_price#50, d_year#52]
+Input [12]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, ws_sold_date_sk#47, ws_ext_discount_amt#49, ws_ext_list_price#50, d_date_sk#51, d_year#52]
+
+(47) HashAggregate [codegen id : 10]
+Input [10]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, ws_ext_discount_amt#49, ws_ext_list_price#50, d_year#52]
+Keys [8]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#52]
+Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#50 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#49 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum#53]
+Results [9]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#52, sum#54]
+
+(48) Exchange
+Input [9]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#52, sum#54]
+Arguments: hashpartitioning(c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#52, 1), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(49) HashAggregate [codegen id : 11]
+Input [9]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#52, sum#54]
+Keys [8]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#52]
+Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#50 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#49 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#50 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#49 as decimal(8,2)))), DecimalType(8,2))))#55]
+Results [2]: [c_customer_id#40 AS customer_id#56, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#50 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#49 as decimal(8,2)))), DecimalType(8,2))))#55,18,2) AS year_total#57]
+
+(50) Filter [codegen id : 11]
+Input [2]: [customer_id#56, year_total#57]
+Condition : (isnotnull(year_total#57) AND (year_total#57 > 0.00))
+
+(51) BroadcastExchange
+Input [2]: [customer_id#56, year_total#57]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [plan_id=8]
+
+(52) BroadcastHashJoin [codegen id : 16]
+Left keys [1]: [customer_id#18]
+Right keys [1]: [customer_id#56]
+Join condition: None
+
+(53) Project [codegen id : 16]
+Output [5]: [customer_id#18, year_total#19, customer_preferred_cust_flag#37, year_total#38, year_total#57]
+Input [6]: [customer_id#18, year_total#19, customer_preferred_cust_flag#37, year_total#38, customer_id#56, year_total#57]
+
+(54) BatchScan spark_catalog.default.customer
+Output [8]: [c_customer_sk#58, c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65]
+spark_catalog.default.customer [scan class = SparkBatchQueryScan] [filters=c_customer_sk IS NOT NULL, c_customer_id IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(55) Filter [codegen id : 14]
+Input [8]: [c_customer_sk#58, c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65]
+Condition : (isnotnull(c_customer_sk#58) AND isnotnull(c_customer_id#59))
+
+(56) Project [codegen id : 14]
+Output [8]: [c_customer_sk#58, c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65]
+Input [8]: [c_customer_sk#58, c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65]
+
+(57) BatchScan spark_catalog.default.web_sales
+Output [4]: [ws_sold_date_sk#66, ws_bill_customer_sk#67, ws_ext_discount_amt#68, ws_ext_list_price#69]
+spark_catalog.default.web_sales [scan class = SparkBatchQueryScan] [filters=ws_bill_customer_sk IS NOT NULL, ws_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(58) Filter [codegen id : 12]
+Input [4]: [ws_sold_date_sk#66, ws_bill_customer_sk#67, ws_ext_discount_amt#68, ws_ext_list_price#69]
+Condition : (isnotnull(ws_bill_customer_sk#67) AND isnotnull(ws_sold_date_sk#66))
+
+(59) Project [codegen id : 12]
+Output [4]: [ws_sold_date_sk#66, ws_bill_customer_sk#67, ws_ext_discount_amt#68, ws_ext_list_price#69]
+Input [4]: [ws_sold_date_sk#66, ws_bill_customer_sk#67, ws_ext_discount_amt#68, ws_ext_list_price#69]
+
+(60) BroadcastExchange
+Input [4]: [ws_sold_date_sk#66, ws_bill_customer_sk#67, ws_ext_discount_amt#68, ws_ext_list_price#69]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=9]
+
+(61) BroadcastHashJoin [codegen id : 14]
+Left keys [1]: [c_customer_sk#58]
+Right keys [1]: [ws_bill_customer_sk#67]
+Join condition: None
+
+(62) Project [codegen id : 14]
+Output [10]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, ws_sold_date_sk#66, ws_ext_discount_amt#68, ws_ext_list_price#69]
+Input [12]: [c_customer_sk#58, c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, ws_sold_date_sk#66, ws_bill_customer_sk#67, ws_ext_discount_amt#68, ws_ext_list_price#69]
+
+(63) ReusedExchange [Reuses operator id: 80]
+Output [2]: [d_date_sk#70, d_year#71]
+
+(64) BroadcastHashJoin [codegen id : 14]
+Left keys [1]: [ws_sold_date_sk#66]
+Right keys [1]: [d_date_sk#70]
+Join condition: None
+
+(65) Project [codegen id : 14]
+Output [10]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, ws_ext_discount_amt#68, ws_ext_list_price#69, d_year#71]
+Input [12]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, ws_sold_date_sk#66, ws_ext_discount_amt#68, ws_ext_list_price#69, d_date_sk#70, d_year#71]
+
+(66) HashAggregate [codegen id : 14]
+Input [10]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, ws_ext_discount_amt#68, ws_ext_list_price#69, d_year#71]
+Keys [8]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, d_year#71]
+Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#69 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#68 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum#72]
+Results [9]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, d_year#71, sum#73]
+
+(67) Exchange
+Input [9]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, d_year#71, sum#73]
+Arguments: hashpartitioning(c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, d_year#71, 1), ENSURE_REQUIREMENTS, [plan_id=10]
+
+(68) HashAggregate [codegen id : 15]
+Input [9]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, d_year#71, sum#73]
+Keys [8]: [c_customer_id#59, c_first_name#60, c_last_name#61, c_preferred_cust_flag#62, c_birth_country#63, c_login#64, c_email_address#65, d_year#71]
+Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#69 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#68 as decimal(8,2)))), DecimalType(8,2))))]
+Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#69 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#68 as decimal(8,2)))), DecimalType(8,2))))#55]
+Results [2]: [c_customer_id#59 AS customer_id#74, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#69 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#68 as decimal(8,2)))), DecimalType(8,2))))#55,18,2) AS year_total#75]
+
+(69) BroadcastExchange
+Input [2]: [customer_id#74, year_total#75]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [plan_id=11]
+
+(70) BroadcastHashJoin [codegen id : 16]
+Left keys [1]: [customer_id#18]
+Right keys [1]: [customer_id#74]
+Join condition: (CASE WHEN (year_total#57 > 0.00) THEN CheckOverflow((promote_precision(year_total#75) / promote_precision(year_total#57)), DecimalType(38,20)) END > CASE WHEN (year_total#19 > 0.00) THEN CheckOverflow((promote_precision(year_total#38) / promote_precision(year_total#19)), DecimalType(38,20)) END)
+
+(71) Project [codegen id : 16]
+Output [1]: [customer_preferred_cust_flag#37]
+Input [7]: [customer_id#18, year_total#19, customer_preferred_cust_flag#37, year_total#38, year_total#57, customer_id#74, year_total#75]
+
+(72) TakeOrderedAndProject
+Input [1]: [customer_preferred_cust_flag#37]
+Arguments: 100, [customer_preferred_cust_flag#37 ASC NULLS FIRST], [customer_preferred_cust_flag#37]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 4 Hosting Expression = ss_sold_date_sk#9 IN dynamicpruning#76
+BroadcastExchange (76)
++- * Project (75)
+   +- * Filter (74)
+      +- BatchScan spark_catalog.default.date_dim (73)
+
+
+(73) BatchScan spark_catalog.default.date_dim
+Output [2]: [d_date_sk#13, d_year#14]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_year IS NOT NULL, d_year = 2001, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(74) Filter [codegen id : 1]
+Input [2]: [d_date_sk#13, d_year#14]
+Condition : ((isnotnull(d_year#14) AND (d_year#14 = 2001)) AND isnotnull(d_date_sk#13))
+
+(75) Project [codegen id : 1]
+Output [2]: [d_date_sk#13, d_year#14]
+Input [2]: [d_date_sk#13, d_year#14]
+
+(76) BroadcastExchange
+Input [2]: [d_date_sk#13, d_year#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=12]
+
+Subquery:2 Hosting operator id = 20 Hosting Expression = ss_sold_date_sk#28 IN dynamicpruning#77
+BroadcastExchange (80)
++- * Project (79)
+   +- * Filter (78)
+      +- BatchScan spark_catalog.default.date_dim (77)
+
+
+(77) BatchScan spark_catalog.default.date_dim
+Output [2]: [d_date_sk#32, d_year#33]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_year IS NOT NULL, d_year = 2002, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(78) Filter [codegen id : 1]
+Input [2]: [d_date_sk#32, d_year#33]
+Condition : ((isnotnull(d_year#33) AND (d_year#33 = 2002)) AND isnotnull(d_date_sk#32))
+
+(79) Project [codegen id : 1]
+Output [2]: [d_date_sk#32, d_year#33]
+Input [2]: [d_date_sk#32, d_year#33]
+
+(80) BroadcastExchange
+Input [2]: [d_date_sk#32, d_year#33]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=13]
+
+Subquery:3 Hosting operator id = 38 Hosting Expression = ws_sold_date_sk#47 IN dynamicpruning#76
+
+Subquery:4 Hosting operator id = 57 Hosting Expression = ws_sold_date_sk#66 IN dynamicpruning#77
+
+

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
+import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -1220,12 +1221,8 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
-case class InWithBroadcastVar(
-    child: Expression,
-    bcVar: BroadcastedJoinKeysWrapper,
-    countCorrectionVariable: String,
-    localInsetVarTerm: String,
-    singleKeyUnsafeRowWriter: String)
+case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapper,
+      countCorrectionVariable: String, localInsetVarTerm: String, singleKeyUnsafeRowWriter: String)
   extends UnaryExpression with Predicate {
 
   // TODO: Asif: Eliminate the deserialized getKeysAsSet call. and directly use the HashedRelation
@@ -1259,37 +1256,39 @@ case class InWithBroadcastVar(
   }
 
   private def evaluateUsingHashedRelation(
-                                           resultTerm: String,
-                                           keyTerm: ExprCode): String = {
-    // since we are going to use HashedRelation we do not need to convert the catalyst data type
-    // to scala types
-    if (CatalystTypeConverters.isPrimitive(child.dataType)) {
-      s"""
-         |if(!${keyTerm.isNull}) {
-         |  $resultTerm = $localInsetVarTerm.containsKey(${keyTerm.value});
-         |}
-         |""".stripMargin
-    } else {
-      // we need to deal with internal row
-      val fieldWritingCode = this.child.dataType match {
-        case DecimalType.Fixed(precision, scale) =>
-          s"$singleKeyUnsafeRowWriter.write(0, ${keyTerm.value}, $precision, $scale);"
-        case _ => s"$singleKeyUnsafeRowWriter.write(0, ${keyTerm.value});"
-      }
-      s"""
-         |if(!${keyTerm.isNull}) {
-         |  $singleKeyUnsafeRowWriter.reset();
-         |  $fieldWritingCode
-         |  $resultTerm = $localInsetVarTerm.containsKey($singleKeyUnsafeRowWriter.getRow());
-         |}
-         |""".stripMargin
-    }
+      resultTerm: String,
+      keyTerm: ExprCode): String = {
+        // since we are going to use HashedRelation we do not need to convert the catalyst data type
+        // to scala types
+        if (CatalystTypeConverters.isPrimitive(child.dataType)) {
+          s"""
+            |if(!${keyTerm.isNull}) {
+            |  $resultTerm = $localInsetVarTerm.containsKey(${keyTerm.value}, ${LocationCache
+            .getBroadcastLocationVar(bcVar.getBroadcastVarId)});
+            |}
+            |""".stripMargin
+        } else {
+          // we need to deal with internal row
+          val fieldWritingCode = this.child.dataType match {
+            case DecimalType.Fixed(precision, scale) =>
+              s"$singleKeyUnsafeRowWriter.write(0, ${keyTerm.value}, $precision, $scale);"
+            case _ => s"$singleKeyUnsafeRowWriter.write(0, ${keyTerm.value});"
+          }
+          s"""
+             |if(!${keyTerm.isNull}) {
+             |  $singleKeyUnsafeRowWriter.reset();
+             |  $fieldWritingCode
+             |  $resultTerm = $localInsetVarTerm.containsKey($singleKeyUnsafeRowWriter.getRow(),
+             |  ${LocationCache.getBroadcastLocationVar(bcVar.getBroadcastVarId)});
+             |}
+             |""".stripMargin
+        }
   }
 
   private def evaluateUsingDeserializedJavaSet(
-                                                resultTerm: String,
-                                                keyTerm: ExprCode,
-                                                ctx: CodegenContext): String = {
+      resultTerm: String,
+      keyTerm: ExprCode,
+      ctx: CodegenContext): String = {
     val converterInitCode = if (CatalystTypeConverters.isPrimitive(child.dataType)) {
       "null;"
     } else {
@@ -1372,4 +1371,28 @@ object IsNotUnknown {
       override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
     }
   }
+}
+
+object LocationCache {
+  private val LOCATION_VAR_PREFIX = "broadcastVar_"
+  def getBroadcastLocationVar(broadcastId: Long): String = s"$LOCATION_VAR_PREFIX$broadcastId"
+  private val broadcastIdsWithLocationCached = ThreadLocal.withInitial[mutable.Set[Long]](() =>
+    mutable.Set.empty[Long])
+
+  def addBroadcastIDsForLocationVar(ids: Seq[Long]): Unit = {
+    broadcastIdsWithLocationCached.get() ++= ids
+  }
+
+  def reset(): Unit = broadcastIdsWithLocationCached.get().clear()
+
+  def shouldUseLocationVar(id: Long): Boolean = broadcastIdsWithLocationCached.get().contains(id)
+
+  def getAllLocationVariables(): Set[String] = broadcastIdsWithLocationCached.get().map(
+    getBroadcastLocationVar).toSet
+}
+
+class LongLocationWrapper {
+  private var location: Long = -1L
+  def setLocation(loc: Long): Unit = this.location = loc
+  def getLocation: Long = location
 }

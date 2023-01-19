@@ -39,11 +39,13 @@ import org.apache.spark.sql.types.DataType
 object BroadcastHashJoinUtil {
  def canPushBroadcastedKeysAsFilter(conf: SQLConf, streamJoinKeys: Seq[Expression],
       buildJoinKeys: Seq[Expression], streamPlan: SparkPlan, buildPlan: SparkPlan,
-      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _]):
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _],
+      buildLegsBlockingPushFromAncestors: java.util.IdentityHashMap[SparkPlan, _]):
    Seq[BroadcastVarPushDownData] = {
     if (conf.pushBroadcastedJoinKeysASFilterToScan && isBuildPlanPrunable(buildPlan,
       batchScansSelectedForBCPush)) {
-      getPushDownDataSkipBuildSideCheck(conf, streamJoinKeys, buildJoinKeys, streamPlan, buildPlan)
+      getPushDownDataSkipBuildSideCheck(conf, streamJoinKeys, buildJoinKeys, streamPlan, buildPlan,
+        buildLegsBlockingPushFromAncestors)
     } else {
       Seq.empty
     }
@@ -175,13 +177,16 @@ object BroadcastHashJoinUtil {
       streamJoinKeys: Seq[Expression],
       buildJoinKeys: Seq[Expression],
       streamPlan: SparkPlan,
-      buildPlan: SparkPlan): Seq[BroadcastVarPushDownData] = {
+      buildPlan: SparkPlan,
+      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _]):
+  Seq[BroadcastVarPushDownData] = {
     val streamKeysStart = streamJoinKeys.zipWithIndex.filter {
       case (streamJk, _) => streamJk.isInstanceOf[Attribute]
     }
     (for ((streamKeyStartExp, joinKeyIndex) <- streamKeysStart) yield {
       val streamKeyStart = streamKeyStartExp.asInstanceOf[Attribute]
-      val batchScansOfInterest = identifyBatchScanOfInterest(streamKeyStart, streamPlan)
+      val batchScansOfInterest = identifyBatchScanOfInterest(streamKeyStart, streamPlan,
+        buildLegsBlockingPush)
       val filteredBatchScansOfInterest = batchScansOfInterest.flatMap {
         case (currentStreamKey, runtimeFilteringBatchScan) =>
           val underlyingRuntimeFilteringScan = runtimeFilteringBatchScan.scan.
@@ -247,7 +252,10 @@ object BroadcastHashJoinUtil {
     isBuildPlanPrunable
   }
 
-  private def identifyBatchScanOfInterest(streamKeyStart: Attribute, streamPlan: SparkPlan):
+  private def identifyBatchScanOfInterest(
+      streamKeyStart: Attribute,
+      streamPlan: SparkPlan,
+      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _]):
   Seq[(Attribute, BatchScanExec)] = {
     var currentStreamKey = streamKeyStart
     var currentStreamPlan = streamPlan
@@ -256,6 +264,7 @@ object BroadcastHashJoinUtil {
     while (keepGoing) {
       currentStreamPlan match {
 
+        case plan if buildLegsBlockingPush.containsKey(plan) => keepGoing = false
         case _: WindowExec => keepGoing = false
 
         case batchScanExec: BatchScanExec =>
@@ -314,7 +323,8 @@ object BroadcastHashJoinUtil {
         case u: UnionExec => val indexOfStreamCol = u.output.indexWhere(
           _.canonicalized == currentStreamKey.canonicalized)
           batchScanOfInterest = (for (child <- u.children) yield {
-            identifyBatchScanOfInterest(child.output(indexOfStreamCol), child)
+            identifyBatchScanOfInterest(child.output(indexOfStreamCol), child,
+              buildLegsBlockingPush)
           }).flatten
           keepGoing = false
 

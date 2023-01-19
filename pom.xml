@@ -91,6 +91,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/iceberg</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
@@ -3504,6 +3505,20 @@
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>iceberg</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.iceberg</groupId>
+          <artifactId>iceberg-spark-runtime</artifactId>
+          <version>3.3.2.7.2.18.0-SNAPSHOT</version>
+        </dependency>
+      </dependencies>
+      <modules>
+        <module>sql/iceberg</module>
       </modules>
     </profile>
 

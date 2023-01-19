@@ -1,0 +1,398 @@
+== Physical Plan ==
+TakeOrderedAndProject (68)
++- * HashAggregate (67)
+   +- Exchange (66)
+      +- * HashAggregate (65)
+         +- Union (64)
+            :- * Project (21)
+            :  +- * Filter (20)
+            :     +- Window (19)
+            :        +- * Sort (18)
+            :           +- Window (17)
+            :              +- * Sort (16)
+            :                 +- * HashAggregate (15)
+            :                    +- Exchange (14)
+            :                       +- * HashAggregate (13)
+            :                          +- * Project (12)
+            :                             +- * BroadcastHashJoin Inner BuildRight (11)
+            :                                :- * Project (9)
+            :                                :  +- * BroadcastHashJoin Inner BuildRight (8)
+            :                                :     :- * Project (3)
+            :                                :     :  +- * Filter (2)
+            :                                :     :     +- BatchScan spark_catalog.default.web_sales (1)
+            :                                :     +- BroadcastExchange (7)
+            :                                :        +- * Project (6)
+            :                                :           +- * Filter (5)
+            :                                :              +- BatchScan spark_catalog.default.web_returns (4)
+            :                                +- ReusedExchange (10)
+            :- * Project (42)
+            :  +- * Filter (41)
+            :     +- Window (40)
+            :        +- * Sort (39)
+            :           +- Window (38)
+            :              +- * Sort (37)
+            :                 +- * HashAggregate (36)
+            :                    +- Exchange (35)
+            :                       +- * HashAggregate (34)
+            :                          +- * Project (33)
+            :                             +- * BroadcastHashJoin Inner BuildRight (32)
+            :                                :- * Project (30)
+            :                                :  +- * BroadcastHashJoin Inner BuildRight (29)
+            :                                :     :- * Project (24)
+            :                                :     :  +- * Filter (23)
+            :                                :     :     +- BatchScan spark_catalog.default.catalog_sales (22)
+            :                                :     +- BroadcastExchange (28)
+            :                                :        +- * Project (27)
+            :                                :           +- * Filter (26)
+            :                                :              +- BatchScan spark_catalog.default.catalog_returns (25)
+            :                                +- ReusedExchange (31)
+            +- * Project (63)
+               +- * Filter (62)
+                  +- Window (61)
+                     +- * Sort (60)
+                        +- Window (59)
+                           +- * Sort (58)
+                              +- * HashAggregate (57)
+                                 +- Exchange (56)
+                                    +- * HashAggregate (55)
+                                       +- * Project (54)
+                                          +- * BroadcastHashJoin Inner BuildRight (53)
+                                             :- * Project (51)
+                                             :  +- * BroadcastHashJoin Inner BuildRight (50)
+                                             :     :- * Project (45)
+                                             :     :  +- * Filter (44)
+                                             :     :     +- BatchScan spark_catalog.default.store_sales (43)
+                                             :     +- BroadcastExchange (49)
+                                             :        +- * Project (48)
+                                             :           +- * Filter (47)
+                                             :              +- BatchScan spark_catalog.default.store_returns (46)
+                                             +- ReusedExchange (52)
+
+
+(1) BatchScan spark_catalog.default.web_sales
+Output [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, ws_net_profit#6]
+spark_catalog.default.web_sales [scan class = SparkBatchQueryScan] [filters=ws_net_profit IS NOT NULL, ws_net_paid IS NOT NULL, ws_quantity IS NOT NULL, ws_net_profit > 1.00, ws_net_paid > 0.00, ws_quantity > 0, ws_order_number IS NOT NULL, ws_item_sk IS NOT NULL, ws_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 3]
+Input [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, ws_net_profit#6]
+Condition : ((((((((isnotnull(ws_net_profit#6) AND isnotnull(ws_net_paid#5)) AND isnotnull(ws_quantity#4)) AND (ws_net_profit#6 > 1.00)) AND (ws_net_paid#5 > 0.00)) AND (ws_quantity#4 > 0)) AND isnotnull(ws_order_number#3)) AND isnotnull(ws_item_sk#2)) AND isnotnull(ws_sold_date_sk#1))
+
+(3) Project [codegen id : 3]
+Output [5]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5]
+Input [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, ws_net_profit#6]
+
+(4) BatchScan spark_catalog.default.web_returns
+Output [4]: [wr_item_sk#7, wr_order_number#8, wr_return_quantity#9, wr_return_amt#10]
+spark_catalog.default.web_returns [scan class = SparkBatchQueryScan] [filters=wr_return_amt IS NOT NULL, wr_return_amt > 10000.00, wr_order_number IS NOT NULL, wr_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [4]: [wr_item_sk#7, wr_order_number#8, wr_return_quantity#9, wr_return_amt#10]
+Condition : (((isnotnull(wr_return_amt#10) AND (wr_return_amt#10 > 10000.00)) AND isnotnull(wr_order_number#8)) AND isnotnull(wr_item_sk#7))
+
+(6) Project [codegen id : 1]
+Output [4]: [wr_item_sk#7, wr_order_number#8, wr_return_quantity#9, wr_return_amt#10]
+Input [4]: [wr_item_sk#7, wr_order_number#8, wr_return_quantity#9, wr_return_amt#10]
+
+(7) BroadcastExchange
+Input [4]: [wr_item_sk#7, wr_order_number#8, wr_return_quantity#9, wr_return_amt#10]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [2]: [ws_order_number#3, ws_item_sk#2]
+Right keys [2]: [wr_order_number#8, wr_item_sk#7]
+Join condition: None
+
+(9) Project [codegen id : 3]
+Output [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_quantity#4, ws_net_paid#5, wr_return_quantity#9, wr_return_amt#10]
+Input [9]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, wr_item_sk#7, wr_order_number#8, wr_return_quantity#9, wr_return_amt#10]
+
+(10) ReusedExchange [Reuses operator id: 72]
+Output [1]: [d_date_sk#11]
+
+(11) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ws_sold_date_sk#1]
+Right keys [1]: [d_date_sk#11]
+Join condition: None
+
+(12) Project [codegen id : 3]
+Output [5]: [ws_item_sk#2, ws_quantity#4, ws_net_paid#5, wr_return_quantity#9, wr_return_amt#10]
+Input [7]: [ws_sold_date_sk#1, ws_item_sk#2, ws_quantity#4, ws_net_paid#5, wr_return_quantity#9, wr_return_amt#10, d_date_sk#11]
+
+(13) HashAggregate [codegen id : 3]
+Input [5]: [ws_item_sk#2, ws_quantity#4, ws_net_paid#5, wr_return_quantity#9, wr_return_amt#10]
+Keys [1]: [ws_item_sk#2]
+Functions [4]: [partial_sum(coalesce(wr_return_quantity#9, 0)), partial_sum(coalesce(ws_quantity#4, 0)), partial_sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
+Aggregate Attributes [6]: [sum#12, sum#13, sum#14, isEmpty#15, sum#16, isEmpty#17]
+Results [7]: [ws_item_sk#2, sum#18, sum#19, sum#20, isEmpty#21, sum#22, isEmpty#23]
+
+(14) Exchange
+Input [7]: [ws_item_sk#2, sum#18, sum#19, sum#20, isEmpty#21, sum#22, isEmpty#23]
+Arguments: hashpartitioning(ws_item_sk#2, 1), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(15) HashAggregate [codegen id : 4]
+Input [7]: [ws_item_sk#2, sum#18, sum#19, sum#20, isEmpty#21, sum#22, isEmpty#23]
+Keys [1]: [ws_item_sk#2]
+Functions [4]: [sum(coalesce(wr_return_quantity#9, 0)), sum(coalesce(ws_quantity#4, 0)), sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#9, 0))#24, sum(coalesce(ws_quantity#4, 0))#25, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#26, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#27]
+Results [3]: [ws_item_sk#2 AS item#28, CheckOverflow((promote_precision(cast(sum(coalesce(wr_return_quantity#9, 0))#24 as decimal(15,4))) / promote_precision(cast(sum(coalesce(ws_quantity#4, 0))#25 as decimal(15,4)))), DecimalType(35,20)) AS return_ratio#29, CheckOverflow((promote_precision(cast(sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#26 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#27 as decimal(15,4)))), DecimalType(35,20)) AS currency_ratio#30]
+
+(16) Sort [codegen id : 4]
+Input [3]: [item#28, return_ratio#29, currency_ratio#30]
+Arguments: [return_ratio#29 ASC NULLS FIRST], false, 0
+
+(17) Window
+Input [3]: [item#28, return_ratio#29, currency_ratio#30]
+Arguments: [rank(return_ratio#29) windowspecdefinition(return_ratio#29 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#31], [return_ratio#29 ASC NULLS FIRST]
+
+(18) Sort [codegen id : 5]
+Input [4]: [item#28, return_ratio#29, currency_ratio#30, return_rank#31]
+Arguments: [currency_ratio#30 ASC NULLS FIRST], false, 0
+
+(19) Window
+Input [4]: [item#28, return_ratio#29, currency_ratio#30, return_rank#31]
+Arguments: [rank(currency_ratio#30) windowspecdefinition(currency_ratio#30 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#32], [currency_ratio#30 ASC NULLS FIRST]
+
+(20) Filter [codegen id : 6]
+Input [5]: [item#28, return_ratio#29, currency_ratio#30, return_rank#31, currency_rank#32]
+Condition : ((return_rank#31 <= 10) OR (currency_rank#32 <= 10))
+
+(21) Project [codegen id : 6]
+Output [5]: [web AS channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+Input [5]: [item#28, return_ratio#29, currency_ratio#30, return_rank#31, currency_rank#32]
+
+(22) BatchScan spark_catalog.default.catalog_sales
+Output [6]: [cs_sold_date_sk#34, cs_item_sk#35, cs_order_number#36, cs_quantity#37, cs_net_paid#38, cs_net_profit#39]
+spark_catalog.default.catalog_sales [scan class = SparkBatchQueryScan] [filters=cs_net_profit IS NOT NULL, cs_net_paid IS NOT NULL, cs_quantity IS NOT NULL, cs_net_profit > 1.00, cs_net_paid > 0.00, cs_quantity > 0, cs_order_number IS NOT NULL, cs_item_sk IS NOT NULL, cs_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(23) Filter [codegen id : 9]
+Input [6]: [cs_sold_date_sk#34, cs_item_sk#35, cs_order_number#36, cs_quantity#37, cs_net_paid#38, cs_net_profit#39]
+Condition : ((((((((isnotnull(cs_net_profit#39) AND isnotnull(cs_net_paid#38)) AND isnotnull(cs_quantity#37)) AND (cs_net_profit#39 > 1.00)) AND (cs_net_paid#38 > 0.00)) AND (cs_quantity#37 > 0)) AND isnotnull(cs_order_number#36)) AND isnotnull(cs_item_sk#35)) AND isnotnull(cs_sold_date_sk#34))
+
+(24) Project [codegen id : 9]
+Output [5]: [cs_sold_date_sk#34, cs_item_sk#35, cs_order_number#36, cs_quantity#37, cs_net_paid#38]
+Input [6]: [cs_sold_date_sk#34, cs_item_sk#35, cs_order_number#36, cs_quantity#37, cs_net_paid#38, cs_net_profit#39]
+
+(25) BatchScan spark_catalog.default.catalog_returns
+Output [4]: [cr_item_sk#40, cr_order_number#41, cr_return_quantity#42, cr_return_amount#43]
+spark_catalog.default.catalog_returns [scan class = SparkBatchQueryScan] [filters=cr_return_amount IS NOT NULL, cr_return_amount > 10000.00, cr_order_number IS NOT NULL, cr_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(26) Filter [codegen id : 7]
+Input [4]: [cr_item_sk#40, cr_order_number#41, cr_return_quantity#42, cr_return_amount#43]
+Condition : (((isnotnull(cr_return_amount#43) AND (cr_return_amount#43 > 10000.00)) AND isnotnull(cr_order_number#41)) AND isnotnull(cr_item_sk#40))
+
+(27) Project [codegen id : 7]
+Output [4]: [cr_item_sk#40, cr_order_number#41, cr_return_quantity#42, cr_return_amount#43]
+Input [4]: [cr_item_sk#40, cr_order_number#41, cr_return_quantity#42, cr_return_amount#43]
+
+(28) BroadcastExchange
+Input [4]: [cr_item_sk#40, cr_order_number#41, cr_return_quantity#42, cr_return_amount#43]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=3]
+
+(29) BroadcastHashJoin [codegen id : 9]
+Left keys [2]: [cs_order_number#36, cs_item_sk#35]
+Right keys [2]: [cr_order_number#41, cr_item_sk#40]
+Join condition: None
+
+(30) Project [codegen id : 9]
+Output [6]: [cs_sold_date_sk#34, cs_item_sk#35, cs_quantity#37, cs_net_paid#38, cr_return_quantity#42, cr_return_amount#43]
+Input [9]: [cs_sold_date_sk#34, cs_item_sk#35, cs_order_number#36, cs_quantity#37, cs_net_paid#38, cr_item_sk#40, cr_order_number#41, cr_return_quantity#42, cr_return_amount#43]
+
+(31) ReusedExchange [Reuses operator id: 72]
+Output [1]: [d_date_sk#44]
+
+(32) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [cs_sold_date_sk#34]
+Right keys [1]: [d_date_sk#44]
+Join condition: None
+
+(33) Project [codegen id : 9]
+Output [5]: [cs_item_sk#35, cs_quantity#37, cs_net_paid#38, cr_return_quantity#42, cr_return_amount#43]
+Input [7]: [cs_sold_date_sk#34, cs_item_sk#35, cs_quantity#37, cs_net_paid#38, cr_return_quantity#42, cr_return_amount#43, d_date_sk#44]
+
+(34) HashAggregate [codegen id : 9]
+Input [5]: [cs_item_sk#35, cs_quantity#37, cs_net_paid#38, cr_return_quantity#42, cr_return_amount#43]
+Keys [1]: [cs_item_sk#35]
+Functions [4]: [partial_sum(coalesce(cr_return_quantity#42, 0)), partial_sum(coalesce(cs_quantity#37, 0)), partial_sum(coalesce(cast(cr_return_amount#43 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(cs_net_paid#38 as decimal(12,2)), 0.00))]
+Aggregate Attributes [6]: [sum#45, sum#46, sum#47, isEmpty#48, sum#49, isEmpty#50]
+Results [7]: [cs_item_sk#35, sum#51, sum#52, sum#53, isEmpty#54, sum#55, isEmpty#56]
+
+(35) Exchange
+Input [7]: [cs_item_sk#35, sum#51, sum#52, sum#53, isEmpty#54, sum#55, isEmpty#56]
+Arguments: hashpartitioning(cs_item_sk#35, 1), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(36) HashAggregate [codegen id : 10]
+Input [7]: [cs_item_sk#35, sum#51, sum#52, sum#53, isEmpty#54, sum#55, isEmpty#56]
+Keys [1]: [cs_item_sk#35]
+Functions [4]: [sum(coalesce(cr_return_quantity#42, 0)), sum(coalesce(cs_quantity#37, 0)), sum(coalesce(cast(cr_return_amount#43 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#38 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#42, 0))#57, sum(coalesce(cs_quantity#37, 0))#58, sum(coalesce(cast(cr_return_amount#43 as decimal(12,2)), 0.00))#59, sum(coalesce(cast(cs_net_paid#38 as decimal(12,2)), 0.00))#60]
+Results [3]: [cs_item_sk#35 AS item#61, CheckOverflow((promote_precision(cast(sum(coalesce(cr_return_quantity#42, 0))#57 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cs_quantity#37, 0))#58 as decimal(15,4)))), DecimalType(35,20)) AS return_ratio#62, CheckOverflow((promote_precision(cast(sum(coalesce(cast(cr_return_amount#43 as decimal(12,2)), 0.00))#59 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(cs_net_paid#38 as decimal(12,2)), 0.00))#60 as decimal(15,4)))), DecimalType(35,20)) AS currency_ratio#63]
+
+(37) Sort [codegen id : 10]
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
+Arguments: [return_ratio#62 ASC NULLS FIRST], false, 0
+
+(38) Window
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
+Arguments: [rank(return_ratio#62) windowspecdefinition(return_ratio#62 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#64], [return_ratio#62 ASC NULLS FIRST]
+
+(39) Sort [codegen id : 11]
+Input [4]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64]
+Arguments: [currency_ratio#63 ASC NULLS FIRST], false, 0
+
+(40) Window
+Input [4]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64]
+Arguments: [rank(currency_ratio#63) windowspecdefinition(currency_ratio#63 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#65], [currency_ratio#63 ASC NULLS FIRST]
+
+(41) Filter [codegen id : 12]
+Input [5]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64, currency_rank#65]
+Condition : ((return_rank#64 <= 10) OR (currency_rank#65 <= 10))
+
+(42) Project [codegen id : 12]
+Output [5]: [catalog AS channel#66, item#61, return_ratio#62, return_rank#64, currency_rank#65]
+Input [5]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64, currency_rank#65]
+
+(43) BatchScan spark_catalog.default.store_sales
+Output [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_net_profit IS NOT NULL, ss_net_paid IS NOT NULL, ss_quantity IS NOT NULL, ss_net_profit > 1.00, ss_net_paid > 0.00, ss_quantity > 0, ss_ticket_number IS NOT NULL, ss_item_sk IS NOT NULL, ss_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(44) Filter [codegen id : 15]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
+Condition : ((((((((isnotnull(ss_net_profit#72) AND isnotnull(ss_net_paid#71)) AND isnotnull(ss_quantity#70)) AND (ss_net_profit#72 > 1.00)) AND (ss_net_paid#71 > 0.00)) AND (ss_quantity#70 > 0)) AND isnotnull(ss_ticket_number#69)) AND isnotnull(ss_item_sk#68)) AND isnotnull(ss_sold_date_sk#67))
+
+(45) Project [codegen id : 15]
+Output [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
+
+(46) BatchScan spark_catalog.default.store_returns
+Output [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+spark_catalog.default.store_returns [scan class = SparkBatchQueryScan] [filters=sr_return_amt IS NOT NULL, sr_return_amt > 10000.00, sr_ticket_number IS NOT NULL, sr_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(47) Filter [codegen id : 13]
+Input [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+Condition : (((isnotnull(sr_return_amt#76) AND (sr_return_amt#76 > 10000.00)) AND isnotnull(sr_ticket_number#74)) AND isnotnull(sr_item_sk#73))
+
+(48) Project [codegen id : 13]
+Output [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+Input [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+
+(49) BroadcastExchange
+Input [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=5]
+
+(50) BroadcastHashJoin [codegen id : 15]
+Left keys [2]: [ss_ticket_number#69, ss_item_sk#68]
+Right keys [2]: [sr_ticket_number#74, sr_item_sk#73]
+Join condition: None
+
+(51) Project [codegen id : 15]
+Output [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Input [9]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+
+(52) ReusedExchange [Reuses operator id: 72]
+Output [1]: [d_date_sk#77]
+
+(53) BroadcastHashJoin [codegen id : 15]
+Left keys [1]: [ss_sold_date_sk#67]
+Right keys [1]: [d_date_sk#77]
+Join condition: None
+
+(54) Project [codegen id : 15]
+Output [5]: [ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Input [7]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76, d_date_sk#77]
+
+(55) HashAggregate [codegen id : 15]
+Input [5]: [ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Keys [1]: [ss_item_sk#68]
+Functions [4]: [partial_sum(coalesce(sr_return_quantity#75, 0)), partial_sum(coalesce(ss_quantity#70, 0)), partial_sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))]
+Aggregate Attributes [6]: [sum#78, sum#79, sum#80, isEmpty#81, sum#82, isEmpty#83]
+Results [7]: [ss_item_sk#68, sum#84, sum#85, sum#86, isEmpty#87, sum#88, isEmpty#89]
+
+(56) Exchange
+Input [7]: [ss_item_sk#68, sum#84, sum#85, sum#86, isEmpty#87, sum#88, isEmpty#89]
+Arguments: hashpartitioning(ss_item_sk#68, 1), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(57) HashAggregate [codegen id : 16]
+Input [7]: [ss_item_sk#68, sum#84, sum#85, sum#86, isEmpty#87, sum#88, isEmpty#89]
+Keys [1]: [ss_item_sk#68]
+Functions [4]: [sum(coalesce(sr_return_quantity#75, 0)), sum(coalesce(ss_quantity#70, 0)), sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#75, 0))#90, sum(coalesce(ss_quantity#70, 0))#91, sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#92, sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#93]
+Results [3]: [ss_item_sk#68 AS item#94, CheckOverflow((promote_precision(cast(sum(coalesce(sr_return_quantity#75, 0))#90 as decimal(15,4))) / promote_precision(cast(sum(coalesce(ss_quantity#70, 0))#91 as decimal(15,4)))), DecimalType(35,20)) AS return_ratio#95, CheckOverflow((promote_precision(cast(sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#92 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#93 as decimal(15,4)))), DecimalType(35,20)) AS currency_ratio#96]
+
+(58) Sort [codegen id : 16]
+Input [3]: [item#94, return_ratio#95, currency_ratio#96]
+Arguments: [return_ratio#95 ASC NULLS FIRST], false, 0
+
+(59) Window
+Input [3]: [item#94, return_ratio#95, currency_ratio#96]
+Arguments: [rank(return_ratio#95) windowspecdefinition(return_ratio#95 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#97], [return_ratio#95 ASC NULLS FIRST]
+
+(60) Sort [codegen id : 17]
+Input [4]: [item#94, return_ratio#95, currency_ratio#96, return_rank#97]
+Arguments: [currency_ratio#96 ASC NULLS FIRST], false, 0
+
+(61) Window
+Input [4]: [item#94, return_ratio#95, currency_ratio#96, return_rank#97]
+Arguments: [rank(currency_ratio#96) windowspecdefinition(currency_ratio#96 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#98], [currency_ratio#96 ASC NULLS FIRST]
+
+(62) Filter [codegen id : 18]
+Input [5]: [item#94, return_ratio#95, currency_ratio#96, return_rank#97, currency_rank#98]
+Condition : ((return_rank#97 <= 10) OR (currency_rank#98 <= 10))
+
+(63) Project [codegen id : 18]
+Output [5]: [store AS channel#99, item#94, return_ratio#95, return_rank#97, currency_rank#98]
+Input [5]: [item#94, return_ratio#95, currency_ratio#96, return_rank#97, currency_rank#98]
+
+(64) Union
+
+(65) HashAggregate [codegen id : 19]
+Input [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+Keys [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+Functions: []
+Aggregate Attributes: []
+Results [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+
+(66) Exchange
+Input [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+Arguments: hashpartitioning(channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32, 1), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(67) HashAggregate [codegen id : 20]
+Input [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+Keys [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+Functions: []
+Aggregate Attributes: []
+Results [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+
+(68) TakeOrderedAndProject
+Input [5]: [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+Arguments: 100, [channel#33 ASC NULLS FIRST, return_rank#31 ASC NULLS FIRST, currency_rank#32 ASC NULLS FIRST], [channel#33, item#28, return_ratio#29, return_rank#31, currency_rank#32]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = ws_sold_date_sk#1 IN dynamicpruning#100
+BroadcastExchange (72)
++- * Project (71)
+   +- * Filter (70)
+      +- BatchScan spark_catalog.default.date_dim (69)
+
+
+(69) BatchScan spark_catalog.default.date_dim
+Output [3]: [d_date_sk#11, d_year#101, d_moy#102]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_year IS NOT NULL, d_moy IS NOT NULL, d_year = 2001, d_moy = 12, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(70) Filter [codegen id : 1]
+Input [3]: [d_date_sk#11, d_year#101, d_moy#102]
+Condition : ((((isnotnull(d_year#101) AND isnotnull(d_moy#102)) AND (d_year#101 = 2001)) AND (d_moy#102 = 12)) AND isnotnull(d_date_sk#11))
+
+(71) Project [codegen id : 1]
+Output [1]: [d_date_sk#11]
+Input [3]: [d_date_sk#11, d_year#101, d_moy#102]
+
+(72) BroadcastExchange
+Input [1]: [d_date_sk#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
+
+Subquery:2 Hosting operator id = 22 Hosting Expression = cs_sold_date_sk#34 IN dynamicpruning#100
+
+Subquery:3 Hosting operator id = 43 Hosting Expression = ss_sold_date_sk#67 IN dynamicpruning#100
+
+

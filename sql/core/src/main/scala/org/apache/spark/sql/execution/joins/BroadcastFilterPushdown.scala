@@ -57,10 +57,43 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
     }
   }
 
+  private def buildLegsBlockingAncestorsPushForReusePreference(plan: SparkPlan):
+  util.IdentityHashMap[SparkPlan, SparkPlan] = {
+    val buildLegBlockingPushFromAncestors =
+      new util.IdentityHashMap[SparkPlan, SparkPlan]()
+    val canonicalizedBuildLegToOriginal = mutable.Map[SparkPlan, SparkPlan]()
+    val nodesToTraverse = mutable.ListBuffer[SparkPlan](plan)
+    while (nodesToTraverse.nonEmpty) {
+      val nodeToAnalyze = nodesToTraverse.remove(0)
+      nodeToAnalyze match {
+        case BroadcastHashJoinExtractorForBCPush(bhj) =>
+          val (buildLegCanonicalized, buildLeg) = bhj.buildSide match {
+            case BuildRight => (bhj.right.canonicalized, bhj.right)
+            case _ => (bhj.left.canonicalized, bhj.left)
+          }
+          val cached = canonicalizedBuildLegToOriginal.getOrElseUpdate(buildLegCanonicalized,
+            buildLeg)
+          if (cached.ne(buildLeg)) {
+            buildLegBlockingPushFromAncestors.put(cached, cached)
+            buildLegBlockingPushFromAncestors.put(buildLeg, buildLeg)
+          }
+          nodesToTraverse.prepend(bhj.left, bhj.right)
+        case _ => val children = nodeToAnalyze.children
+        if (children.nonEmpty) {
+          nodesToTraverse.prepend(children : _*)
+        }
+      }
+    }
+    buildLegBlockingPushFromAncestors
+  }
 
   private def useTopDownPush(plan: SparkPlan):
   (SparkPlan, java.util.IdentityHashMap[LogicalPlan, Seq[DynamicPruning]]) = {
-
+    val buildLegsBlockingPushFromAncestors = if (conf.preferReuseExchangeOverBroadcastVarPushdown) {
+      buildLegsBlockingAncestorsPushForReusePreference(plan)
+    } else {
+      new util.IdentityHashMap[SparkPlan, SparkPlan]()
+    }
     val batchScanToJoinLegMapping = new util.IdentityHashMap[BatchScanExec,
       mutable.Map[LogicalPlan, Seq[JoiningKeyData]]]()
     val batchScanToRemoveDpp = new util.IdentityHashMap[BatchScanExec, BatchScanExec]()
@@ -79,7 +112,8 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
         var pushingAnyFilter = false
 
         val temp = BroadcastHashJoinUtil.canPushBroadcastedKeysAsFilter(conf, streamedKeys,
-          buildKeys, streamedPlan, buildPlan, batchScanToJoinLegMapping)
+          buildKeys, streamedPlan, buildPlan, batchScanToJoinLegMapping,
+          buildLegsBlockingPushFromAncestors)
         val groupingOnBasisOfBatchScanExec = temp.groupBy(_.targetBatchScanExec)
         val logicalNode = BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan)
         buildLegPlanToOriginalBatchScans.put(logicalNode, BroadcastHashJoinUtil

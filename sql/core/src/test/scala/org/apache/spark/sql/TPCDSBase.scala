@@ -34,26 +34,37 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
-  // Since `tpcdsQueriesV2_7_0` has almost the same queries with these ones below,
-  // we skip them in the TPCDS-related tests.
-  // NOTE: q6" and "q75" can cause flaky test results, so we must exclude them.
-  // For more details, see SPARK-35327.
-  private val excludedTpcdsQueries: Set[String] = Set("q6", "q34", "q64", "q74", "q75", "q78")
-
-  val tpcdsQueries: Seq[String] = tpcdsAllQueries.filterNot(excludedTpcdsQueries.contains)
 
   // This list only includes TPCDS v2.7 queries that are different from v1.4 ones
-  val tpcdsQueriesV2_7_0 = Seq(
+  private val tpcdsAllQueriesV2_7_0 = Seq(
     "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
     "q20", "q22", "q22a", "q24", "q27a", "q34", "q35", "q35a", "q36a", "q47", "q49",
     "q51a", "q57", "q64", "q67a", "q70a", "q72", "q74", "q75", "q77a", "q78",
     "q80a", "q86a", "q98")
 
+  // Since `tpcdsQueriesV2_7_0` has almost the same queries with these ones below,
+  // we skip them in the TPCDS-related tests.
+  // NOTE: q6" and "q75" can cause flaky test results, so we must exclude them.
+  // For more details, see SPARK-35327.
+  def excludedTpcdsQueries: Set[String] = Set("q6", "q34", "q64", "q74", "q75", "q78")
+
+  def excludedModifiedTpcdsQueries: Set[String] = Set.empty
+
+  def excludedTpcdsV2_7_0Queries: Set[String] = Set.empty
+  
+  val tpcdsQueries: Seq[String] = tpcdsAllQueries.filterNot(excludedTpcdsQueries.contains)
+
+  // This list only includes TPCDS v2.7 queries that are different from v1.4 ones
+  val tpcdsQueriesV2_7_0 = tpcdsAllQueriesV2_7_0.filterNot(excludedTpcdsV2_7_0Queries.contains)
+
   // These queries are from https://github.com/cloudera/impala-tpcds-kit/tree/master/queries
-  val modifiedTPCDSQueries = Seq(
+  val modifiedTPCDSQueriesAll = Seq(
     "q3", "q7", "q10", "q19", "q27", "q34", "q42", "q43", "q46", "q52", "q53", "q55", "q59",
     "q63", "q65", "q68", "q73", "q79", "q89", "q98", "ss_max")
 
+  val modifiedTPCDSQueries = modifiedTPCDSQueriesAll.filterNot(
+    excludedModifiedTpcdsQueries.contains)
+  
   protected def partitionedByClause(tableName: String): String = {
     tablePartitionColumns.get(tableName) match {
       case Some(cols) if cols.nonEmpty => s"PARTITIONED BY (${cols.mkString(", ")})"

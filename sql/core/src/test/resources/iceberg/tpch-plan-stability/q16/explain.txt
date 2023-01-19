@@ -1,0 +1,127 @@
+== Physical Plan ==
+* Sort (22)
++- Exchange (21)
+   +- * HashAggregate (20)
+      +- Exchange (19)
+         +- * HashAggregate (18)
+            +- * HashAggregate (17)
+               +- Exchange (16)
+                  +- * HashAggregate (15)
+                     +- * Project (14)
+                        +- * BroadcastHashJoin Inner BuildRight (13)
+                           :- * BroadcastHashJoin LeftAnti BuildRight (8)
+                           :  :- * Project (3)
+                           :  :  +- * Filter (2)
+                           :  :     +- BatchScan spark_catalog.default.partsupp (1)
+                           :  +- BroadcastExchange (7)
+                           :     +- * Project (6)
+                           :        +- * Filter (5)
+                           :           +- BatchScan spark_catalog.default.supplier (4)
+                           +- BroadcastExchange (12)
+                              +- * Project (11)
+                                 +- * Filter (10)
+                                    +- BatchScan spark_catalog.default.part (9)
+
+
+(1) BatchScan spark_catalog.default.partsupp
+Output [2]: [ps_partkey#1, ps_suppkey#2]
+spark_catalog.default.partsupp [scan class = SparkBatchQueryScan] [filters=ps_partkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 3]
+Input [2]: [ps_partkey#1, ps_suppkey#2]
+Condition : isnotnull(ps_partkey#1)
+
+(3) Project [codegen id : 3]
+Output [2]: [ps_partkey#1, ps_suppkey#2]
+Input [2]: [ps_partkey#1, ps_suppkey#2]
+
+(4) BatchScan spark_catalog.default.supplier
+Output [2]: [s_suppkey#3, s_comment#4]
+spark_catalog.default.supplier [scan class = SparkBatchQueryScan] [filters=s_comment IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [2]: [s_suppkey#3, s_comment#4]
+Condition : (s_comment#4 LIKE %Customer%Complaints% AND isnotnull(s_comment#4))
+
+(6) Project [codegen id : 1]
+Output [1]: [s_suppkey#3]
+Input [2]: [s_suppkey#3, s_comment#4]
+
+(7) BroadcastExchange
+Input [1]: [s_suppkey#3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),true), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ps_suppkey#2]
+Right keys [1]: [s_suppkey#3]
+Join condition: None
+
+(9) BatchScan spark_catalog.default.part
+Output [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
+spark_catalog.default.part [scan class = SparkBatchQueryScan] [filters=p_brand IS NOT NULL, p_type IS NOT NULL, NOT (p_brand = 'Brand#9'), NOT (p_type LIKE '"MEDIUM POLISHED"%'), p_size IN (49, 14, 23, 45, 19, 3, 36, 9), p_partkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(10) Filter [codegen id : 2]
+Input [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
+Condition : (((((isnotnull(p_brand#6) AND isnotnull(p_type#7)) AND NOT (p_brand#6 = Brand#9)) AND NOT StartsWith(p_type#7, MEDIUM POLISHED)) AND p_size#8 IN (49,14,23,45,19,3,36,9)) AND isnotnull(p_partkey#5))
+
+(11) Project [codegen id : 2]
+Output [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
+Input [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
+
+(12) BroadcastExchange
+Input [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
+
+(13) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ps_partkey#1]
+Right keys [1]: [p_partkey#5]
+Join condition: None
+
+(14) Project [codegen id : 3]
+Output [4]: [ps_suppkey#2, p_brand#6, p_type#7, p_size#8]
+Input [6]: [ps_partkey#1, ps_suppkey#2, p_partkey#5, p_brand#6, p_type#7, p_size#8]
+
+(15) HashAggregate [codegen id : 3]
+Input [4]: [ps_suppkey#2, p_brand#6, p_type#7, p_size#8]
+Keys [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Functions: []
+Aggregate Attributes: []
+Results [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+
+(16) Exchange
+Input [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Arguments: hashpartitioning(p_brand#6, p_type#7, p_size#8, ps_suppkey#2, 1), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(17) HashAggregate [codegen id : 4]
+Input [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Keys [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Functions: []
+Aggregate Attributes: []
+Results [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+
+(18) HashAggregate [codegen id : 4]
+Input [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Keys [3]: [p_brand#6, p_type#7, p_size#8]
+Functions [1]: [partial_count(distinct ps_suppkey#2)]
+Aggregate Attributes [1]: [count(ps_suppkey#2)#10]
+Results [4]: [p_brand#6, p_type#7, p_size#8, count#11]
+
+(19) Exchange
+Input [4]: [p_brand#6, p_type#7, p_size#8, count#11]
+Arguments: hashpartitioning(p_brand#6, p_type#7, p_size#8, 1), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(20) HashAggregate [codegen id : 5]
+Input [4]: [p_brand#6, p_type#7, p_size#8, count#11]
+Keys [3]: [p_brand#6, p_type#7, p_size#8]
+Functions [1]: [count(distinct ps_suppkey#2)]
+Aggregate Attributes [1]: [count(ps_suppkey#2)#10]
+Results [4]: [p_brand#6, p_type#7, p_size#8, count(ps_suppkey#2)#10 AS supplier_cnt#12]
+
+(21) Exchange
+Input [4]: [p_brand#6, p_type#7, p_size#8, supplier_cnt#12]
+Arguments: rangepartitioning(supplier_cnt#12 DESC NULLS LAST, p_brand#6 ASC NULLS FIRST, p_type#7 ASC NULLS FIRST, p_size#8 ASC NULLS FIRST, 1), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(22) Sort [codegen id : 6]
+Input [4]: [p_brand#6, p_type#7, p_size#8, supplier_cnt#12]
+Arguments: [supplier_cnt#12 DESC NULLS LAST, p_brand#6 ASC NULLS FIRST, p_type#7 ASC NULLS FIRST, p_size#8 ASC NULLS FIRST], true, 0
+
