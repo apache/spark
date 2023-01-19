@@ -506,7 +506,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> type(df.write)
-        <class 'pyspark.sql.readwriter.DataFrameWriter'>
+        <class '...readwriter.DataFrameWriter'>
 
         Write the DataFrame as a table.
 
@@ -3657,7 +3657,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.intersect(df2).show()
+        >>> df1.intersect(df2).sort(df1.C1.desc()).show()
         +---+---+
         | C1| C2|
         +---+---+

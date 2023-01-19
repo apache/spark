@@ -71,6 +71,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -89,6 +90,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
   },
@@ -110,6 +112,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "[1, 2]",
@@ -149,6 +152,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
+  "sqlState" : "42K07",
   "messageParameters" : {
     "inputSchema" : "\"1\""
   },
@@ -170,7 +174,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'InvalidType'",
     "hint" : ": extra input 'InvalidType'"
@@ -193,6 +197,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -211,6 +216,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
   },
@@ -232,6 +238,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "[2, 3]",
@@ -421,6 +428,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "datetime" : "'02-29'"
@@ -439,6 +447,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "datetime" : "'02-29'"
@@ -486,6 +495,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "json",
     "sqlExpr" : "\"schema_of_json(NULL)\""
@@ -516,6 +526,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"jsonField\"",
     "inputName" : "json",
@@ -548,6 +559,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"2\"",
     "inputType" : "\"INT\"",
@@ -573,6 +585,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "1",
@@ -660,6 +673,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "1",
@@ -691,6 +705,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"200\"",
     "inputType" : "\"INT\"",

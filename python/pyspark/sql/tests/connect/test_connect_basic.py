@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import array
 import datetime
 import unittest
 import shutil
@@ -214,17 +215,28 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).format("json").save(d)
             # Read the JSON file as a DataFrame.
             self.assert_eq(self.connect.read.json(d).toPandas(), self.spark.read.json(d).toPandas())
-            self.assert_eq(
-                self.connect.read.json(path=d, schema="age INT, name STRING").toPandas(),
-                self.spark.read.json(path=d, schema="age INT, name STRING").toPandas(),
-            )
+
+            for schema in [
+                "age INT, name STRING",
+                StructType(
+                    [
+                        StructField("age", IntegerType()),
+                        StructField("name", StringType()),
+                    ]
+                ),
+            ]:
+                self.assert_eq(
+                    self.connect.read.json(path=d, schema=schema).toPandas(),
+                    self.spark.read.json(path=d, schema=schema).toPandas(),
+                )
+
             self.assert_eq(
                 self.connect.read.json(path=d, primitivesAsString=True).toPandas(),
                 self.spark.read.json(path=d, primitivesAsString=True).toPandas(),
             )
 
-    def test_paruqet(self):
-        # SPARK-41445: Implement DataFrameReader.paruqet
+    def test_parquet(self):
+        # SPARK-41445: Implement DataFrameReader.parquet
         with tempfile.TemporaryDirectory() as d:
             # Write a DataFrame into a JSON file
             self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
@@ -244,6 +256,53 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).write.mode("overwrite").format("text").save(d)
             # Read the text file as a DataFrame.
             self.assert_eq(self.connect.read.text(d).toPandas(), self.spark.read.text(d).toPandas())
+
+    def test_csv(self):
+        # SPARK-42011: Implement DataFrameReader.csv
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a text file
+            self.spark.createDataFrame(
+                [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
+            ).write.mode("overwrite").format("csv").save(d)
+            # Read the text file as a DataFrame.
+            self.assert_eq(self.connect.read.csv(d).toPandas(), self.spark.read.csv(d).toPandas())
+
+    def test_multi_paths(self):
+        # SPARK-42041: DataFrameReader should support list of paths
+
+        with tempfile.TemporaryDirectory() as d:
+            text_files = []
+            for i in range(0, 3):
+                text_file = f"{d}/text-{i}.text"
+                shutil.copyfile("python/test_support/sql/text-test.txt", text_file)
+                text_files.append(text_file)
+
+            self.assertEqual(
+                self.connect.read.text(text_files).collect(),
+                self.spark.read.text(text_files).collect(),
+            )
+
+        with tempfile.TemporaryDirectory() as d:
+            json_files = []
+            for i in range(0, 5):
+                json_file = f"{d}/json-{i}.json"
+                shutil.copyfile("python/test_support/sql/people.json", json_file)
+                json_files.append(json_file)
+
+            self.assertEqual(
+                self.connect.read.json(json_files).collect(),
+                self.spark.read.json(json_files).collect(),
+            )
+
+    def test_orc(self):
+        # SPARK-42012: Implement DataFrameReader.orc
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a text file
+            self.spark.createDataFrame(
+                [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
+            ).write.mode("overwrite").format("orc").save(d)
+            # Read the text file as a DataFrame.
+            self.assert_eq(self.connect.read.orc(d).toPandas(), self.spark.read.orc(d).toPandas())
 
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
@@ -439,7 +498,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
+            "Length mismatch: Expected axis has 5 elements, new values have 4 elements",
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
@@ -600,9 +659,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 ]
             ),
         ]:
-            print(schema)
-            print(schema)
-            print(schema)
             cdf = self.connect.createDataFrame(data=[], schema=schema)
             sdf = self.spark.createDataFrame(data=[], schema=schema)
 
@@ -614,6 +670,149 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "can not infer schema from empty dataset",
         ):
             self.connect.createDataFrame(data=[])
+
+    def test_create_dataframe_from_arrays(self):
+        # SPARK-42021: createDataFrame support array.array
+        data1 = [Row(a=1, b=array.array("i", [1, 2, 3]), c=array.array("d", [4, 5, 6]))]
+        data2 = [(array.array("d", [1, 2, 3]), 2, "3")]
+        data3 = [{"a": 1, "b": array.array("i", [1, 2, 3])}]
+
+        for data in [data1, data2, data3]:
+            cdf = self.connect.createDataFrame(data)
+            sdf = self.spark.createDataFrame(data)
+
+            # TODO: the nullability is different, need to fix
+            # self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_timestampe_create_from_rows(self):
+        data = [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)]
+
+        cdf = self.connect.createDataFrame(data, ["date", "val"])
+        sdf = self.spark.createDataFrame(data, ["date", "val"])
+
+        self.assertEqual(cdf.schema, sdf.schema)
+        self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_nested_type_create_from_rows(self):
+        data1 = [Row(a=1, b=Row(c=2, d=Row(e=3, f=Row(g=4, h=Row(i=5)))))]
+        # root
+        # |-- a: long (nullable = true)
+        # |-- b: struct (nullable = true)
+        # |    |-- c: long (nullable = true)
+        # |    |-- d: struct (nullable = true)
+        # |    |    |-- e: long (nullable = true)
+        # |    |    |-- f: struct (nullable = true)
+        # |    |    |    |-- g: long (nullable = true)
+        # |    |    |    |-- h: struct (nullable = true)
+        # |    |    |    |    |-- i: long (nullable = true)
+
+        data2 = [
+            (
+                1,
+                "a",
+                Row(
+                    a=1,
+                    b=[1, 2, 3],
+                    c={"a": "b"},
+                    d=Row(x=1, y="y", z=Row(o=1, p=2, q=Row(g=1.5))),
+                ),
+            )
+        ]
+        # root
+        # |-- _1: long (nullable = true)
+        # |-- _2: string (nullable = true)
+        # |-- _3: struct (nullable = true)
+        # |    |-- a: long (nullable = true)
+        # |    |-- b: array (nullable = true)
+        # |    |    |-- element: long (containsNull = true)
+        # |    |-- c: map (nullable = true)
+        # |    |    |-- key: string
+        # |    |    |-- value: string (valueContainsNull = true)
+        # |    |-- d: struct (nullable = true)
+        # |    |    |-- x: long (nullable = true)
+        # |    |    |-- y: string (nullable = true)
+        # |    |    |-- z: struct (nullable = true)
+        # |    |    |    |-- o: long (nullable = true)
+        # |    |    |    |-- p: long (nullable = true)
+        # |    |    |    |-- q: struct (nullable = true)
+        # |    |    |    |    |-- g: double (nullable = true)
+
+        data3 = [
+            Row(
+                a=1,
+                b=[1, 2, 3],
+                c={"a": "b"},
+                d=Row(x=1, y="y", z=Row(1, 2, 3)),
+                e=list("hello connect"),
+            )
+        ]
+        # root
+        # |-- a: long (nullable = true)
+        # |-- b: array (nullable = true)
+        # |    |-- element: long (containsNull = true)
+        # |-- c: map (nullable = true)
+        # |    |-- key: string
+        # |    |-- value: string (valueContainsNull = true)
+        # |-- d: struct (nullable = true)
+        # |    |-- x: long (nullable = true)
+        # |    |-- y: string (nullable = true)
+        # |    |-- z: struct (nullable = true)
+        # |    |    |-- _1: long (nullable = true)
+        # |    |    |-- _2: long (nullable = true)
+        # |    |    |-- _3: long (nullable = true)
+        # |-- e: array (nullable = true)
+        # |    |-- element: string (containsNull = true)
+
+        data4 = [
+            {
+                "a": 1,
+                "b": Row(x=1, y=Row(z=2)),
+                "c": {"x": -1, "y": 2},
+                "d": [1, 2, 3, 4, 5],
+            }
+        ]
+        # root
+        # |-- a: long (nullable = true)
+        # |-- b: struct (nullable = true)
+        # |    |-- x: long (nullable = true)
+        # |    |-- y: struct (nullable = true)
+        # |    |    |-- z: long (nullable = true)
+        # |-- c: map (nullable = true)
+        # |    |-- key: string
+        # |    |-- value: long (valueContainsNull = true)
+        # |-- d: array (nullable = true)
+        # |    |-- element: long (containsNull = true)
+
+        data5 = [
+            {
+                "a": [Row(x=1, y="2"), Row(x=-1, y="-2")],
+                "b": [[1, 2, 3], [4, 5], [6]],
+                "c": {3: {4: {5: 6}}, 7: {8: {9: 0}}},
+            }
+        ]
+        # root
+        # |-- a: array (nullable = true)
+        # |    |-- element: struct (containsNull = true)
+        # |    |    |-- x: long (nullable = true)
+        # |    |    |-- y: string (nullable = true)
+        # |-- b: array (nullable = true)
+        # |    |-- element: array (containsNull = true)
+        # |    |    |-- element: long (containsNull = true)
+        # |-- c: map (nullable = true)
+        # |    |-- key: long
+        # |    |-- value: map (valueContainsNull = true)
+        # |    |    |-- key: long
+        # |    |    |-- value: map (valueContainsNull = true)
+        # |    |    |    |-- key: long
+        # |    |    |    |-- value: long (valueContainsNull = true)
+
+        for data in [data1, data2, data3, data4, data5]:
+            cdf = self.connect.createDataFrame(data)
+            sdf = self.spark.createDataFrame(data)
+
+            self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
@@ -1071,6 +1270,35 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).toPandas(),
         )
 
+    def test_create_dataframe_from_pandas_with_ns_timestamp(self):
+        """Truncate the timestamps for nanoseconds."""
+        from datetime import datetime, timezone, timedelta
+        from pandas import Timestamp
+        import pandas as pd
+
+        pdf = pd.DataFrame(
+            {
+                "naive": [datetime(2019, 1, 1, 0)],
+                "aware": [
+                    Timestamp(
+                        year=2019, month=1, day=1, nanosecond=500, tz=timezone(timedelta(hours=-8))
+                    )
+                ],
+            }
+        )
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            self.assertEqual(
+                self.connect.createDataFrame(pdf).collect(),
+                self.spark.createDataFrame(pdf).collect(),
+            )
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+            self.assertEqual(
+                self.connect.createDataFrame(pdf).collect(),
+                self.spark.createDataFrame(pdf).collect(),
+            )
+
     def test_select_expr(self):
         # SPARK-41201: test selectExpr API.
         self.assert_eq(
@@ -1228,6 +1456,28 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_union_by_name(self):
+        # SPARK-41832: Test unionByName
+        data1 = [(1, 2, 3)]
+        data2 = [(6, 2, 5)]
+        df1_connect = self.connect.createDataFrame(data1, ["a", "b", "c"])
+        df2_connect = self.connect.createDataFrame(data2, ["a", "b", "c"])
+        union_df_connect = df1_connect.unionByName(df2_connect)
+
+        df1_spark = self.spark.createDataFrame(data1, ["a", "b", "c"])
+        df2_spark = self.spark.createDataFrame(data2, ["a", "b", "c"])
+        union_df_spark = df1_spark.unionByName(df2_spark)
+
+        self.assert_eq(union_df_connect.toPandas(), union_df_spark.toPandas())
+
+        df2_connect = self.connect.createDataFrame(data2, ["a", "B", "C"])
+        union_df_connect = df1_connect.unionByName(df2_connect, allowMissingColumns=True)
+
+        df2_spark = self.spark.createDataFrame(data2, ["a", "B", "C"])
+        union_df_spark = df1_spark.unionByName(df2_spark, allowMissingColumns=True)
+
+        self.assert_eq(union_df_connect.toPandas(), union_df_spark.toPandas())
+
     def test_random_split(self):
         # SPARK-41440: test randomSplit(weights, seed).
         relations = (
@@ -1316,6 +1566,24 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(
             "ShuffledHashJoin" in cdf1.join(cdf2.hint("SHUFFLE_HASH"), "name")._explain_string()
         )
+
+    def test_extended_hint_types(self):
+        cdf = self.connect.range(100).toDF("id")
+
+        cdf.hint(
+            "my awesome hint",
+            1.2345,
+            "what",
+            ["itworks1", "itworks2", "itworks3"],
+        ).show()
+
+        with self.assertRaisesRegex(TypeError, "all parameters should be in"):
+            cdf.hint(
+                "my awesome hint",
+                1.2345,
+                "what",
+                {"itworks1": "itworks2"},
+            ).show()
 
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
@@ -1504,14 +1772,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         shutil.rmtree(tmpPath)
         writeDf.write.text(tmpPath)
 
-        readDf = self.connect.read.format("text").schema("id STRING").load(path=tmpPath)
-        expectResult = writeDf.collect()
-        pandasResult = readDf.toPandas()
-        if pandasResult is None:
-            self.assertTrue(False, "Empty pandas dataframe")
-        else:
-            actualResult = pandasResult.values.tolist()
-            self.assertEqual(len(expectResult), len(actualResult))
+        for schema in [
+            "id STRING",
+            StructType([StructField("id", StringType())]),
+        ]:
+            readDf = self.connect.read.format("text").schema(schema).load(path=tmpPath)
+            expectResult = writeDf.collect()
+            pandasResult = readDf.toPandas()
+            if pandasResult is None:
+                self.assertTrue(False, "Empty pandas dataframe")
+            else:
+                actualResult = pandasResult.values.tolist()
+                self.assertEqual(len(expectResult), len(actualResult))
 
     def test_simple_read_without_schema(self) -> None:
         """SPARK-41300: Schema not set when reading CSV."""
@@ -2095,6 +2367,148 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             cdf.withMetadata(columnName="name", metadata=["magic"])
 
+    def test_collect_nested_type(self):
+        query = """
+            SELECT * FROM VALUES
+            (1, 4, 0, 8, true, true, ARRAY(1, NULL, 3), MAP(1, 2, 3, 4)),
+            (2, 5, -1, NULL, false, NULL, ARRAY(1, 3), MAP(1, NULL, 3, 4)),
+            (3, 6, NULL, 0, false, NULL, ARRAY(NULL), NULL)
+            AS tab(a, b, c, d, e, f, g, h)
+            """
+
+        # +---+---+----+----+-----+----+------------+-------------------+
+        # |  a|  b|   c|   d|    e|   f|           g|                  h|
+        # +---+---+----+----+-----+----+------------+-------------------+
+        # |  1|  4|   0|   8| true|true|[1, null, 3]|   {1 -> 2, 3 -> 4}|
+        # |  2|  5|  -1|null|false|null|      [1, 3]|{1 -> null, 3 -> 4}|
+        # |  3|  6|null|   0|false|null|      [null]|               null|
+        # +---+---+----+----+-----+----+------------+-------------------+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test collect array
+        # +--------------+-------------+------------+
+        # |array(a, b, c)|  array(e, f)|           g|
+        # +--------------+-------------+------------+
+        # |     [1, 4, 0]| [true, true]|[1, null, 3]|
+        # |    [2, 5, -1]|[false, null]|      [1, 3]|
+        # |  [3, 6, null]|[false, null]|      [null]|
+        # +--------------+-------------+------------+
+        self.assertEqual(
+            cdf.select(CF.array("a", "b", "c"), CF.array("e", "f"), CF.col("g")).collect(),
+            sdf.select(SF.array("a", "b", "c"), SF.array("e", "f"), SF.col("g")).collect(),
+        )
+
+        # test collect nested array
+        # +-----------------------------------+-------------------------+
+        # |array(array(a), array(b), array(c))|array(array(e), array(f))|
+        # +-----------------------------------+-------------------------+
+        # |                    [[1], [4], [0]]|         [[true], [true]]|
+        # |                   [[2], [5], [-1]]|        [[false], [null]]|
+        # |                 [[3], [6], [null]]|        [[false], [null]]|
+        # +-----------------------------------+-------------------------+
+        self.assertEqual(
+            cdf.select(
+                CF.array(CF.array("a"), CF.array("b"), CF.array("c")),
+                CF.array(CF.array("e"), CF.array("f")),
+            ).collect(),
+            sdf.select(
+                SF.array(SF.array("a"), SF.array("b"), SF.array("c")),
+                SF.array(SF.array("e"), SF.array("f")),
+            ).collect(),
+        )
+
+        # test collect array of struct, map
+        # +----------------+---------------------+
+        # |array(struct(a))|             array(h)|
+        # +----------------+---------------------+
+        # |           [{1}]|   [{1 -> 2, 3 -> 4}]|
+        # |           [{2}]|[{1 -> null, 3 -> 4}]|
+        # |           [{3}]|               [null]|
+        # +----------------+---------------------+
+        self.assertEqual(
+            cdf.select(CF.array(CF.struct("a")), CF.array("h")).collect(),
+            sdf.select(SF.array(SF.struct("a")), SF.array("h")).collect(),
+        )
+
+        # test collect map
+        # +-------------------+-------------------+
+        # |                  h|    map(a, b, b, c)|
+        # +-------------------+-------------------+
+        # |   {1 -> 2, 3 -> 4}|   {1 -> 4, 4 -> 0}|
+        # |{1 -> null, 3 -> 4}|  {2 -> 5, 5 -> -1}|
+        # |               null|{3 -> 6, 6 -> null}|
+        # +-------------------+-------------------+
+        self.assertEqual(
+            cdf.select(CF.col("h"), CF.create_map("a", "b", "b", "c")).collect(),
+            sdf.select(SF.col("h"), SF.create_map("a", "b", "b", "c")).collect(),
+        )
+
+        # test collect map of struct, array
+        # +-------------------+------------------------+
+        # |          map(a, g)|    map(a, struct(b, g))|
+        # +-------------------+------------------------+
+        # |{1 -> [1, null, 3]}|{1 -> {4, [1, null, 3]}}|
+        # |      {2 -> [1, 3]}|      {2 -> {5, [1, 3]}}|
+        # |      {3 -> [null]}|      {3 -> {6, [null]}}|
+        # +-------------------+------------------------+
+        self.assertEqual(
+            cdf.select(CF.create_map("a", "g"), CF.create_map("a", CF.struct("b", "g"))).collect(),
+            sdf.select(SF.create_map("a", "g"), SF.create_map("a", SF.struct("b", "g"))).collect(),
+        )
+
+        # test collect struct
+        # +------------------+--------------------------+
+        # |struct(a, b, c, d)|           struct(e, f, g)|
+        # +------------------+--------------------------+
+        # |      {1, 4, 0, 8}|{true, true, [1, null, 3]}|
+        # |  {2, 5, -1, null}|     {false, null, [1, 3]}|
+        # |   {3, 6, null, 0}|     {false, null, [null]}|
+        # +------------------+--------------------------+
+        self.assertEqual(
+            cdf.select(CF.struct("a", "b", "c", "d"), CF.struct("e", "f", "g")).collect(),
+            sdf.select(SF.struct("a", "b", "c", "d"), SF.struct("e", "f", "g")).collect(),
+        )
+
+        # test collect nested struct
+        # +------------------------------------------+--------------------------+----------------------------+ # noqa
+        # |struct(a, struct(a, struct(c, struct(d))))|struct(a, b, struct(c, d))|     struct(e, f, struct(g))| # noqa
+        # +------------------------------------------+--------------------------+----------------------------+ # noqa
+        # |                        {1, {1, {0, {8}}}}|            {1, 4, {0, 8}}|{true, true, {[1, null, 3]}}| # noqa
+        # |                    {2, {2, {-1, {null}}}}|        {2, 5, {-1, null}}|     {false, null, {[1, 3]}}| # noqa
+        # |                     {3, {3, {null, {0}}}}|         {3, 6, {null, 0}}|     {false, null, {[null]}}| # noqa
+        # +------------------------------------------+--------------------------+----------------------------+ # noqa
+        self.assertEqual(
+            cdf.select(
+                CF.struct("a", CF.struct("a", CF.struct("c", CF.struct("d")))),
+                CF.struct("a", "b", CF.struct("c", "d")),
+                CF.struct("e", "f", CF.struct("g")),
+            ).collect(),
+            sdf.select(
+                SF.struct("a", SF.struct("a", SF.struct("c", SF.struct("d")))),
+                SF.struct("a", "b", SF.struct("c", "d")),
+                SF.struct("e", "f", SF.struct("g")),
+            ).collect(),
+        )
+
+        # test collect struct containing array, map
+        # +--------------------------------------------+
+        # |  struct(a, struct(a, struct(g, struct(h))))|
+        # +--------------------------------------------+
+        # |{1, {1, {[1, null, 3], {{1 -> 2, 3 -> 4}}}}}|
+        # |   {2, {2, {[1, 3], {{1 -> null, 3 -> 4}}}}}|
+        # |                  {3, {3, {[null], {null}}}}|
+        # +--------------------------------------------+
+        self.assertEqual(
+            cdf.select(
+                CF.struct("a", CF.struct("a", CF.struct("g", CF.struct("h")))),
+            ).collect(),
+            sdf.select(
+                SF.struct("a", SF.struct("a", SF.struct("g", SF.struct("h")))),
+            ).collect(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
@@ -2136,11 +2550,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(NotImplementedError):
             RemoteSparkSession.getActiveSession()
 
+        with self.assertRaises(NotImplementedError):
+            RemoteSparkSession.builder.enableHiveSupport()
+
         for f in (
             "newSession",
             "conf",
             "sparkContext",
             "streams",
+            "readStream",
             "udf",
             "version",
         ):
@@ -2158,6 +2576,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.catalog, f)()
+
+    def test_unsupported_io_functions(self):
+        # SPARK-41964: Disable unsupported functions.
+        # DataFrameWriterV2 is also not implemented yet
+        df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
+
+        for f in ("jdbc",):
+            with self.assertRaises(NotImplementedError):
+                getattr(self.connect.read, f)()
+
+        for f in ("jdbc",):
+            with self.assertRaises(NotImplementedError):
+                getattr(df.write, f)()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

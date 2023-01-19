@@ -2650,7 +2650,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       },
       errorClass = "INDEX_ALREADY_EXISTS",
       parameters = Map(
-        "message" -> "Failed to create index people_index in test.people"
+        "indexName" -> "people_index",
+        "tableName" -> "test.people"
       )
     )
     assert(jdbcTable.indexExists("people_index"))

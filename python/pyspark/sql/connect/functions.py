@@ -31,6 +31,8 @@ from typing import (
     cast,
 )
 
+import numpy as np
+
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -40,9 +42,10 @@ from pyspark.sql.connect.expressions import (
     UnresolvedFunction,
     SQLExpression,
     LambdaFunction,
+    UnresolvedNamedLambdaVariable,
 )
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.types import DataType, StructType, ArrayType
+from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -135,14 +138,18 @@ def _create_lambda(f: Callable) -> LambdaFunction:
     parameters = _get_lambda_parameters(f)
 
     arg_names = ["x", "y", "z"][: len(parameters)]
-    arg_cols = [column(arg) for arg in arg_names]
+    arg_exprs = [
+        UnresolvedNamedLambdaVariable([UnresolvedNamedLambdaVariable.fresh_var_name(arg_name)])
+        for arg_name in arg_names
+    ]
+    arg_cols = [Column(arg_expr) for arg_expr in arg_exprs]
 
     result = f(*arg_cols)
 
     if not isinstance(result, Column):
         raise ValueError(f"Callable {f} should return Column, got {type(result)}")
 
-    return LambdaFunction(result._expr, arg_names)
+    return LambdaFunction(result._expr, arg_exprs)
 
 
 def _invoke_higher_order_function(
@@ -192,6 +199,17 @@ def lit(col: Any) -> Column:
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
+        return array(*[lit(c) for c in col])
+    elif isinstance(col, np.ndarray) and col.ndim == 1:
+        if _from_numpy_type(col.dtype) is None:
+            raise TypeError("The type of array scalar '%s' is not supported" % (col.dtype))
+
+        # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
+        # Actually this is not a problem for Connect, but here still convert it
+        # to int16 for compatibility.
+        if col.dtype == np.int8:
+            col = col.astype(np.int16)
+
         return array(*[lit(c) for c in col])
     else:
         return Column(LiteralExpression._from_value(col))
@@ -2357,13 +2375,6 @@ def _test() -> None:
         # Spark Connect does not support Spark Context but the test depends on that.
         del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
-        # TODO(SPARK-41880): Function `from_json` should support non-literal expression
-        # TODO(SPARK-41879): `DataFrame.collect` should support nested types
-        del pyspark.sql.connect.functions.struct.__doc__
-        del pyspark.sql.connect.functions.create_map.__doc__
-        del pyspark.sql.connect.functions.from_csv.__doc__
-        del pyspark.sql.connect.functions.from_json.__doc__
-
         # TODO(SPARK-41834): implement Dataframe.conf
         del pyspark.sql.connect.functions.from_unixtime.__doc__
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__
@@ -2371,20 +2382,6 @@ def _test() -> None:
 
         # TODO(SPARK-41757): Fix String representation for Column class
         del pyspark.sql.connect.functions.col.__doc__
-
-        # TODO(SPARK-41838): fix dataset.show
-        del pyspark.sql.connect.functions.posexplode_outer.__doc__
-        del pyspark.sql.connect.functions.explode_outer.__doc__
-
-        # TODO(SPARK-41837): createDataFrame datatype conversion error
-        del pyspark.sql.connect.functions.to_csv.__doc__
-        del pyspark.sql.connect.functions.to_json.__doc__
-
-        # TODO(SPARK-41835): Fix `transform_keys` function
-        del pyspark.sql.connect.functions.transform_keys.__doc__
-
-        # TODO(SPARK-41836): Implement `transform_values` function
-        del pyspark.sql.connect.functions.transform_values.__doc__
 
         # TODO(SPARK-41812): Proper column names after join
         del pyspark.sql.connect.functions.count_distinct.__doc__
@@ -2394,13 +2391,6 @@ def _test() -> None:
 
         # TODO(SPARK-41845): Fix count bug
         del pyspark.sql.connect.functions.count.__doc__
-
-        # TODO(SPARK-41847): mapfield,structlist invalid type
-        del pyspark.sql.connect.functions.element_at.__doc__
-        del pyspark.sql.connect.functions.explode.__doc__
-        del pyspark.sql.connect.functions.map_filter.__doc__
-        del pyspark.sql.connect.functions.map_zip_with.__doc__
-        del pyspark.sql.connect.functions.posexplode.__doc__
 
         globs["spark"] = (
             PySparkSession.builder.appName("sql.connect.functions tests")

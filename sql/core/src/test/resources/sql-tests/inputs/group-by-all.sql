@@ -75,8 +75,11 @@ select (id + id) / 2 + count(*) * 2 from data group by all;
 select country, (select count(*) from data) as cnt, count(id) as cnt_id from data group by all;
 
 -- correlated subquery should also work
-select (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all;
+select country, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all;
 
--- make sure we report the right error when there's an attribute in correlated subquery
--- that is, to report UNRESOLVED_ALL_IN_GROUP_BY, rather than some random subquery error.
-select coutnry, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all;
+-- correlated subquery together with aggregate function doesn't work.
+-- make sure we report the right error UNRESOLVED_ALL_IN_GROUP_BY, rather than some random subquery error.
+select (select count(*) from data d1 where d1.country = d2.country) + count(id) from data d2 group by all;
+
+-- SELECT list contains unresolved column, should not report UNRESOLVED_ALL_IN_GROUP_BY
+select non_exist from data group by all;

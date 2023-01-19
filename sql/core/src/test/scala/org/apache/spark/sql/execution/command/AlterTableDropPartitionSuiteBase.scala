@@ -254,4 +254,34 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       checkPartitions(t)
     }
   }
+
+  test("SPARK-41982: drop partition when keepPartitionSpecAsString set `true`") {
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) using orc PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = 08)")
+        checkPartitions(t)
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = '08')")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = '08')")
+        checkPartitions(t)
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "false") {
+      withNamespaceAndTable("ns", "tb2") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) using orc PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "8"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = 08)")
+        checkPartitions(t)
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "8"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = 8)")
+        checkPartitions(t)
+      }
+    }
+  }
 }

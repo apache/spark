@@ -253,10 +253,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         // This should pass without exception
         sql(s"CREATE index IF NOT EXISTS i1 ON $catalogName.new_table (col1)")
 
-        m = intercept[IndexAlreadyExistsException] {
-          sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
-        }.getMessage
-        assert(m.contains("Failed to create index i1 in new_table"))
+        checkError(
+          exception = intercept[IndexAlreadyExistsException] {
+            sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
+          },
+          errorClass = "INDEX_ALREADY_EXISTS",
+          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+        )
 
         sql(s"DROP index i1 ON $catalogName.new_table")
         assert(jdbcTable.indexExists("i1") == false)

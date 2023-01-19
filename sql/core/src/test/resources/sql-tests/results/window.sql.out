@@ -104,6 +104,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "expectedType" : "\"INT\"",
     "exprType" : "\"BIGINT\"",
@@ -341,6 +342,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "orderSpecType" : "\"DATE\"",
     "sqlExpr" : "\"(PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)\"",
@@ -382,6 +384,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "lower" : "\"UNBOUNDED FOLLOWING\"",
     "sqlExpr" : "\"ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING\"",
@@ -406,6 +409,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY cate RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\""
   },
@@ -428,6 +432,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "orderSpec" : "val#x ASC NULLS FIRST,cate#x ASC NULLS FIRST",
     "sqlExpr" : "\"(PARTITION BY cate ORDER BY val ASC NULLS FIRST, cate ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\""
@@ -451,6 +456,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "orderSpecType" : "\"TIMESTAMP\"",
     "sqlExpr" : "\"(PARTITION BY cate ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",
@@ -475,6 +481,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "comparison" : "less than or equal",
     "sqlExpr" : "\"RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING\""

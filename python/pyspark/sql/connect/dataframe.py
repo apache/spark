@@ -33,14 +33,18 @@ from typing import (
 import sys
 import random
 import pandas
-import datetime
 import json
 import warnings
 from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import StructType, Row
+from pyspark.sql.types import Row, StructType
+from pyspark.sql.dataframe import (
+    DataFrame as PySparkDataFrame,
+    DataFrameNaFunctions as PySparkDataFrameNaFunctions,
+    DataFrameStatFunctions as PySparkDataFrameStatFunctions,
+)
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
@@ -54,14 +58,16 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
-from pyspark.sql.dataframe import (
-    DataFrame as PySparkDataFrame,
-    DataFrameNaFunctions as PySparkDataFrameNaFunctions,
-    DataFrameStatFunctions as PySparkDataFrameStatFunctions,
-)
+from pyspark.sql.connect.types import from_arrow_schema
+
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        LiteralType,
+        PrimitiveType,
+        OptionalPrimitiveType,
+    )
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -554,7 +560,7 @@ class DataFrame:
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of existing column name and new column name.")
 
-        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
+        return DataFrame.withPlan(plan.WithColumnsRenamed(self._plan, colsMap), self._session)
 
     withColumnsRenamed.__doc__ = PySparkDataFrame.withColumnsRenamed.__doc__
 
@@ -642,6 +648,8 @@ class DataFrame:
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
+        assert ids is not None, "ids must not be None"
+
         def to_jcols(
             cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
         ) -> List["ColumnOrName"]:
@@ -666,17 +674,26 @@ class DataFrame:
 
     melt = unpivot
 
-    def hint(self, name: str, *params: Any) -> "DataFrame":
-        for param in params:
-            # TODO(SPARK-41887): support list type as hint parameter
-            if param is not None and not isinstance(param, (int, str, float)):
+    def hint(
+        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+    ) -> "DataFrame":
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]  # type: ignore[assignment]
+
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+
+        allowed_types = (str, list, float, int)
+        for p in parameters:
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    f"param should be a str, float or int, but got {type(param).__name__}"
-                    f" {param}"
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)
+                    )
                 )
 
         return DataFrame.withPlan(
-            plan.Hint(self._plan, name, list(params)),
+            plan.Hint(self._plan, name, list(parameters)),
             session=self._session,
         )
 
@@ -746,7 +763,11 @@ class DataFrame:
             raise ValueError("Argument to UnionByName does not contain a valid plan.")
         return DataFrame.withPlan(
             plan.SetOperation(
-                self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
+                self._plan,
+                other._plan,
+                "union",
+                by_name=True,
+                allow_missing_columns=allowMissingColumns,
             ),
             session=self._session,
         )
@@ -1152,7 +1173,11 @@ class DataFrame:
     def sampleBy(
         self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
     ) -> "DataFrame":
-        if not isinstance(col, (Column, str)):
+        from pyspark.sql.connect.expressions import ColumnReference
+
+        if isinstance(col, str):
+            col = Column(ColumnReference(name=col))
+        elif not isinstance(col, Column):
             raise TypeError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise TypeError("fractions must be a dict but got %r" % type(fractions))
@@ -1161,7 +1186,6 @@ class DataFrame:
                 raise TypeError("key must be float, int, or string, but got %r" % type(k))
             fractions[k] = float(v)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-
         return DataFrame.withPlan(
             plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
             session=self._session,
@@ -1218,30 +1242,13 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table = self._session.client.to_table(query)
 
-        rows: List[Row] = []
-        columns = [column.to_pylist() for column in table.columns]
-        i = 0
-        while i < table.num_rows:
-            values: List[Any] = []
-            j = 0
-            while j < table.num_columns:
-                v = columns[j][i]
-                if isinstance(v, bytes):
-                    values.append(bytearray(v))
-                elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
-                    # TODO: Should be controlled by "spark.sql.timestampType"
-                    # always remove the time zone for now
-                    values.append(v.replace(tzinfo=None))
-                elif isinstance(v, dict):
-                    values.append(Row(**v))
-                else:
-                    values.append(v)
-                j += 1
-            new_row = Row(*values)
-            new_row.__fields__ = table.column_names
-            rows.append(new_row)
-            i += 1
-        return rows
+        schema = from_arrow_schema(table.schema)
+
+        assert schema is not None and isinstance(schema, StructType)
+
+        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+
+        return ArrowTableToRowsConversion.convert(table, schema)
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
@@ -1317,7 +1324,7 @@ class DataFrame:
     to.__doc__ = PySparkDataFrame.to.__doc__
 
     def toDF(self, *cols: str) -> "DataFrame":
-        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
+        return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
 
     toDF.__doc__ = PySparkDataFrame.toDF.__doc__
 
@@ -1627,14 +1634,8 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
-        # TODO(SPARK-41886): The doctest output has different order
-        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
-
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
-        # TODO(SPARK-41832): fix unionByName
-        del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
 
         # TODO(SPARK-41818): Support saveAsTable
         del pyspark.sql.connect.dataframe.DataFrame.write.__doc__

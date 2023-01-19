@@ -17,6 +17,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -54,7 +55,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
     "expressionAnyValue" : "\"any_value(a)\""
@@ -125,7 +126,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
     "expressionAnyValue" : "\"any_value(a)\""
@@ -189,6 +190,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
     "sqlExpr" : "CAST(udf(cast(count(b) as string)) AS BIGINT)"
   },
@@ -219,7 +221,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"k\"",
     "expressionAnyValue" : "\"any_value(k)\""
@@ -243,7 +245,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
@@ -329,6 +331,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -444,6 +447,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"INT\"",
@@ -469,6 +473,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"SMALLINT\"",
@@ -494,6 +499,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"BIGINT\"",
@@ -519,6 +525,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
@@ -621,6 +628,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(count(1) > 1)\"",
     "expressionList" : "count(1)"
@@ -643,6 +651,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"((count(1) + 1) > 1)\"",
     "expressionList" : "count(1)"
@@ -665,6 +674,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",
     "expressionList" : "count(1), max(test_agg.k)"

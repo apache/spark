@@ -522,7 +522,7 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("timestamP_LTZ '2016-33-11 20:54:00.000'"),
         errorClass = "INVALID_TYPED_LITERAL",
-        sqlState = "42000",
+        sqlState = "42604",
         parameters = Map(
           "valueType" -> "\"TIMESTAMP_LTZ\"",
           "value" -> "'2016-33-11 20:54:00.000'"
@@ -538,7 +538,7 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("tImEstAmp_Ntz '2016-33-11 20:54:00.000'"),
         errorClass = "INVALID_TYPED_LITERAL",
-        sqlState = "42000",
+        sqlState = "42604",
         parameters = Map(
           "valueType" -> "\"TIMESTAMP_NTZ\"",
           "value" -> "'2016-33-11 20:54:00.000'"
@@ -554,7 +554,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("DAtE 'mar 11 2016'"),
       errorClass = "INVALID_TYPED_LITERAL",
-      sqlState = "42000",
+      sqlState = "42604",
       parameters = Map("valueType" -> "\"DATE\"", "value" -> "'mar 11 2016'"),
       context = ExpectedContext(
         fragment = "DAtE 'mar 11 2016'",
@@ -567,7 +567,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
       errorClass = "INVALID_TYPED_LITERAL",
-      sqlState = "42000",
+      sqlState = "42604",
       parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
       context = ExpectedContext(
         fragment = "timestamP '2016-33-11 20:54:00.000'",
@@ -582,7 +582,7 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
         errorClass = "INVALID_TYPED_LITERAL",
-        sqlState = "42000",
+        sqlState = "42604",
         parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
         context = ExpectedContext(
           fragment = "timestamP '2016-33-11 20:54:00.000'",
@@ -670,7 +670,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("x'A1OC'"),
       errorClass = "INVALID_TYPED_LITERAL",
-      sqlState = "42000",
+      sqlState = "42604",
       parameters = Map(
         "valueType" -> "\"X\"",
         "value" -> "'A1OC'"
