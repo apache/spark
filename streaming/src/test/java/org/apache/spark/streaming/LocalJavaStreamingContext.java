@@ -22,8 +22,6 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.junit.After;
 import org.junit.Before;
 
-@SuppressWarnings( "deprecation" )
-
 public abstract class LocalJavaStreamingContext {
 
     protected transient JavaStreamingContext ssc;
