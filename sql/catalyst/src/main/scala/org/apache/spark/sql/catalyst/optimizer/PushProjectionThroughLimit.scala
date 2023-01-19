@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, PROJECT}
@@ -29,11 +30,13 @@ object PushProjectionThroughLimit extends Rule[LogicalPlan] {
     _.containsAllPatterns(PROJECT, LIMIT)) {
 
     case p @ Project(projectList, limit @ LocalLimit(_, child))
-        if projectList.forall(_.deterministic) =>
+        if projectList.forall(_.deterministic) &&
+          projectList.forall(!_.exists(_.isInstanceOf[PythonUDF])) =>
       limit.copy(child = p.copy(projectList, child))
 
     case p @ Project(projectList, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
-        if projectList.forall(_.deterministic) =>
+        if projectList.forall(_.deterministic) &&
+          projectList.forall(!_.exists(_.isInstanceOf[PythonUDF])) =>
       g.copy(child = limit.copy(child = p.copy(projectList, child)))
   }
 }

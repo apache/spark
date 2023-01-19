@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{FileSourceScanExec, GlobalLimitExec, SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.col
@@ -90,6 +90,19 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
     val arrowEvalNodes = collectArrowExec(df2.queryExecution.executedPlan)
     assert(pythonEvalNodes.size == 2)
     assert(arrowEvalNodes.size == 2)
+  }
+
+  test("SPARK-42115: Push limit through Python UDFs") {
+    val local = Seq(("Hello", 4)).toDF("a", "b")
+    // Should create it from RDD to disable local data optimization
+    val df = spark.createDataFrame(local.rdd, local.schema)
+    val df2 = df.limit(10).select(batchedPythonUDF(col("a")))
+    val df3 = df.limit(10).select(scalarPandasUDF(col("b")))
+
+    val pythonEvalNodes = collectBatchExec(df2.queryExecution.sparkPlan)
+    val arrowEvalNodes = collectArrowExec(df3.queryExecution.sparkPlan)
+    assert(pythonEvalNodes.head.child.isInstanceOf[GlobalLimitExec])
+    assert(arrowEvalNodes.head.child.isInstanceOf[GlobalLimitExec])
   }
 
   test("Python UDF should not break column pruning/filter pushdown -- Parquet V1") {

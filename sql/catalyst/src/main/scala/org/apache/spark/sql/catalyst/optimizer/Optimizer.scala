@@ -1006,7 +1006,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
-        if isRenaming(l1, l2) =>
+        if isRenaming(l1, l2) && l1.forall(!_.exists(_.isInstanceOf[PythonUDF])) =>
         val newProjectList = buildCleanedProjectList(l1, l2)
         g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
       case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
