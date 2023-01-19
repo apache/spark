@@ -68,7 +68,10 @@ class StreamingContext:
         batchDuration: Optional[int] = None,
         jssc: Optional[JavaObject] = None,
     ):
-        warnings.warn("DStream is deprecated as of Spark 3.4.0. Migrate to Structured Streaming.", FutureWarning)
+        warnings.warn(
+            "DStream is deprecated as of Spark 3.4.0. Migrate to Structured Streaming.",
+            FutureWarning,
+        )
         self._sc = sparkContext
         self._jvm = self._sc._jvm
         self._jssc = jssc or self._initialize_context(self._sc, batchDuration)
