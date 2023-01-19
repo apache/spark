@@ -48,6 +48,11 @@ class StreamingContext:
     batchDuration : int, optional
         the time interval (in seconds) at which streaming
         data will be divided into batches
+    .. deprecated:: Spark 3.4.0
+       This is deprecated as of Spark 3.4.0.
+       There are no longer updates to DStream and it’s a legacy project.
+       There is a newer and easier to use streaming engine in Spark called Structured Streaming.
+       You should use Spark Structured Streaming for your streaming applications.
     """
 
     _transformerSerializer = None
@@ -61,6 +66,7 @@ class StreamingContext:
         batchDuration: Optional[int] = None,
         jssc: Optional[JavaObject] = None,
     ):
+        warnings.warn("DStream is deprecated. Migrate to Structured Streaming", FutureWarning)
         self._sc = sparkContext
         self._jvm = self._sc._jvm
         self._jssc = jssc or self._initialize_context(self._sc, batchDuration)
