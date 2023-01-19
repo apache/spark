@@ -28,6 +28,7 @@ import json
 import decimal
 import datetime
 import warnings
+from threading import Lock
 
 import numpy as np
 
@@ -155,7 +156,7 @@ class ColumnAlias(Expression):
             return exp
 
     def __repr__(self) -> str:
-        return f"Alias({self._parent}, ({','.join(self._alias)}))"
+        return f"{self._parent} AS {','.join(self._alias)}"
 
 
 class LiteralExpression(Expression):
@@ -326,7 +327,7 @@ class LiteralExpression(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"Literal({self._value})"
+        return f"{self._value}"
 
 
 class ColumnReference(Expression):
@@ -351,7 +352,7 @@ class ColumnReference(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"ColumnReference({self._unparsed_identifier})"
+        return f"{self._unparsed_identifier}"
 
 
 class SQLExpression(Expression):
@@ -432,6 +433,7 @@ class UnresolvedFunction(Expression):
         return fun
 
     def __repr__(self) -> str:
+        # Default print handling:
         if self._is_distinct:
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
@@ -557,11 +559,53 @@ class CastExpression(Expression):
         return f"({self._expr} ({self._data_type}))"
 
 
+class UnresolvedNamedLambdaVariable(Expression):
+
+    _lock: Lock = Lock()
+    _nextVarNameId: int = 0
+
+    def __init__(
+        self,
+        name_parts: Sequence[str],
+    ) -> None:
+        super().__init__()
+
+        assert (
+            isinstance(name_parts, list)
+            and len(name_parts) > 0
+            and all(isinstance(p, str) for p in name_parts)
+        )
+
+        self._name_parts = name_parts
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.unresolved_named_lambda_variable.name_parts.extend(self._name_parts)
+        return expr
+
+    def __repr__(self) -> str:
+        return f"(UnresolvedNamedLambdaVariable({', '.join(self._name_parts)})"
+
+    @staticmethod
+    def fresh_var_name(name: str) -> str:
+        assert isinstance(name, str) and str != ""
+
+        _id: Optional[int] = None
+
+        with UnresolvedNamedLambdaVariable._lock:
+            _id = UnresolvedNamedLambdaVariable._nextVarNameId
+            UnresolvedNamedLambdaVariable._nextVarNameId += 1
+
+        assert _id is not None
+
+        return f"{name}_{_id}"
+
+
 class LambdaFunction(Expression):
     def __init__(
         self,
         function: Expression,
-        arguments: Sequence[str],
+        arguments: Sequence[UnresolvedNamedLambdaVariable],
     ) -> None:
         super().__init__()
 
@@ -570,17 +614,19 @@ class LambdaFunction(Expression):
         assert (
             isinstance(arguments, list)
             and len(arguments) > 0
-            and all(isinstance(arg, str) for arg in arguments)
+            and all(isinstance(arg, UnresolvedNamedLambdaVariable) for arg in arguments)
         )
 
         self._function = function
         self._arguments = arguments
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        fun = proto.Expression()
-        fun.lambda_function.function.CopyFrom(self._function.to_plan(session))
-        fun.lambda_function.arguments.extend(self._arguments)
-        return fun
+        expr = proto.Expression()
+        expr.lambda_function.function.CopyFrom(self._function.to_plan(session))
+        expr.lambda_function.arguments.extend(
+            [arg.to_plan(session).unresolved_named_lambda_variable for arg in self._arguments]
+        )
+        return expr
 
     def __repr__(self) -> str:
         return f"(LambdaFunction({str(self._function)}, {', '.join(self._arguments)})"

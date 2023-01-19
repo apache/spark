@@ -777,10 +777,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("database" -> quoted))
   }
 
-  def cannotDropViewWithDropTableError(): Throwable = {
+  def wrongCommandForObjectTypeError(
+      operation: String,
+      requiredType: String,
+      objectName: String,
+      foundType: String,
+      alternative: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1056",
-      messageParameters = Map.empty)
+      errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+      messageParameters = Map(
+        "operation" -> operation,
+        "requiredType" -> requiredType,
+        "objectName" -> objectName,
+        "foundType" -> foundType,
+        "alternative" -> alternative
+      )
+    )
   }
 
   def showColumnsWithConflictDatabasesError(
@@ -2393,22 +2405,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cmdOnlyWorksOnPartitionedTablesError(cmd: String, tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnPartitionedTablesError(
+      operation: String,
+      tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "NOT_A_PARTITIONED_TABLE",
       messageParameters = Map(
-        "cmd" -> cmd,
+        "operation" -> toSQLStmt(operation),
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "_LEGACY_ERROR_TEMP_2446",
       messageParameters = Map(
         "cmd" -> cmd,
         "tableIdentWithDB" -> tableIdentWithDB))
-    new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
-      s"location provided: $tableIdentWithDB")
   }
 
   def actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(
@@ -2862,9 +2874,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("quote" -> quote))
   }
 
-  def sortByNotUsedWithBucketByError(): Throwable = {
+  def sortByWithoutBucketingError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1311",
+      errorClass = "SORT_BY_WITHOUT_BUCKETING",
       messageParameters = Map.empty)
   }
 
@@ -3400,5 +3412,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "aggFunc" -> toSQLExpr(aggExpr)
       )
     )
+  }
+
+  def dataTypeOperationUnsupportedError(): Throwable = {
+    SparkException.internalError(
+      "The operation `dataType` is not supported.")
   }
 }

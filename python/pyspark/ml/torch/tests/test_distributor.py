@@ -73,7 +73,14 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         ]
         for num_processes, local_mode, use_gpu in inputs:
             with self.subTest():
-                TorchDistributor(num_processes, local_mode, use_gpu)
+                expected_params = {
+                    "num_processes": num_processes,
+                    "local_mode": local_mode,
+                    "use_gpu": use_gpu,
+                    "num_tasks": num_processes,
+                }
+                dist = TorchDistributor(num_processes, local_mode, use_gpu)
+                self.assertEqual(expected_params, dist.input_params)
 
     def test_validate_incorrect_inputs(self) -> None:
         inputs = [
@@ -153,7 +160,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         expected_local_mode_output = [
             sys.executable,
             "-m",
-            "pyspark.ml.torch.distributor.torch_run_process_wrapper",
+            "pyspark.ml.torch.torch_run_process_wrapper",
             "--standalone",
             "--nnodes=1",
             "--nproc_per_node=4",
@@ -167,6 +174,32 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
             ),
             expected_local_mode_output,
         )
+
+        distributed_mode_input_params = {"num_processes": 4, "local_mode": False}
+        input_env_vars = {"MASTER_ADDR": "localhost", "MASTER_PORT": "9350", "RANK": "3"}
+
+        args_number = [1, 3]  # testing conversion to strings
+        self.setup_env_vars(input_env_vars)
+        expected_distributed_mode_output = [
+            sys.executable,
+            "-m",
+            "pyspark.ml.torch.torch_run_process_wrapper",
+            "--nnodes=4",
+            "--node_rank=3",
+            "--rdzv_endpoint=localhost:9350",
+            "--rdzv_id=0",
+            "--nproc_per_node=1",
+            "train.py",
+            "1",
+            "3",
+        ]
+        self.assertEqual(
+            TorchDistributor._create_torchrun_command(
+                distributed_mode_input_params, train_path, *args_number
+            ),
+            expected_distributed_mode_output,
+        )
+        self.delete_env_vars(input_env_vars)
 
 
 class TorchDistributorLocalUnitTests(unittest.TestCase):
@@ -285,6 +318,23 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
     def tearDown(self) -> None:
         os.unlink(self.tempFile.name)
         self.spark.stop()
+
+    def test_dist_training_succeeds(self) -> None:
+        CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
+        inputs = [
+            ("0,1,2", 2, True, "0"),
+        ]
+
+        for i, (_, num_processes, use_gpu, expected) in enumerate(inputs):
+            with self.subTest(f"subtest: {i + 1}"):
+                dist = TorchDistributor(num_processes, False, use_gpu)
+                dist._run_training_on_pytorch_file = lambda *args: os.environ.get(  # type: ignore
+                    CUDA_VISIBLE_DEVICES, "NONE"
+                )
+                self.assertEqual(
+                    expected,
+                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "..."),
+                )
 
     def test_get_num_tasks_distributed(self) -> None:
         inputs = [(1, 8, 8), (2, 8, 4), (3, 8, 3)]

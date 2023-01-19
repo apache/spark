@@ -1010,6 +1010,21 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     assert(received)
   }
+
+  test("SPARK-42100: onJobStart handle event with unregistered executionId shouldn't throw NPE") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 5
+    // Using protobuf serialization will throw npe before SPARK-42100
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Nil,
+      createProperties(executionId)))
+
+    assertJobs(statusStore.execution(executionId), running = Seq(0))
+  }
 }
 
 class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSuite {

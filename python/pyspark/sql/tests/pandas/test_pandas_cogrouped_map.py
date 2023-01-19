@@ -20,7 +20,7 @@ from typing import cast
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
-from pyspark.sql.utils import IllegalArgumentException, PythonException
+from pyspark.errors import IllegalArgumentException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

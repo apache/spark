@@ -39,20 +39,12 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import (
-    Row,
-    StructType,
-    ArrayType,
-    MapType,
-    TimestampType,
-    TimestampNTZType,
-)
+from pyspark.sql.types import Row, StructType
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
-from pyspark.sql.pandas.types import from_arrow_schema
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
@@ -66,6 +58,8 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
+from pyspark.sql.connect.types import from_arrow_schema
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -566,7 +560,7 @@ class DataFrame:
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of existing column name and new column name.")
 
-        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
+        return DataFrame.withPlan(plan.WithColumnsRenamed(self._plan, colsMap), self._session)
 
     withColumnsRenamed.__doc__ = PySparkDataFrame.withColumnsRenamed.__doc__
 
@@ -1248,30 +1242,7 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table = self._session.client.to_table(query)
 
-        # We first try the inferred schema from PyArrow Table instead of always fetching
-        # the Connect Dataframe schema by 'self.schema', for two reasons:
-        # 1, the schema maybe quietly simple, then we can save an RPC;
-        # 2, if we always invoke 'self.schema' here, all catalog functions based on
-        # 'dataframe.collect' will be invoked twice (1, collect data, 2, fetch schema),
-        # and then some of them (e.g. "CREATE DATABASE") fail due to the second invocation.
-
-        schema: Optional[StructType] = None
-        try:
-            schema = from_arrow_schema(table.schema)
-        except Exception:
-            # may fail due to 'from_arrow_schema' not supporting nested struct
-            schema = None
-
-        if schema is None:
-            schema = self.schema
-        else:
-            if any(
-                isinstance(
-                    f.dataType, (StructType, ArrayType, MapType, TimestampType, TimestampNTZType)
-                )
-                for f in schema.fields
-            ):
-                schema = self.schema
+        schema = from_arrow_schema(table.schema)
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1353,7 +1324,7 @@ class DataFrame:
     to.__doc__ = PySparkDataFrame.to.__doc__
 
     def toDF(self, *cols: str) -> "DataFrame":
-        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
+        return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
 
     toDF.__doc__ = PySparkDataFrame.toDF.__doc__
 

@@ -167,7 +167,7 @@ class SparkSession:
         infer_dict_as_struct = False
         infer_array_from_first_element = False
         prefer_timestamp_ntz = False
-        schema = reduce(
+        return reduce(
             _merge_type,
             (
                 _infer_schema(
@@ -180,9 +180,6 @@ class SparkSession:
                 for row in data
             ),
         )
-        if _has_nulltype(schema):
-            raise ValueError("Some of types cannot be determined after inferring")
-        return schema
 
     def createDataFrame(
         self,
@@ -299,9 +296,9 @@ class SparkSession:
                 # we need to convert it to [[1], [2], [3]] to be able to infer schema.
                 _data = [[d] for d in _data]
 
-            try:
-                _inferred_schema = self._inferSchemaFromList(_data, _cols)
-            except Exception:
+            _inferred_schema = self._inferSchemaFromList(_data, _cols)
+
+            if _has_nulltype(_inferred_schema):
                 # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                 # we can not infer the schema from the data itself.
                 warnings.warn("failed to infer the schema from data")

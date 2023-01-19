@@ -81,6 +81,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "5",
     "expectedNum" : "[1, 2, 3, 4]",
@@ -104,6 +105,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`range`",
     "inputSql" : "\"NULL\"",
@@ -129,6 +131,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`range`",
     "inputSql" : "\"array(1, 2, 3)\"",
@@ -154,6 +157,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FAILED_FUNCTION_CALL",
+  "sqlState" : "38000",
   "messageParameters" : {
     "funcName" : "`range`"
   },
@@ -245,6 +249,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
@@ -270,6 +275,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
@@ -295,6 +301,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
@@ -320,6 +327,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
     "expectedNum" : "1",
@@ -343,6 +351,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
   },

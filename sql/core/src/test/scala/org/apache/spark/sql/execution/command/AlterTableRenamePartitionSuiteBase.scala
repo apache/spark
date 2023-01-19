@@ -242,4 +242,40 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       checkPartitions(t, Map("part" -> "2020-01-02"))
     }
   }
+
+  test("SPARK-41982: rename partition when keepPartitionSpecAsString set `true`") {
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 08)" +
+          s" RENAME TO PARTITION (dt = 09)")
+        checkPartitions(t, Map("dt" -> "09"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 09)" +
+          s" RENAME TO PARTITION (dt = '08')")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t PARTITION (dt = '08')" +
+          s" RENAME TO PARTITION (dt = '09')")
+        checkPartitions(t, Map("dt" -> "09"))
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "false") {
+      withNamespaceAndTable("ns", "tb2") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "8"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 08)" +
+          s" RENAME TO PARTITION (dt = 09)")
+        checkPartitions(t, Map("dt" -> "9"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 09)" +
+          s" RENAME TO PARTITION (dt = '08')")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t PARTITION (dt = '08')" +
+          s" RENAME TO PARTITION (dt = '09')")
+        checkPartitions(t, Map("dt" -> "09"))
+      }
+    }
+  }
 }

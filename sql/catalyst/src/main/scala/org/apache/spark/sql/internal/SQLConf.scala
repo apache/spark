@@ -3312,6 +3312,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL =
+    buildConf("spark.sql.legacy.keepPartitionSpecAsStringLiteral")
+      .internal()
+      .doc("If it is set to true, `PARTITION(col=05)` is parsed as a string literal of its " +
+        "text representation, e.g., string '05', when the partition column is string type. " +
+        "Otherwise, it is always parsed as a numeric literal in the partition spec.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
       .internal()

@@ -79,8 +79,8 @@ class Relation(google.protobuf.message.Message):
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     REPARTITION_FIELD_NUMBER: builtins.int
-    RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
-    RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
+    TO_DF_FIELD_NUMBER: builtins.int
+    WITH_COLUMNS_RENAMED_FIELD_NUMBER: builtins.int
     SHOW_STRING_FIELD_NUMBER: builtins.int
     DROP_FIELD_NUMBER: builtins.int
     TAIL_FIELD_NUMBER: builtins.int
@@ -138,9 +138,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition(self) -> global___Repartition: ...
     @property
-    def rename_columns_by_same_length_names(self) -> global___RenameColumnsBySameLengthNames: ...
+    def to_df(self) -> global___ToDF: ...
     @property
-    def rename_columns_by_name_to_name_map(self) -> global___RenameColumnsByNameToNameMap: ...
+    def with_columns_renamed(self) -> global___WithColumnsRenamed: ...
     @property
     def show_string(self) -> global___ShowString: ...
     @property
@@ -211,8 +211,8 @@ class Relation(google.protobuf.message.Message):
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
         repartition: global___Repartition | None = ...,
-        rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
-        rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
+        to_df: global___ToDF | None = ...,
+        with_columns_renamed: global___WithColumnsRenamed | None = ...,
         show_string: global___ShowString | None = ...,
         drop: global___Drop | None = ...,
         tail: global___Tail | None = ...,
@@ -287,10 +287,6 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
-            "rename_columns_by_name_to_name_map",
-            b"rename_columns_by_name_to_name_map",
-            "rename_columns_by_same_length_names",
-            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "repartition_by_expression",
@@ -315,6 +311,8 @@ class Relation(google.protobuf.message.Message):
             b"summary",
             "tail",
             b"tail",
+            "to_df",
+            b"to_df",
             "to_schema",
             b"to_schema",
             "unknown",
@@ -323,6 +321,8 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
+            "with_columns_renamed",
+            b"with_columns_renamed",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -376,10 +376,6 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
-            "rename_columns_by_name_to_name_map",
-            b"rename_columns_by_name_to_name_map",
-            "rename_columns_by_same_length_names",
-            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "repartition_by_expression",
@@ -404,6 +400,8 @@ class Relation(google.protobuf.message.Message):
             b"summary",
             "tail",
             b"tail",
+            "to_df",
+            b"to_df",
             "to_schema",
             b"to_schema",
             "unknown",
@@ -412,6 +410,8 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
+            "with_columns_renamed",
+            b"with_columns_renamed",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -433,8 +433,8 @@ class Relation(google.protobuf.message.Message):
         "range",
         "subquery_alias",
         "repartition",
-        "rename_columns_by_same_length_names",
-        "rename_columns_by_name_to_name_map",
+        "to_df",
+        "with_columns_renamed",
         "show_string",
         "drop",
         "tail",
@@ -2250,7 +2250,7 @@ class NAReplace(google.protobuf.message.Message):
 
 global___NAReplace = NAReplace
 
-class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
+class ToDF(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2283,9 +2283,9 @@ class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
         field_name: typing_extensions.Literal["column_names", b"column_names", "input", b"input"],
     ) -> None: ...
 
-global___RenameColumnsBySameLengthNames = RenameColumnsBySameLengthNames
+global___ToDF = ToDF
 
-class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
+class WithColumnsRenamed(google.protobuf.message.Message):
     """Rename columns on the input relation by a map with name to name mapping."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2339,7 +2339,7 @@ class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___RenameColumnsByNameToNameMap = RenameColumnsByNameToNameMap
+global___WithColumnsRenamed = WithColumnsRenamed
 
 class WithColumns(google.protobuf.message.Message):
     """Adding columns or replacing the existing columns that have the same names."""

@@ -277,7 +277,7 @@ class QueryCompilationErrorsSuite
       exception = groupingColMismatchEx,
       errorClass = "GROUPING_COLUMN_MISMATCH",
       parameters = Map("grouping" -> "earnings.*", "groupingColumns" -> "course.*,year.*"),
-      sqlState = Some("42000"),
+      sqlState = Some("42803"),
       matchPVals = true)
   }
 
@@ -290,7 +290,7 @@ class QueryCompilationErrorsSuite
       errorClass = "GROUPING_ID_COLUMN_MISMATCH",
       parameters = Map("groupingIdColumn" -> "earnings.*",
       "groupByColumns" -> "course.*,year.*"),
-      sqlState = Some("42000"),
+      sqlState = Some("42803"),
       matchPVals = true)
   }
 

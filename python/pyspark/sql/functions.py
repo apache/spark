@@ -9584,14 +9584,11 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": -2.0, "bar": 2.0})], ("id", "data"))
-    >>> df.select(transform_keys(
+    >>> row = df.select(transform_keys(
     ...     "data", lambda k, _: upper(k)).alias("data_upper")
-    ... ).show(truncate=False)
-    +-------------------------+
-    |data_upper               |
-    +-------------------------+
-    |{BAR -> 2.0, FOO -> -2.0}|
-    +-------------------------+
+    ... ).head()
+    >>> sorted(row["data_upper"].items())
+    [('BAR', 2.0), ('FOO', -2.0)]
     """
     return _invoke_higher_order_function("TransformKeys", [col], [f])
 
@@ -9627,14 +9624,11 @@ def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column])
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"IT": 10.0, "SALES": 2.0, "OPS": 24.0})], ("id", "data"))
-    >>> df.select(transform_values(
+    >>> row = df.select(transform_values(
     ...     "data", lambda k, v: when(k.isin("IT", "OPS"), v + 10.0).otherwise(v)
-    ... ).alias("new_data")).show(truncate=False)
-    +---------------------------------------+
-    |new_data                               |
-    +---------------------------------------+
-    |{OPS -> 34.0, IT -> 20.0, SALES -> 2.0}|
-    +---------------------------------------+
+    ... ).alias("new_data")).head()
+    >>> sorted(row["new_data"].items())
+    [('IT', 20.0), ('OPS', 34.0), ('SALES', 2.0)]
     """
     return _invoke_higher_order_function("TransformValues", [col], [f])
 
@@ -9668,14 +9662,11 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-    >>> df.select(map_filter(
+    >>> row = df.select(map_filter(
     ...     "data", lambda _, v: v > 30.0).alias("data_filtered")
-    ... ).show(truncate=False)
-    +--------------------------+
-    |data_filtered             |
-    +--------------------------+
-    |{baz -> 32.0, foo -> 42.0}|
-    +--------------------------+
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('baz', 32.0), ('foo', 42.0)]
     """
     return _invoke_higher_order_function("MapFilter", [col], [f])
 
@@ -9719,14 +9710,11 @@ def map_zip_with(
     ...     (1, {"IT": 24.0, "SALES": 12.00}, {"IT": 2.0, "SALES": 1.4})],
     ...     ("id", "base", "ratio")
     ... )
-    >>> df.select(map_zip_with(
+    >>> row = df.select(map_zip_with(
     ...     "base", "ratio", lambda k, v1, v2: round(v1 * v2, 2)).alias("updated_data")
-    ... ).show(truncate=False)
-    +---------------------------+
-    |updated_data               |
-    +---------------------------+
-    |{SALES -> 16.8, IT -> 48.0}|
-    +---------------------------+
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('IT', 48.0), ('SALES', 16.8)]
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 

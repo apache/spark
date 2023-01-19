@@ -43,7 +43,7 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.errors import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SQLTestUtils,

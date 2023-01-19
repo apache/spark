@@ -120,6 +120,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       caseSensitive = false)
   }
 
+  test("SPARK-42108: transform count(*) to count(1)") {
+    val a = testRelation.output(0)
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: Nil, testRelation))
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() ::
+          Alias(UnresolvedFunction("count" :: Nil,
+            UnresolvedAttribute("a") :: Nil, isDistinct = false), "y")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: count(a).as("y") :: Nil, testRelation))
+  }
+
   test("resolve sort references - filter/limit") {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)

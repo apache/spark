@@ -1024,11 +1024,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       var plan1 = DummySparkPlan(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
-          leftPartValues.length, Some(leftPartValues))
+          leftPartValues.length, leftPartValues)
       )
       var plan2 = DummySparkPlan(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-          rightPartValues.length, Some(rightPartValues))
+          rightPartValues.length, rightPartValues)
       )
 
       // simple case
@@ -1047,9 +1047,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       plan1 = DummySparkPlan(outputPartitioning =
         PartitioningCollection(
           Seq(KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
-            leftPartValues.length, Some(leftPartValues)),
+            leftPartValues.length, leftPartValues),
             KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
-              leftPartValues.length, Some(leftPartValues)))
+              leftPartValues.length, leftPartValues))
         )
       )
 
@@ -1074,15 +1074,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
             PartitioningCollection(
               Seq(
                 KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                  rightPartValues.length, Some(rightPartValues)),
+                  rightPartValues.length, rightPartValues),
                 KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                  rightPartValues.length, Some(rightPartValues)))),
+                  rightPartValues.length, rightPartValues))),
               PartitioningCollection(
                 Seq(
                   KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                    rightPartValues.length, Some(rightPartValues)),
+                    rightPartValues.length, rightPartValues),
                   KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                    rightPartValues.length, Some(rightPartValues))))
+                    rightPartValues.length, rightPartValues)))
           )
         )
       )
