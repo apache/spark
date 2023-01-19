@@ -293,12 +293,14 @@ class DecorrelateInnerQuerySuite extends PlanTest {
           testRelation))
     val correctAnswer =
       Union(
-        Filter(And(x === a, c === 3),
-          DomainJoin(Seq(x, y),
-            testRelation)),
-        Filter(And(y === b, c === 6),
-          DomainJoin(Seq(x, y),
-            testRelation))
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a, b, c, x, y),
+          Filter(And(y === b, c === 6),
+            DomainJoin(Seq(x, y),
+              testRelation)))
       )
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
   }
@@ -315,15 +317,18 @@ class DecorrelateInnerQuerySuite extends PlanTest {
           testRelation)))
     val correctAnswer =
       Union(Seq(
-        Filter(And(x === a, a > 2),
-          DomainJoin(Seq(x, y, z),
-            testRelation)),
-        Filter(And(y === b, b > 3),
-          DomainJoin(Seq(x, y, z),
-            testRelation)),
-        Filter(And(z === c, c > 4),
-          DomainJoin(Seq(x, y, z),
-            testRelation))
+        Project(Seq(a, b, c, x, y, z),
+          Filter(And(x === a, a > 2),
+            DomainJoin(Seq(x, y, z),
+              testRelation))),
+        Project(Seq(a, b, c, x, y, z),
+          Filter(And(y === b, b > 3),
+            DomainJoin(Seq(x, y, z),
+              testRelation))),
+        Project(Seq(a, b, c, x, y, z),
+          Filter(And(z === c, c > 4),
+            DomainJoin(Seq(x, y, z),
+              testRelation)))
       ))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y, z <=> z))
   }

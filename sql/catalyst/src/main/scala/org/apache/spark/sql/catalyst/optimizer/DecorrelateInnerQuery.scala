@@ -724,23 +724,37 @@ object DecorrelateInnerQuery extends PredicateHelper {
             (newJoin, newJoinCond, newOuterReferenceMap)
 
           case u: Union =>
+            // Set ops are decorrelated by pushing the domain join into each child. For details see
+            // https://docs.google.com/document/d/11b9ClCF2jYGU7vU2suOT7LRswYkg6tZ8_6xJbvxfh2I/edit
+
             // First collect outer references from all children - these must all be added to the
             // Domain (otherwise we’d be unioning together inner values corresponding to different
             // outer values).
             //
             // As an example, this inner subquery:
-            //   (select c from t1 where t1.a = outer.a UNION ALL
-            //   select c from t2 where t2.b = outer.b)
+            //   select c from t1 where t1.a = t_outer.a
+            //   UNION ALL
+            //   select c from t2 where t2.b = t_outer.b
             // has columns a, b in the Domain and is rewritten to:
-            //   (select c, outer.a, outer.b from t1 join outer where t1.a = outer.a UNION ALL
-            //   select c, outer.a, outer.b from t2 join outer where t2.b = outer.b)
+            //   select c, t_outer.a, t_outer.b from t1 join t_outer where t1.a = t_outer.a
+            //   UNION ALL
+            //   select c, t_outer.a, t_outer.b from t2 join t_outer where t2.b = t_outer.b
             val collectedChildOuterReferences = collectOuterReferencesInPlanTree(u)
             val newOuterReferences = AttributeSet(
               parentOuterReferences ++ collectedChildOuterReferences)
 
             val childDecorrelateResults =
               u.children.map { child =>
-                decorrelate(child, newOuterReferences, aggregated, underSetOp = true)
+                val (decorrelatedChild, newJoinCond, newOuterReferenceMap) =
+                  decorrelate(child, newOuterReferences, aggregated, underSetOp = true)
+                // Create a Project to ensure that the domain attributes are added to the same
+                // positions in each child of the union. If we don't explicitly construct this
+                // Project, they could get added at the beginning or the end of the output columns
+                // depending on the child plan.
+                // The inner expressions for the domain are the values of newOuterReferenceMap.
+                val domainProjections = collectedChildOuterReferences.map(newOuterReferenceMap(_))
+                val newChild = Project(child.output ++ domainProjections, decorrelatedChild)
+                (newChild, newJoinCond, newOuterReferenceMap)
               }
 
             val newChildren = childDecorrelateResults.map(_._1)
