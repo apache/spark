@@ -128,7 +128,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
-        schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
+        schema, parsedOptions, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)
       CSVDataSource(parsedOptions).readFile(
         conf,
         file,

@@ -16,12 +16,10 @@
 #
 
 import collections
-import ctypes
 import math
 import os
 import random
 import re
-import signal
 import sys
 import subprocess
 import time
@@ -30,6 +28,7 @@ import warnings
 
 from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
+from pyspark.taskcontext import BarrierTaskContext
 
 
 # TODO(SPARK-41589): will move the functions and tests to an external file
@@ -73,13 +72,13 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
     )
 
 
-def get_gpus_owned(sc: SparkContext) -> List[str]:
+def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str]:
     """Gets the number of GPUs that Spark scheduled to the calling task.
 
     Parameters
     ----------
-    sc : :class:`SparkContext`
-        The :class:`SparkContext` that has GPUs available.
+    context : :class:`SparkContext` or :class:`BarrierTaskContext`
+        The :class:`SparkContext` or :class:`BarrierTaskContext` that has GPUs available.
 
     Returns
     -------
@@ -93,7 +92,10 @@ def get_gpus_owned(sc: SparkContext) -> List[str]:
     """
     CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
     pattern = re.compile("^[1-9][0-9]*|0$")
-    addresses = sc.resources["gpu"].addresses
+    if isinstance(context, SparkContext):
+        addresses = context.resources["gpu"].addresses
+    else:
+        addresses = context.resources()["gpu"].addresses
     if any(not pattern.match(address) for address in addresses):
         raise ValueError(
             f"Found GPU addresses {addresses} which "
@@ -325,13 +327,20 @@ class TorchDistributor(Distributor):
             torchrun_args = ["--standalone", "--nnodes=1"]
             processes_per_node = num_processes
         else:
-            pass
-            # TODO(SPARK-41592): Handle distributed training
+            master_addr, master_port = os.environ["MASTER_ADDR"], os.environ["MASTER_PORT"]
+            node_rank = os.environ["RANK"]
+            torchrun_args = [
+                f"--nnodes={num_processes}",
+                f"--node_rank={node_rank}",
+                f"--rdzv_endpoint={master_addr}:{master_port}",
+                "--rdzv_id=0",
+            ]  # TODO: setup random ID that is gleaned from env variables
+            processes_per_node = 1
 
         args_string = list(map(str, args))  # converting all args to strings
 
         return (
-            [sys.executable, "-m", "pyspark.ml.torch.distributor.torch_run_process_wrapper"]
+            [sys.executable, "-m", "pyspark.ml.torch.torch_run_process_wrapper"]
             + torchrun_args
             + [f"--nproc_per_node={processes_per_node}"]
             + [path_to_train_file, *args_string]
@@ -343,28 +352,12 @@ class TorchDistributor(Distributor):
     ) -> None:
         _TAIL_LINES_TO_KEEP = 100
 
-        def sigterm_on_parent_death() -> None:
-            """
-            Uses prctl to automatically send SIGTERM to the command process when its parent is dead.
-            This handles the case when the parent is a PySpark worker process.
-            If a user cancels the PySpark job, the worker process gets killed, regardless of
-            PySpark daemon and worker reuse settings.
-            """
-            if _prctl:
-                try:
-                    libc = ctypes.CDLL("libc.so.6")
-                    # Set the parent process death signal of the command process to SIGTERM.
-                    libc.prctl(1, signal.SIGTERM)
-                except OSError:
-                    pass
-
         task = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             stdin=subprocess.PIPE,
             env=os.environ,
-            preexec_fn=sigterm_on_parent_death,
         )
         task.stdin.close()  # type: ignore
         tail: collections.deque = collections.deque(maxlen=_TAIL_LINES_TO_KEEP)
@@ -407,13 +400,6 @@ class TorchDistributor(Distributor):
         try:
             if self.use_gpu:
                 gpus_owned = get_gpus_owned(self.sc)
-
-                if self.num_processes > len(gpus_owned):
-                    raise ValueError(
-                        f"""{self.num_processes} processes were requested
-                        for local training with GPU training but only
-                        {len(gpus_owned)} GPUs were available."""
-                    )
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
@@ -427,6 +413,105 @@ class TorchDistributor(Distributor):
                     del os.environ[CUDA_VISIBLE_DEVICES]
 
         return output
+
+    def _get_spark_task_function(
+        self,
+        framework_wrapper_fn: Optional[Callable],
+        train_object: Union[Callable, str],
+        *args: Any,
+    ) -> Callable:
+        """Creates a spark task function that is used inside `mapPartitions`.
+
+        Parameters
+        ----------
+        framework_wrapper_fn : Optional[Callable]
+            The function that determines whether we are running training
+            on a PyTorch file or a PyTorch function.
+        train_object : Union[Callable, str]
+            The actual train function/file.
+
+        Returns
+        -------
+        Callable
+            The wrapped function ready for use with `mapPartitions`
+        """
+        num_processes = self.num_processes
+        use_gpu = self.use_gpu
+        input_params = self.input_params
+
+        # Spark task program
+        def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
+            import os
+            from pyspark import BarrierTaskContext
+
+            CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
+
+            # The idea of setting the random port to 0 doesn't seem to work?
+            def get_free_port(address: str) -> int:
+                import socket
+                import random
+
+                MAX_NUM_ATTEMPTS = 100
+
+                for _ in range(MAX_NUM_ATTEMPTS):
+                    time.sleep(0.1)
+                    port = random.randint(32768, 61000)
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    if not (sock.connect_ex((address, port)) == 0):
+                        return port
+
+                raise RuntimeError("Failed to find free port for distributed training.")
+
+            def set_torch_config(context: "BarrierTaskContext") -> None:
+                addrs = [e.address.split(":")[0] for e in context.getTaskInfos()]
+
+                os.environ["MASTER_ADDR"] = str(addrs[0])
+                os.environ["MASTER_PORT"] = str(get_free_port(addrs[0]))
+                os.environ["WORLD_SIZE"] = str(num_processes)
+                os.environ["NODE_RANK"] = str(context.partitionId())
+                os.environ["RANK"] = str(context.partitionId())
+
+            def set_gpus(context: "BarrierTaskContext") -> None:
+                if CUDA_VISIBLE_DEVICES in os.environ:
+                    return
+
+                gpus_owned = get_gpus_owned(context)
+                os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
+
+            context = BarrierTaskContext.get()
+
+            if use_gpu:
+                set_gpus(context)
+            else:
+                os.environ[CUDA_VISIBLE_DEVICES] = ""
+            set_torch_config(context)
+
+            output = framework_wrapper_fn(input_params, train_object, *args)
+
+            if context.partitionId() == 0:
+                yield output
+
+        return wrapped_train_fn
+
+    def _run_distributed_training(
+        self,
+        framework_wrapper_fn: Optional[Callable],
+        train_object: Union[Callable, str],
+        *args: Any,
+    ) -> Optional[Any]:
+        if not framework_wrapper_fn:
+            raise RuntimeError("Unknown combination of parameters")
+        spark_task_function = self._get_spark_task_function(
+            framework_wrapper_fn, train_object, *args
+        )
+        self._check_encryption()
+        result = (
+            self.sc.parallelize(range(self.num_tasks), self.num_tasks)
+            .barrier()
+            .mapPartitions(spark_task_function)
+            .collect()[0]
+        )
+        return result
 
     @staticmethod
     def _run_training_on_pytorch_file(
@@ -458,4 +543,6 @@ class TorchDistributor(Distributor):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
         if self.local_mode:
             output = self._run_local_training(framework_wrapper_fn, train_object, *args)
+        else:
+            output = self._run_distributed_training(framework_wrapper_fn, train_object, *args)
         return output
