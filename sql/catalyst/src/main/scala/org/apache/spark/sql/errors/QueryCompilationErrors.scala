@@ -685,9 +685,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           "functionName" -> toSQLId(name),
           "expectedNum" -> expectedNumberOfParameters,
           "actualNum" -> actualNumber.toString,
-          "legacyNum" -> legacyNum.toString,
-          "legacyConfKey" -> legacyConfKey.toString,
-          "legacyConfValue" -> legacyConfValue.toString)
+          "legacyNum" -> legacyNum,
+          "legacyConfKey" -> legacyConfKey,
+          "legacyConfValue" -> legacyConfValue)
       )
     }
   }
