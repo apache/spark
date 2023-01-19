@@ -367,13 +367,14 @@ case class WriteDelta(
     }
   }
 
-  private def isCompatible(projectionField: StructField, outAttr: NamedExpression): Boolean = {
-    val inType = CharVarcharUtils.getRawType(projectionField.metadata).getOrElse(outAttr.dataType)
+  // checks if a projection field is compatible with a table attribute
+  private def isCompatible(inField: StructField, outAttr: NamedExpression): Boolean = {
+    val inType = CharVarcharUtils.getRawType(inField.metadata).getOrElse(inField.dataType)
     val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
     // names and types must match, nullability must be compatible
-    projectionField.name == outAttr.name &&
+    inField.name == outAttr.name &&
       DataType.equalsIgnoreCompatibleNullability(inType, outType) &&
-      (outAttr.nullable || !projectionField.nullable)
+      (outAttr.nullable || !inField.nullable)
   }
 
   override def withNewQuery(newQuery: LogicalPlan): V2WriteCommand = copy(query = newQuery)
