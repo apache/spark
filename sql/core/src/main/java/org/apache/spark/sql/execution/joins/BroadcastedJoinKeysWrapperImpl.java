@@ -237,8 +237,8 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
   public ArrayWrapper getKeysArray() {
     Object array = this.initKeys();
-    return new ArrayWrapper(array, this.relativeKeyIndexInArray,
-        this.indexesOfInterest.length == 1);
+    return ArrayWrapper.wrapArray(array, this.indexesOfInterest.length == 1,
+        this.relativeKeyIndexInArray);
   }
 
   public Set<Object> getKeysAsSet() {

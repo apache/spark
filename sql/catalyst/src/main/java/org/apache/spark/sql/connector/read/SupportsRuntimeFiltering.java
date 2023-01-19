@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.read;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.sources.Filter;

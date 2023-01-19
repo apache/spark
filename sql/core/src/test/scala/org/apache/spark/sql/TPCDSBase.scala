@@ -34,7 +34,6 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
-
   // This list only includes TPCDS v2.7 queries that are different from v1.4 ones
   private val tpcdsAllQueriesV2_7_0 = Seq(
     "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
@@ -51,6 +50,8 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
   def excludedModifiedTpcdsQueries: Set[String] = Set.empty
 
   def excludedTpcdsV2_7_0Queries: Set[String] = Set.empty
+
+  def excludedTpcdsV2_7_0Queries: Set[String] = Set.empty
   
   val tpcdsQueries: Seq[String] = tpcdsAllQueries.filterNot(excludedTpcdsQueries.contains)
 
@@ -64,7 +65,7 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
 
   val modifiedTPCDSQueries = modifiedTPCDSQueriesAll.filterNot(
     excludedModifiedTpcdsQueries.contains)
-  
+
   protected def partitionedByClause(tableName: String): String = {
     tablePartitionColumns.get(tableName) match {
       case Some(cols) if cols.nonEmpty => s"PARTITIONED BY (${cols.mkString(", ")})"

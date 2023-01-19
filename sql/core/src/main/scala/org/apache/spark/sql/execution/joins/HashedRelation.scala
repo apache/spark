@@ -239,7 +239,6 @@ private[joins] class UnsafeHashedRelation(
     (null, null)
   }
 
-
   private[joins] def this() = this(0, 0, null)  // Needed for serialization
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
@@ -476,7 +475,6 @@ private[joins] class UnsafeHashedRelation(
     numKeys = readInt()
     numFields = readInt()
     this.isForSingleThreadUse = readBoolean()
-
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
     val nValues = readLong()

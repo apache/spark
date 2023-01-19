@@ -32,8 +32,6 @@ import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, Par
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
 
-
-
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
  */

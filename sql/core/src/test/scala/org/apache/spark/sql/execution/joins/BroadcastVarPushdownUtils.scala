@@ -223,7 +223,7 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
     withSQLConf(
       SQLConf.PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN.key -> "true",
       SQLConf.PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED.key -> "true",
-      SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "true",
+      SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "true"
     ) {
       func
     }
@@ -233,7 +233,7 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
     withSQLConf(
       SQLConf.PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN.key -> "false",
       SQLConf.PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED.key -> "true",
-      SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "false",
+      SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "false"
     ) {
       func
     }
@@ -243,7 +243,7 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
     withSQLConf(
       SQLConf.PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN.key -> "true",
       SQLConf.PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED.key -> "true",
-      SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "false",
+      SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "false"
     ) {
       func
     }

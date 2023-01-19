@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 
 trait IcebergSharedSparkSession extends SharedSparkSessionBase{
   self: Suite =>
-  
+
   override protected def sparkConf: SparkConf =
     super.sparkConf.set("spark.sql.extensions",
       "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions").

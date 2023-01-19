@@ -1225,7 +1225,7 @@ case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapp
       countCorrectionVariable: String, localInsetVarTerm: String, singleKeyUnsafeRowWriter: String)
   extends UnaryExpression with Predicate {
 
-  // TODO: Asif: Eliminate the deserialized getKeysAsSet call. and directly use the HashedRelation
+  // Try to eliminate the deserialized getKeysAsSet call. and directly use the HashedRelation
   // but that is problematic as it would require HashedRelation to be defined in catalyst module
   // or move BroadcastJoinKeysWrapper trait to sql module. But moving the trait to sql module
   // will create problems as catalyst package needs access to BroadcastJoinKeysWrapper trait
@@ -1347,7 +1347,6 @@ case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapp
   override protected def withNewChildInternal(newChild: Expression): InWithBroadcastVar =
     copy(child = newChild)
 }
-
 
 /**
  * IS UNKNOWN and IS NOT UNKNOWN are the same as IS NULL and IS NOT NULL, respectively,

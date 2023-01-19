@@ -47,53 +47,51 @@ trait IcebergSQLTestData extends SQLTestData {
     spark.sql("drop view if exists largeAndSmallInts")
     largeAndSmallInts.writeTo("largeAndSmallInts").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists decimalData")
     decimalData.writeTo("decimalData").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists binaryData")
     binaryData.writeTo("binaryData").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
-    
+
     spark.sql("drop view if exists upperCaseData")
     upperCaseData.writeTo("upperCaseData").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists lowerCaseData")
     lowerCaseData.writeTo("lowerCaseData").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
-    
+
     spark.sql("drop view if exists nullInts")
     nullInts.writeTo("nullInts").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists allNulls")
     allNulls.writeTo("allNulls").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists nullStrings")
     nullStrings.writeTo("nullStrings").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists tableName")
     tableName.writeTo("tableName").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists person")
     person.writeTo("person").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists salary")
     salary.writeTo("salary").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists complexData")
     complexData.writeTo("complexData").tableProperty("write.format.default", "parquet").
       using("iceberg").create()
-    
+
     spark.sql("drop view if exists courseSales")
     courseSales.writeTo("courseSales").tableProperty("write.format.default", "parquet").
       using("iceberg").create()

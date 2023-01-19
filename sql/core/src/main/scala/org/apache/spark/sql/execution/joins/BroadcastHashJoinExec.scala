@@ -75,7 +75,6 @@ case class BroadcastHashJoinExec(
 
   @volatile @transient private var broadcastVar: Option[Broadcast[HashedRelation]] = None
 
-
   private[execution] def getBroadcastID: Option[Long] = this.broadcastVar.map(_.id)
 
   def pushBroadcastVar(): Unit = if (this.bcVarPushNode == SELF_PUSH ) {
@@ -321,7 +320,3 @@ trait BCVarPushNodeType extends LeafExpression with Unevaluable {
 case object PASS_THROUGH extends BCVarPushNodeType
 
 case object SELF_PUSH extends BCVarPushNodeType
-
-
-
-

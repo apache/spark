@@ -23,8 +23,6 @@ import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest
 class TPCDSIcebergQuerySuite extends TPCDSQuerySuite with TPCDSIcebergBase {
-
- 
   // these queries are failing due to call of estimation of stats before pushdown of filters &
   // columns
   override def excludedTpcdsQueries: Set[String] = super.excludedTpcdsQueries ++

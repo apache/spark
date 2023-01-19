@@ -34,7 +34,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   private lazy val partTable1 = part_table1
   private lazy val partTable2 = part_table2
   private lazy val partTable3 = part_table3
-  
+
   test("test identification of batchscans for broadcast variables on simple join") {
     runWithDefaultConfig({
       val lp = nonPartTable1.where('c1_1.attr > 100).join(nonPartTable2, Inner,
