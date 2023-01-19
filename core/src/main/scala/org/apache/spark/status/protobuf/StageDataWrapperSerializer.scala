@@ -393,10 +393,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
       getOptional(binary.hasFirstTaskLaunchedTime, () => new Date(binary.getFirstTaskLaunchedTime))
     val completionTime =
       getOptional(binary.hasCompletionTime, () => new Date(binary.getCompletionTime))
-    val failureReason =
-      getOptional(binary.hasFailureReason, () => weakIntern(binary.getFailureReason))
-    val description =
-      getOptional(binary.hasDescription, () => weakIntern(binary.getDescription))
+    val failureReason = getOptional(binary.hasFailureReason, binary.getFailureReason)
+    val description = getOptional(binary.hasDescription, binary.getDescription)
     val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
     val tasks = if (MapUtils.isNotEmpty(binary.getTasksMap)) {
       Some(binary.getTasksMap.asScala.map(
@@ -467,9 +465,9 @@ class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
       shuffleWriteBytes = binary.getShuffleWriteBytes,
       shuffleWriteTime = binary.getShuffleWriteTime,
       shuffleWriteRecords = binary.getShuffleWriteRecords,
-      name = weakIntern(binary.getName),
+      name = binary.getName,
       description = description,
-      details = weakIntern(binary.getDetails),
+      details = binary.getDetails,
       schedulingPool = weakIntern(binary.getSchedulingPool),
       rddIds = binary.getRddIdsList.asScala.map(_.toInt),
       accumulatorUpdates = accumulatorUpdates,
@@ -644,7 +642,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
       taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
       accumulatorUpdates = accumulatorUpdates,
-      errorMessage = getOptional(binary.hasErrorMessage, () => weakIntern(binary.getErrorMessage)),
+      errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
       taskMetrics = taskMetrics,
       executorLogs = binary.getExecutorLogsMap.asScala.toMap,
       schedulerDelay = binary.getSchedulerDelay,
