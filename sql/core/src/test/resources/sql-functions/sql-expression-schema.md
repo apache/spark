@@ -144,6 +144,7 @@
 | org.apache.spark.sql.catalyst.expressions.GroupingID | grouping_id | SELECT name, grouping_id(), sum(age), avg(height) FROM VALUES (2, 'Alice', 165), (5, 'Bob', 180) people(age, name, height) GROUP BY cube(name, height) | struct<name:string,grouping_id():bigint,sum(age):bigint,avg(height):double> |
 | org.apache.spark.sql.catalyst.expressions.Hex | hex | SELECT hex(17) | struct<hex(17):string> |
 | org.apache.spark.sql.catalyst.expressions.Hour | hour | SELECT hour('2009-07-30 12:58:59') | struct<hour(2009-07-30 12:58:59):int> |
+| org.apache.spark.sql.catalyst.expressions.HyperLogLogPlusPlusEvalSketch | approx_count_distinct_eval_sketch | SELECT approx_count_distinct_eval_sketch(approx_count_distinct_sketch(col1)) FROM VALUES (1), (1), (2), (2), (3) tab(col1) | struct<approx_count_distinct_eval_sketch(approx_count_distinct_sketch(col1)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Hypot | hypot | SELECT hypot(3, 4) | struct<HYPOT(3, 4):double> |
 | org.apache.spark.sql.catalyst.expressions.ILike | ilike | SELECT ilike('Spark', '_Park') | struct<ilike(Spark, _Park):boolean> |
 | org.apache.spark.sql.catalyst.expressions.If | if | SELECT if(1 < 2, 'a', 'b') | struct<(IF((1 < 2), a, b)):string> |

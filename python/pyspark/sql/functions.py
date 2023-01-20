@@ -2697,7 +2697,7 @@ def approx_count_distinct_eval_sketch(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df_agg = df.agg(approx_count_distinct_sketch("value")).alias('hll_sketch'))
-    >>> df_agg.withColumn(approx_distinct_count_eval_skecth("hll_sketch")).alias('distinct_count').show()
+    >>> df_agg.withColumn(approx_count_distinct_eval_sketch("hll_sketch")).alias('distinct_count').show()
     +---------------+---------------+
     |     hll_sketch|distinct_values|
     +---------------+---------------+
@@ -2729,7 +2729,7 @@ def approx_count_distinct_agg_sketch(col: "ColumnOrName", rsd: Optional[float] =
     --------
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df_agg = df.agg(approx_count_distinct_sketch("value")).alias('hll_sketch'))
-    >>> df_agg.agg(approx_distinct_count_agg_skecth("hll_sketch")).alias('distinct_count').show()
+    >>> df_agg.agg(approx_count_distinct_agg_sketch("hll_sketch")).alias('distinct_count').show()
     +---------------+
     |distinct_values|
     +---------------+

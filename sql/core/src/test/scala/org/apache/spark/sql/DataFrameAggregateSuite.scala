@@ -1541,7 +1541,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
   }
 
-  test("SPARK-16484: approx_distinct_count_agg_sketch positive tests") {
+  test("SPARK-16484: approx_count_distinct_agg_sketch positive tests") {
     val df1 = Seq(
       (1, "a"), (1, "a"), (1, "a"),
       (1, "b"),
@@ -1600,7 +1600,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res3, Row(1, 15, 6))
   }
 
-  test("SPARK-16484: approx_distinct_count_agg_sketch negative tests") {
+  test("SPARK-16484: approx_count_distinct_agg_sketch negative tests") {
 
     val df1 = Seq(
       (1, "a"), (1, "a"), (1, "a"),

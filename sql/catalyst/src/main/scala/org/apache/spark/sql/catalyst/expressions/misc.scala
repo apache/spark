@@ -438,14 +438,14 @@ case class AesDecrypt(
   usage = """_FUNC_(expr) - Return the estimated distinct count associated with this HyperLogLog++ sketch.""",
   examples = """
     Examples:
-      > SELECT _FUNC_(approx_distinct_count_sketch(col1)) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+      > SELECT _FUNC_(approx_count_distinct_sketch(col1)) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
        3
   """,
   since = "3.3.1",
   group = "misc_funcs")
 case class HyperLogLogPlusPlusEvalSketch(child: Expression) extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with CodegenFallback{
   override def nullable: Boolean = true
-  override def prettyName: String = "approx_distinct_count_eval_sketch"
+  override def prettyName: String = "approx_count_distinct_eval_sketch"
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
   override def dataType: DataType = LongType
 
