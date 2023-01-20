@@ -22,7 +22,12 @@ package org.apache.spark.status.protobuf;
  * Developer guides:
  *   - Coding style: https://developers.google.com/protocol-buffers/docs/style
  *   - Use int64 for job/stage IDs, in case of future extension in Spark core.
- *   - Use `weakIntern` on string values in create new objects during deserialization.
+ *   - For string fields:
+ *     - use `optional string` for protobuf definition
+ *     - on serialization, check if the string is null to avoid NPE
+ *     - on deserialization, set string fields as null if it is not set. Also, use `weakIntern` on
+ *       string values in create new objects during deserialization.
+ *     - add tests with null string inputs
  */
 
 enum JobExecutionStatus {
@@ -65,9 +70,9 @@ message JobDataWrapper {
 
 message AccumulableInfo {
   int64 id = 1;
-  string name = 2;
+  optional string name = 2;
   optional string update = 3;
-  string value = 4;
+  optional string value = 4;
 }
 
 message TaskDataWrapper {
@@ -334,8 +339,8 @@ message SpeculationStageSummaryWrapper {
 }
 
 message ProcessSummary {
-  string id = 1;
-  string host_port = 2;
+  optional string id = 1;
+  optional string host_port = 2;
   bool is_active = 3;
   int32 total_cores = 4;
   int64 add_time = 5;

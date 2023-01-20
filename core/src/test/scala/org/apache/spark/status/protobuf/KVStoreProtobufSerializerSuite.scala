@@ -86,7 +86,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   test("Task Data") {
     val accumulatorUpdates = Seq(
       new AccumulableInfo(1L, "duration", Some("update"), "value1"),
-      new AccumulableInfo(2L, "duration2", None, "value2")
+      new AccumulableInfo(2L, "duration2", None, "value2"),
+      new AccumulableInfo(-1L, null, None, null)
     )
     val input = new TaskDataWrapper(
       taskId = 1,
@@ -757,29 +758,34 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Process Summary") {
-    val input = new ProcessSummaryWrapper(
-      info = new ProcessSummary(
-        id = "id_1",
-        hostPort = "localhost:2020",
-        isActive = true,
-        totalCores = 4,
-        addTime = new Date(1234567L),
-        removeTime = Some(new Date(1234568L)),
-        processLogs = Map("log1" -> "log/log1", "log2" -> "logs/log2.log")
+    Seq(
+      ("id_1", "localhost:2020"),
+      (null, "") // hostPort can't be null. Otherwise there will be NPE.
+    ).foreach { case(id, hostPort) =>
+      val input = new ProcessSummaryWrapper(
+        info = new ProcessSummary(
+          id = id,
+          hostPort = hostPort,
+          isActive = true,
+          totalCores = 4,
+          addTime = new Date(1234567L),
+          removeTime = Some(new Date(1234568L)),
+          processLogs = Map("log1" -> "log/log1", "log2" -> "logs/log2.log")
+        )
       )
-    )
-    val bytes = serializer.serialize(input)
-    val result = serializer.deserialize(bytes, classOf[ProcessSummaryWrapper])
-    assert(result.info.id == input.info.id)
-    assert(result.info.hostPort == input.info.hostPort)
-    assert(result.info.isActive == input.info.isActive)
-    assert(result.info.totalCores == input.info.totalCores)
-    assert(result.info.addTime == input.info.addTime)
-    assert(result.info.removeTime == input.info.removeTime)
-    assert(result.info.processLogs.size == input.info.processLogs.size)
-    result.info.processLogs.keys.foreach { k =>
-      assert(input.info.processLogs.contains(k))
-      assert(result.info.processLogs(k) == input.info.processLogs(k))
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[ProcessSummaryWrapper])
+      assert(result.info.id == input.info.id)
+      assert(result.info.hostPort == input.info.hostPort)
+      assert(result.info.isActive == input.info.isActive)
+      assert(result.info.totalCores == input.info.totalCores)
+      assert(result.info.addTime == input.info.addTime)
+      assert(result.info.removeTime == input.info.removeTime)
+      assert(result.info.processLogs.size == input.info.processLogs.size)
+      result.info.processLogs.keys.foreach { k =>
+        assert(input.info.processLogs.contains(k))
+        assert(result.info.processLogs(k) == input.info.processLogs(k))
+      }
     }
   }
 
@@ -1365,6 +1371,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(a1.name == a2.name)
       assert(a1.update.getOrElse("") == a2.update.getOrElse(""))
       assert(a1.update == a2.update)
+      assert(a1.value == a2.value)
     }
   }
 
