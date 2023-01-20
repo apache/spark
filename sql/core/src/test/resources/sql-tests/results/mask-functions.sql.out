@@ -2,7 +2,7 @@
 -- !query
 SELECT mask('AbCD123-@$#')
 -- !query schema
-struct<mask(AbCD123-@$#, X, x, n, -1):string>
+struct<mask(AbCD123-@$#, X, x, n, NULL):string>
 -- !query output
 XxXXnnn-@$#
 
@@ -10,7 +10,7 @@ XxXXnnn-@$#
 -- !query
 SELECT mask('AbCD123-@$#', 'Q')
 -- !query schema
-struct<mask(AbCD123-@$#, Q, x, n, -1):string>
+struct<mask(AbCD123-@$#, Q, x, n, NULL):string>
 -- !query output
 QxQQnnn-@$#
 
@@ -18,7 +18,7 @@ QxQQnnn-@$#
 -- !query
 SELECT mask('AbCD123-@$#', 'Q', 'q')
 -- !query schema
-struct<mask(AbCD123-@$#, Q, q, n, -1):string>
+struct<mask(AbCD123-@$#, Q, q, n, NULL):string>
 -- !query output
 QqQQnnn-@$#
 
@@ -26,7 +26,7 @@ QqQQnnn-@$#
 -- !query
 SELECT mask('AbCD123-@$#', 'Q', 'q', 'd')
 -- !query schema
-struct<mask(AbCD123-@$#, Q, q, d, -1):string>
+struct<mask(AbCD123-@$#, Q, q, d, NULL):string>
 -- !query output
 QqQQddd-@$#
 
@@ -63,33 +63,33 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT mask('AbCD123-@$#', -1, 'q', 'd', 'o')
+SELECT mask('AbCD123-@$#', NULL, 'q', 'd', 'o')
 -- !query schema
-struct<mask(AbCD123-@$#, -1, q, d, o):string>
+struct<mask(AbCD123-@$#, NULL, q, d, o):string>
 -- !query output
 AqCDdddoooo
 
 
 -- !query
-SELECT mask('AbCD123-@$#', -1, -1, 'd', 'o')
+SELECT mask('AbCD123-@$#', NULL, NULL, 'd', 'o')
 -- !query schema
-struct<mask(AbCD123-@$#, -1, -1, d, o):string>
+struct<mask(AbCD123-@$#, NULL, NULL, d, o):string>
 -- !query output
 AbCDdddoooo
 
 
 -- !query
-SELECT mask('AbCD123-@$#', -1, -1, -1, 'o')
+SELECT mask('AbCD123-@$#', NULL, NULL, NULL, 'o')
 -- !query schema
-struct<mask(AbCD123-@$#, -1, -1, -1, o):string>
+struct<mask(AbCD123-@$#, NULL, NULL, NULL, o):string>
 -- !query output
 AbCD123oooo
 
 
 -- !query
-SELECT mask('AbCD123-@$#', -1, -1, -1, -1)
+SELECT mask('AbCD123-@$#', NULL, NULL, NULL, NULL)
 -- !query schema
-struct<mask(AbCD123-@$#, -1, -1, -1, -1):string>
+struct<mask(AbCD123-@$#, NULL, NULL, NULL, NULL):string>
 -- !query output
 AbCD123-@$#
 
@@ -97,162 +97,47 @@ AbCD123-@$#
 -- !query
 SELECT mask(NULL)
 -- !query schema
-struct<mask(NULL, X, x, n, -1):string>
+struct<mask(NULL, X, x, n, NULL):string>
 -- !query output
 NULL
 
 
 -- !query
-SELECT mask(NULL, -1, 'q', 'd', 'o')
+SELECT mask(NULL, NULL, 'q', 'd', 'o')
 -- !query schema
-struct<mask(NULL, -1, q, d, o):string>
+struct<mask(NULL, NULL, q, d, o):string>
 -- !query output
 NULL
 
 
 -- !query
-SELECT mask(NULL, -1, -1, 'd', 'o')
+SELECT mask(NULL, NULL, NULL, 'd', 'o')
 -- !query schema
-struct<mask(NULL, -1, -1, d, o):string>
+struct<mask(NULL, NULL, NULL, d, o):string>
 -- !query output
 NULL
 
 
 -- !query
-SELECT mask(NULL, -1, -1, -1, 'o')
+SELECT mask(NULL, NULL, NULL, NULL, 'o')
 -- !query schema
-struct<mask(NULL, -1, -1, -1, o):string>
+struct<mask(NULL, NULL, NULL, NULL, o):string>
 -- !query output
 NULL
-
-
--- !query
-SELECT mask(NULL, -1, -1, -1, -1)
--- !query schema
-struct<mask(NULL, -1, -1, -1, -1):string>
--- !query output
-NULL
-
-
--- !query
-SELECT mask('AbCD123-@$#', NULL, -1, -1, -1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "upperChar",
-    "sqlExpr" : "\"mask(AbCD123-@$#, NULL, -1, -1, -1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "mask('AbCD123-@$#', NULL, -1, -1, -1)"
-  } ]
-}
-
-
--- !query
-SELECT mask('AbCD123-@$#', -1, NULL, -1, -1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "lowerChar",
-    "sqlExpr" : "\"mask(AbCD123-@$#, -1, NULL, -1, -1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "mask('AbCD123-@$#', -1, NULL, -1, -1)"
-  } ]
-}
-
-
--- !query
-SELECT mask('AbCD123-@$#', -1, -1, NULL, -1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "digitChar",
-    "sqlExpr" : "\"mask(AbCD123-@$#, -1, -1, NULL, -1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "mask('AbCD123-@$#', -1, -1, NULL, -1)"
-  } ]
-}
-
-
--- !query
-SELECT mask('AbCD123-@$#', -1, -1, -1, NULL)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "otherChar",
-    "sqlExpr" : "\"mask(AbCD123-@$#, -1, -1, -1, NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "mask('AbCD123-@$#', -1, -1, -1, NULL)"
-  } ]
-}
 
 
 -- !query
 SELECT mask('AbCD123-@$#', NULL, NULL, NULL, NULL)
 -- !query schema
-struct<>
+struct<mask(AbCD123-@$#, NULL, NULL, NULL, NULL):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "upperChar",
-    "sqlExpr" : "\"mask(AbCD123-@$#, NULL, NULL, NULL, NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 50,
-    "fragment" : "mask('AbCD123-@$#', NULL, NULL, NULL, NULL)"
-  } ]
-}
+AbCD123-@$#
 
 
 -- !query
 SELECT mask(c1) from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, X, x, n, -1):string>
+struct<mask(c1, X, x, n, NULL):string>
 -- !query output
 XxXXnnn-@$#
 
@@ -260,7 +145,7 @@ XxXXnnn-@$#
 -- !query
 SELECT mask(c1, 'Q') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, x, n, -1):string>
+struct<mask(c1, Q, x, n, NULL):string>
 -- !query output
 QxQQnnn-@$#
 
@@ -268,7 +153,7 @@ QxQQnnn-@$#
 -- !query
 SELECT mask(c1, 'Q', 'q')from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, n, -1):string>
+struct<mask(c1, Q, q, n, NULL):string>
 -- !query output
 QqQQnnn-@$#
 
@@ -276,7 +161,7 @@ QqQQnnn-@$#
 -- !query
 SELECT mask(c1, 'Q', 'q', 'd') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, d, -1):string>
+struct<mask(c1, Q, q, d, NULL):string>
 -- !query output
 QqQQddd-@$#
 
@@ -290,33 +175,33 @@ QqQQdddoooo
 
 
 -- !query
-SELECT mask(c1, -1, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+SELECT mask(c1, NULL, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, q, d, o):string>
+struct<mask(c1, NULL, q, d, o):string>
 -- !query output
 AqCDdddoooo
 
 
 -- !query
-SELECT mask(c1, -1, -1, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+SELECT mask(c1, NULL, NULL, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, d, o):string>
+struct<mask(c1, NULL, NULL, d, o):string>
 -- !query output
 AbCDdddoooo
 
 
 -- !query
-SELECT mask(c1, -1, -1, -1, 'o') from values ('AbCD123-@$#') as tab(c1)
+SELECT mask(c1, NULL, NULL, NULL, 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, o):string>
+struct<mask(c1, NULL, NULL, NULL, o):string>
 -- !query output
 AbCD123oooo
 
 
 -- !query
-SELECT mask(c1, -1, -1, -1, -1) from values ('AbCD123-@$#') as tab(c1)
+SELECT mask(c1, NULL, NULL, NULL, NULL) from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, -1):string>
+struct<mask(c1, NULL, NULL, NULL, NULL):string>
 -- !query output
 AbCD123-@$#
 
@@ -324,145 +209,47 @@ AbCD123-@$#
 -- !query
 SELECT mask(c1, NULL, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<>
+struct<mask(c1, NULL, q, d, o):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "upperChar",
-    "sqlExpr" : "\"mask(c1, NULL, q, d, o)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 36,
-    "fragment" : "mask(c1, NULL, 'q', 'd', 'o')"
-  } ]
-}
+AqCDdddoooo
 
 
 -- !query
 SELECT mask(c1, 'Q', NULL, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<>
+struct<mask(c1, Q, NULL, d, o):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "lowerChar",
-    "sqlExpr" : "\"mask(c1, Q, NULL, d, o)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 36,
-    "fragment" : "mask(c1, 'Q', NULL, 'd', 'o')"
-  } ]
-}
+QbQQdddoooo
 
 
 -- !query
 SELECT mask(c1, 'Q', 'q', NULL, 'o') from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<>
+struct<mask(c1, Q, q, NULL, o):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "digitChar",
-    "sqlExpr" : "\"mask(c1, Q, q, NULL, o)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 36,
-    "fragment" : "mask(c1, 'Q', 'q', NULL, 'o')"
-  } ]
-}
+QqQQ123oooo
 
 
 -- !query
 SELECT mask(c1, 'Q', 'q', 'd', NULL) from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<>
+struct<mask(c1, Q, q, d, NULL):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "otherChar",
-    "sqlExpr" : "\"mask(c1, Q, q, d, NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 36,
-    "fragment" : "mask(c1, 'Q', 'q', 'd', NULL)"
-  } ]
-}
+QqQQddd-@$#
 
 
 -- !query
 SELECT mask(NULL, 'Q', 'q', 'd', NULL) from values ('AbCD123-@$#') as tab(c1)
 -- !query schema
-struct<>
+struct<mask(NULL, Q, q, d, NULL):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "otherChar",
-    "sqlExpr" : "\"mask(NULL, Q, q, d, NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 38,
-    "fragment" : "mask(NULL, 'Q', 'q', 'd', NULL)"
-  } ]
-}
-
-
--- !query
-SELECT mask(NULL, NULL, NULL, NULL, NULL) from values ('AbCD123-@$#') as tab(c1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "upperChar",
-    "sqlExpr" : "\"mask(NULL, NULL, NULL, NULL, NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 41,
-    "fragment" : "mask(NULL, NULL, NULL, NULL, NULL)"
-  } ]
-}
+NULL
 
 
 -- !query
 SELECT mask('abcd-EFGH-8765-4321')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, X, x, n, -1):string>
+struct<mask(abcd-EFGH-8765-4321, X, x, n, NULL):string>
 -- !query output
 xxxx-XXXX-nnnn-nnnn
 
@@ -470,7 +257,7 @@ xxxx-XXXX-nnnn-nnnn
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'Q')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, Q, x, n, -1):string>
+struct<mask(abcd-EFGH-8765-4321, Q, x, n, NULL):string>
 -- !query output
 xxxx-QQQQ-nnnn-nnnn
 
@@ -478,7 +265,7 @@ xxxx-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'Q', 'q')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, Q, q, n, -1):string>
+struct<mask(abcd-EFGH-8765-4321, Q, q, n, NULL):string>
 -- !query output
 qqqq-QQQQ-nnnn-nnnn
 
@@ -486,7 +273,7 @@ qqqq-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'Q', 'q', 'd')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, Q, q, d, -1):string>
+struct<mask(abcd-EFGH-8765-4321, Q, q, d, NULL):string>
 -- !query output
 qqqq-QQQQ-dddd-dddd
 
@@ -500,33 +287,33 @@ qqqq*QQQQ*dddd*dddd
 
 
 -- !query
-SELECT mask('abcd-EFGH-8765-4321', -1, 'q', 'd', '*')
+SELECT mask('abcd-EFGH-8765-4321', NULL, 'q', 'd', '*')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, q, d, *):string>
+struct<mask(abcd-EFGH-8765-4321, NULL, q, d, *):string>
 -- !query output
 qqqq*EFGH*dddd*dddd
 
 
 -- !query
-SELECT mask('abcd-EFGH-8765-4321', -1, -1, 'd', '*')
+SELECT mask('abcd-EFGH-8765-4321', NULL, NULL, 'd', '*')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, -1, d, *):string>
+struct<mask(abcd-EFGH-8765-4321, NULL, NULL, d, *):string>
 -- !query output
 abcd*EFGH*dddd*dddd
 
 
 -- !query
-SELECT mask('abcd-EFGH-8765-4321', -1, -1, -1, '*')
+SELECT mask('abcd-EFGH-8765-4321', NULL, NULL, NULL, '*')
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, -1, -1, *):string>
+struct<mask(abcd-EFGH-8765-4321, NULL, NULL, NULL, *):string>
 -- !query output
 abcd*EFGH*8765*4321
 
 
 -- !query
-SELECT mask('abcd-EFGH-8765-4321', -1, -1, -1, -1)
+SELECT mask('abcd-EFGH-8765-4321', NULL, NULL, NULL, NULL)
 -- !query schema
-struct<mask(abcd-EFGH-8765-4321, -1, -1, -1, -1):string>
+struct<mask(abcd-EFGH-8765-4321, NULL, NULL, NULL, NULL):string>
 -- !query output
 abcd-EFGH-8765-4321
 
@@ -534,39 +321,39 @@ abcd-EFGH-8765-4321
 -- !query
 SELECT mask(NULL)
 -- !query schema
-struct<mask(NULL, X, x, n, -1):string>
+struct<mask(NULL, X, x, n, NULL):string>
 -- !query output
 NULL
 
 
 -- !query
-SELECT mask(NULL, -1, 'q', 'd', '*')
+SELECT mask(NULL, NULL, 'q', 'd', '*')
 -- !query schema
-struct<mask(NULL, -1, q, d, *):string>
+struct<mask(NULL, NULL, q, d, *):string>
 -- !query output
 NULL
 
 
 -- !query
-SELECT mask(NULL, -1, -1, 'd', '*')
+SELECT mask(NULL, NULL, NULL, 'd', '*')
 -- !query schema
-struct<mask(NULL, -1, -1, d, *):string>
+struct<mask(NULL, NULL, NULL, d, *):string>
 -- !query output
 NULL
 
 
 -- !query
-SELECT mask(NULL, -1, -1, -1, '*')
+SELECT mask(NULL, NULL, NULL, NULL, '*')
 -- !query schema
-struct<mask(NULL, -1, -1, -1, *):string>
+struct<mask(NULL, NULL, NULL, NULL, *):string>
 -- !query output
 NULL
 
 
 -- !query
-SELECT mask(NULL, -1, -1, -1, -1)
+SELECT mask(NULL, NULL, NULL, NULL, NULL)
 -- !query schema
-struct<mask(NULL, -1, -1, -1, -1):string>
+struct<mask(NULL, NULL, NULL, NULL, NULL):string>
 -- !query output
 NULL
 
@@ -574,7 +361,7 @@ NULL
 -- !query
 SELECT mask(c1) from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, X, x, n, -1):string>
+struct<mask(c1, X, x, n, NULL):string>
 -- !query output
 xxxx-XXXX-nnnn-nnnn
 
@@ -582,7 +369,7 @@ xxxx-XXXX-nnnn-nnnn
 -- !query
 SELECT mask(c1, 'Q') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, x, n, -1):string>
+struct<mask(c1, Q, x, n, NULL):string>
 -- !query output
 xxxx-QQQQ-nnnn-nnnn
 
@@ -590,7 +377,7 @@ xxxx-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask(c1, 'Q', 'q')from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, n, -1):string>
+struct<mask(c1, Q, q, n, NULL):string>
 -- !query output
 qqqq-QQQQ-nnnn-nnnn
 
@@ -598,7 +385,7 @@ qqqq-QQQQ-nnnn-nnnn
 -- !query
 SELECT mask(c1, 'Q', 'q', 'd') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, Q, q, d, -1):string>
+struct<mask(c1, Q, q, d, NULL):string>
 -- !query output
 qqqq-QQQQ-dddd-dddd
 
@@ -612,33 +399,33 @@ qqqq*QQQQ*dddd*dddd
 
 
 -- !query
-SELECT mask(c1, -1, 'q', 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
+SELECT mask(c1, NULL, 'q', 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, q, d, *):string>
+struct<mask(c1, NULL, q, d, *):string>
 -- !query output
 qqqq*EFGH*dddd*dddd
 
 
 -- !query
-SELECT mask(c1, -1, -1, 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
+SELECT mask(c1, NULL, NULL, 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, d, *):string>
+struct<mask(c1, NULL, NULL, d, *):string>
 -- !query output
 abcd*EFGH*dddd*dddd
 
 
 -- !query
-SELECT mask(c1, -1, -1, -1, '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
+SELECT mask(c1, NULL, NULL, NULL, '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, *):string>
+struct<mask(c1, NULL, NULL, NULL, *):string>
 -- !query output
 abcd*EFGH*8765*4321
 
 
 -- !query
-SELECT mask(c1, -1, -1, -1, -1) from values ('abcd-EFGH-8765-4321') as tab(c1)
+SELECT mask(c1, NULL, NULL, NULL, NULL) from values ('abcd-EFGH-8765-4321') as tab(c1)
 -- !query schema
-struct<mask(c1, -1, -1, -1, -1):string>
+struct<mask(c1, NULL, NULL, NULL, NULL):string>
 -- !query output
 abcd-EFGH-8765-4321
 
@@ -656,7 +443,7 @@ org.apache.spark.sql.AnalysisException
     "inputExpr" : "\"replaceArg\"",
     "inputName" : "upperChar",
     "inputType" : "\"STRING\"",
-    "sqlExpr" : "\"mask(c1, replaceArg, x, n, -1)\""
+    "sqlExpr" : "\"mask(c1, replaceArg, x, n, NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -681,7 +468,7 @@ org.apache.spark.sql.AnalysisException
     "inputExpr" : "\"replaceArg\"",
     "inputName" : "upperChar",
     "inputType" : "\"STRING\"",
-    "sqlExpr" : "\"mask(c1, replaceArg, x, n, -1)\""
+    "sqlExpr" : "\"mask(c1, replaceArg, x, n, NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -700,13 +487,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputExpr" : "\"replaceArg\"",
-    "inputName" : "upperChar",
-    "inputType" : "\"STRING\"",
-    "sqlExpr" : "\"mask(c1, replaceArg, x, n, -1)\""
+    "inputSql" : "\"replaceArg\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"mask(c1, replaceArg, x, n, NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -729,7 +517,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "digitChar",
-    "sqlExpr" : "\"mask(abcd-EFGH-8765-4321, A, w, , -1)\""
+    "sqlExpr" : "\"mask(abcd-EFGH-8765-4321, A, w, , NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -752,7 +540,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "lowerChar",
-    "sqlExpr" : "\"mask(abcd-EFGH-8765-4321, A, abc, n, -1)\""
+    "sqlExpr" : "\"mask(abcd-EFGH-8765-4321, A, abc, n, NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
