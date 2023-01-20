@@ -94,7 +94,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
         dist.init_process_group("gloo")
 
         train_sampler = DistributedSampler(dataset=train_dataset)  # type: ignore
-        data_loader = torch.utils.data.DataLoader(  # type: ignore
+        data_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=batch_size, sampler=train_sampler
         )
 

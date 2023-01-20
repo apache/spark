@@ -679,7 +679,9 @@ class TorchDistributor(Distributor):
         if isinstance(train_object, str):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
         else:
-            framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_function
+            framework_wrapper_fn = (
+                TorchDistributor._run_training_on_pytorch_function  # type: ignore
+            )
         if self.local_mode:
             output = self._run_local_training(framework_wrapper_fn, train_object, *args)
         else:
