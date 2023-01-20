@@ -659,7 +659,7 @@
   },
   "INDEX_NOT_FOUND" : {
     "message" : [
-      "Cannot find the index. <message>."
+      "Cannot find the index <indexName> on table <tableName>."
     ],
     "sqlState" : "42704"
   },
