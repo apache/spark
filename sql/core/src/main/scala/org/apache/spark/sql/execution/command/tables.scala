@@ -652,7 +652,8 @@ case class DescribeTableCommand(
         append(result, "", "", "")
         append(result, "# Column Default Information", "", "")
         metadata.schema.foreach { column =>
-          column.getCurrentDefaultValue().map(append(result, column.name, "", _))
+          column.getCurrentDefaultValue().map(
+            append(result, column.name, column.dataType.simpleString, _))
         }
       }
     }
