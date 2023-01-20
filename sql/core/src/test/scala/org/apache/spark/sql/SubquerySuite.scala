@@ -944,21 +944,22 @@ class SubquerySuite extends QueryTest
       Seq((1, 1, 3)).toDF("t1a", "t1b", "t1c").createOrReplaceTempView("t1")
       Seq((1, 1, 5), (2, 2, 7)).toDF("t2a", "t2b", "t2c").createOrReplaceTempView("t2")
 
-      {
-        // Union with different outer refs
-        val df = sql(
-          """
-            | SELECT t0a, (SELECT sum(t1c) FROM
-            |   (SELECT t1c
-            |   FROM   t1
-            |   WHERE  t1a = t0a
-            |   UNION ALL
-            |   SELECT t2c
-            |   FROM   t2
-            |   WHERE  t2b = t0b)
-            | )
-            | FROM t0""".stripMargin)
+      // Union with different outer refs
+      val query =
+        """
+          | SELECT t0a, (SELECT sum(t1c) FROM
+          |   (SELECT t1c
+          |   FROM   t1
+          |   WHERE  t1a = t0a
+          |   UNION ALL
+          |   SELECT t2c
+          |   FROM   t2
+          |   WHERE  t2b = t0b)
+          | )
+          | FROM t0""".stripMargin
 
+      {
+        val df = sql(query)
         checkAnswer(df,
           Row(1, 8) :: Row(2, null) :: Nil)
 
@@ -968,6 +969,14 @@ class SubquerySuite extends QueryTest
         val union = optimizedPlan.collectFirst { case u: Union => u }.get
         assert(union.output.size == 3)
         assert(optimizedPlan.resolved)
+      }
+      withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+        val error = intercept[AnalysisException] { sql(query) }
+        assert(error.message.contains("Accessing outer query column is not allowed"))
+      }
+      withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
+        val error = intercept[AnalysisException] { sql(query) }
+        assert(error.message.contains("Accessing outer query column is not allowed"))
       }
 
       {

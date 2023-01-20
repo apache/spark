@@ -1216,7 +1216,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         case p @ (_ : Union) =>
           // Set operations (e.g. UNION) containing correlated values are only supported
           // with DecorrelateInnerQuery framework.
-          val childCanContainOuter = canContainOuter && usingDecorrelateInnerQueryFramework
+          val childCanContainOuter = (canContainOuter
+            && usingDecorrelateInnerQueryFramework
+            && SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED))
           p.children.foreach(child => checkPlan(child, aggregated, childCanContainOuter))
 
         // Category 2:
