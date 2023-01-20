@@ -21,6 +21,7 @@ import scala.language.existentials
 
 import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 import java.net.URI
+import java.util.UUID
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -41,6 +42,11 @@ class SparkConnectClient(
    */
   def userId: String = userContext.getUserId()
 
+  // Generate a unique session ID for this client. This UUID must be unique to allow
+  // concurrent Spark sessions of the same user. If the channel is closed, creating
+  // a new client will create a new session ID.
+  private[client] val sessionId: String = UUID.randomUUID.toString
+
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
    * @return
@@ -56,6 +62,22 @@ class SparkConnectClient(
       .setUserContext(userContext)
       .build()
     stub.executePlan(request)
+  }
+
+  /**
+   * Builds a [[proto.AnalyzePlanRequest]] from `plan` and dispatched it to the Spark Connect
+   * server.
+   * @return
+   *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
+   */
+  def analyze(plan: proto.Plan): proto.AnalyzePlanResponse = {
+    val request = proto.AnalyzePlanRequest
+      .newBuilder()
+      .setPlan(plan)
+      .setUserContext(userContext)
+      .setClientId(sessionId)
+      .build()
+    analyze(request)
   }
 
   /**

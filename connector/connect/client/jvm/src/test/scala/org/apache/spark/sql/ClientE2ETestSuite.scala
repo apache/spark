@@ -38,6 +38,15 @@ class ClientE2ETestSuite extends RemoteSparkSession { // scalastyle:ignore funsu
     assert(array(1).getString(0) == "World")
   }
 
+  test("simple dataset test") {
+    val df = spark.range(10).limit(3)
+    val result = df.collectResult()
+    assert(result.length == 3)
+    val array = result.toArray
+    assert(array(0).getLong(0) == 0)
+    assert(array(1).getLong(0) == 1)
+  }
+
   // TODO test large result when we can create table or view
   // test("test spark large result")
 }
