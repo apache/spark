@@ -118,12 +118,13 @@ object SparkConnectServerUtils {
     val parentDir = new File(sparkHome, target)
     assert(
       parentDir.exists(),
-      s"Fail to locate the spark connect target folder: '${parentDir.getCanonicalPath}'. " +
+      s"Fail to locate the spark connect server target folder: '${parentDir.getCanonicalPath}'. " +
         s"SPARK_HOME='${new File(sparkHome).getCanonicalPath}'. " +
-        "Make sure system property `SPARK_HOME` is set correctly.")
+        "Make sure the spark connect server jar has been built " +
+        "and the system property `SPARK_HOME` is set correctly.")
     val jars = recursiveListFiles(parentDir).filter { f =>
       // SBT jar
-      (f.getParent.endsWith("scala-2.12") &&
+      (f.getParentFile.getName.startsWith("scala-") &&
         f.getName.startsWith("spark-connect-assembly") && f.getName.endsWith("SNAPSHOT.jar")) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
@@ -188,7 +189,7 @@ trait RemoteSparkSession
 
   override def afterAll(): Unit = {
     try {
-      spark.close()
+      if (spark != null) spark.close()
     } catch {
       case e: Throwable => debug(e)
     }
