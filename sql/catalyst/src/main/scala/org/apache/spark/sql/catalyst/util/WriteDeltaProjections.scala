@@ -15,23 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.orc
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
 
-@ExtendedSQLTest
-class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
-  override protected val dataSourceName: String = "orc"
-  override protected val vectorizedReaderEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
-  override protected val vectorizedReaderNestedEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
-
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
-}
+case class WriteDeltaProjections(
+    rowProjection: Option[ProjectingInternalRow],
+    rowIdProjection: ProjectingInternalRow,
+    metadataProjection: Option[ProjectingInternalRow])

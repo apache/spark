@@ -15,26 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status.protobuf
+package org.apache.spark.sql.connector
 
-import scala.collection.JavaConverters._
+import org.apache.spark.sql.AnalysisException
 
-import org.apache.spark.status.PoolData
+class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
-class PoolDataSerializer extends ProtobufSerDe[PoolData] {
-
-  override def serialize(input: PoolData): Array[Byte] = {
-    val builder = StoreTypes.PoolData.newBuilder()
-    builder.setName(input.name)
-    input.stageIds.foreach(id => builder.addStageIds(id.toLong))
-    builder.build().toByteArray
+  override protected lazy val extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("supports-deltas", "true")
+    props
   }
 
-  override def deserialize(bytes: Array[Byte]): PoolData = {
-    val poolData = StoreTypes.PoolData.parseFrom(bytes)
-    new PoolData(
-      name = poolData.getName,
-      stageIds = poolData.getStageIdsList.asScala.map(_.toInt).toSet
-    )
+  test("nullable row ID attrs") {
+    createAndInitTable("pk INT, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 300, "dep": 'hr' }
+        |{ "pk": 2, "salary": 150, "dep": 'software' }
+        |{ "pk": 3, "salary": 120, "dep": 'hr' }
+        |""".stripMargin)
+
+    val exception = intercept[AnalysisException] {
+      sql(s"DELETE FROM $tableNameAsString WHERE pk = 1")
+    }
+    assert(exception.message.contains("Row ID attributes cannot be nullable"))
   }
 }

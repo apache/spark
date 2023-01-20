@@ -47,6 +47,12 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!--TODO: fix the dependency once the catalyst refactoring is done-->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>

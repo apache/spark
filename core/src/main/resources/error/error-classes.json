@@ -1048,6 +1048,12 @@
     ],
     "sqlState" : "42000"
   },
+  "NULLABLE_ROW_ID_ATTRIBUTES" : {
+    "message" : [
+      "Row ID attributes cannot be nullable: <nullableRowIdAttrs>."
+    ],
+    "sqlState" : "42000"
+  },
   "NULL_MAP_KEY" : {
     "message" : [
       "Cannot use null as map key."
