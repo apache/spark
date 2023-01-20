@@ -186,13 +186,21 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
   test("describe a column with a default value") {
     withTable("t") {
       sql(s"create table t(a int default 42) $defaultUsing")
+      val descriptionDf = sql("describe table extended t a")
       QueryTest.checkAnswer(
-        sql("describe table extended t a"),
+        descriptionDf,
         Seq(
           Row("col_name", "a"),
           Row("data_type", "int"),
-          Row("comment", ""),
-          Row("default", "42")))
+          Row("comment", "NULL"),
+          Row("default", "42"),
+          Row("min", "NULL"),
+          Row("max", "NULL"),
+          Row("num_nulls", "NULL"),
+          Row("distinct_count", "NULL"),
+          Row("max_col_len", "NULL"),
+          Row("avg_col_len", "NULL"),
+          Row("histogram", "NULL")))
     }
   }
 }
@@ -248,24 +256,20 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         ("data_type", StringType),
         ("comment", StringType)))
       QueryTest.checkAnswer(
-        descriptionDf.filter("!(col_name in ('Created Time', 'Created By'))"),
+        descriptionDf.filter(
+          "!(col_name in ('Created Time', 'Created By', 'Database', 'Location', " +
+            "'Provider', 'Type'))"),
         Seq(
-          Row("data", "string", null),
-          Row("id", "bigint", null),
-          Row("# Partition Information", "", ""),
-          Row("# col_name", "data_type", "comment"),
           Row("id", "bigint", null),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Catalog", SESSION_CATALOG_NAME, ""),
-          Row("Table", "table", ""),
+          Row("Table", "t", ""),
           Row("Last Access", "UNKNOWN", ""),
-          Row("Type", "EXTERNAL", ""),
-          Row("Provider", getProvider(), ""),
-          Row("Comment", "this is a test table", ""),
-          Row("Table Properties", "[bar=baz]", ""),
-          Row("Location", "file:/tmp/testcat/table_name", ""),
-          Row("Partition Provider", "Catalog", "")))
+          Row("", "", ""),
+          Row("# Column Default Information", "", ""),
+          Row("id", "", "42")
+        ))
     }
   }
 }

@@ -651,7 +651,7 @@ case class DescribeTableCommand(
         ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
         append(result, "", "", "")
         append(result, "# Column Default Information", "", "")
-        schema.foreach { column =>
+        metadata.schema.foreach { column =>
           column.getCurrentDefaultValue().map(append(result, column.name, "", _))
         }
       }
@@ -819,7 +819,7 @@ case class DescribeColumnCommand(
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
       val defaultKey = ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
       if (field.metadata.contains(defaultKey)) {
-        buffer += Row("default", defaultKey)
+        buffer += Row("default", field.metadata.getString(defaultKey))
       }
     }
     buffer.toSeq
