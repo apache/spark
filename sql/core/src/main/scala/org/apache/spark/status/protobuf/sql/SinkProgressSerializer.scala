@@ -17,6 +17,8 @@
 
 package org.apache.spark.status.protobuf.sql
 
+import java.util.{HashMap => JHashMap}
+
 import org.apache.spark.sql.streaming.SinkProgress
 import org.apache.spark.status.protobuf.StoreTypes
 
@@ -36,7 +38,7 @@ private[protobuf] object SinkProgressSerializer {
     new SinkProgress(
       description = sink.getDescription,
       numOutputRows = sink.getNumOutputRows,
-      metrics = sink.getMetricsMap
+      metrics = new JHashMap(sink.getMetricsMap)
     )
   }
 }

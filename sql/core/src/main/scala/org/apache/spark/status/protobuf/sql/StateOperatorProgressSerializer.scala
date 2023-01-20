@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf.sql
 
-import java.util.{List => JList}
+import java.util.{HashMap => JHashMap, List => JList}
 
 import org.apache.spark.sql.streaming.StateOperatorProgress
 import org.apache.spark.status.protobuf.StoreTypes
@@ -69,7 +69,7 @@ object StateOperatorProgressSerializer {
       numRowsDroppedByWatermark = stateOperator.getNumRowsDroppedByWatermark,
       numShufflePartitions = stateOperator.getNumShufflePartitions,
       numStateStoreInstances = stateOperator.getNumStateStoreInstances,
-      customMetrics = stateOperator.getCustomMetricsMap
+      customMetrics = new JHashMap(stateOperator.getCustomMetricsMap)
     )
   }
 }

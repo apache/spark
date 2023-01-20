@@ -68,7 +68,7 @@ private[protobuf] object StreamingQueryProgressSerializer {
       batchId = process.getBatchId,
       batchDuration = process.getBatchDuration,
       durationMs = new JHashMap(process.getDurationMsMap),
-      eventTime = process.getEventTimeMap,
+      eventTime = new JHashMap(process.getEventTimeMap),
       stateOperators =
         StateOperatorProgressSerializer.deserializeToArray(process.getStateOperatorsList),
       sources = SourceProgressSerializer.deserializeToArray(process.getSourcesList),

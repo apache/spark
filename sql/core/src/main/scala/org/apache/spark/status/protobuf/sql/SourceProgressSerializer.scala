@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf.sql
 
-import java.util.{List => JList}
+import java.util.{HashMap => JHashMap, List => JList}
 
 import org.apache.spark.sql.streaming.SourceProgress
 import org.apache.spark.status.protobuf.StoreTypes
@@ -59,7 +59,7 @@ private[protobuf] object SourceProgressSerializer {
       numInputRows = source.getNumInputRows,
       inputRowsPerSecond = source.getInputRowsPerSecond,
       processedRowsPerSecond = source.getProcessedRowsPerSecond,
-      metrics = source.getMetricsMap
+      metrics = new JHashMap(source.getMetricsMap)
     )
   }
 }
