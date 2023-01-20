@@ -18,16 +18,21 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.types.{MetadataBuilder, StringType}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructType}
 
 private[sql] object DescribeCommandSchema {
-  def describeTableAttributes(): Seq[AttributeReference] = Seq(
+  def describeTableAttributes(schema: StructType): Seq[AttributeReference] = Seq(
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("data_type", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "data type of the column").build())(),
     AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())())
+      new MetadataBuilder().putString("comment", "comment of the column").build())()) ++
+    (if (schema.fields.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+      Seq(AttributeReference("default", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "default value of the column").build())())
+    } else Seq.empty)
 
   def describeColumnAttributes(): Seq[AttributeReference] = Seq(
     AttributeReference("info_name", StringType, nullable = false,

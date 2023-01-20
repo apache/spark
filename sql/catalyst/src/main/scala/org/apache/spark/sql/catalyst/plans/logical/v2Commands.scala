@@ -519,15 +519,16 @@ object ShowNamespaces {
 case class DescribeRelation(
     relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean,
-    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends UnaryCommand {
+    isExtended: Boolean) extends UnaryCommand {
+  override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs(relation.schema)
   override def child: LogicalPlan = relation
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelation =
     copy(relation = newChild)
 }
 
 object DescribeRelation {
-  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+  def getOutputAttrs(schema: StructType): Seq[Attribute] =
+    DescribeCommandSchema.describeTableAttributes(schema)
 }
 
 /**

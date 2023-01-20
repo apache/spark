@@ -591,18 +591,33 @@ abstract class DescribeCommandBase extends LeafRunnableCommand {
       buffer: ArrayBuffer[Row],
       header: Boolean): Unit = {
     if (header) {
-      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+      val default = if (output.length > 3) output(3).name else ""
+      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name, default)
     }
     schema.foreach { column =>
-      append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
+      append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull,
+        column.getCurrentDefaultValue().getOrElse(""))
     }
   }
 
   protected def append(
-    buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
-    buffer += Row(column, dataType, comment)
+    buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String,
+    default: String): Unit = {
+    buffer += Row(column, dataType, comment, default)
+  }
+
+  /** If the schema's columns have no default values, drop the fourth column from the result. */
+  protected def dropColumnDefaultIfEmpty(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
+    if (!schema.fields.exists(_.metadata.contains(
+      ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+      val pruned = ArrayBuffer.empty[Row]
+      buffer.foreach { row =>
+        pruned.append(Row(row.get(0), row.get(1), row.get(2)))
+      }
+    }
   }
 }
+
 /**
  * Command that looks like
  * {{{
@@ -620,12 +635,13 @@ case class DescribeTableCommand(
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
-    if (catalog.isTempView(table)) {
+    val schema = if (catalog.isTempView(table)) {
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.descPartitionNotAllowedOnTempView(table.identifier)
       }
       val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
       describeSchema(schema, result, header = false)
+      schema
     } else {
       val metadata = catalog.getTableRawMetadata(table)
       if (metadata.schema.isEmpty) {
@@ -645,14 +661,16 @@ case class DescribeTableCommand(
       } else if (isExtended) {
         describeFormattedTableInfo(metadata, result)
       }
+      metadata.schema
     }
 
+    dropColumnDefaultIfEmpty(schema, result)
     result.toSeq
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (table.partitionColumnNames.nonEmpty) {
-      append(buffer, "# Partition Information", "", "")
+      append(buffer, "# Partition Information", "", "", "")
       describeSchema(table.partitionSchema, buffer, header = true)
     }
   }
@@ -663,10 +681,10 @@ case class DescribeTableCommand(
       "Partition Columns",
       "Schema"
     )
-    append(buffer, "", "", "")
-    append(buffer, "# Detailed Table Information", "", "")
+    append(buffer, "", "", "", "")
+    append(buffer, "# Detailed Table Information", "", "", "")
     table.toLinkedHashMap.filterKeys(!excludedTableInfo.contains(_)).foreach {
-      s => append(buffer, s._1, s._2, "")
+      s => append(buffer, s._1, s._2, "", "")
     }
   }
 
@@ -693,19 +711,19 @@ case class DescribeTableCommand(
       table: CatalogTable,
       partition: CatalogTablePartition,
       buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# Detailed Partition Information", "", "")
-    append(buffer, "Database", table.database, "")
-    append(buffer, "Table", tableIdentifier.table, "")
-    partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
-    append(buffer, "", "", "")
-    append(buffer, "# Storage Information", "", "")
+    append(buffer, "", "", "", "")
+    append(buffer, "# Detailed Partition Information", "", "", "")
+    append(buffer, "Database", table.database, "", "")
+    append(buffer, "Table", tableIdentifier.table, "", "")
+    partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, "", ""))
+    append(buffer, "", "", "", "")
+    append(buffer, "# Storage Information", "", "", "")
     table.bucketSpec match {
       case Some(spec) =>
-        spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+        spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, "", ""))
       case _ =>
     }
-    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, "", ""))
   }
 }
 
@@ -728,14 +746,16 @@ case class DescribeTableCommand(
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   extends DescribeCommandBase {
 
-  override val output = DescribeCommandSchema.describeTableAttributes()
+  override val output = DescribeCommandSchema.describeTableAttributes(plan.schema)
 
   override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
     val queryExecution = sparkSession.sessionState.executePlan(plan)
+    val schema = queryExecution.analyzed.schema
     describeSchema(queryExecution.analyzed.schema, result, header = false)
+    dropColumnDefaultIfEmpty(schema, result)
     result.toSeq
   }
 }
@@ -807,6 +827,10 @@ case class DescribeColumnCommand(
         hist <- c.histogram
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
+      val defaultKey = ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+      if (field.metadata.contains(defaultKey)) {
+        buffer += Row("default", defaultKey)
+      }
     }
     buffer.toSeq
   }

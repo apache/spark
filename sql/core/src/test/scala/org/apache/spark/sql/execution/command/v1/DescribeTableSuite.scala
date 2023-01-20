@@ -182,6 +182,24 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       }
     }
   }
+
+  test("describe a column with a default value") {
+    withTable("t") {
+      sql("create table t(a int default 42)")
+      QueryTest.checkAnswer(
+        sql("describe a"),
+        Seq(
+          Row("col_name", "data_type", "comment", "default"),
+          Row("a", "int", "", "42")))
+      QueryTest.checkAnswer(
+        sql("describe table extended t a"),
+        Seq(
+          Row("col_name", "a"),
+          Row("data_type", "int"),
+          Row("comment", ""),
+          Row("default", "42")))
+    }
+  }
 }
 
 /**

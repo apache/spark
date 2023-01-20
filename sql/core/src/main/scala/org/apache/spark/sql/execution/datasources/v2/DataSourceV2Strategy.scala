@@ -318,11 +318,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeNamespace(ResolvedNamespace(catalog, ns), extended, output) =>
       DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
-    case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, output) =>
+    case d @ DescribeRelation(r: ResolvedTable, partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.describeDoesNotSupportPartitionForV2TablesError()
       }
-      DescribeTableExec(output, r.table, isExtended) :: Nil
+      DescribeTableExec(d.output, r.table, isExtended) :: Nil
 
     case DescribeColumn(_: ResolvedTable, column, isExtended, output) =>
       column match {
