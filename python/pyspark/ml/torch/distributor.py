@@ -29,7 +29,7 @@ import sys
 import tempfile
 import textwrap
 import time
-from typing import Union, Callable, List, Dict, Optional, Any, Tuple
+from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
 from pyspark.sql import SparkSession
 from pyspark.ml.torch.log_communication import (  # type: ignore
@@ -443,7 +443,7 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
             self.logger.info(f"Started local training with {self.num_processes} processes")
-            output = framework_wrapper_fn(self.input_params, train_object, *args)  # type: ignore
+            output = framework_wrapper_fn(self.input_params, train_object, *args)
             self.logger.info(f"Finished local training with {self.num_processes} processes")
 
         finally:
@@ -594,7 +594,7 @@ class TorchDistributor(Distributor):
 
     @contextmanager
     @staticmethod
-    def _setup_files(train_fn: Callable, *args: Any) -> Tuple[str, str]:
+    def _setup_files(train_fn: Callable, *args: Any) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
         pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args)
         output_file_path = os.path.join(save_dir, TorchDistributor.PICKLED_OUTPUT_FILE)
@@ -608,7 +608,7 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _run_training_on_pytorch_function(
-        input_params: dict[str, Any], train_fn: Callable, *args: Any  # TODO: change dict to Dict
+        input_params: Dict[str, Any], train_fn: Callable, *args: Any
     ) -> Any:
         with TorchDistributor._setup_files(train_fn, *args) as (train_file_path, output_file_path):
             args = []  # type: ignore
@@ -623,7 +623,7 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _cleanup_files(save_dir: str) -> None:
-        shutil.rmtree(save_dir)
+        shutil.rmtree(save_dir, ignore_errors=True)
 
     @staticmethod
     def _save_pickled_function(save_dir: str, train_fn: Union[str, Callable], *args: Any) -> str:

@@ -93,9 +93,9 @@ def create_training_function(mnist_dir_path: str) -> Callable:
 
         dist.init_process_group("gloo")
 
-        train_sampler = DistributedSampler(dataset=train_dataset)
-        data_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=batch_size, sampler=train_sampler  # type: ignore
+        train_sampler = DistributedSampler(dataset=train_dataset)  # type: ignore
+        data_loader = torch.utils.data.DataLoader(  # type: ignore
+            train_dataset, batch_size=batch_size, sampler=train_sampler
         )
 
         model = Net()
@@ -274,22 +274,24 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
 class TorchDistributorLocalUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
-        self.tempFile.write(
+        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        self.gpu_discovery_script_file.write(
             b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
         )
-        self.tempFile.close()
+        self.gpu_discovery_script_file.close()
         # create temporary directory for Worker resources coordination
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
         os.chmod(
-            self.tempFile.name,
+            self.gpu_discovery_script_file.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
 
         conf = conf.set("spark.driver.resource.gpu.amount", "3")
-        conf = conf.set("spark.driver.resource.gpu.discoveryScript", self.tempFile.name)
+        conf = conf.set(
+            "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+        )
 
         self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
         self.spark = SparkSession(self.sc)
@@ -297,7 +299,7 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.tempFile.name)
+        os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
 
     def setup_env_vars(self, input_map: Dict[str, str]) -> None:
@@ -378,21 +380,23 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
-        self.tempFile.write(
+        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        self.gpu_discovery_script_file.write(
             b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
         )
-        self.tempFile.close()
+        self.gpu_discovery_script_file.close()
         # create temporary directory for Worker resources coordination
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
         os.chmod(
-            self.tempFile.name,
+            self.gpu_discovery_script_file.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
 
-        conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
+        conf = conf.set(
+            "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+        )
         conf = conf.set("spark.worker.resource.gpu.amount", "3")
         conf = conf.set("spark.task.cpus", "2")
         conf = conf.set("spark.task.resource.gpu.amount", "1")
@@ -404,7 +408,7 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.tempFile.name)
+        os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
 
     def test_dist_training_succeeds(self) -> None:
