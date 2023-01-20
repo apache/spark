@@ -643,7 +643,7 @@ object DataSource extends Logging {
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else {
-                  throw QueryExecutionErrors.failedToFindDataSourceError(provider1, error)
+                  throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
             }
           } catch {

@@ -44,8 +44,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     val wrapper = StoreTypes.SparkPlanGraphWrapper.parseFrom(bytes)
     new SparkPlanGraphWrapper(
       executionId = wrapper.getExecutionId,
-      nodes = wrapper.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper).toSeq,
-      edges = wrapper.getEdgesList.asScala.map(deserializeSparkPlanGraphEdge).toSeq
+      nodes = wrapper.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper),
+      edges = wrapper.getEdgesList.asScala.map(deserializeSparkPlanGraphEdge)
     )
   }
 
@@ -53,18 +53,27 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     StoreTypes.SparkPlanGraphNodeWrapper = {
 
     val builder = StoreTypes.SparkPlanGraphNodeWrapper.newBuilder()
-    builder.setNode(serializeSparkPlanGraphNode(input.node))
-    builder.setCluster(serializeSparkPlanGraphClusterWrapper(input.cluster))
+    if (input.node != null) {
+      builder.setNode(serializeSparkPlanGraphNode(input.node))
+    } else {
+      builder.setCluster(serializeSparkPlanGraphClusterWrapper(input.cluster))
+    }
     builder.build()
   }
 
   private def deserializeSparkPlanGraphNodeWrapper(input: StoreTypes.SparkPlanGraphNodeWrapper):
     SparkPlanGraphNodeWrapper = {
-
-    new SparkPlanGraphNodeWrapper(
-      node = deserializeSparkPlanGraphNode(input.getNode),
-      cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster)
-    )
+    if (input.hasNode) {
+      new SparkPlanGraphNodeWrapper(
+        node = deserializeSparkPlanGraphNode(input.getNode),
+        cluster = null
+      )
+    } else {
+      new SparkPlanGraphNodeWrapper(
+        node = null,
+        cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster)
+      )
+    }
   }
 
   private def serializeSparkPlanGraphEdge(edge: SparkPlanGraphEdge):
@@ -101,7 +110,7 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
       id = node.getId,
       name = node.getName,
       desc = node.getDesc,
-      metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
+      metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
     )
   }
 
@@ -127,8 +136,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
       id = cluster.getId,
       name = cluster.getName,
       desc = cluster.getDesc,
-      nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper).toSeq,
-      metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
+      nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper),
+      metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
     )
   }
 }

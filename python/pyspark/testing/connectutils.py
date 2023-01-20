@@ -14,17 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import shutil
+import tempfile
 import typing
 import os
 import functools
 import unittest
 
+from pyspark import Row
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    SQLTestUtils,
 )
+from pyspark.sql.session import SparkSession as PySparkSession
 
 
 grpc_requirement_message = None
@@ -154,3 +159,23 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")
         cls.connect.drop_hook("with_plan")
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils):
+    """
+    Spark Connect version of :class:`pyspark.testing.sqlutils.ReusedSQLTestCase`.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = PySparkSession.builder.appName(cls.__name__).remote("local[4]").getOrCreate()
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        cls.df = cls.spark.createDataFrame(cls.testData)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        cls.spark.stop()

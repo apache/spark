@@ -189,7 +189,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df = spark.range(1)
         >>> type(df.sparkSession)
-        <class 'pyspark.sql.session.SparkSession'>
+        <class '...session.SparkSession'>
         """
         return self._session
 
@@ -233,7 +233,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df = spark.sql("SELECT 1 AS c1, int(NULL) AS c2")
         >>> type(df.na)
-        <class 'pyspark.sql.dataframe.DataFrameNaFunctions'>
+        <class '...dataframe.DataFrameNaFunctions'>
 
         Replace the missing values as 2.
 
@@ -264,7 +264,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> import pyspark.sql.functions as f
         >>> df = spark.range(3).withColumn("c", f.expr("id + 1"))
         >>> type(df.stat)
-        <class 'pyspark.sql.dataframe.DataFrameStatFunctions'>
+        <class '...dataframe.DataFrameStatFunctions'>
         >>> df.stat.corr("id", "c")
         1.0
         """
@@ -355,7 +355,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throw an exception if the table already exists.
 
-        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -438,7 +438,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throws an exception if the global temporary view already exists.
 
-        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -639,7 +639,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Print out the physical plan only (default).
 
-        >>> df.explain()
+        >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         *(1) Scan ExistingRDD[age...,name...]
 
@@ -657,7 +657,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Print out the plans with two sections: a physical plan outline and node details
 
-        >>> df.explain(mode="formatted")
+        >>> df.explain(mode="formatted")  # doctest: +SKIP
         == Physical Plan ==
         * Scan ExistingRDD (...)
         (1) Scan ExistingRDD [codegen id : ...]
@@ -1116,7 +1116,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-        >>> df.join(df2, "name").explain()
+        >>> df.join(df2, "name").explain()  # doctest: +SKIP
         == Physical Plan ==
         ...
         ... +- SortMergeJoin ...
@@ -3657,7 +3657,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.intersect(df2).show()
+        >>> df1.intersect(df2).sort(df1.C1.desc()).show()
         +---+---+
         | C1| C2|
         +---+---+

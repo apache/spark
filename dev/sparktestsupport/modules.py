@@ -430,6 +430,7 @@ pyspark_core = Module(
         "pyspark.tests.test_taskcontext",
         "pyspark.tests.test_util",
         "pyspark.tests.test_worker",
+        "pyspark.tests.test_stage_sched",
     ],
 )
 
@@ -506,12 +507,14 @@ pyspark_connect = Module(
         # doctests
         "pyspark.sql.connect.catalog",
         "pyspark.sql.connect.group",
+        "pyspark.sql.connect.session",
         "pyspark.sql.connect.window",
         "pyspark.sql.connect.column",
+        "pyspark.sql.connect.readwriter",
+        "pyspark.sql.connect.dataframe",
+        "pyspark.sql.connect.functions",
         # unittests
-        "pyspark.sql.tests.connect.test_connect_column_expressions",
-        "pyspark.sql.tests.connect.test_connect_plan_only",
-        "pyspark.sql.tests.connect.test_connect_select_ops",
+        "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",
@@ -621,6 +624,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_tuning",
         "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
+        "pyspark.ml.torch.tests.test_distributor",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there

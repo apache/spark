@@ -310,8 +310,31 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
         Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       val serializedTaskDescription = TaskDescription.encode(taskDescription)
-      backend.executor = mock[Executor]
       backend.rpcEnv.setupEndpoint("Executor 1", backend)
+      backend.executor = mock[Executor](CALLS_REAL_METHODS)
+      val executor = backend.executor
+      // Mock the executor.
+      val threadPool = ThreadUtils.newDaemonFixedThreadPool(1, "test-executor")
+      when(executor.threadPool).thenReturn(threadPool)
+      val runningTasks = new ConcurrentHashMap[Long, Executor#TaskRunner]
+      when(executor.runningTasks).thenAnswer(_ => runningTasks)
+      when(executor.conf).thenReturn(conf)
+
+      def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
+        new executor.TaskRunner(backend, taskDescription, None) {
+          override def run(): Unit = {
+            logInfo(s"task ${taskDescription.taskId} runs.")
+          }
+
+          override def kill(interruptThread: Boolean, reason: String): Unit = {
+            logInfo(s"task ${taskDescription.taskId} killed.")
+          }
+        }
+      }
+
+      // Feed the fake task-runners to be executed by the executor.
+      doAnswer(_ => getFakeTaskRunner(taskDescription))
+        .when(executor).createTaskRunner(any(), any())
 
       // Launch a new task shall add an entry to `taskResources` map.
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))

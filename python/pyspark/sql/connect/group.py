@@ -31,8 +31,8 @@ from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.types import NumericType
 
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.column import Column, scalar_function
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import LiteralType
@@ -80,8 +80,14 @@ class GroupedData:
 
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
+            # There is a special case for count(*) which is rewritten into count(1).
             # Convert the dict into key value pairs
-            aggregate_cols = [scalar_function(exprs[0][k], col(k)) for k in exprs[0]]
+            aggregate_cols = [
+                _invoke_function(
+                    exprs[0][k], lit(1) if exprs[0][k] == "count" and k == "*" else col(k)
+                )
+                for k in exprs[0]
+            ]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -133,7 +139,7 @@ class GroupedData:
                 child=self._df._plan,
                 group_type=self._group_type,
                 grouping_cols=self._grouping_cols,
-                aggregate_cols=[scalar_function(function, col(c)) for c in agg_cols],
+                aggregate_cols=[_invoke_function(function, col(c)) for c in agg_cols],
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
             ),
@@ -160,8 +166,10 @@ class GroupedData:
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
 
+    mean = avg
+
     def count(self) -> "DataFrame":
-        return self.agg(scalar_function("count", lit(1)))
+        return self.agg(_invoke_function("count", lit(1)).alias("count"))
 
     count.__doc__ = PySparkGroupedData.count.__doc__
 
@@ -198,6 +206,18 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
+    def apply(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("apply() is not implemented.")
+
+    def applyInPandas(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandas() is not implemented.")
+
+    def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandasWithState() is not implemented.")
+
+    def cogroup(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cogroup() is not implemented.")
+
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
 
@@ -206,7 +226,6 @@ def _test() -> None:
     import os
     import sys
     import doctest
-    from pyspark import SparkContext, SparkConf
     from pyspark.sql import SparkSession as PySparkSession
     from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -216,21 +235,21 @@ def _test() -> None:
         import pyspark.sql.connect.group
 
         globs = pyspark.sql.connect.group.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.group tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.group tests"})
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.group tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.group,
             globs=globs,
             optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
         )
-        globs["_spark"].stop()
+
         globs["spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:
