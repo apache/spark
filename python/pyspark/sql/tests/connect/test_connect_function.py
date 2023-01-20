@@ -2304,8 +2304,8 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         # as a normal function
         self.assert_eq(
-            cdf.select(CF.udf(lambda x: x + 1)(cdf.a), CF.udf(lambda x: x + 1)(cdf.b)).toPandas(),
-            sdf.select(SF.udf(lambda x: x + 1)(sdf.a), SF.udf(lambda x: x + 1)(sdf.b)).toPandas(),
+            cdf.withColumn("A", CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
+            sdf.withColumn("A", SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
         )
 
         # as a decorator
@@ -2318,8 +2318,8 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             return x + "a"
 
         self.assert_eq(
-            cdf.select(cfun(cdf.c)).toPandas(),
-            sdf.select(sfun(sdf.c)).toPandas(),
+            cdf.withColumn("A", cfun(cdf.c)).toPandas(),
+            sdf.withColumn("A", sfun(sdf.c)).toPandas(),
         )
 
     def test_unsupported_functions(self):
