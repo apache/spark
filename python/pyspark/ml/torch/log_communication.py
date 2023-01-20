@@ -47,12 +47,12 @@ def _get_log_print_lock() -> threading.Lock:
 class WriteLogToStdout(socketserver.StreamRequestHandler):
     def _read_bline(self) -> Generator[bytes, None, None]:
         while self.server.is_active:
-            packed_number_bytes = self.rfile.read1(4)
+            packed_number_bytes = self.rfile.read(4)
             if not packed_number_bytes:
                 time.sleep(_SERVER_POLL_INTERVAL)
                 continue
-            number_bytes = unpack("@i", packed_number_bytes)[0]
-            message = self.rfile.read1(number_bytes)
+            number_bytes = unpack(">i", packed_number_bytes)[0]
+            message = self.rfile.read(number_bytes)
             yield message
 
     def handle(self) -> None:
@@ -71,13 +71,13 @@ class LogStreamingServer:
         self.port = None
 
     @staticmethod
-    def _get_free_port() -> int:
+    def _get_free_port(spark_host_address: str = "") -> int:
         with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as tcp:
-            tcp.bind(("", 0))
+            tcp.bind((spark_host_address, 0))
             _, port = tcp.getsockname()
         return port
 
-    def start(self) -> None:
+    def start(self, spark_host_address: str = "") -> None:
         if self.server:
             raise RuntimeError("Cannot start the server twice.")
 
@@ -87,7 +87,7 @@ class LogStreamingServer:
                 server.is_active = True
                 server.serve_forever(poll_interval=_SERVER_POLL_INTERVAL)
 
-        self.port = LogStreamingServer._get_free_port()
+        self.port = LogStreamingServer._get_free_port(spark_host_address)
         self.serve_thread = threading.Thread(target=serve_task, args=(self.port,))
         self.serve_thread.setDaemon(True)
         self.serve_thread.start()
@@ -166,6 +166,7 @@ class LogStreamingClient(LogStreamingClientBase):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((self.address, self.port))
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.sock = sock
             self.failed = False
         except (OSError, IOError):  # pylint: disable=broad-except
@@ -186,8 +187,7 @@ class LogStreamingClient(LogStreamingClientBase):
                     #     cloud provider
                     #  2) sendall may block when server is busy handling data.
                     binary_message = message.encode("utf-8")
-                    packed_number_bytes = pack("@i", len(binary_message))
-                    self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    packed_number_bytes = pack(">i", len(binary_message))
                     self.sock.sendall(packed_number_bytes + binary_message)
                 except Exception:  # pylint: disable=broad-except
                     self._fail("Error sending logs to driver, stopping log streaming")

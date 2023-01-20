@@ -540,7 +540,7 @@ class TorchDistributor(Distributor):
 
         log_streaming_server = LogStreamingServer()
         self.driver_address = get_driver_host(self.sc)
-        log_streaming_server.start()
+        log_streaming_server.start(spark_host_address=self.driver_address)
         time.sleep(1)  # wait for the server to start
         self.log_streaming_server_port = log_streaming_server.port
 
