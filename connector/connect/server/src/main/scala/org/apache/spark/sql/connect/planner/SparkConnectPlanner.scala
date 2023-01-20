@@ -1002,11 +1002,19 @@ class SparkConnectPlanner(session: SparkSession) {
     session.sessionState.sqlParser.parseExpression(expr.getExpression)
   }
 
-  private def transformUnresolvedStar(regex: proto.Expression.UnresolvedStar): Expression = {
-    if (regex.getTargetList.isEmpty) {
-      UnresolvedStar(Option.empty)
+  private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): UnresolvedStar = {
+    if (star.hasUnparsedTarget) {
+      val target = star.getUnparsedTarget
+      if (!target.endsWith(".*")) {
+        throw InvalidPlanInput(
+          s"UnresolvedStar requires a unparsed target ending with '.*', " +
+            s"but got $target.")
+      }
+
+      UnresolvedStar(
+        Some(UnresolvedAttribute.parseAttributeName(target.substring(0, target.length - 2))))
     } else {
-      UnresolvedStar(Some(regex.getTargetList.asScala.toSeq))
+      UnresolvedStar(None)
     }
   }
 

@@ -40,6 +40,7 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
     ColumnReference,
     UnresolvedFunction,
+    UnresolvedStar,
     SQLExpression,
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
@@ -186,7 +187,12 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    return Column(ColumnReference(col))
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -799,13 +805,6 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
-    # convert count(*), count(col(*)) and count(expr(*)) to count(1)
-    if isinstance(col, str) and col == "*":
-        col = lit(1)
-    elif isinstance(col, Column) and (
-        SQLExpression("*") == col._expr or ColumnReference("*") == col._expr
-    ):
-        col = lit(1)
     return _invoke_function_over_columns("count", col)
 
 
