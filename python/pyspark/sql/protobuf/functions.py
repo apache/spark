@@ -37,13 +37,15 @@ def from_protobuf(
 ) -> Column:
     """
     Converts a binary column of Protobuf format into its corresponding catalyst value.
-    The specified schema must match the read data, otherwise the behavior is undefined:
-    it may fail or return arbitrary result. The jar containing Java class should be shaded.
-    Specifically, ``com.google.protobuf.*`` should be shaded to
-    ``org.sparkproject.spark-protobuf.protobuf.*``.
+    The Protobuf definition is provided in one of these two ways:
 
-    To deserialize the data with a compatible and evolved schema, the expected
-    Protobuf schema can be set via the option protobuf descriptor.
+       - Protobuf descriptor file: E.g. a descriptor file created with
+          `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
+       - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
+         Specifically, `com.google.protobuf.*` should be shaded to
+         `org.sparkproject.spark-protobuf.protobuf.*`.
+         https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+         Protobuf files. The jar file can be added with spark-submit option --jars.
 
     .. versionadded:: 3.4.0
 
@@ -52,11 +54,10 @@ def from_protobuf(
     data : :class:`~pyspark.sql.Column` or str
         the binary column.
     messageName: str, optional
-        the protobuf message name to look for in descriptor file. Or
-        The Protobuf class name. E.g. ``org.spark.examples.protobuf.ExampleEvent``,
-        without descFilePath parameter.
-        Using the spark-submit option --jars, add a messageClassName specific jar.
-    descFilePath : str
+        the protobuf message name to look for in descriptor file, or
+        The Protobuf class name when descFilePath parameter is not set.
+        E.g. `com.example.protos.ExampleEvent`.
+    descFilePath : str, optional
         The protobuf descriptor file.
     options : dict, optional
         options to control how the protobuf record is parsed.
@@ -141,10 +142,16 @@ def to_protobuf(
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
-    Converts a column into binary of protobuf format. The specified Protobuf class must match the
-    data, otherwise the behavior is undefined: it may fail or return arbitrary result. The jar
-    containing Java class should be shaded. Specifically, ``com.google.protobuf.*`` should be
-    shaded to ``org.sparkproject.spark-protobuf.protobuf.*``.
+    Converts a column into binary of protobuf format. The Protobuf definition is provided in one
+    of these two ways:
+
+       - Protobuf descriptor file: E.g. a descriptor file created with
+          `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
+       - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
+         Specifically, `com.google.protobuf.*` should be shaded to
+         `org.sparkproject.spark-protobuf.protobuf.*`.
+         https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+         Protobuf files. The jar file can be added with spark-submit option --jars.
 
     .. versionadded:: 3.4.0
 
@@ -153,12 +160,12 @@ def to_protobuf(
     data : :class:`~pyspark.sql.Column` or str
         the data column.
     messageName: str, optional
-        the protobuf message name to look for in descriptor file. Or
-        The Protobuf class name. E.g. ``org.spark.examples.protobuf.ExampleEvent``,
-        without descFilePath parameter.
-        Using the spark-submit option --jars, add a messageClassName specific jar.
-    descFilePath : str
+        the protobuf message name to look for in descriptor file, or
+        The Protobuf class name when descFilePath parameter is not set.
+        E.g. `com.example.protos.ExampleEvent`.
+    descFilePath : str, optional
         the Protobuf descriptor file.
+    options : dict, optional
 
     Notes
     -----

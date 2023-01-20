@@ -27,14 +27,12 @@ object functions {
 
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified schema must match actual schema of the read data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
-   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
+   * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
    *
    * @param data
    *   the binary column.
    * @param messageName
-   *   the protobuf message name to look for in descriptorFile.
+   *   the protobuf message name to look for in descriptor file.
    * @param descFilePath
    *   the protobuf descriptor file.
    * @param options
@@ -53,14 +51,12 @@ object functions {
 
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified schema must match actual schema of the read data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
-   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
+   * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
    *
    * @param data
    *   the binary column.
    * @param messageName
-   *   the protobuf MessageName to look for in descriptorFile.
+   *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
    *   the protobuf descriptor file.
    * @since 3.4.0
@@ -73,16 +69,17 @@ object functions {
   }
 
   /**
-   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified Protobuf class must match the data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. The jar containing Java class should be
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
    * shaded. Specifically, `com.google.protobuf.*` should be shaded to
    * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
    *
    * @param data
    *   the binary column.
    * @param messageClassName
-   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
    *   The jar with these classes needs to be shaded as described above.
    * @since 3.4.0
    */
@@ -92,16 +89,17 @@ object functions {
   }
 
   /**
-   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified Protobuf class must match the data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. The jar containing Java class should be
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
    * shaded. Specifically, `com.google.protobuf.*` should be shaded to
    * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
    *
    * @param data
    *   the binary column.
    * @param messageClassName
-   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
    *   The jar with these classes needs to be shaded as described above.
    * @param options
    * @since 3.4.0
@@ -115,12 +113,13 @@ object functions {
   }
 
   /**
-   * Converts a column into binary of protobuf format.
+   * Converts a column into binary of protobuf format. The Protobuf definition is provided
+   * through Protobuf <i>descriptor file</i>.
    *
    * @param data
    *   the data column.
    * @param messageName
-   *   the protobuf MessageName to look for in descriptorFile.
+   *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
    *   the protobuf descriptor file.
    * @since 3.4.0
@@ -131,7 +130,8 @@ object functions {
   }
 
   /**
-   * Converts a column into binary of protobuf format.
+   * Converts a column into binary of protobuf format. The Protobuf definition is provided
+   * through Protobuf <i>descriptor file</i>.
    *
    * @param data
    *   the data column.
@@ -155,11 +155,17 @@ object functions {
 
   /**
    * Converts a column into binary of protobuf format.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
    *
    * @param data
    *   the data column.
    * @param messageClassName
-   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
    * @since 3.4.0
    */
   @Experimental
@@ -169,11 +175,17 @@ object functions {
 
   /**
    * Converts a column into binary of protobuf format.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
    *
    * @param data
    *   the data column.
    * @param messageClassName
-   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
    * @param options
    * @since 3.4.0
    */
