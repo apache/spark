@@ -382,7 +382,7 @@ class UnresolvedStar(Expression):
         if self._unparsed_target is not None:
             return f"unresolvedstar({self._unparsed_target})"
         else:
-            return f"unresolvedstar()"
+            return "unresolvedstar()"
 
     def __eq__(self, other: Any) -> bool:
         return (
