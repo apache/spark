@@ -184,29 +184,6 @@ private[jdbc] class JDBCRDD(
   private val columnList: String = if (columns.isEmpty) "1" else columns.mkString(",")
 
   /**
-   * `filters`, but as a WHERE clause suitable for injection into a SQL query.
-   */
-  private val filterWhereClause: String = {
-    val dialect = JdbcDialects.get(url)
-    predicates.flatMap(dialect.compileExpression(_)).map(p => s"($p)").mkString(" AND ")
-  }
-
-  /**
-   * A WHERE clause representing both `filters`, if any, and the current partition.
-   */
-  private def getWhereClause(part: JDBCPartition): String = {
-    if (part.whereClause != null && filterWhereClause.length > 0) {
-      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
-    } else if (part.whereClause != null) {
-      "WHERE " + part.whereClause
-    } else if (filterWhereClause.length > 0) {
-      "WHERE " + filterWhereClause
-    } else {
-      ""
-    }
-  }
-
-  /**
    * A GROUP BY clause representing pushed-down grouping columns.
    */
   private def getGroupByClause: String = {
@@ -299,20 +276,8 @@ private[jdbc] class JDBCRDD(
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
 
-    val myWhereClause = getWhereClause(part)
-
-    val myTableSampleClause: String = if (sample.nonEmpty) {
-      JdbcDialects.get(url).getTableSample(sample.get)
-    } else {
-      ""
-    }
-
-    val myLimitClause: String = dialect.getLimitClause(limit)
-    val myOffsetClause: String = dialect.getOffsetClause(offset)
-
-    val sqlText = options.prepareQuery +
-      s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
-      s" $myWhereClause $getGroupByClause $getOrderByClause $myLimitClause $myOffsetClause"
+    val sqlText = dialect.getSQLText(options, columnList, sample, predicates, part,
+      getGroupByClause, getOrderByClause, limit, offset)
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

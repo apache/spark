@@ -37,9 +37,10 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JDBCPartition, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -549,6 +550,63 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def getOffsetClause(offset: Integer): String = {
     if (offset > 0 ) s"OFFSET $offset" else ""
+  }
+
+  /**
+   * returns the SQL text for the SELECT statement.
+   *
+   * @param options - JDBC options that contains url, table and other information.
+   * @param columnList - The names of the columns or aggregate columns to SELECT.
+   * @param sample - The pushed down tableSample.
+   * @param predicates - The predicates to include in all WHERE clauses.
+   * @param part - The JDBCPartition specifying partition id and WHERE clause.
+   * @param groupByClause - The group by clause for the SELECT statement.
+   * @param orderByClause - The order by clause for the SELECT statement.
+   * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
+   *                is not pushed down.
+   * @param offset - The pushed down offset. If the value is 0, it means no offset or offset
+   *                 is not pushed down.
+   * @return
+   */
+  def getSQLText(
+      options: JDBCOptions,
+      columnList: String,
+      sample: Option[TableSampleInfo],
+      predicates: Array[Predicate],
+      part: JDBCPartition,
+      groupByClause: String,
+      orderByClause: String,
+      limit: Int,
+      offset: Int): String = {
+
+    val tableSampleClause: String = if (sample.nonEmpty) {
+      getTableSample(sample.get)
+    } else {
+      ""
+    }
+
+    // `filters`, but as a WHERE clause suitable for injection into a SQL query.
+    val filterWhereClause: String = {
+      predicates.flatMap(compileExpression(_)).map(p => s"($p)").mkString(" AND ")
+    }
+
+    // A WHERE clause representing both `filters`, if any, and the current partition.
+    val whereClause = if (part.whereClause != null && filterWhereClause.length > 0) {
+      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
+    } else if (part.whereClause != null) {
+      "WHERE " + part.whereClause
+    } else if (filterWhereClause.length > 0) {
+      "WHERE " + filterWhereClause
+    } else {
+      ""
+    }
+
+    val limitClause: String = getLimitClause(limit)
+    val offsetClause: String = getOffsetClause(offset)
+
+    options.prepareQuery +
+      s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+      s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"
   }
 
   def supportsTableSample: Boolean = false
