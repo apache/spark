@@ -4602,7 +4602,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1)",
+  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 0)",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 4, 5);
@@ -4685,6 +4685,10 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       math.abs(posInt) + 1
     } else {
       math.max(baseArr.numElements() + 1, itemInsertionIndex + 1)
+    }
+
+    if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
     }
 
     val newArray = new Array[Any](newArrayLength)

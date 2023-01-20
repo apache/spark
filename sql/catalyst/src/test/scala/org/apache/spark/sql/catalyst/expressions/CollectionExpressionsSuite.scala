@@ -2269,62 +2269,61 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a16 = Literal.create(Seq("b", null, "a", "g", null), ArrayType(StringType, true))
     val a18 = Literal.create(null, ArrayType(StringType))
 
-    val litTwoInt = Literal.create(2, IntegerType)
-    val litThreeInt = Literal.create(3, IntegerType)
-    val litOneInt = Literal.create(1, IntegerType)
-    val litFourInt = Literal.create(4, IntegerType)
-    val litNullInt = Literal.create(null, IntegerType)
-    val litZeroInt = Literal.create(0, IntegerType)
-    val litTenInt = Literal.create(10, IntegerType)
-    val litMinusTwoInt = Literal.create(-2, IntegerType)
-    val litMinusTenInt = Literal.create(-10, IntegerType)
-    val litThreeLong = Literal.create(3L, LongType)
-    val litBoolTrue = Literal.create(true, BooleanType)
-    val litThreeByte = Literal.create(5.asInstanceOf[Byte], ByteType)
-    val litThreeShort = Literal.create(3.asInstanceOf[Short], ShortType)
-    val litFourFourFloat = Literal.create(4.4F, FloatType)
-    val litFourFourDouble = Literal.create(4.4, DoubleType)
-    val litDString = Literal.create("d", StringType)
-
     // basic additions per type
-    checkEvaluation(ArrayInsert(a1, litTwoInt, litThreeInt), Seq(1, 2, 3, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(2), Literal(3)), Seq(1, 2, 3, 4))
     checkEvaluation(
-      ArrayInsert(a3, litTwoInt, litBoolTrue),
+      ArrayInsert(a3, Literal.create(2, IntegerType), Literal(true)),
       Seq[Boolean](true, false, true, true)
     )
-    checkEvaluation(ArrayInsert(a4, litTwoInt, litThreeByte), Seq[Byte](1, 2, 5, 3, 2))
-    checkEvaluation(ArrayInsert(a7, litTwoInt, litThreeShort), Seq[Short](1, 2, 3, 3, 2))
     checkEvaluation(
-      ArrayInsert(a11, litThreeInt, litFourFourDouble),
+      ArrayInsert(
+        a4,
+        Literal(2),
+        Literal.create(5.asInstanceOf[Byte], ByteType)),
+      Seq[Byte](1, 2, 5, 3, 2))
+
+    checkEvaluation(
+      ArrayInsert(
+        a7,
+        Literal(2),
+        Literal.create(3.asInstanceOf[Short], ShortType)),
+      Seq[Short](1, 2, 3, 3, 2))
+
+    checkEvaluation(
+      ArrayInsert(a11, Literal(3), Literal(4.4F)),
       Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
     )
+
     checkEvaluation(
-      ArrayInsert(a9, litThreeInt, litFourFourFloat),
+      ArrayInsert(a9, Literal(3), Literal(4.4F)),
       Seq(1.1F, 2.2F, 3.3F, 4.4F, 2.2F)
     )
-    checkEvaluation(ArrayInsert(a13, litTwoInt, litThreeLong), Seq(1L, 2L, 3L, 4L))
-    checkEvaluation(ArrayInsert(a15, litTwoInt, litDString), Seq("b", "a", "d", "c"))
+
+    checkEvaluation(ArrayInsert(a13, Literal(2), Literal(3L)), Seq(1L, 2L, 3L, 4L))
+    checkEvaluation(ArrayInsert(a15, Literal(2), Literal("d")), Seq("b", "a", "d", "c"))
 
     // index edge cases
-    checkEvaluation(ArrayInsert(a1, litOneInt, litThreeInt), Seq(1, 3, 2, 4))
-    checkEvaluation(ArrayInsert(a1, litZeroInt, litThreeInt), Seq(3, 1, 2, 4))
-    checkEvaluation(ArrayInsert(a1, litThreeInt, litThreeInt), Seq(1, 2, 4, 3))
-    checkEvaluation(ArrayInsert(a1, litMinusTwoInt, litThreeInt), Seq(1, 3, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(1), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(0), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(3), Literal(3)), Seq(1, 2, 4, 3))
+    checkEvaluation(ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 3, 2, 4))
     checkEvaluation(
-      ArrayInsert(a1, litTenInt, litThreeInt),
+      ArrayInsert(a1, Literal(10), Literal(3)),
       Seq(1, 2, 4, null, null, null, null, null, null, null, 3)
     )
     checkEvaluation(
-      ArrayInsert(a1, litMinusTenInt, litThreeInt),
+      ArrayInsert(a1, Literal(-10), Literal(3)),
       Seq(3, null, null, null, null, null, null, null, 1, 2, 4)
     )
 
     // null handling
-    checkEvaluation(ArrayInsert(a1, litTwoInt, litNullInt), Seq(1, 2, null, 4))
-    checkEvaluation(ArrayInsert(a2, litTwoInt, litThreeInt), Seq(1, 2, 3, null, 4, 5, null))
-    checkEvaluation(ArrayInsert(a16, litTwoInt, litDString), Seq("b", null, "d", "a", "g", null))
-    checkEvaluation(ArrayInsert(a18, litTwoInt, litDString), null)
-    checkEvaluation(ArrayInsert(a16, litNullInt, litDString), null)
+    checkEvaluation(ArrayInsert(
+      a1, Literal(2), Literal.create(null, IntegerType)), Seq(1, 2, null, 4)
+    )
+    checkEvaluation(ArrayInsert(a2, Literal(2), Literal(3)), Seq(1, 2, 3, null, 4, 5, null))
+    checkEvaluation(ArrayInsert(a16, Literal(2), Literal("d")), Seq("b", null, "d", "a", "g", null))
+    checkEvaluation(ArrayInsert(a18, Literal(2), Literal("d")), null)
+    checkEvaluation(ArrayInsert(a16, Literal.create(null, IntegerType), Literal("d")), null)
   }
 
   test("Array Intersect") {
