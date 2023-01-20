@@ -185,12 +185,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
 
   test("describe a column with a default value") {
     withTable("t") {
-      sql("create table t(a int default 42)")
-      QueryTest.checkAnswer(
-        sql("describe a"),
-        Seq(
-          Row("col_name", "data_type", "comment", "default"),
-          Row("a", "int", "", "42")))
+      sql(s"create table t(a int default 42) $defaultUsing")
       QueryTest.checkAnswer(
         sql("describe table extended t a"),
         Seq(
@@ -233,6 +228,36 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("# Detailed Table Information", "", ""),
           Row("Catalog", SESSION_CATALOG_NAME, ""),
           Row("Database", "ns", ""),
+          Row("Table", "table", ""),
+          Row("Last Access", "UNKNOWN", ""),
+          Row("Type", "EXTERNAL", ""),
+          Row("Provider", getProvider(), ""),
+          Row("Comment", "this is a test table", ""),
+          Row("Table Properties", "[bar=baz]", ""),
+          Row("Location", "file:/tmp/testcat/table_name", ""),
+          Row("Partition Provider", "Catalog", "")))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED of a table with a default column value") {
+    withTable("t") {
+      spark.sql(s"CREATE TABLE t (id bigint default 42) $defaultUsing")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf.filter("!(col_name in ('Created Time', 'Created By'))"),
+        Seq(
+          Row("data", "string", null),
+          Row("id", "bigint", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Catalog", SESSION_CATALOG_NAME, ""),
           Row("Table", "table", ""),
           Row("Last Access", "UNKNOWN", ""),
           Row("Type", "EXTERNAL", ""),
