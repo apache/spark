@@ -683,7 +683,7 @@ class BaseUDFTests(object):
 
     # SPARK-42134
     def test_file_dsv2_with_udf_filter(self):
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import lit
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
