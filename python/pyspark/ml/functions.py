@@ -427,7 +427,9 @@ def predict_batch_udf(
     Examples
     --------
     For a pre-trained TensorFlow MNIST model with two-dimensional input images represented as a
-    flattened tensor value stored in a single Spark DataFrame column of type `array<float>`.::
+    flattened tensor value stored in a single Spark DataFrame column of type `array<float>`.
+
+    .. code-block:: python
 
         from pyspark.ml.functions import predict_batch_udf
 
