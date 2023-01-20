@@ -677,6 +677,10 @@ object CoGroup {
       left: LogicalPlan,
       right: LogicalPlan): LogicalPlan = {
     require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
+
+    // SPARK-42132: The DeduplicateRelations rule would replace duplicate attributes
+    // in leftGroup and leftAttr as well, but not in rightDeserializer
+    // aliasing those attributes here deduplicates them as well
     val duplicateAttributes = right.output.filter(left.output.contains)
       .map(a => a -> Alias(a, a.name)()).toMap
 
@@ -738,36 +742,6 @@ case class CoGroup(
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {
-  def rewriteAttrs2(attrMap: AttributeMap[Attribute]): LogicalPlan = {
-    // attributes rewritten in left / right children must only be rewritten
-    // in respective deserializer, group, attr, not both
-    // note: key deserializer refers to left side
-    val (leftAttrMap, rightAttrMap) = attrMap.partition(map => left.output.contains(map._2))
-    val rewritten = super.rewriteAttrs(attrMap).asInstanceOf[CoGroup]
-    // revert attribute mappings to the wrong side
-    val revertLeftAttrMap = AttributeMap(leftAttrMap.map(m => (m._2, m._1)))
-    val revertRightAttrMap = AttributeMap(rightAttrMap.map(m => (m._2, m._1)))
-
-    def revert(revertAttrMap: AttributeMap[Attribute])(attr: Attribute): Attribute =
-      revertAttrMap.get(attr).getOrElse(attr)
-
-    CoGroup(
-      func,
-      rewritten.keyDeserializer,
-      rewritten.leftDeserializer,
-      rewritten.rightDeserializer,
-      rewritten.leftGroup.map(revert(revertRightAttrMap)),
-      rewritten.rightGroup.map(revert(revertLeftAttrMap)),
-      rewritten.leftAttr.map(revert(revertRightAttrMap)),
-      rewritten.rightAttr.map(revert(revertLeftAttrMap)),
-      rewritten.leftOrder,
-      rewritten.rightOrder,
-      rewritten.outputObjAttr,
-      rewritten.left,
-      rewritten.right
-    )
-  }
-
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }
