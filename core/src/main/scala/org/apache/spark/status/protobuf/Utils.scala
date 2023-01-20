@@ -31,4 +31,10 @@ object Utils {
       f(input)
     }
   }
+
+  def getStringField(condition: Boolean, result: () => String): String = if (condition) {
+    result()
+  } else {
+    null
+  }
 }
