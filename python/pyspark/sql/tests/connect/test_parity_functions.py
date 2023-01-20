@@ -59,16 +59,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_lit_np_scalar(self):
         super().test_lit_np_scalar()
 
-    # TODO(SPARK-41901): Parity in String representation of Column
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_overlay(self):
-        super().test_overlay()
-
-    # TODO(SPARK-41901): Parity in String representation of Column
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_percentile_approx(self):
-        super().test_percentile_approx()
-
     # TODO(SPARK-41897): Parity in Error types between pyspark and connect functions
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_raise_error(self):

@@ -18,6 +18,7 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.ExecutorStageSummaryWrapper
+import org.apache.spark.util.Utils.weakIntern
 
 class ExecutorStageSummaryWrapperSerializer
   extends ProtobufSerDe[ExecutorStageSummaryWrapper] {
@@ -38,7 +39,7 @@ class ExecutorStageSummaryWrapperSerializer
     new ExecutorStageSummaryWrapper(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
-      executorId = binary.getExecutorId,
+      executorId = weakIntern(binary.getExecutorId),
       info = info)
   }
 }

@@ -163,7 +163,7 @@ trait FileScan extends Scan
     }
 
     if (splitFiles.length == 1) {
-      val path = new Path(splitFiles(0).filePath)
+      val path = splitFiles(0).toPath
       if (!isSplitable(path) && splitFiles(0).length >
         sparkSession.sparkContext.getConf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
         logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +

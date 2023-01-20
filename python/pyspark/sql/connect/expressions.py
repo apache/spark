@@ -156,7 +156,7 @@ class ColumnAlias(Expression):
             return exp
 
     def __repr__(self) -> str:
-        return f"Alias({self._parent}, ({','.join(self._alias)}))"
+        return f"{self._parent} AS {','.join(self._alias)}"
 
 
 class LiteralExpression(Expression):
@@ -327,7 +327,7 @@ class LiteralExpression(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"Literal({self._value})"
+        return f"{self._value}"
 
 
 class ColumnReference(Expression):
@@ -352,7 +352,7 @@ class ColumnReference(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"ColumnReference({self._unparsed_identifier})"
+        return f"{self._unparsed_identifier}"
 
 
 class SQLExpression(Expression):
@@ -433,6 +433,7 @@ class UnresolvedFunction(Expression):
         return fun
 
     def __repr__(self) -> str:
+        # Default print handling:
         if self._is_distinct:
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:

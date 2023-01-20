@@ -489,7 +489,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def getBucketSpec: Option[BucketSpec] = {
     if (sortColumnNames.isDefined && numBuckets.isEmpty) {
-      throw QueryCompilationErrors.sortByNotUsedWithBucketByError()
+      throw QueryCompilationErrors.sortByWithoutBucketingError()
     }
 
     numBuckets.map { n =>

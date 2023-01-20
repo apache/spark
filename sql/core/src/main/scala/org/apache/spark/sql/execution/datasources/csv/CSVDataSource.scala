@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.net.URI
 import java.nio.charset.{Charset, StandardCharsets}
 
 import com.univocity.parsers.csv.CsvParser
@@ -179,7 +178,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
     UnivocityParser.parseStream(
-      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
+      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
       parser,
       headerChecker,
       requiredSchema)
