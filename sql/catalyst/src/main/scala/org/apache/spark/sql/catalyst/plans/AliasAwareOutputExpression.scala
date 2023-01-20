@@ -71,7 +71,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
     expr.multiTransformDown {
       // Mapping with aliases
       case e: Expression if aliasMap.contains(e.canonicalized) =>
-        aliasMap(e.canonicalized) ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
+        aliasMap(e.canonicalized).toSeq ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
 
       // Prune if we encounter an attribute that we can't map and it is not in output set.
       // This prune will go up to the closest `multiTransformDown()` call and returns `Stream.empty`
@@ -97,12 +97,14 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
   override final def outputOrdering: Seq[SortOrder] = {
     if (hasAlias) {
       orderingExpressions.flatMap { sortOrder =>
-        val equalOrderings = sortOrder.children.toStream
+        val orderingSet = mutable.Set.empty[Expression]
+        val sameOrderings = sortOrder.children.toStream
           .flatMap(projectExpression)
+          .filter(e => orderingSet.add(e.canonicalized))
           .take(aliasCandidateLimit)
-        if (equalOrderings.nonEmpty) {
-          Some(sortOrder.copy(child = equalOrderings.head,
-            sameOrderExpressions = equalOrderings.tail))
+        if (sameOrderings.nonEmpty) {
+          Some(sortOrder.copy(child = sameOrderings.head,
+            sameOrderExpressions = sameOrderings.tail))
         } else {
           None
         }

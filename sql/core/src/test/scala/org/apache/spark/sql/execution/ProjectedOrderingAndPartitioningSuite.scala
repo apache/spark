@@ -97,4 +97,18 @@ class ProjectedOrderingAndPartitioningSuite
       case _ => fail(s"Unexpected $outputPartitioning")
     }
   }
+
+  test("SPARK-42049: Improve AliasAwareOutputExpression - multi-references to same") {
+    val df2 = spark.range(2).repartition($"id" + $"id").selectExpr("id as a", "id as b")
+    val outputPartitioning = stripAQEPlan(df2.queryExecution.executedPlan).outputPartitioning
+    val partitionings = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    // (a + b) is the very same as (b + a) so keep only one
+    assert(partitionings.size == 3)
+
+    val df = spark.range(2).orderBy($"id" + $"id").selectExpr("id as a", "id as b")
+    val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
+    assert(outputOrdering.size == 1)
+    // (a + b) is the very same as (b + a) so keep only one
+    assert(outputOrdering.head.children.size == 3)
+  }
 }
