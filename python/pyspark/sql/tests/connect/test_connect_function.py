@@ -17,6 +17,7 @@
 import unittest
 import tempfile
 
+from pyspark.errors import PySparkException
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -305,11 +306,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         ):
             CF.when(cdf.a == 0, 1.0).otherwise(1.0).otherwise(1.0)
 
-        with self.assertRaisesRegex(
-            TypeError,
-            """condition should be a Column""",
-        ):
+        with self.assertRaises(PySparkException) as pe:
             CF.when(True, 1.0).otherwise(1.0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_COLUMN",
+            message_parameters={"arg_name": "condition", "arg_type": "bool"},
+        )
 
     def test_sorting_functions_with_column(self):
         from pyspark.sql.connect import functions as CF
