@@ -86,7 +86,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   test("Task Data") {
     val accumulatorUpdates = Seq(
       new AccumulableInfo(1L, "duration", Some("update"), "value1"),
-      new AccumulableInfo(2L, "duration2", None, "value2")
+      new AccumulableInfo(2L, "duration2", None, "value2"),
+      new AccumulableInfo(-1L, null, None, null)
     )
     val input = new TaskDataWrapper(
       taskId = 1,
@@ -1357,14 +1358,23 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.recordsWritten == expected.recordsWritten)
   }
 
+  private def emptyStringForNull(s: String) = {
+    if (s == null) {
+      ""
+    } else {
+      s
+    }
+  }
+
   private def checkAnswer(result: collection.Seq[AccumulableInfo],
       expected: collection.Seq[AccumulableInfo]): Unit = {
     assert(result.length == expected.length)
     result.zip(expected).foreach { case (a1, a2) =>
       assert(a1.id == a2.id)
-      assert(a1.name == a2.name)
+      assert(a1.name == emptyStringForNull(a2.name))
       assert(a1.update.getOrElse("") == a2.update.getOrElse(""))
       assert(a1.update == a2.update)
+      assert(a1.value == emptyStringForNull(a2.value))
     }
   }
 
