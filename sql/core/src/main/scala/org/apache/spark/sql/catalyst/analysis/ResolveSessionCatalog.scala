@@ -142,8 +142,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case d @ DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
-      DescribeTableCommand(ident, partitionSpec, isExtended, d.output)
+    case DescribeRelation(
+         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+      DescribeTableCommand(ident, partitionSpec, isExtended, output)
 
     case DescribeColumn(
          ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
