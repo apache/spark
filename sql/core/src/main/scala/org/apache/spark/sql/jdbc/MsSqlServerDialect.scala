@@ -167,8 +167,13 @@ private object MsSqlServerDialect extends JdbcDialect {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
 
+  // SQL Server does not support, it uses `getTopExpression` instead.
   override def getLimitClause(limit: Integer): String = {
     ""
+  }
+
+  override def getTopExpression(limit: Integer): String = {
+    if (limit > 0) s"TOP ($limit)" else ""
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {

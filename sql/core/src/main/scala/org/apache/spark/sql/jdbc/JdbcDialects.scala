@@ -545,6 +545,14 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * MS SQL Server version of `getLimitClause`.
+   * This is only supported by SQL Server as it uses TOP (N) instead.
+   */
+  def getTopExpression(limit: Integer): String = {
+    ""
+  }
+
+  /**
    * returns the OFFSET clause for the SELECT statement
    */
   def getOffsetClause(offset: Integer): String = {

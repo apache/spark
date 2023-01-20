@@ -1001,6 +1001,35 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Dialect Limit and Top implementation") {
+    // Dialects that support LIMIT N.
+    val limitDialects = Seq(
+      JdbcDialects.get("jdbc:mysql"),
+      JdbcDialects.get("jdbc:postgresql"),
+      JdbcDialects.get("jdbc:db2"),
+      JdbcDialects.get("jdbc:h2")
+    )
+
+    for (dialect <- limitDialects) {
+      assert(dialect.getLimitClause(0) == "")
+      assert(dialect.getTopExpression(0) == "")
+      assert(dialect.getLimitClause(100) == "LIMIT 100")
+      assert(dialect.getTopExpression(100) == "")
+    }
+
+    // Dialects that support TOP (N)
+    val topDialects = Seq(
+      JdbcDialects.get("jdbc:sqlserver")
+    )
+
+    for (dialect <- topDialects) {
+      assert(dialect.getLimitClause(0) == "")
+      assert(dialect.getTopExpression(0) == "")
+      assert(dialect.getLimitClause(100) == "")
+      assert(dialect.getTopExpression(100) == "TOP (100)")
+    }
+  }
+
   test("table exists query by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
