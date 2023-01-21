@@ -814,8 +814,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             }
           } catch (IOException ioe) {
             logger.warn("{} attempt {} shuffle {} shuffleMerge {}: exception while " +
-                "finalizing shuffle partition {}", msg.appId, msg.appAttemptId, msg.shuffleId,
-                msg.shuffleMergeId, partition.reduceId);
+                "finalizing shuffle partition {}. Exception message: {}", msg.appId,
+                msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId, partition.reduceId,
+                ioe.getMessage());
           } finally {
             partition.closeAllFilesAndDeleteIfNeeded(false);
           }
