@@ -179,7 +179,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
         s"CREATE TABLE $fullName (",
         "a BIGINT,",
         "b BIGINT DEFAULT 42,",
-        "c STRING DEFAULT \\'abc\\' COMMENT 'comment')",
+        "c STRING DEFAULT 'abc' COMMENT 'comment')",
         "USING parquet",
         "COMMENT 'This is a comment'"
       ))

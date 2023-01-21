@@ -142,7 +142,6 @@ case class StructField(
   }
 
   private def getDDLDefault = getCurrentDefaultValue()
-    .map(escapeSingleQuotedString)
     .map(" DEFAULT " + _)
     .getOrElse("")
 

@@ -197,7 +197,7 @@ struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE default.tbl (
   a INT,
-  b STRING DEFAULT \'abc\',
+  b STRING DEFAULT 'abc',
   c INT DEFAULT 42)
 USING parquet
 COMMENT 'This is a comment'
