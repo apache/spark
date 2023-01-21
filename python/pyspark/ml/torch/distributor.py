@@ -592,8 +592,8 @@ class TorchDistributor(Distributor):
             training_command, log_streaming_client=log_streaming_client
         )
 
-    @contextmanager
     @staticmethod
+    @contextmanager
     def _setup_files(train_fn: Callable, *args: Any) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
         pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args)
