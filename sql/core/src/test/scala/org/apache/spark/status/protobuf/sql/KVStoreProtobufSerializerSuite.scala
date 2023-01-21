@@ -224,9 +224,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
   test("StreamingQueryProgressWrapper") {
     Seq(
-      ("sink-0", "name-1", "2023-01-03T09:14:04.175Z"),
-      (null, null, null)
-    ).foreach { case (sinkDescription, processName, timestamp) =>
+      ("sink-0", UUID.randomUUID(), UUID.randomUUID(), "name-1", "2023-01-03T09:14:04.175Z"),
+      (null, null, null, null, null)
+    ).foreach { case (sinkDescription, pId, pRunId, pName, pTimestamp) =>
       // Generate input data
       val stateOperatorProgress0 = new StateOperatorProgress(
         operatorName = "op-0",
@@ -310,10 +310,10 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       ).asJava
 
       val progress = new StreamingQueryProgress(
-        id = UUID.randomUUID(),
-        runId = UUID.randomUUID(),
-        name = processName,
-        timestamp = timestamp,
+        id = pId,
+        runId = pRunId,
+        name = pName,
+        timestamp = pTimestamp,
         batchId = 1L,
         batchDuration = 2L,
         durationMs = Map(

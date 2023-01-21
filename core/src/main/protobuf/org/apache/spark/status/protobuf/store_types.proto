@@ -799,9 +799,8 @@ message SinkProgress {
 }
 
 message StreamingQueryProgress {
-  // id and run_id convert from uuid, should not be null
-  string id = 1;
-  string run_id = 2;
+  optional string id = 1;
+  optional string run_id = 2;
   optional string name = 3;
   optional string timestamp = 4;
   int64 batch_id = 5;

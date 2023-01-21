@@ -36,8 +36,12 @@ private[protobuf] object StreamingQueryProgressSerializer {
 
   def serialize(process: StreamingQueryProgress): StoreTypes.StreamingQueryProgress = {
     val builder = StoreTypes.StreamingQueryProgress.newBuilder()
-    builder.setId(process.id.toString)
-    builder.setRunId(process.runId.toString)
+    if (process.id != null) {
+      builder.setId(process.id.toString)
+    }
+    if (process.runId != null) {
+      builder.setRunId(process.runId.toString)
+    }
     setStringField(process.name, builder.setName)
     setStringField(process.timestamp, builder.setTimestamp)
     builder.setBatchId(process.batchId)
@@ -61,9 +65,15 @@ private[protobuf] object StreamingQueryProgressSerializer {
   }
 
   def deserialize(process: StoreTypes.StreamingQueryProgress): StreamingQueryProgress = {
+    val id = if (process.hasId) {
+      UUID.fromString(process.getId)
+    } else null
+    val runId = if (process.hasId) {
+      UUID.fromString(process.getRunId)
+    } else null
     new StreamingQueryProgress(
-      id = UUID.fromString(process.getId),
-      runId = UUID.fromString(process.getRunId),
+      id = id,
+      runId = runId,
       name = getStringField(process.hasName, () => process.getName),
       timestamp = getStringField(process.hasTimestamp, () => process.getTimestamp),
       batchId = process.getBatchId,
