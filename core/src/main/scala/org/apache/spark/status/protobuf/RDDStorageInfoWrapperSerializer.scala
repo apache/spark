@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.status.RDDStorageInfoWrapper
 import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo, RDDStorageInfo}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 
 class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrapper] {
 
@@ -41,7 +41,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
   private def serializeRDDStorageInfo(info: RDDStorageInfo): StoreTypes.RDDStorageInfo = {
     val builder = StoreTypes.RDDStorageInfo.newBuilder()
     builder.setId(info.id)
-    builder.setName(info.name)
+    setStringField(info.name, builder.setName)
     builder.setNumPartitions(info.numPartitions)
     builder.setNumCachedPartitions(info.numCachedPartitions)
     builder.setStorageLevel(info.storageLevel)
@@ -81,7 +81,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
   private def deserializeRDDStorageInfo(info: StoreTypes.RDDStorageInfo): RDDStorageInfo = {
     new RDDStorageInfo(
       id = info.getId,
-      name = info.getName,
+      name = getStringField(info.hasName, info.getName),
       numPartitions = info.getNumPartitions,
       numCachedPartitions = info.getNumCachedPartitions,
       storageLevel = info.getStorageLevel,

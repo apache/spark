@@ -261,7 +261,7 @@ message RDDPartitionInfo {
 
 message RDDStorageInfo {
   int32 id = 1;
-  string name = 2;
+  optional string name = 2;
   int32 num_partitions = 3;
   int32 num_cached_partitions = 4;
   string storage_level = 5;

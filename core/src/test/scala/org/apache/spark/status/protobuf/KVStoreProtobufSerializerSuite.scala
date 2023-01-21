@@ -422,6 +422,19 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           dataDistribution = None,
           partitions = Some(Seq.empty)
         )
+      ),
+      new RDDStorageInfoWrapper(
+        info = new RDDStorageInfo(
+          id = 3,
+          name = null,
+          numPartitions = 8,
+          numCachedPartitions = 5,
+          storageLevel = "IN_MEMORY",
+          memoryUsed = 100,
+          diskUsed = 2560,
+          dataDistribution = None,
+          partitions = Some(Seq.empty)
+        )
       )
     )
     inputs.foreach { input =>
