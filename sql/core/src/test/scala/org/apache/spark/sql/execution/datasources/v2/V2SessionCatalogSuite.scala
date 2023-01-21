@@ -24,9 +24,10 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -35,7 +36,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeAndAfter {
+abstract class V2SessionCatalogBaseSuite extends SparkFunSuite{
+
+  protected def spark: SparkSession
 
   val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
   val schema: StructType = new StructType()
@@ -55,7 +58,8 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   }
 }
 
-class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
+abstract class V2SessionCatalogTableBaseSuite extends V2SessionCatalogBaseSuite
+    with BeforeAndAfterAll with BeforeAndAfter {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -815,7 +819,11 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   }
 }
 
-class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
+class V2SessionCatalogTableSuite extends V2SessionCatalogTableBaseSuite with SharedSparkSession {
+}
+
+class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite
+  with SharedSparkSession {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -895,7 +903,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
   test("createNamespace: basic behavior") {
     val catalog = newCatalog()
 
-    val sessionCatalog = sqlContext.sessionState.catalog
+    val sessionCatalog = spark.sqlContext.sessionState.catalog
     val expectedPath =
       new Path(spark.sessionState.conf.warehousePath,
         sessionCatalog.getDefaultDBPath(testNs(0)).toString).toString

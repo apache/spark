@@ -20,30 +20,27 @@ package org.apache.spark.sql.hive
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.datasources.v2.{V2SessionCatalog, V2SessionCatalogNamespaceSuite, V2SessionCatalogTableSuite}
+import org.apache.spark.sql.execution.datasources.v2.{V2SessionCatalog, V2SessionCatalogTableBaseSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class HiveExternalV2SessionCatalogInitialization extends TestHiveSingleton {
-  val sparkSession = spark
 
-  def newCatalog(): V2SessionCatalog = {
+  class HiveExternalV2SessionCatalogTableSuite extends V2SessionCatalogTableBaseSuite
+    with TestHiveSingleton {
+
+  override def newCatalog(): V2SessionCatalog = {
     val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
-}
-
-class HiveExternalV2SessionCatalogTableSuite extends V2SessionCatalogTableSuite {
-
-  val init = new HiveExternalV2SessionCatalogInitialization
-
-  override protected val spark: SparkSession = init.sparkSession
-
-  override def newCatalog(): V2SessionCatalog = init.newCatalog()
 
   def excluded: Seq[String] = Seq(
+    // Not supported in Hive catalog
+    "alterTable: add nested column",
+    "createTable: location",
+    "alterTable: location",
+
+    // Not supported in V2SessionCatalog
     "alterTable: rename top-level column",
     "alterTable: rename nested column",
     "alterTable: rename struct column",
@@ -58,13 +55,3 @@ class HiveExternalV2SessionCatalogTableSuite extends V2SessionCatalogTableSuite 
     else super.test(testName, testTags: _*)(testFun)
   }
 }
-
-class HiveExternalV2SessionCatalogNamespaceSuite extends V2SessionCatalogNamespaceSuite {
-
-  val init = new HiveExternalV2SessionCatalogInitialization
-
-  override protected val spark: SparkSession = init.sparkSession
-
-  override def newCatalog(): V2SessionCatalog = init.newCatalog()
-}
-
