@@ -228,7 +228,7 @@ message ApplicationInfoWrapper {
   ApplicationInfo info = 1;
 }
 
-  message StreamBlockData {
+message StreamBlockData {
   optional string name = 1;
   optional string executor_id = 2;
   optional string host_port = 3;
