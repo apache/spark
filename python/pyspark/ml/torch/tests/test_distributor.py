@@ -248,9 +248,10 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 
         for num_processes in fails:
             with self.subTest():
-                with self.assertWarns(RuntimeWarning):
+                with self.assertLogs("TorchDistributor", level="WARNING") as log:
                     distributor = TorchDistributor(num_processes, True, True)
-                    distributor.num_processes = 3
+                    self.assertEqual(len(log.records), 1)
+                    self.assertEqual(distributor.num_processes, 3)
 
     def test_get_gpus_owned_local(self) -> None:
         addresses = ["0", "1", "2"]
