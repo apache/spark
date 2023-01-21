@@ -21,16 +21,16 @@ import java.util.UUID
 
 import org.apache.spark.sql.streaming.ui.StreamingQueryData
 import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils._
 
 class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
 
   override def serialize(data: StreamingQueryData): Array[Byte] = {
     val builder = StoreTypes.StreamingQueryData.newBuilder()
-      .setId(data.id.toString)
-      .setRunId(data.runId)
-      .setIsActive(data.isActive)
-    Option(data.name).foreach(builder.setName)
+    setStringField(data.name, builder.setName)
+    builder.setId(data.id.toString)
+    setStringField(data.runId, builder.setRunId)
+    builder.setIsActive(data.isActive)
     data.exception.foreach(builder.setException)
     builder.setStartTimestamp(data.startTimestamp)
     data.endTimestamp.foreach(builder.setEndTimestamp)
@@ -44,9 +44,9 @@ class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
     val endTimestamp =
       getOptional(data.hasEndTimestamp, () => data.getEndTimestamp)
     new StreamingQueryData(
-      name = data.getName,
+      name = getStringField(data.hasName, () => data.getName),
       id = UUID.fromString(data.getId),
-      runId = data.getRunId,
+      runId = getStringField(data.hasRunId, () => data.getRunId),
       isActive = data.getIsActive,
       exception = exception,
       startTimestamp = data.getStartTimestamp,

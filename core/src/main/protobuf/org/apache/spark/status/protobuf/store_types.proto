@@ -495,9 +495,10 @@ message RDDOperationGraphWrapper {
 }
 
 message StreamingQueryData {
-  string name = 1;
+  optional string name = 1;
+  // convert from uuid, id should not be null
   string id = 2;
-  string run_id = 3;
+  optional string run_id = 3;
   bool is_active = 4;
   optional string exception = 5;
   int64 start_timestamp = 6;
