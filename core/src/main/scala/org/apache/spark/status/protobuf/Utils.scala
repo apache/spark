@@ -25,8 +25,8 @@ object Utils {
   }
 
 
-  // TODO(SPARK-42147): Revert SPARK-42146 to make maven build pass
-  //  when other module use `Utils#setStringField`
+  // TODO(SPARK-42147): Restore the signature of f to `String => MessageOrBuilder`
+  //  when `setStringField` used by other modules not cause maven build failure
   def setStringField(input: String, f: String => Any): Unit = {
     if (input != null) {
       f(input)
