@@ -1744,6 +1744,23 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           resolveExpressionByPlanChildren(resolvedWithAgg, u, allowOuter = true)
         }
 
+      case u @ UnresolvedQualify(cond, child) if !u.resolved && child.resolved =>
+        if (!u.containsPattern(WINDOW_EXPRESSION)) {
+          throw QueryCompilationErrors.expressionWithoutWindowExpressionError(cond)
+        } else {
+          if (u.missingInput.nonEmpty) {
+            val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
+            val qualifyCondition = newCond.head
+            if (child.output == newChild.output) {
+              u.copy(qualifyCondition = qualifyCondition)
+            } else {
+              Project(child.output, UnresolvedQualify(qualifyCondition, newChild))
+            }
+          } else {
+            u
+          }
+        }
+
       // RepartitionByExpression can host missing attributes that are from a descendant node.
       // For example, `spark.table("t").select($"a").repartition($"b")`. We can resolve `b` with
       // table `t` even if there is a Project node between the table scan node and Sort node.
@@ -3122,6 +3139,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
         Project(finalProjectList, withWindow)
+
+      // Filter corresponding to qualify clause may has window expressions
+      case UnresolvedQualify(condition, child) if condition.resolved && child.resolved =>
+        if (hasWindowFunction(condition)) {
+          val namedWindowExpr = condition.collect {
+            case e: WindowExpression => e
+          }.map(we => Alias(we, we.toString)())
+
+          val newPredicate = condition.transformUp {
+            case e: WindowExpression =>
+              namedWindowExpr.find(_.child.semanticEquals(e))
+                .map(a => UnresolvedAttribute.quoted(a.name)).getOrElse(e)
+          }
+
+          val (windowExprs, _) = extract(namedWindowExpr)
+          Project(child.output, Filter(newPredicate, addWindow(windowExprs, child)))
+        } else {
+          Filter(condition, child)
+        }
 
       case p: LogicalPlan if !p.childrenResolved => p
 

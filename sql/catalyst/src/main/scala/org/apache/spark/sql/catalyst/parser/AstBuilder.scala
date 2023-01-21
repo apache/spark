@@ -158,6 +158,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
+        ctx.qualifyClause,
         plan
       )
     } else {
@@ -169,6 +170,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
+        ctx.qualifyClause,
         plan
       )
     }
@@ -648,6 +650,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
+      ctx.qualifyClause,
       from
     )
   }
@@ -665,6 +668,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
+      ctx.qualifyClause,
       from
     )
   }
@@ -714,6 +718,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifierClause: QualifyClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     if (transformClause.setQuantifier != null) {
       throw QueryParsingErrors.transformNotSupportQuantifierError(transformClause.setQuantifier)
@@ -741,6 +746,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       aggregationClause,
       havingClause,
       windowClause,
+      qualifierClause,
       isDistinct = false)
 
     ScriptTransformation(
@@ -773,6 +779,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifierClause: QualifyClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val isDistinct = selectClause.setQuantifier() != null &&
       selectClause.setQuantifier().DISTINCT() != null
@@ -785,6 +792,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       aggregationClause,
       havingClause,
       windowClause,
+      qualifierClause,
       isDistinct)
 
     // Hint
@@ -799,6 +807,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifierClause: QualifyClauseContext,
       isDistinct: Boolean): LogicalPlan = {
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
@@ -848,7 +857,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Window
     val withWindow = withDistinct.optionalMap(windowClause)(withWindowClause)
 
-    withWindow
+    // Qualify
+    val withQualify = withWindow.optionalMap(qualifierClause)(withQualifyClause)
+
+    withQualify
   }
 
   // Script Transform's input/output format.
@@ -1033,6 +1045,19 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
     WithWindowDefinition(windowMapView.map(identity).toMap, query)
+  }
+
+  /**
+   * Add a [[Filter]] operator for qualify clause to a logical plan.
+   */
+  private def withQualifyClause(
+      ctx: QualifyClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val predicate = expression(ctx.booleanExpression) match {
+      case p: Predicate => p
+      case e => Cast(e, BooleanType)
+    }
+    UnresolvedQualify(predicate, query)
   }
 
   /**

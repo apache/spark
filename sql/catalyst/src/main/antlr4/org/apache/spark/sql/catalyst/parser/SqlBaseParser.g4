@@ -495,6 +495,7 @@ fromStatementBody
       aggregationClause?
       havingClause?
       windowClause?
+      qualifyClause?
       queryOrganization
     ;
 
@@ -505,14 +506,16 @@ querySpecification
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #transformQuerySpecification
+      windowClause?
+      qualifyClause?                                                       #transformQuerySpecification
     | selectClause
       fromClause?
       lateralView*
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #regularQuerySpecification
+      windowClause?
+      qualifyClause?                                                        #regularQuerySpecification
     ;
 
 transformClause
@@ -1059,6 +1062,10 @@ windowClause
     : WINDOW namedWindow (COMMA namedWindow)*
     ;
 
+qualifyClause
+    : QUALIFY booleanExpression
+    ;
+
 namedWindow
     : name=errorCapturingIdentifier AS windowSpec
     ;
@@ -1326,6 +1333,7 @@ ansiNonReserved
     | PRINCIPALS
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -1629,6 +1637,7 @@ nonReserved
     | PRINCIPALS
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
