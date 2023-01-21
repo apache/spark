@@ -343,3 +343,15 @@ class SparkConnectTempTableAlreadyExistsException(SparkConnectAnalysisException)
     """
     Failed to create temp view since it is already exists.
     """
+
+
+class PySparkValueError(PySparkException, ValueError):
+    """
+    Wrapper class for ValueError to support error classes.
+    """
+
+
+class PySparkTypeError(PySparkException, TypeError):
+    """
+    Wrapper class for TypeError to support error classes.
+    """
