@@ -22,15 +22,16 @@ import java.util.{List => JList}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.status.api.v1.AccumulableInfo
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
 private[protobuf] object AccumulableInfoSerializer {
 
   def serialize(input: AccumulableInfo): StoreTypes.AccumulableInfo = {
     val builder = StoreTypes.AccumulableInfo.newBuilder()
       .setId(input.id)
-      .setName(input.name)
-      .setValue(input.value)
+    setStringField(input.name, builder.setName)
+    setStringField(input.value, builder.setValue)
     input.update.foreach(builder.setUpdate)
     builder.build()
   }
@@ -40,9 +41,9 @@ private[protobuf] object AccumulableInfoSerializer {
     updates.forEach { update =>
       accumulatorUpdates.append(new AccumulableInfo(
         id = update.getId,
-        name = update.getName,
+        name = getStringField(update.hasName, () => weakIntern(update.getName)),
         update = getOptional(update.hasUpdate, update.getUpdate),
-        value = update.getValue))
+        value = getStringField(update.hasValue, update.getValue)))
     }
     accumulatorUpdates
   }

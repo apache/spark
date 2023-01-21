@@ -47,6 +47,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd MM yyyy EEEEEE'"

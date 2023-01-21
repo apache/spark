@@ -74,7 +74,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "0",
     "size" : "2"
@@ -97,7 +97,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "2"
@@ -120,7 +120,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "3",
     "size" : "2"

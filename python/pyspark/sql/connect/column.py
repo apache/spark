@@ -439,9 +439,6 @@ def _test() -> None:
             .getOrCreate()
         )
 
-        # Spark Connect has a different string representation for Column.
-        del pyspark.sql.connect.column.Column.getItem.__doc__
-
         # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
         del pyspark.sql.connect.column.Column.withField.__doc__
 

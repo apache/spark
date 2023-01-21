@@ -305,10 +305,15 @@ public class YarnShuffleService extends AuxiliaryService {
           DEFAULT_SPARK_SHUFFLE_SERVICE_METRICS_NAME);
       YarnShuffleServiceMetrics serviceMetrics =
           new YarnShuffleServiceMetrics(metricsNamespace, blockHandler.getAllMetrics());
+      YarnShuffleServiceMetrics mergeManagerMetrics =
+          new YarnShuffleServiceMetrics("mergeManagerMetrics", shuffleMergeManager.getMetrics());
 
       MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
       metricsSystem.register(
           metricsNamespace, "Metrics on the Spark Shuffle Service", serviceMetrics);
+      metricsSystem.register(
+          "PushBasedShuffleMergeManager", "Metrics on the push-based shuffle merge manager",
+          mergeManagerMetrics);
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
           metricsNamespace);
 

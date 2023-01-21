@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CreateStruct, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
@@ -145,6 +145,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         f,
         groupingAttributes,
         dataAttributes,
+        Seq.empty,
         logicalPlan))
   }
 
@@ -169,6 +170,83 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def flatMapGroups[U](f: FlatMapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
     flatMapGroups((key, data) => f.call(key, data.asJava).asScala)(encoder)
+  }
+
+  /**
+   * (Scala-specific)
+   * Applies the given function to each group of data.  For each unique group, the function will
+   * be passed the group key and a sorted iterator that contains all of the elements in the group.
+   * The function can return an iterator containing elements of an arbitrary type which will be
+   * returned as a new [[Dataset]].
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * `org.apache.spark.sql.expressions#Aggregator`.
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory.  However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
+   * constraints of their cluster.
+   *
+   * This is equivalent to [[KeyValueGroupedDataset#flatMapGroups]], except for the iterator
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
+   * @since 3.4.0
+   */
+  def flatMapSortedGroups[U : Encoder](
+      sortExprs: Column*)(
+      f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
+      col.expr match {
+        case expr: SortOrder => expr
+        case expr: Expression => SortOrder(expr, Ascending)
+      }
+    }
+
+    Dataset[U](
+      sparkSession,
+      MapGroups(
+        f,
+        groupingAttributes,
+        dataAttributes,
+        sortOrder,
+        logicalPlan
+      )
+    )
+  }
+
+  /**
+   * (Java-specific)
+   * Applies the given function to each group of data.  For each unique group, the function will
+   * be passed the group key and a sorted iterator that contains all of the elements in the group.
+   * The function can return an iterator containing elements of an arbitrary type which will be
+   * returned as a new [[Dataset]].
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * `org.apache.spark.sql.expressions#Aggregator`.
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory.  However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
+   * constraints of their cluster.
+   *
+   * This is equivalent to [[KeyValueGroupedDataset#flatMapGroups]], except for the iterator
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
+   * @since 3.4.0
+   */
+  def flatMapSortedGroups[U](
+      SortExprs: Array[Column],
+      f: FlatMapGroupsFunction[K, V, U],
+      encoder: Encoder[U]): Dataset[U] = {
+    flatMapSortedGroups(SortExprs: _*)((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
   /**
@@ -753,6 +831,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
         other.groupingAttributes,
         this.dataAttributes,
         other.dataAttributes,
+        Seq.empty,
+        Seq.empty,
         this.logicalPlan,
         other.logicalPlan))
   }
@@ -771,6 +851,72 @@ class KeyValueGroupedDataset[K, V] private[sql](
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
+  }
+
+  /**
+   * (Scala-specific)
+   * Applies the given function to each sorted cogrouped data.  For each unique group, the function
+   * will be passed the grouping key and 2 sorted iterators containing all elements in the group
+   * from [[Dataset]] `this` and `other`.  The function can return an iterator containing elements
+   * of an arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * This is equivalent to [[KeyValueGroupedDataset#cogroup]], except for the iterators
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
+   * @since 3.4.0
+   */
+  def cogroupSorted[U, R : Encoder](
+      other: KeyValueGroupedDataset[K, U])(
+      thisSortExprs: Column*)(
+      otherSortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    def toSortOrder(col: Column): SortOrder = col.expr match {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    }
+
+    val thisSortOrder: Seq[SortOrder] = thisSortExprs.map(toSortOrder)
+    val otherSortOrder: Seq[SortOrder] = otherSortExprs.map(toSortOrder)
+
+    implicit val uEncoder = other.vExprEnc
+    Dataset[R](
+      sparkSession,
+      CoGroup(
+        f,
+        this.groupingAttributes,
+        other.groupingAttributes,
+        this.dataAttributes,
+        other.dataAttributes,
+        thisSortOrder,
+        otherSortOrder,
+        this.logicalPlan,
+        other.logicalPlan))
+  }
+
+  /**
+   * (Java-specific)
+   * Applies the given function to each sorted cogrouped data.  For each unique group, the function
+   * will be passed the grouping key and 2 sorted iterators containing all elements in the group
+   * from [[Dataset]] `this` and `other`.  The function can return an iterator containing elements
+   * of an arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * This is equivalent to [[KeyValueGroupedDataset#cogroup]], except for the iterators
+   * to be sorted according to the given sort expressions. That sorting does not add
+   * computational complexity.
+   *
+   * @see [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
+   * @since 3.4.0
+   */
+  def cogroupSorted[U, R](
+      other: KeyValueGroupedDataset[K, U],
+      thisSortExprs: Array[Column],
+      otherSortExprs: Array[Column],
+      f: CoGroupFunction[K, V, U, R],
+      encoder: Encoder[R]): Dataset[R] = {
+    cogroupSorted(other)(thisSortExprs: _*)(otherSortExprs: _*)(
+      (key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 
   override def toString: String = {

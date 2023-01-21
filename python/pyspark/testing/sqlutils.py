@@ -24,7 +24,7 @@ from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
-from pyspark.testing.utils import ReusedPySparkTestCase
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
 
 
 pandas_requirement_message = None
@@ -254,7 +254,7 @@ class SQLTestUtils:
         return sum(diff) == len(a)
 
 
-class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
+class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
     @classmethod
     def setUpClass(cls):
         super(ReusedSQLTestCase, cls).setUpClass()

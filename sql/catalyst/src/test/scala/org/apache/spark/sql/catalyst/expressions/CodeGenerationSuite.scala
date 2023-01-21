@@ -332,7 +332,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"),
         IntegerType,
-        lenient = false) :: Nil)
+        IntegerType) :: Nil)
   }
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {

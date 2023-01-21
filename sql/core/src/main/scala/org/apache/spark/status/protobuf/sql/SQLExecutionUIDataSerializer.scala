@@ -25,19 +25,19 @@ import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.status.protobuf.{JobExecutionStatusSerializer, ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class SQLExecutionUIDataSerializer extends ProtobufSerDe {
+class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
 
-  override val supportClass: Class[_] = classOf[SQLExecutionUIData]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val ui = input.asInstanceOf[SQLExecutionUIData]
+  override def serialize(ui: SQLExecutionUIData): Array[Byte] = {
     val builder = StoreTypes.SQLExecutionUIData.newBuilder()
     builder.setExecutionId(ui.executionId)
-    builder.setDescription(ui.description)
-    builder.setDetails(ui.details)
-    builder.setPhysicalPlanDescription(ui.physicalPlanDescription)
-    ui.modifiedConfigs.foreach {
-      case (k, v) => builder.putModifiedConfigs(k, v)
+    builder.setRootExecutionId(ui.rootExecutionId)
+    Option(ui.description).foreach(builder.setDescription)
+    Option(ui.details).foreach(builder.setDetails)
+    Option(ui.physicalPlanDescription).foreach(builder.setPhysicalPlanDescription)
+    if (ui.modifiedConfigs != null) {
+      ui.modifiedConfigs.foreach {
+        case (k, v) => builder.putModifiedConfigs(k, v)
+      }
     }
     ui.metrics.foreach(m => builder.addMetrics(SQLPlanMetricSerializer.serialize(m)))
     builder.setSubmissionTime(ui.submissionTime)

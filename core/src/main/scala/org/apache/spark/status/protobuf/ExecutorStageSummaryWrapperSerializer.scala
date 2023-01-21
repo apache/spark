@@ -18,21 +18,19 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.ExecutorStageSummaryWrapper
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
-class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
+class ExecutorStageSummaryWrapperSerializer
+  extends ProtobufSerDe[ExecutorStageSummaryWrapper] {
 
-  override val supportClass: Class[_] = classOf[ExecutorStageSummaryWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[ExecutorStageSummaryWrapper])
-
-  private def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {
+  override def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {
     val info = ExecutorStageSummarySerializer.serialize(input.info)
     val builder = StoreTypes.ExecutorStageSummaryWrapper.newBuilder()
       .setStageId(input.stageId.toLong)
       .setStageAttemptId(input.stageAttemptId)
-      .setExecutorId(input.executorId)
       .setInfo(info)
+    setStringField(input.executorId, builder.setExecutorId)
     builder.build().toByteArray
   }
 
@@ -42,7 +40,7 @@ class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
     new ExecutorStageSummaryWrapper(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
-      executorId = binary.getExecutorId,
+      executorId = getStringField(binary.hasExecutorId, () => weakIntern(binary.getExecutorId)),
       info = info)
   }
 }

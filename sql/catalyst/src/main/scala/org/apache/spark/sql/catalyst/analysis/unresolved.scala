@@ -425,6 +425,12 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
 
     // If there is a table specified, use hidden input attributes as well
     val hiddenOutput = input.metadataOutput.filter(_.qualifiedAccessOnly)
+      // Remove the qualified-access-only restriction immediately. The expanded attributes will be
+      // put in a logical plan node and becomes normal attributes. They can still keep the special
+      // attribute metadata to indicate that they are from metadata columns, but they should not
+      // keep any restrictions that may break column resolution for normal attributes.
+      // See SPARK-42084 for more details.
+      .map(_.markAsAllowAnyAccess())
     val expandedAttributes = (hiddenOutput ++ input.output).filter(
       matchedQualifier(_, target.get, resolver))
 

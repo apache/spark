@@ -25,16 +25,11 @@ import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.ExecutorSummaryWrapper
 import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
 import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.util.Utils.weakIntern
 
-class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
+class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrapper] {
 
-  override val supportClass: Class[_] = classOf[ExecutorSummaryWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    serialize(input.asInstanceOf[ExecutorSummaryWrapper])
-  }
-
-  def serialize(input: ExecutorSummaryWrapper): Array[Byte] = {
+  override def serialize(input: ExecutorSummaryWrapper): Array[Byte] = {
     val info = serializeExecutorSummary(input.info)
     val builder = StoreTypes.ExecutorSummaryWrapper.newBuilder()
       .setInfo(info)
@@ -115,8 +110,8 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
       getOptional(binary.hasMemoryMetrics,
         () => deserializeMemoryMetrics(binary.getMemoryMetrics))
     new ExecutorSummary(
-      id = binary.getId,
-      hostPort = binary.getHostPort,
+      id = weakIntern(binary.getId),
+      hostPort = weakIntern(binary.getHostPort),
       isActive = binary.getIsActive,
       rddBlocks = binary.getRddBlocks,
       memoryUsed = binary.getMemoryUsed,
@@ -177,7 +172,7 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
   private def deserializeResourceInformation(binary: StoreTypes.ResourceInformation):
     ResourceInformation = {
     new ResourceInformation(
-      name = binary.getName,
-      addresses = binary.getAddressesList.asScala.toArray)
+      name = weakIntern(binary.getName),
+      addresses = binary.getAddressesList.asScala.map(weakIntern).toArray)
   }
 }

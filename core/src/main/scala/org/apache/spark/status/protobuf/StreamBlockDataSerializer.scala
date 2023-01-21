@@ -18,12 +18,11 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.StreamBlockData
+import org.apache.spark.util.Utils.weakIntern
 
-class StreamBlockDataSerializer extends ProtobufSerDe {
-  override val supportClass: Class[_] = classOf[StreamBlockData]
+class StreamBlockDataSerializer extends ProtobufSerDe[StreamBlockData] {
 
-  override def serialize(input: Any): Array[Byte] = {
-    val data = input.asInstanceOf[StreamBlockData]
+  override def serialize(data: StreamBlockData): Array[Byte] = {
     val builder = StoreTypes.StreamBlockData.newBuilder()
       .setName(data.name)
       .setExecutorId(data.executorId)
@@ -41,9 +40,9 @@ class StreamBlockDataSerializer extends ProtobufSerDe {
     val binary = StoreTypes.StreamBlockData.parseFrom(bytes)
     new StreamBlockData(
       name = binary.getName,
-      executorId = binary.getExecutorId,
-      hostPort = binary.getHostPort,
-      storageLevel = binary.getStorageLevel,
+      executorId = weakIntern(binary.getExecutorId),
+      hostPort = weakIntern(binary.getHostPort),
+      storageLevel = weakIntern(binary.getStorageLevel),
       useMemory = binary.getUseMemory,
       useDisk = binary.getUseDisk,
       deserialized = binary.getDeserialized,

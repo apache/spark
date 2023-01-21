@@ -23,17 +23,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.status.ProcessSummaryWrapper
 import org.apache.spark.status.api.v1.ProcessSummary
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 
-class ProcessSummaryWrapperSerializer extends ProtobufSerDe {
+class ProcessSummaryWrapperSerializer extends ProtobufSerDe[ProcessSummaryWrapper] {
 
-  override val supportClass: Class[_] = classOf[ProcessSummaryWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    serialize(input.asInstanceOf[ProcessSummaryWrapper])
-  }
-
-  def serialize(input: ProcessSummaryWrapper): Array[Byte] = {
+  override def serialize(input: ProcessSummaryWrapper): Array[Byte] = {
     val builder = StoreTypes.ProcessSummaryWrapper.newBuilder()
     builder.setInfo(serializeProcessSummary(input.info))
     builder.build().toByteArray
@@ -48,8 +42,8 @@ class ProcessSummaryWrapperSerializer extends ProtobufSerDe {
 
   private def serializeProcessSummary(info: ProcessSummary): StoreTypes.ProcessSummary = {
     val builder = StoreTypes.ProcessSummary.newBuilder()
-    builder.setId(info.id)
-    builder.setHostPort(info.hostPort)
+    setStringField(info.id, builder.setId)
+    setStringField(info.hostPort, builder.setHostPort)
     builder.setIsActive(info.isActive)
     builder.setTotalCores(info.totalCores)
     builder.setAddTime(info.addTime.getTime)
@@ -65,8 +59,8 @@ class ProcessSummaryWrapperSerializer extends ProtobufSerDe {
   private def deserializeProcessSummary(info: StoreTypes.ProcessSummary): ProcessSummary = {
     val removeTime = getOptional(info.hasRemoveTime, () => new Date(info.getRemoveTime))
     new ProcessSummary(
-      id = info.getId,
-      hostPort = info.getHostPort,
+      id = getStringField(info.hasId, info.getId),
+      hostPort = getStringField(info.hasHostPort, info.getHostPort),
       isActive = info.getIsActive,
       totalCores = info.getTotalCores,
       addTime = new Date(info.getAddTime),

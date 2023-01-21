@@ -632,8 +632,8 @@ case class FileSourceScanExec(
         }
       }.groupBy { f =>
         BucketingUtils
-          .getBucketId(new Path(f.filePath).getName)
-          .getOrElse(throw QueryExecutionErrors.invalidBucketFile(f.filePath))
+          .getBucketId(f.toPath.getName)
+          .getOrElse(throw QueryExecutionErrors.invalidBucketFile(f.urlEncodedPath))
       }
 
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
