@@ -659,7 +659,7 @@
   },
   "INDEX_NOT_FOUND" : {
     "message" : [
-      "Cannot find the index. <message>."
+      "Cannot find the index <indexName> on table <tableName>."
     ],
     "sqlState" : "42704"
   },
@@ -1045,6 +1045,12 @@
   "NULLABLE_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is nullable while it's required to be non-nullable."
+    ],
+    "sqlState" : "42000"
+  },
+  "NULLABLE_ROW_ID_ATTRIBUTES" : {
+    "message" : [
+      "Row ID attributes cannot be nullable: <nullableRowIdAttrs>."
     ],
     "sqlState" : "42000"
   },

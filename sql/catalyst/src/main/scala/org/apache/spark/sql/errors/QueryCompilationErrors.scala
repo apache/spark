@@ -3418,4 +3418,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     SparkException.internalError(
       "The operation `dataType` is not supported.")
   }
+
+  def nullableRowIdError(nullableRowIdAttrs: Seq[AttributeReference]): Throwable = {
+    new AnalysisException(
+      errorClass = "NULLABLE_ROW_ID_ATTRIBUTES",
+      messageParameters = Map("nullableRowIdAttrs" -> nullableRowIdAttrs.mkString(", ")))
+  }
 }

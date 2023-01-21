@@ -294,7 +294,7 @@ package object dsl {
             proto.NAFill
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllCols(cols.toSeq.asJava)
+              .addAllCols(cols.asJava)
               .addAllValues(Seq(toConnectProtoValue(value)).asJava)
               .build())
           .build()
@@ -615,7 +615,7 @@ package object dsl {
           .build()
       }
 
-      def createDefaultSortField(col: String): Expression.SortOrder = {
+      private def createDefaultSortField(col: String): Expression.SortOrder = {
         Expression.SortOrder
           .newBuilder()
           .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)

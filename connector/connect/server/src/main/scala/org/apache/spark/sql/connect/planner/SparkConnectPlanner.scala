@@ -58,7 +58,7 @@ final case class InvalidCommandInput(
     extends Exception(message, cause)
 
 class SparkConnectPlanner(session: SparkSession) {
-  lazy val pythonExec =
+  private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
   // The root of the query plan is a relation and we apply the transformations to it.
@@ -123,7 +123,7 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
-  def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
+  private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
     SparkConnectPluginRegistry.relationRegistry
       // Lazily traverse the collection.
       .view
@@ -745,7 +745,7 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
-  def transformExpressionPlugin(extension: ProtoAny): Expression = {
+  private def transformExpressionPlugin(extension: ProtoAny): Expression = {
     SparkConnectPluginRegistry.expressionRegistry
       // Lazily traverse the collection.
       .view
@@ -1002,11 +1002,19 @@ class SparkConnectPlanner(session: SparkSession) {
     session.sessionState.sqlParser.parseExpression(expr.getExpression)
   }
 
-  private def transformUnresolvedStar(regex: proto.Expression.UnresolvedStar): Expression = {
-    if (regex.getTargetList.isEmpty) {
-      UnresolvedStar(Option.empty)
+  private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): UnresolvedStar = {
+    if (star.hasUnparsedTarget) {
+      val target = star.getUnparsedTarget
+      if (!target.endsWith(".*")) {
+        throw InvalidPlanInput(
+          s"UnresolvedStar requires a unparsed target ending with '.*', " +
+            s"but got $target.")
+      }
+
+      UnresolvedStar(
+        Some(UnresolvedAttribute.parseAttributeName(target.substring(0, target.length - 2))))
     } else {
-      UnresolvedStar(Some(regex.getTargetList.asScala.toSeq))
+      UnresolvedStar(None)
     }
   }
 
@@ -1337,7 +1345,7 @@ class SparkConnectPlanner(session: SparkSession) {
    *
    * @param cf
    */
-  def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
+  private def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
     val function = SimplePythonFunction(
       cf.getSerializedFunction.toByteArray,
       Maps.newHashMap(),
@@ -1357,7 +1365,7 @@ class SparkConnectPlanner(session: SparkSession) {
     session.udf.registerPython(cf.getPartsList.asScala.head, udf)
   }
 
-  def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
+  private def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
     val viewType = if (createView.getIsGlobal) GlobalTempView else LocalTempView
 
     val tableIdentifier =
@@ -1392,7 +1400,7 @@ class SparkConnectPlanner(session: SparkSession) {
    *
    * @param writeOperation
    */
-  def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
+  private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
     // Transform the input plan into the logical plan.
     val planner = new SparkConnectPlanner(session)
     val plan = planner.transformRelation(writeOperation.getInput)

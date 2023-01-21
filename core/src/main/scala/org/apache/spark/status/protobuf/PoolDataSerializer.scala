@@ -20,7 +20,6 @@ package org.apache.spark.status.protobuf
 import scala.collection.JavaConverters._
 
 import org.apache.spark.status.PoolData
-import org.apache.spark.util.Utils.weakIntern
 
 class PoolDataSerializer extends ProtobufSerDe[PoolData] {
 
@@ -34,7 +33,7 @@ class PoolDataSerializer extends ProtobufSerDe[PoolData] {
   override def deserialize(bytes: Array[Byte]): PoolData = {
     val poolData = StoreTypes.PoolData.parseFrom(bytes)
     new PoolData(
-      name = weakIntern(poolData.getName),
+      name = poolData.getName,
       stageIds = poolData.getStageIdsList.asScala.map(_.toInt).toSet
     )
   }

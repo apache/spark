@@ -26,7 +26,8 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
 private[protobuf] case class CatalystDataToProtobuf(
     child: Expression,
     messageName: String,
-    descFilePath: Option[String] = None)
+    descFilePath: Option[String] = None,
+    options: Map[String, String] = Map.empty)
     extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
