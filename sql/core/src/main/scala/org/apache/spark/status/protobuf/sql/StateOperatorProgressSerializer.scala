@@ -21,12 +21,13 @@ import java.util.{HashMap => JHashMap, List => JList}
 
 import org.apache.spark.sql.streaming.StateOperatorProgress
 import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
 object StateOperatorProgressSerializer {
 
   def serialize(stateOperator: StateOperatorProgress): StoreTypes.StateOperatorProgress = {
     val builder = StoreTypes.StateOperatorProgress.newBuilder()
-    builder.setOperatorName(stateOperator.operatorName)
+    setStringField(stateOperator.operatorName, builder.setOperatorName)
     builder.setNumRowsTotal(stateOperator.numRowsTotal)
     builder.setNumRowsUpdated(stateOperator.numRowsUpdated)
     builder.setAllUpdatesTimeMs(stateOperator.allUpdatesTimeMs)
@@ -58,7 +59,8 @@ object StateOperatorProgressSerializer {
   private def deserialize(
       stateOperator: StoreTypes.StateOperatorProgress): StateOperatorProgress = {
     new StateOperatorProgress(
-      operatorName = stateOperator.getOperatorName,
+      operatorName =
+        getStringField(stateOperator.hasOperatorName, () => stateOperator.getOperatorName),
       numRowsTotal = stateOperator.getNumRowsTotal,
       numRowsUpdated = stateOperator.getNumRowsUpdated,
       allUpdatesTimeMs = stateOperator.getAllUpdatesTimeMs,

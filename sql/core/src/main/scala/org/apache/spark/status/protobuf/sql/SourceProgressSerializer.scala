@@ -21,15 +21,16 @@ import java.util.{HashMap => JHashMap, List => JList}
 
 import org.apache.spark.sql.streaming.SourceProgress
 import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
 private[protobuf] object SourceProgressSerializer {
 
   def serialize(source: SourceProgress): StoreTypes.SourceProgress = {
     val builder = StoreTypes.SourceProgress.newBuilder()
-    builder.setDescription(source.description)
-    Option(source.startOffset).foreach(builder.setStartOffset)
-    Option(source.endOffset).foreach(builder.setEndOffset)
-    Option(source.latestOffset).foreach(builder.setLatestOffset)
+    setStringField(source.description, builder.setDescription)
+    setStringField(source.startOffset, builder.setStartOffset)
+    setStringField(source.endOffset, builder.setEndOffset)
+    setStringField(source.latestOffset, builder.setLatestOffset)
     builder.setNumInputRows(source.numInputRows)
     builder.setInputRowsPerSecond(source.inputRowsPerSecond)
     builder.setProcessedRowsPerSecond(source.processedRowsPerSecond)
@@ -52,10 +53,10 @@ private[protobuf] object SourceProgressSerializer {
 
   private def deserialize(source: StoreTypes.SourceProgress): SourceProgress = {
     new SourceProgress(
-      description = source.getDescription,
-      startOffset = source.getStartOffset,
-      endOffset = source.getEndOffset,
-      latestOffset = source.getLatestOffset,
+      description = getStringField(source.hasDescription, () => source.getDescription),
+      startOffset = getStringField(source.hasStartOffset, () => source.getStartOffset),
+      endOffset = getStringField(source.hasEndOffset, () => source.getEndOffset),
+      latestOffset = getStringField(source.hasLatestOffset, () => source.getLatestOffset),
       numInputRows = source.getNumInputRows,
       inputRowsPerSecond = source.getInputRowsPerSecond,
       processedRowsPerSecond = source.getProcessedRowsPerSecond,

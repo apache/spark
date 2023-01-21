@@ -26,6 +26,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
 private[protobuf] object StreamingQueryProgressSerializer {
 
@@ -37,8 +38,8 @@ private[protobuf] object StreamingQueryProgressSerializer {
     val builder = StoreTypes.StreamingQueryProgress.newBuilder()
     builder.setId(process.id.toString)
     builder.setRunId(process.runId.toString)
-    Option(process.name).foreach(builder.setName)
-    builder.setTimestamp(process.timestamp)
+    setStringField(process.name, builder.setName)
+    setStringField(process.timestamp, builder.setTimestamp)
     builder.setBatchId(process.batchId)
     builder.setBatchDuration(process.batchDuration)
     process.durationMs.forEach {
@@ -63,8 +64,8 @@ private[protobuf] object StreamingQueryProgressSerializer {
     new StreamingQueryProgress(
       id = UUID.fromString(process.getId),
       runId = UUID.fromString(process.getRunId),
-      name = process.getName,
-      timestamp = process.getTimestamp,
+      name = getStringField(process.hasName, () => process.getName),
+      timestamp = getStringField(process.hasTimestamp, () => process.getTimestamp),
       batchId = process.getBatchId,
       batchDuration = process.getBatchDuration,
       durationMs = new JHashMap(process.getDurationMsMap),

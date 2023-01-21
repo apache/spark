@@ -21,12 +21,13 @@ import java.util.{HashMap => JHashMap}
 
 import org.apache.spark.sql.streaming.SinkProgress
 import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
 private[protobuf] object SinkProgressSerializer {
 
   def serialize(sink: SinkProgress): StoreTypes.SinkProgress = {
     val builder = StoreTypes.SinkProgress.newBuilder()
-    builder.setDescription(sink.description)
+    setStringField(sink.description, builder.setDescription)
     builder.setNumOutputRows(sink.numOutputRows)
     sink.metrics.forEach {
       case (k, v) => builder.putMetrics(k, v)
@@ -36,7 +37,7 @@ private[protobuf] object SinkProgressSerializer {
 
   def deserialize(sink: StoreTypes.SinkProgress): SinkProgress = {
     new SinkProgress(
-      description = sink.getDescription,
+      description = getStringField(sink.hasDescription, () => sink.getDescription),
       numOutputRows = sink.getNumOutputRows,
       metrics = new JHashMap(sink.getMetricsMap)
     )
