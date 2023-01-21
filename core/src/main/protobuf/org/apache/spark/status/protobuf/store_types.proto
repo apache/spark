@@ -411,9 +411,9 @@ message SQLPlanMetric {
 message SQLExecutionUIData {
   int64 execution_id = 1;
   int64 root_execution_id = 2;
-  string description = 3;
-  string details = 4;
-  string physical_plan_description = 5;
+  optional string description = 3;
+  optional string details = 4;
+  optional string physical_plan_description = 5;
   map<string, string> modified_configs = 6;
   repeated SQLPlanMetric metrics = 7;
   int64 submission_time = 8;
