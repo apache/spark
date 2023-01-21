@@ -361,8 +361,4 @@ You can also specify `volcano` tag to only run Volcano test:
 ## Cleanup Volcano
 
     kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
-    
-    # Cleanup Volcano webhook 
-    kubectl delete validatingwebhookconfigurations volcano-admission-service-jobs-validate volcano-admission-service-pods-validate volcano-admission-service-queues-validate
-    kubectl delete mutatingwebhookconfigurations volcano-admission-service-jobs-mutate volcano-admission-service-podgroups-mutate volcano-admission-service-pods-mutate volcano-admission-service-queues-mutate
 
