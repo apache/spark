@@ -25,7 +25,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
-from pyspark.errors import PySparkException
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -655,7 +655,7 @@ class FunctionsTestsMixin:
             )
         )
 
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             df.select(least(df.a).alias("least")).collect()
 
         self.check_error(
@@ -709,7 +709,7 @@ class FunctionsTestsMixin:
             )
         )
 
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(overlay(df.x, df.y, 7.5, 0).alias("ol")).collect()
 
         self.check_error(
@@ -718,7 +718,7 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "pos", "arg_type": "float"},
         )
 
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(overlay(df.x, df.y, 7, 0.5).alias("ol")).collect()
 
         self.check_error(
@@ -798,7 +798,7 @@ class FunctionsTestsMixin:
         from pyspark.sql.functions import col, transform
 
         # Should fail with varargs
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda *x: lit(1))
 
         self.check_error(
@@ -808,7 +808,7 @@ class FunctionsTestsMixin:
         )
 
         # Should fail with kwargs
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda **x: lit(1))
 
         self.check_error(
@@ -818,7 +818,7 @@ class FunctionsTestsMixin:
         )
 
         # Should fail with nullary function
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda: lit(1))
 
         self.check_error(
@@ -828,7 +828,7 @@ class FunctionsTestsMixin:
         )
 
         # Should fail with quaternary function
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
 
         self.check_error(
@@ -838,7 +838,7 @@ class FunctionsTestsMixin:
         )
 
         # Should fail if function doesn't return Column
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda x: 1)
 
         self.check_error(
@@ -1025,7 +1025,7 @@ class FunctionsTestsMixin:
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("2000000", str(cm.exception))
 
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(assert_true(df.id < 2, 5))
 
         self.check_error(
@@ -1049,7 +1049,7 @@ class FunctionsTestsMixin:
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("barfoo", str(cm.exception))
 
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(raise_error(None))
 
         self.check_error(
@@ -1107,7 +1107,7 @@ class FunctionsTestsMixin:
             self.assertEqual(actual, expected)
 
         df = self.spark.range(10)
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             lit([df.id, df.id])
 
         self.check_error(
@@ -1233,7 +1233,7 @@ class FunctionsTestsMixin:
         self.assertEqual(expected, actual["from_items"])
 
     def test_schema_of_json(self):
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             schema_of_json(1)
 
         self.check_error(
@@ -1243,7 +1243,7 @@ class FunctionsTestsMixin:
         )
 
     def test_schema_of_csv(self):
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             schema_of_csv(1)
 
         self.check_error(
@@ -1254,7 +1254,7 @@ class FunctionsTestsMixin:
 
     def test_from_csv(self):
         df = self.spark.range(10)
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             from_csv(df.id, 1)
 
         self.check_error(
@@ -1265,7 +1265,7 @@ class FunctionsTestsMixin:
 
     def test_greatest(self):
         df = self.spark.range(10)
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             greatest(df.id)
 
         self.check_error(
@@ -1275,7 +1275,7 @@ class FunctionsTestsMixin:
         )
 
     def test_when(self):
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             when("id", 1)
 
         self.check_error(
@@ -1285,7 +1285,7 @@ class FunctionsTestsMixin:
         )
 
     def test_window(self):
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             window("date", 5)
 
         self.check_error(
@@ -1295,7 +1295,7 @@ class FunctionsTestsMixin:
         )
 
     def test_session_window(self):
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             session_window("date", 5)
 
         self.check_error(
@@ -1305,7 +1305,7 @@ class FunctionsTestsMixin:
         )
 
     def test_bucket(self):
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             bucket("5", "id")
 
         self.check_error(

@@ -2263,14 +2263,13 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     elif isinstance(numBuckets, Column):
         _numBuckets = numBuckets
     else:
-        if not isinstance(numBuckets, (int, Column)):
-            raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_INTEGER",
-                message_parameters={
-                    "arg_name": "numBuckets",
-                    "arg_type": type(numBuckets).__name__,
-                },
-            )
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER",
+            message_parameters={
+                "arg_name": "numBuckets",
+                "arg_type": type(numBuckets).__name__,
+            },
+        )
 
     return _invoke_function("bucket", _numBuckets, _to_col(col))
 

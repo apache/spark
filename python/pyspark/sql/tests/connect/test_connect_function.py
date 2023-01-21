@@ -17,7 +17,7 @@
 import unittest
 import tempfile
 
-from pyspark.errors import PySparkException
+from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -306,7 +306,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         ):
             CF.when(cdf.a == 0, 1.0).otherwise(1.0).otherwise(1.0)
 
-        with self.assertRaises(PySparkException) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             CF.when(True, 1.0).otherwise(1.0)
 
         self.check_error(
