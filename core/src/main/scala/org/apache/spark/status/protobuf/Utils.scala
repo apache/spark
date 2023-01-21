@@ -24,10 +24,6 @@ object Utils {
     None
   }
 
-
-  // TODO(SPARK-42147): Restore the signature of `f` when `f` is declared as
-  //  `f: String => MessageOrBuilder` and `setStringField` used by other modules
-  //  not cause maven build failure
   def setStringField(input: String, f: String => Any): Unit = {
     if (input != null) {
       f(input)
