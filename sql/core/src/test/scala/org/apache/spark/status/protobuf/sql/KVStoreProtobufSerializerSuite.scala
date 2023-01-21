@@ -85,7 +85,6 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.metricValues == input.metricValues)
   }
 
-
   test("SQLExecutionUIData with metricValues is empty map and null") {
     val templateData = SqlResourceSuite.sqlExecutionUIData
 
