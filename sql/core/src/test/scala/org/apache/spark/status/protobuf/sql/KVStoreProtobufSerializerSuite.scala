@@ -206,7 +206,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     )
     val withNull = new StreamingQueryData(
       name = null,
-      id = id,
+      id = null,
       runId = null,
       isActive = false,
       exception = None,

@@ -28,7 +28,7 @@ class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
   override def serialize(data: StreamingQueryData): Array[Byte] = {
     val builder = StoreTypes.StreamingQueryData.newBuilder()
     setStringField(data.name, builder.setName)
-    builder.setId(data.id.toString)
+    setStringField(data.id.toString, builder.setId)
     setStringField(data.runId, builder.setRunId)
     builder.setIsActive(data.isActive)
     data.exception.foreach(builder.setException)
@@ -43,9 +43,12 @@ class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
       getOptional(data.hasException, () => data.getException)
     val endTimestamp =
       getOptional(data.hasEndTimestamp, () => data.getEndTimestamp)
+    val id = if (data.hasId) {
+      UUID.fromString(data.getId)
+    } else null
     new StreamingQueryData(
       name = getStringField(data.hasName, () => data.getName),
-      id = UUID.fromString(data.getId),
+      id = id,
       runId = getStringField(data.hasRunId, () => data.getRunId),
       isActive = data.getIsActive,
       exception = exception,
