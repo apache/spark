@@ -693,7 +693,7 @@
             </relocation>
             <relocation>
               <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.spark-core.protobuf</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.spark_core.protobuf</shadedPattern>
               <includes>
                 <include>com.google.protobuf.**</include>
               </includes>
