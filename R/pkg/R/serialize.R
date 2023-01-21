@@ -208,7 +208,11 @@ writeEnv <- function(con, env) {
 }
 
 writeDate <- function(con, date) {
-  writeString(con, as.character(date))
+  if (is.na(date)) {
+    writeString(con, "NA")
+  } else {
+    writeString(con, as.character(date))
+  }
 }
 
 writeTime <- function(con, time) {
