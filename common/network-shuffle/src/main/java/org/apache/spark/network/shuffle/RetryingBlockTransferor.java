@@ -24,12 +24,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.sasl.SaslTimeoutException;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -85,6 +87,8 @@ public class RetryingBlockTransferor {
   /** Number of times we've attempted to retry so far. */
   private int retryCount = 0;
 
+  private boolean saslTimeoutSeen;
+
   /**
    * Set of all block ids which have not been transferred successfully or with a non-IO Exception.
    * A retry involves requesting every outstanding block. Note that since this is a LinkedHashSet,
@@ -98,6 +102,9 @@ public class RetryingBlockTransferor {
    * old Listeners to ignore all further responses.
    */
   private RetryingBlockTransferListener currentListener;
+
+  /** Whether sasl retries are enabled. */
+  private final boolean enableSaslRetries;
 
   private final ErrorHandler errorHandler;
 
@@ -115,6 +122,8 @@ public class RetryingBlockTransferor {
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
+    this.enableSaslRetries = conf.enableSaslRetries();
+    this.saslTimeoutSeen = false;
   }
 
   public RetryingBlockTransferor(
@@ -187,13 +196,29 @@ public class RetryingBlockTransferor {
 
   /**
    * Returns true if we should retry due a block transfer failure. We will retry if and only if
-   * the exception was an IOException and we haven't retried 'maxRetries' times already.
+   * the exception was an IOException or SaslTimeoutException and we haven't retried
+   * 'maxRetries' times already.
    */
   private synchronized boolean shouldRetry(Throwable e) {
     boolean isIOException = e instanceof IOException
       || e.getCause() instanceof IOException;
+    boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
+    if (!isSaslTimeout && saslTimeoutSeen) {
+      retryCount = 0;
+      saslTimeoutSeen = false;
+    }
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return isIOException && hasRemainingRetries && errorHandler.shouldRetryError(e);
+    boolean shouldRetry =  (isSaslTimeout || isIOException) &&
+        hasRemainingRetries && errorHandler.shouldRetryError(e);
+    if (shouldRetry && isSaslTimeout) {
+      this.saslTimeoutSeen = true;
+    }
+    return shouldRetry;
+  }
+
+  @VisibleForTesting
+  public int getRetryCount() {
+    return retryCount;
   }
 
   /**
@@ -211,6 +236,10 @@ public class RetryingBlockTransferor {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           outstandingBlocksIds.remove(blockId);
           shouldForwardSuccess = true;
+          if (saslTimeoutSeen) {
+            retryCount = 0;
+            saslTimeoutSeen = false;
+          }
         }
       }
 
