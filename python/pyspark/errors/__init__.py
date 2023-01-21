@@ -28,6 +28,11 @@ from pyspark.errors.exceptions import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    SparkConnectException,
+    SparkConnectGrpcException,
+    SparkConnectAnalysisException,
+    SparkConnectParseException,
+    SparkConnectTempTableAlreadyExistsException,
 )
 
 
@@ -41,4 +46,9 @@ __all__ = [
     "PythonException",
     "UnknownException",
     "SparkUpgradeException",
+    "SparkConnectException",
+    "SparkConnectGrpcException",
+    "SparkConnectAnalysisException",
+    "SparkConnectParseException",
+    "SparkConnectTempTableAlreadyExistsException",
 ]

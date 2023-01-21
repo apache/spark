@@ -36,7 +36,12 @@ from pyspark.sql.types import (
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.sql.connect.client import SparkConnectException, SparkConnectAnalysisException
+from pyspark.errors import (
+    SparkConnectException,
+    SparkConnectAnalysisException,
+    SparkConnectParseException,
+    SparkConnectTempTableAlreadyExistsException,
+)
 
 if should_test_connect:
     import grpc
@@ -456,7 +461,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -502,7 +507,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -1201,7 +1206,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(SparkConnectException):
+            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -1213,7 +1218,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(SparkConnectException):
+            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -1427,7 +1432,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
             self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
 
-        with self.assertRaises(SparkConnectException) as context:
+        with self.assertRaises(SparkConnectAnalysisException) as context:
             self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
             self.assertIn(
                 """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
@@ -1535,7 +1540,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # Hint with unsupported parameter values
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
@@ -1549,7 +1554,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).toPandas()
 
         # Hint with wrong combination
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_join_hint(self):
@@ -1867,7 +1872,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartition with unsupported parameter values
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).repartition("id+1").toPandas()
 
     def test_repartition_by_range(self) -> None:
@@ -1891,7 +1896,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartitionByRange with unsupported parameter values
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).repartitionByRange("id+1").toPandas()
 
     def test_agg_with_two_agg_exprs(self) -> None:
