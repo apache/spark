@@ -161,14 +161,14 @@ message ExecutorStageSummaryWrapper {
 }
 
 message ExecutorResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   int64 amount = 2;
-  string discoveryScript = 3;
-  string vendor = 4;
+  optional string discoveryScript = 3;
+  optional string vendor = 4;
 }
 
 message TaskResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   double amount = 2;
 }
 
@@ -179,9 +179,9 @@ message ResourceProfileInfo {
 }
 
 message RuntimeInfo {
-  string java_version = 1;
-  string java_home = 2;
-  string scala_version = 3;
+  optional string java_version = 1;
+  optional string java_home = 2;
+  optional string scala_version = 3;
 }
 
 message PairStrings {
@@ -209,14 +209,14 @@ message ApplicationAttemptInfo {
   int64 end_time = 3;
   int64 last_updated = 4;
   int64 duration = 5;
-  string spark_user = 6;
+  optional string spark_user = 6;
   bool completed = 7;
-  string app_spark_version = 8;
+  optional string app_spark_version = 8;
 }
 
 message ApplicationInfo {
-  string id = 1;
-  string name = 2;
+  optional string id = 1;
+  optional string name = 2;
   optional int32 cores_granted = 3;
   optional int32 max_cores = 4;
   optional int32 cores_per_executor = 5;

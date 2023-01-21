@@ -244,12 +244,21 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Application Environment Info") {
+    testApplicationEnvironmentInfoWrapperSerDe("1.8", "/tmp/java", "2.13")
+  }
+
+  test("Application Environment Info with nulls") {
+    testApplicationEnvironmentInfoWrapperSerDe(null, null, null)
+  }
+
+  private def testApplicationEnvironmentInfoWrapperSerDe(
+      javaVersion: String, javaHome: String, scalaVersion: String): Unit = {
     val input = new ApplicationEnvironmentInfoWrapper(
       new ApplicationEnvironmentInfo(
         runtime = new RuntimeInfo(
-          javaVersion = "1.8",
-          javaHome = "/tmp/java",
-          scalaVersion = "2.13"),
+          javaVersion = javaVersion,
+          javaHome = javaHome,
+          scalaVersion = scalaVersion),
         sparkProperties = Seq(("spark.conf.1", "1"), ("spark.conf.2", "2")),
         hadoopProperties = Seq(("hadoop.conf.conf1", "1"), ("hadoop.conf2", "val2")),
         systemProperties = Seq(("sys.prop.1", "value1"), ("sys.prop.2", "value2")),
@@ -264,10 +273,10 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
               discoveryScript = "script0",
               vendor = "apache"),
             "1" -> new ExecutorResourceRequest(
-              resourceName = "exec2",
+              resourceName = null,
               amount = 1,
-              discoveryScript = "script1",
-              vendor = "apache")
+              discoveryScript = null,
+              vendor = null)
           ),
           taskResources = Map(
             "0" -> new TaskResourceRequest(resourceName = "exec1", amount = 1),
@@ -323,6 +332,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Application Info") {
+    testApplicationInfoWrapperSerDe("2", "app_2")
+  }
+
+  test("Application Info with nulls") {
+    testApplicationInfoWrapperSerDe(null, null)
+  }
+
+  private def testApplicationInfoWrapperSerDe(id: String, name: String): Unit = {
     val attempts: Seq[ApplicationAttemptInfo] = Seq(
       ApplicationAttemptInfo(
         attemptId = Some("001"),
@@ -340,14 +357,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         endTime = new Date(17L),
         lastUpdated = new Date(18L),
         duration = 100,
-        sparkUser = "user",
+        sparkUser = null,
         completed = true,
-        appSparkVersion = "3.4.0"
+        appSparkVersion = null
       ))
     val input = new ApplicationInfoWrapper(
       ApplicationInfo(
-        id = "2",
-        name = "app_2",
+        id = id,
+        name = name,
         coresGranted = Some(1),
         maxCores = Some(2),
         coresPerExecutor = Some(3),
