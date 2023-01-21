@@ -39,6 +39,7 @@ Classes
     SparkUpgradeException
     SparkConnectAnalysisException
     SparkConnectException
+    SparkConnectGrpcException
     SparkConnectParseException
     SparkConnectTempTableAlreadyExistsException
 
