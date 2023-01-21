@@ -40,7 +40,6 @@ class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
   }
 
   private def serializeStageData(stageData: StageData): StoreTypes.StageData = {
-    import org.apache.spark.status.protobuf.Utils.setStringField
     val stageDataBuilder = StoreTypes.StageData.newBuilder()
     stageDataBuilder
       .setStatus(StageStatusSerializer.serialize(stageData.status))
