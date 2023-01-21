@@ -386,7 +386,16 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         onHeapMemoryUsed = Some(101),
         offHeapMemoryUsed = Some(102),
         onHeapMemoryRemaining = Some(103),
-        offHeapMemoryRemaining = Some(104))
+        offHeapMemoryRemaining = Some(104)),
+      new RDDDataDistribution(
+        address = null,
+        memoryUsed = 60,
+        memoryRemaining = 80,
+        diskUsed = 1000,
+        onHeapMemoryUsed = Some(1010),
+        offHeapMemoryUsed = Some(1020),
+        onHeapMemoryRemaining = Some(1030),
+        offHeapMemoryRemaining = Some(1040))
     )
     val rddPartitionInfo = Seq(
       new RDDPartitionInfo(
@@ -394,7 +403,13 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         storageLevel = "IN_MEM",
         memoryUsed = 105,
         diskUsed = 106,
-        executors = Seq("exec_0", "exec_1"))
+        executors = Seq("exec_0", "exec_1")),
+      new RDDPartitionInfo(
+        blockName = null,
+        storageLevel = null,
+        memoryUsed = 105,
+        diskUsed = 106,
+        executors = Seq("exec_2", "exec_3"))
     )
     val inputs = Seq(
       new RDDStorageInfoWrapper(
