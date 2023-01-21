@@ -320,6 +320,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Application Info") {
+    testApplicationInfoWrapperSerDe("2", "app_2")
+  }
+
+  test("Application Info with nulls") {
+    testApplicationInfoWrapperSerDe(null, null)
+  }
+
+  private def testApplicationInfoWrapperSerDe(id: String, name: String): Unit = {
     val attempts: Seq[ApplicationAttemptInfo] = Seq(
       ApplicationAttemptInfo(
         attemptId = Some("001"),
@@ -337,14 +345,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         endTime = new Date(17L),
         lastUpdated = new Date(18L),
         duration = 100,
-        sparkUser = "user",
+        sparkUser = null,
         completed = true,
-        appSparkVersion = "3.4.0"
+        appSparkVersion = null
       ))
     val input = new ApplicationInfoWrapper(
       ApplicationInfo(
-        id = "2",
-        name = "app_2",
+        id = id,
+        name = name,
         coresGranted = Some(1),
         maxCores = Some(2),
         coresPerExecutor = Some(3),

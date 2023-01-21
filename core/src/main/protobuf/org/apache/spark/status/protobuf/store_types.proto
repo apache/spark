@@ -209,14 +209,14 @@ message ApplicationAttemptInfo {
   int64 end_time = 3;
   int64 last_updated = 4;
   int64 duration = 5;
-  string spark_user = 6;
+  optional string spark_user = 6;
   bool completed = 7;
-  string app_spark_version = 8;
+  optional string app_spark_version = 8;
 }
 
 message ApplicationInfo {
-  string id = 1;
-  string name = 2;
+  optional string id = 1;
+  optional string name = 2;
   optional int32 cores_granted = 3;
   optional int32 max_cores = 4;
   optional int32 cores_per_executor = 5;
