@@ -314,7 +314,7 @@ class SparkConnectGrpcException(SparkConnectException):
         plan: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> None:
-        self.message = message
+        self.message = message  # type: ignore[assignment]
         if plan is not None:
             self.message = f"{self.message}\nPlan: {plan}"
         if reason is not None:
