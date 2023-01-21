@@ -14,13 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import contextlib
+import functools
 import logging
 import os
+import random
+import time
 import urllib.parse
 import uuid
 import json
-from typing import Iterable, Optional, Any, Union, List, Tuple, Dict, NoReturn, cast
+from types import TracebackType
+from typing import (
+    Iterable,
+    Optional,
+    Any,
+    Union,
+    List,
+    Tuple,
+    Dict,
+    NoReturn,
+    cast,
+    Callable,
+    Generator,
+    Type,
+)
 
 import pandas as pd
 import pyarrow as pa
@@ -342,11 +359,16 @@ class AnalyzeResult:
 class SparkConnectClient(object):
     """Conceptually the remote spark session that communicates with the server"""
 
+    @classmethod
+    def retry_exception(cls, e: grpc.RpcError) -> bool:
+        return e.code() == grpc.StatusCode.UNAVAILABLE
+
     def __init__(
         self,
         connectionString: str,
         userId: Optional[str] = None,
         channelOptions: Optional[List[Tuple[str, Any]]] = None,
+        retryPolicy: Optional[Dict[str, Any]] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -365,6 +387,15 @@ class SparkConnectClient(object):
         # Parse the connection string.
         self._builder = ChannelBuilder(connectionString, channelOptions)
         self._user_id = None
+        self._retry_policy = {
+            "max_retries": 15,
+            "backoff_multiplier": 4,
+            "initial_backoff": 50,
+            "max_backoff": 60000,
+        }
+        if retryPolicy:
+            self._retry_policy.update(retryPolicy)
+
         # Generate a unique session ID for this client. This UUID must be unique to allow
         # concurrent Spark sessions of the same user. If the channel is closed, creating
         # a new client will create a new session ID.
@@ -531,12 +562,15 @@ class SparkConnectClient(object):
             req.explain.explain_mode = pb2.Explain.ExplainMode.CODEGEN
         else:  # formatted
             req.explain.explain_mode = pb2.Explain.ExplainMode.FORMATTED
-
         try:
-            resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
-            if resp.client_id != self._session_id:
-                raise SparkConnectException("Received incorrect session identifier for request.")
-            return AnalyzeResult.fromProto(resp)
+            for attempt in Retrying(SparkConnectClient.retry_exception, **self._retry_policy):
+                with attempt:
+                    resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
+                    if resp.client_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request."
+                        )
+                    return AnalyzeResult.fromProto(resp)
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
@@ -552,12 +586,14 @@ class SparkConnectClient(object):
         """
         logger.info("Execute")
         try:
-            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                if b.client_id != self._session_id:
-                    raise SparkConnectException(
-                        "Received incorrect session identifier for request."
-                    )
-                continue
+            for attempt in Retrying(SparkConnectClient.retry_exception, **self._retry_policy):
+                with attempt:
+                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                        if b.client_id != self._session_id:
+                            raise SparkConnectException(
+                                "Received incorrect session identifier for request."
+                            )
+                        continue
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
@@ -567,37 +603,34 @@ class SparkConnectClient(object):
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
-
         batches: List[pa.RecordBatch] = []
 
         try:
-            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                if b.client_id != self._session_id:
-                    raise SparkConnectException(
-                        "Received incorrect session identifier for request."
-                    )
-                if b.metrics is not None:
-                    logger.debug("Received metric batch.")
-                    m = b.metrics
-                if b.HasField("arrow_batch"):
-                    logger.debug(
-                        f"Received arrow batch rows={b.arrow_batch.row_count} "
-                        f"size={len(b.arrow_batch.data)}"
-                    )
+            for attempt in Retrying(SparkConnectClient.retry_exception, **self._retry_policy):
+                with attempt:
+                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                        if b.client_id != self._session_id:
+                            raise SparkConnectException(
+                                "Received incorrect session identifier for request."
+                            )
+                        if b.metrics is not None:
+                            logger.debug("Received metric batch.")
+                            m = b.metrics
+                        if b.HasField("arrow_batch"):
+                            logger.debug(
+                                f"Received arrow batch rows={b.arrow_batch.row_count} "
+                                f"size={len(b.arrow_batch.data)}"
+                            )
 
-                    with pa.ipc.open_stream(b.arrow_batch.data) as reader:
-                        for batch in reader:
-                            assert isinstance(batch, pa.RecordBatch)
-                            batches.append(batch)
+                            with pa.ipc.open_stream(b.arrow_batch.data) as reader:
+                                for batch in reader:
+                                    assert isinstance(batch, pa.RecordBatch)
+                                    batches.append(batch)
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
-
         assert len(batches) > 0
-
         table = pa.Table.from_batches(batches=batches)
-
         metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
-
         return table, metrics
 
     def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
@@ -605,16 +638,13 @@ class SparkConnectClient(object):
         Error handling helper for dealing with GRPC Errors. On the server side, certain
         exceptions are enriched with additional RPC Status information. These are
         unpacked in this function and put into the exception.
-
         To avoid overloading the user with GRPC errors, this message explicitly
         swallows the error context from the call. This GRPC Error is logged however,
         and can be enabled.
-
         Parameters
         ----------
         rpc_error : grpc.RpcError
            RPC Error containing the details of the exception.
-
         Returns
         -------
         Throws the appropriate internal Python exception.
@@ -638,6 +668,136 @@ class SparkConnectClient(object):
             raise SparkConnectException(status.message) from None
         else:
             raise SparkConnectException(str(rpc_error)) from None
+
+
+class RetryState:
+    """
+    Simple state helper that captures the state between retries of the exceptions. It
+    keeps track of the last exception thrown and how many in total. when the task
+    finishes successfully done() returns True.
+    """
+
+    def __init__(self) -> None:
+        self._exception: Optional[BaseException] = None
+        self._done = False
+        self._count = 0
+
+    def set_exception(self, exc: Optional[BaseException]) -> None:
+        self._exception = exc
+        self._count += 1
+
+    def exception(self) -> Optional[BaseException]:
+        return self._exception
+
+    def set_done(self) -> None:
+        self._done = True
+
+    def count(self) -> int:
+        return self._count
+
+    def done(self) -> bool:
+        return self._done
+
+
+class AttemptManager:
+    """
+    Simple ContextManager that is used to capture the exception thrown inside the context.
+    """
+
+    def __init__(self, check: Callable[..., bool], retry_state: RetryState) -> None:
+        self._retry_state = retry_state
+        self._can_retry = check
+
+    def __enter__(self) -> None:
+        pass
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Optional[bool]:
+        if isinstance(exc_val, BaseException):
+            # Swallow the exception.
+            if self._can_retry(exc_val):
+                self._retry_state.set_exception(exc_val)
+                return True
+            # Bubble up the exception.
+            return False
+        else:
+            self._retry_state.set_done()
+            return None
+
+
+class Retrying:
+    """
+    This helper class is used as a generator together with a context manager to
+    allow retrying exceptions in particular code blocks. The Retrying can be configured
+    with a lambda function that is can be filtered what kind of exceptions should be
+    retried.
+
+    In addition, there are several parameters that are used to configure the exponential
+    backoff behavior.
+
+    An example to use this class looks like this:
+
+        for attempt in Retrying(lambda x: isinstance(x, TransientError)):
+            with attempt:
+                # do the work.
+
+    """
+
+    def __init__(
+        self,
+        can_retry: Callable[..., bool] = lambda x: True,
+        max_retries: int = 15,
+        initial_backoff: int = 50,
+        max_backoff: int = 60000,
+        backoff_multiplier: float = 4.0,
+    ) -> None:
+        self._can_retry = can_retry
+        self._max_retries = max_retries
+        self._initial_backoff = initial_backoff
+        self._max_backoff = max_backoff
+        self._backoff_multiplier = backoff_multiplier
+
+    def __iter__(self) -> Generator[AttemptManager, None, None]:
+        """
+        Generator function to wrap the exception producing code block.
+        Returns
+        -------
+
+        """
+        retry_state = RetryState()
+        while True:
+            # Check if the operation was completed successfully.
+            if retry_state.done():
+                break
+
+            # If the number of retries have exceeded the maximum allowed retries.
+            if retry_state.count() > self._max_retries:
+                e = retry_state.exception()
+                if e is not None:
+                    raise e
+                else:
+                    raise ValueError("Retries exceeded but no exception caught.")
+
+            # Do backoff
+            if retry_state.count() > 0:
+                backoff = random.randrange(
+                    0,
+                    int(
+                        min(
+                            self._initial_backoff * self._backoff_multiplier ** retry_state.count(),
+                            self._max_backoff,
+                        )
+                    ),
+                )
+                logger.debug(f"Retrying call after {backoff} ms sleep")
+                # Pythons sleep takes seconds as arguments.
+                time.sleep(backoff / 1000.0)
+
+            yield AttemptManager(self._can_retry, retry_state)
 
 
 __all__ = [

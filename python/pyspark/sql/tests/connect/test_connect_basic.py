@@ -2592,6 +2592,73 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ClientTests(unittest.TestCase):
+    def test_retry_error_handling(self):
+        # Helper class for wrapping the test.
+        class TestError(grpc.RpcError, Exception):
+            def __init__(self, code: grpc.StatusCode):
+                self._code = code
+
+            def code(self):
+                return self._code
+
+        def stub(retries, w, code):
+            w["counter"] += 1
+            if w["counter"] < retries:
+                raise TestError(code)
+
+        from pyspark.sql.connect.client import Retrying
+
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = {"counter": 0}
+        for attempt in Retrying(lambda x: True, max_retries=4, backoff_multiplier=1):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        # Exceed the retries.
+        call_wrap = {"counter": 0}
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                lambda x: True, max_retries=2, max_backoff=50, backoff_multiplier=1
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        # Check that only specific exceptions are retried.
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = {"counter": 0}
+        for attempt in Retrying(
+            lambda x: x.code() == grpc.StatusCode.UNAVAILABLE, max_retries=4, backoff_multiplier=1
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        # Exceed the retries.
+        call_wrap = {"counter": 0}
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        # Test that another error is always thrown.
+        call_wrap = {"counter": 0}
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=0,
+                max_backoff=50,
+                backoff_multiplier=1,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):
     def test_invalid_connection_strings(self):
         invalid = [
