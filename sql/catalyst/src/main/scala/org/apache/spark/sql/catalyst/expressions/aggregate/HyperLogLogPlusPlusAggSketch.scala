@@ -142,9 +142,9 @@ case class HyperLogLogPlusPlusAggSketch(
 
         case false =>
           val newNumWords = new HyperLogLogPlusPlusHelper(newRelativeSD).numWords
-          if (newNumWords < hllppHelper.numWords) {
+          if (newNumWords > hllppHelper.numWords) {
             throw new IllegalStateException(s"""The HyperLogLogPlusPlusAggSketch function
-              must be configured with a relativeSD value that is equal or greater than the
+              must be configured with a relativeSD value that is less than or equal to the
               sketches written by a previous instance of the HyperLogLogPlusPlusSketch
               function: new SD ($newRelativeSD) configured SD ($relativeSD)""")
           }
