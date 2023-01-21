@@ -16,6 +16,7 @@
 #
 
 import collections
+import logging
 import math
 import os
 import random
@@ -24,9 +25,13 @@ import sys
 import subprocess
 import time
 from typing import Union, Callable, List, Dict, Optional, Any
-import warnings
 
 from pyspark.sql import SparkSession
+from pyspark.ml.torch.log_communication import (  # type: ignore
+    get_driver_host,
+    LogStreamingClient,
+    LogStreamingServer,
+)
 from pyspark.context import SparkContext
 from pyspark.taskcontext import BarrierTaskContext
 
@@ -70,6 +75,19 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
         f"value but found value of type {type(val)} "
         f"with value: {val}"
     )
+
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    Gets a logger by name, or creates and configures it for the first time.
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    # If the logger is configured, skip the configure
+    if not logger.handlers and not logging.getLogger().handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        logger.addHandler(handler)
+    return logger
 
 
 def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str]:
@@ -122,6 +140,7 @@ class Distributor:
         local_mode: bool = True,
         use_gpu: bool = True,
     ):
+        self.logger = get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
         self.use_gpu = use_gpu
@@ -134,7 +153,7 @@ class Distributor:
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
-        for unneeded_param in ["spark", "sc", "ssl_conf"]:
+        for unneeded_param in ["spark", "sc", "ssl_conf", "logger"]:
             del input_params[unneeded_param]
         return input_params
 
@@ -169,11 +188,10 @@ class Distributor:
                 if num_available_gpus == 0:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
-                    warnings.warn(
+                    self.logger.warning(
                         f"'num_processes' cannot be set to a value greater than the number of "
                         f"available GPUs on the driver, which is {num_available_gpus}. "
                         f"'num_processes' was reset to be equal to the number of available GPUs.",
-                        RuntimeWarning,
                     )
                     self.num_processes = num_available_gpus
         return self.num_processes
@@ -201,7 +219,7 @@ class Distributor:
         if is_ssl_enabled:
             name = self.__class__.__name__
             if ignore_ssl:
-                warnings.warn(
+                self.logger.warning(
                     f"""
                     This cluster has TLS encryption enabled;
                     however, {name} does not
@@ -348,7 +366,10 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _execute_command(
-        cmd: List[str], _prctl: bool = True, redirect_to_stdout: bool = True
+        cmd: List[str],
+        _prctl: bool = True,
+        redirect_to_stdout: bool = True,
+        log_streaming_client: Optional[LogStreamingClient] = None,
     ) -> None:
         _TAIL_LINES_TO_KEEP = 100
 
@@ -367,6 +388,8 @@ class TorchDistributor(Distributor):
                 tail.append(decoded)
                 if redirect_to_stdout:
                     sys.stdout.write(decoded)
+                if log_streaming_client:
+                    log_streaming_client.send(decoded.rstrip())
             task.wait()
         finally:
             if task.poll() is None:
@@ -404,7 +427,10 @@ class TorchDistributor(Distributor):
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
+            self.logger.info(f"Started local training with {self.num_processes} processes")
             output = framework_wrapper_fn(self.input_params, train_object, *args)  # type: ignore
+            self.logger.info(f"Finished local training with {self.num_processes} processes")
+
         finally:
             if cuda_state_was_set:
                 os.environ[CUDA_VISIBLE_DEVICES] = old_cuda_visible_devices
@@ -438,6 +464,8 @@ class TorchDistributor(Distributor):
         num_processes = self.num_processes
         use_gpu = self.use_gpu
         input_params = self.input_params
+        driver_address = self.driver_address
+        log_streaming_server_port = self.log_streaming_server_port
 
         # Spark task program
         def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
@@ -486,7 +514,15 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ""
             set_torch_config(context)
 
-            output = framework_wrapper_fn(input_params, train_object, *args)
+            log_streaming_client = LogStreamingClient(driver_address, log_streaming_server_port)
+            input_params["log_streaming_client"] = log_streaming_client
+            try:
+                output = framework_wrapper_fn(input_params, train_object, *args)
+            finally:
+                try:
+                    LogStreamingClient._destroy()
+                except BaseException:
+                    pass
 
             if context.partitionId() == 0:
                 yield output
@@ -501,15 +537,31 @@ class TorchDistributor(Distributor):
     ) -> Optional[Any]:
         if not framework_wrapper_fn:
             raise RuntimeError("Unknown combination of parameters")
+
+        log_streaming_server = LogStreamingServer()
+        self.driver_address = get_driver_host(self.sc)
+        log_streaming_server.start(spark_host_address=self.driver_address)
+        time.sleep(1)  # wait for the server to start
+        self.log_streaming_server_port = log_streaming_server.port
+
         spark_task_function = self._get_spark_task_function(
             framework_wrapper_fn, train_object, *args
         )
         self._check_encryption()
-        result = (
-            self.sc.parallelize(range(self.num_tasks), self.num_tasks)
-            .barrier()
-            .mapPartitions(spark_task_function)
-            .collect()[0]
+        self.logger.info(
+            f"Started distributed training with {self.num_processes} executor proceses"
+        )
+        try:
+            result = (
+                self.sc.parallelize(range(self.num_tasks), self.num_tasks)
+                .barrier()
+                .mapPartitions(spark_task_function)
+                .collect()[0]
+            )
+        finally:
+            log_streaming_server.shutdown()
+        self.logger.info(
+            f"Finished distributed training with {self.num_processes} executor proceses"
         )
         return result
 
@@ -517,10 +569,13 @@ class TorchDistributor(Distributor):
     def _run_training_on_pytorch_file(
         input_params: Dict[str, Any], train_path: str, *args: Any
     ) -> None:
+        log_streaming_client = input_params.get("log_streaming_client", None)
         training_command = TorchDistributor._create_torchrun_command(
             input_params, train_path, *args
         )
-        TorchDistributor._execute_command(training_command)
+        TorchDistributor._execute_command(
+            training_command, log_streaming_client=log_streaming_client
+        )
 
     def run(self, train_object: Union[Callable, str], *args: Any) -> Optional[Any]:
         """Runs distributed training.

@@ -290,3 +290,15 @@ class SparkUpgradeException(CapturedException):
     """
     Exception thrown because of Spark upgrade
     """
+
+
+class PySparkValueError(PySparkException, ValueError):
+    """
+    Wrapper class for ValueError to support error classes.
+    """
+
+
+class PySparkTypeError(PySparkException, TypeError):
+    """
+    Wrapper class for TypeError to support error classes.
+    """
