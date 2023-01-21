@@ -43,7 +43,7 @@ def from_protobuf(
           `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
        - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
          Specifically, `com.google.protobuf.*` should be shaded to
-         `org.sparkproject.spark-protobuf.protobuf.*`.
+         `org.sparkproject.spark_protobuf.protobuf.*`.
          https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
          Protobuf files. The jar file can be added with spark-submit option --jars.
 
@@ -105,7 +105,7 @@ def from_protobuf(
     >>> data = [([(1668035962, 2020)])]
     >>> ddl_schema = "value struct<seconds: LONG, nanos: INT>"
     >>> df = spark.createDataFrame(data, ddl_schema)
-    >>> message_class_name = "org.sparkproject.spark-protobuf.protobuf.Timestamp"
+    >>> message_class_name = "org.sparkproject.spark_protobuf.protobuf.Timestamp"
     >>> to_proto_df = df.select(to_protobuf(df.value, message_class_name).alias("value"))
     >>> from_proto_df = to_proto_df.select(
     ...     from_protobuf(to_proto_df.value, message_class_name).alias("value"))
@@ -149,7 +149,7 @@ def to_protobuf(
           `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
        - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
          Specifically, `com.google.protobuf.*` should be shaded to
-         `org.sparkproject.spark-protobuf.protobuf.*`.
+         `org.sparkproject.spark_protobuf.protobuf.*`.
          https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
          Protobuf files. The jar file can be added with spark-submit option --jars.
 
@@ -202,7 +202,7 @@ def to_protobuf(
     >>> data = [([(1668035962, 2020)])]
     >>> ddl_schema = "value struct<seconds: LONG, nanos: INT>"
     >>> df = spark.createDataFrame(data, ddl_schema)
-    >>> message_class_name = "org.sparkproject.spark-protobuf.protobuf.Timestamp"
+    >>> message_class_name = "org.sparkproject.spark_protobuf.protobuf.Timestamp"
     >>> proto_df = df.select(to_protobuf(df.value, message_class_name).alias("suite"))
     >>> proto_df.show(truncate=False)
     +----------------------------+
