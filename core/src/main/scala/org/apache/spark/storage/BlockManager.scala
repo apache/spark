@@ -291,7 +291,7 @@ private[spark] class BlockManager(
    *
    * @param blockId The blockId of the corrupted shuffle block
    * @param checksumByReader The checksum value of the corrupted block
-   * @param algorithm The cheksum algorithm that is used when calculating the checksum value
+   * @param algorithm The checksum algorithm that is used when calculating the checksum value
    */
   override def diagnoseShuffleBlockCorruption(
       blockId: BlockId,

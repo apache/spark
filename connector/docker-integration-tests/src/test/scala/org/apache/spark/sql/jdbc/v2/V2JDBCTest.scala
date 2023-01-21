@@ -278,10 +278,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         // This should pass without exception
         sql(s"DROP index IF EXISTS i1 ON $catalogName.new_table")
 
-        m = intercept[NoSuchIndexException] {
-          sql(s"DROP index i1 ON $catalogName.new_table")
-        }.getMessage
-        assert(m.contains("Failed to drop index i1 in new_table"))
+        checkError(
+          exception = intercept[NoSuchIndexException] {
+            sql(s"DROP index i1 ON $catalogName.new_table")
+          },
+          errorClass = "INDEX_NOT_FOUND",
+          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+        )
       }
     }
   }
