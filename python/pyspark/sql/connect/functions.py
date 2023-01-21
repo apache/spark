@@ -40,6 +40,7 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
     ColumnReference,
     UnresolvedFunction,
+    UnresolvedStar,
     SQLExpression,
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
@@ -186,7 +187,12 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    return Column(ColumnReference(col))
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -2388,9 +2394,6 @@ def _test() -> None:
 
         # TODO(SPARK-41843): Implement SparkSession.udf
         del pyspark.sql.connect.functions.call_udf.__doc__
-
-        # TODO(SPARK-41845): Fix count bug
-        del pyspark.sql.connect.functions.count.__doc__
 
         globs["spark"] = (
             PySparkSession.builder.appName("sql.connect.functions tests")

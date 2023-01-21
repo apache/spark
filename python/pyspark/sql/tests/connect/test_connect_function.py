@@ -71,6 +71,64 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         self.assertEqual(str1, str2)
 
+    def test_count_star(self):
+        # SPARK-42099: test count(*), count(col(*)) and count(expr(*))
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        data = [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")]
+
+        cdf = self.connect.createDataFrame(data, schema=["age", "name"])
+        sdf = self.spark.createDataFrame(data, schema=["age", "name"])
+
+        self.assertEqual(
+            cdf.select(CF.count(CF.expr("*")), CF.count(cdf.age)).collect(),
+            sdf.select(SF.count(SF.expr("*")), SF.count(sdf.age)).collect(),
+        )
+
+        self.assertEqual(
+            cdf.select(CF.count(CF.col("*")), CF.count(cdf.age)).collect(),
+            sdf.select(SF.count(SF.col("*")), SF.count(sdf.age)).collect(),
+        )
+
+        self.assertEqual(
+            cdf.select(CF.count("*"), CF.count(cdf.age)).collect(),
+            sdf.select(SF.count("*"), SF.count(sdf.age)).collect(),
+        )
+
+        self.assertEqual(
+            cdf.groupby("name").agg({"*": "count"}).sort("name").collect(),
+            sdf.groupby("name").agg({"*": "count"}).sort("name").collect(),
+        )
+
+        self.assertEqual(
+            cdf.groupby("name")
+            .agg(CF.count(CF.expr("*")), CF.count(cdf.age))
+            .sort("name")
+            .collect(),
+            sdf.groupby("name")
+            .agg(SF.count(SF.expr("*")), SF.count(sdf.age))
+            .sort("name")
+            .collect(),
+        )
+
+        self.assertEqual(
+            cdf.groupby("name")
+            .agg(CF.count(CF.col("*")), CF.count(cdf.age))
+            .sort("name")
+            .collect(),
+            sdf.groupby("name")
+            .agg(SF.count(SF.col("*")), SF.count(sdf.age))
+            .sort("name")
+            .collect(),
+        )
+
+        self.assertEqual(
+            cdf.groupby("name").agg(CF.count("*"), CF.count(cdf.age)).sort("name").collect(),
+            sdf.groupby("name").agg(SF.count("*"), SF.count(sdf.age)).sort("name").collect(),
+        )
+
     def test_broadcast(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF

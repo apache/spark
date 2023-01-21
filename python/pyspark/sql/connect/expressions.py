@@ -336,10 +336,10 @@ class ColumnReference(Expression):
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, unparsed_identifier: str) -> None:
         super().__init__()
-        assert isinstance(name, str)
-        self._unparsed_identifier = name
+        assert isinstance(unparsed_identifier, str)
+        self._unparsed_identifier = unparsed_identifier
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -353,6 +353,43 @@ class ColumnReference(Expression):
 
     def __repr__(self) -> str:
         return f"{self._unparsed_identifier}"
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, ColumnReference)
+            and other._unparsed_identifier == self._unparsed_identifier
+        )
+
+
+class UnresolvedStar(Expression):
+    def __init__(self, unparsed_target: Optional[str]):
+        super().__init__()
+
+        if unparsed_target is not None:
+            assert isinstance(unparsed_target, str) and unparsed_target.endswith(".*")
+
+        self._unparsed_target = unparsed_target
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        expr = proto.Expression()
+        expr.unresolved_star.SetInParent()
+        if self._unparsed_target is not None:
+            expr.unresolved_star.unparsed_target = self._unparsed_target
+        return expr
+
+    def __repr__(self) -> str:
+        if self._unparsed_target is not None:
+            return f"unresolvedstar({self._unparsed_target})"
+        else:
+            return "unresolvedstar()"
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, UnresolvedStar)
+            and other._unparsed_target == self._unparsed_target
+        )
 
 
 class SQLExpression(Expression):
@@ -369,6 +406,9 @@ class SQLExpression(Expression):
         expr = proto.Expression()
         expr.expression_string.expression = self._expr
         return expr
+
+    def __eq__(self, other: Any) -> bool:
+        return other is not None and isinstance(other, SQLExpression) and other._expr == self._expr
 
 
 class SortOrder(Expression):
