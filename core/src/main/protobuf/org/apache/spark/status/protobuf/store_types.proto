@@ -427,15 +427,15 @@ message SQLExecutionUIData {
 
 message SparkPlanGraphNode {
   int64 id = 1;
-  string name = 2;
-  string desc = 3;
+  optional string name = 2;
+  optional string desc = 3;
   repeated SQLPlanMetric metrics = 4;
 }
 
 message SparkPlanGraphClusterWrapper {
   int64 id = 1;
-  string name = 2;
-  string desc = 3;
+  optional string name = 2;
+  optional string desc = 3;
   repeated SparkPlanGraphNodeWrapper nodes = 4;
   repeated SQLPlanMetric metrics = 5;
 }

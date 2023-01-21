@@ -48,7 +48,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.metricValues == input.metricValues)
   }
 
-  test("SQLExecutionUIData with null fields") {
+  test("SQLExecutionUIData with null string fields") {
     val input = {
       val normalInput = SqlResourceSuite.sqlExecutionUIData
       new SQLExecutionUIData(
@@ -130,30 +130,59 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Spark Plan Graph") {
+    val node0: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
+      node = new SparkPlanGraphNode(
+        id = 12,
+        name = "name_12",
+        desc = "desc_12",
+        metrics = Seq(
+          SQLPlanMetric(
+            name = "name_13",
+            accumulatorId = 13,
+            metricType = "metric_13"
+          ),
+          SQLPlanMetric(
+            name = "name_14",
+            accumulatorId = 14,
+            metricType = "metric_14"
+          )
+        )
+      ),
+      cluster = null
+    )
+
+    val node1: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
+      node = new SparkPlanGraphNode(
+        id = 13,
+        name = null,
+        desc = null,
+        metrics = Seq(
+          SQLPlanMetric(
+            name = null,
+            accumulatorId = 13,
+            metricType = null
+          )
+        )
+      ),
+      cluster = null
+    )
+
+    val node2: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
+      node = null,
+      cluster = new SparkPlanGraphClusterWrapper(
+        id = 6,
+        name = null,
+        desc = null,
+        nodes = Seq.empty,
+        metrics = Seq.empty
+      )
+    )
+
     val cluster = new SparkPlanGraphClusterWrapper(
       id = 5,
       name = "name_5",
       desc = "desc_5",
-      nodes = Seq(new SparkPlanGraphNodeWrapper(
-        node = new SparkPlanGraphNode(
-          id = 12,
-          name = "name_12",
-          desc = "desc_12",
-          metrics = Seq(
-            SQLPlanMetric(
-              name = "name_13",
-              accumulatorId = 13,
-              metricType = "metric_13"
-            ),
-            SQLPlanMetric(
-              name = "name_14",
-              accumulatorId = 14,
-              metricType = "metric_14"
-            )
-          )
-        ),
-        cluster = null
-      )),
+      nodes = Seq(node0, node1, node2),
       metrics = Seq(
         SQLPlanMetric(
           name = "name_6",
