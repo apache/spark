@@ -225,9 +225,12 @@ message Expression {
 
   // UnresolvedStar is used to expand all the fields of a relation or struct.
   message UnresolvedStar {
-    // (Optional) The target of the expansion, either be a table name or struct name, this
-    // is a list of identifiers that is the path of the expansion.
-    repeated string target = 1;
+
+    // (Optional) The target of the expansion.
+    //
+    // If set, it should end with '.*' and will be parsed by 'parseAttributeName'
+    // in the server side.
+    optional string unparsed_target = 1;
   }
 
   // Represents all of the input attributes to a given relational operator, for example in

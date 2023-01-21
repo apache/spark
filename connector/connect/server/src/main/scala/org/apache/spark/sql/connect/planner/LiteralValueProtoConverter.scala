@@ -107,7 +107,7 @@ object LiteralValueProtoConverter {
     lit.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.STRING => lit.getString
 
-      case _ => toCatalystExpression(lit).asInstanceOf[expressions.Literal].value
+      case _ => toCatalystExpression(lit).value
     }
   }
 

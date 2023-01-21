@@ -22,7 +22,12 @@ package org.apache.spark.status.protobuf;
  * Developer guides:
  *   - Coding style: https://developers.google.com/protocol-buffers/docs/style
  *   - Use int64 for job/stage IDs, in case of future extension in Spark core.
- *   - Use `weakIntern` on string values in create new objects during deserialization.
+ *   - For string fields:
+ *     - use `optional string` for protobuf definition
+ *     - on serialization, check if the string is null to avoid NPE
+ *     - on deserialization, set string fields as null if it is not set. Also, use `weakIntern` on
+ *       string values in create new objects during deserialization.
+ *     - add tests with null string inputs
  */
 
 enum JobExecutionStatus {
@@ -36,7 +41,7 @@ enum JobExecutionStatus {
 message JobData {
   // All IDs are int64 for extendability, even when they are currently int32 in Spark.
   int64 job_id = 1;
-  string name = 2;
+  optional string name = 2;
   optional string description = 3;
   optional int64 submission_time = 4;
   optional int64 completion_time = 5;
@@ -65,9 +70,9 @@ message JobDataWrapper {
 
 message AccumulableInfo {
   int64 id = 1;
-  string name = 2;
+  optional string name = 2;
   optional string update = 3;
-  string value = 4;
+  optional string value = 4;
 }
 
 message TaskDataWrapper {
@@ -78,10 +83,10 @@ message TaskDataWrapper {
   int64 launch_time = 5;
   int64 result_fetch_start = 6;
   int64 duration = 7;
-  string executor_id = 8;
-  string host = 9;
-  string status = 10;
-  string task_locality = 11;
+  optional string executor_id = 8;
+  optional string host = 9;
+  optional string status = 10;
+  optional string task_locality = 11;
   bool speculative = 12;
   repeated AccumulableInfo accumulator_updates = 13;
   optional string error_message = 14;
@@ -151,7 +156,7 @@ message ExecutorStageSummary {
 message ExecutorStageSummaryWrapper {
   int64 stage_id = 1;
   int32 stage_attempt_id = 2;
-  string executor_id = 3;
+  optional string executor_id = 3;
   ExecutorStageSummary info = 4;
 }
 
@@ -334,8 +339,8 @@ message SpeculationStageSummaryWrapper {
 }
 
 message ProcessSummary {
-  string id = 1;
-  string host_port = 2;
+  optional string id = 1;
+  optional string host_port = 2;
   bool is_active = 3;
   int32 total_cores = 4;
   int64 add_time = 5;

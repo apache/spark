@@ -699,22 +699,33 @@ class Expression(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        TARGET_FIELD_NUMBER: builtins.int
-        @property
-        def target(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """(Optional) The target of the expansion, either be a table name or struct name, this
-            is a list of identifiers that is the path of the expansion.
-            """
+        UNPARSED_TARGET_FIELD_NUMBER: builtins.int
+        unparsed_target: builtins.str
+        """(Optional) The target of the expansion.
+
+        If set, it should end with '.*' and will be parsed by 'parseAttributeName'
+        in the server side.
+        """
         def __init__(
             self,
             *,
-            target: collections.abc.Iterable[builtins.str] | None = ...,
+            unparsed_target: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_unparsed_target", b"_unparsed_target", "unparsed_target", b"unparsed_target"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["target", b"target"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_unparsed_target", b"_unparsed_target", "unparsed_target", b"unparsed_target"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_unparsed_target", b"_unparsed_target"]
+        ) -> typing_extensions.Literal["unparsed_target"] | None: ...
 
     class UnresolvedRegex(google.protobuf.message.Message):
         """Represents all of the input attributes to a given relational operator, for example in
