@@ -232,12 +232,21 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Application Environment Info") {
+    testApplicationEnvironmentInfoWrapperSerDe("1.8", "/tmp/java", "2.13")
+  }
+
+  test("Application Environment Info with nulls") {
+    testApplicationEnvironmentInfoWrapperSerDe(null, null, null)
+  }
+
+  private def testApplicationEnvironmentInfoWrapperSerDe(
+      javaVersion: String, javaHome: String, scalaVersion: String): Unit = {
     val input = new ApplicationEnvironmentInfoWrapper(
       new ApplicationEnvironmentInfo(
         runtime = new RuntimeInfo(
-          javaVersion = "1.8",
-          javaHome = "/tmp/java",
-          scalaVersion = "2.13"),
+          javaVersion = javaVersion,
+          javaHome = javaHome,
+          scalaVersion = scalaVersion),
         sparkProperties = Seq(("spark.conf.1", "1"), ("spark.conf.2", "2")),
         hadoopProperties = Seq(("hadoop.conf.conf1", "1"), ("hadoop.conf2", "val2")),
         systemProperties = Seq(("sys.prop.1", "value1"), ("sys.prop.2", "value2")),
@@ -252,10 +261,10 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
               discoveryScript = "script0",
               vendor = "apache"),
             "1" -> new ExecutorResourceRequest(
-              resourceName = "exec2",
+              resourceName = null,
               amount = 1,
-              discoveryScript = "script1",
-              vendor = "apache")
+              discoveryScript = null,
+              vendor = null)
           ),
           taskResources = Map(
             "0" -> new TaskResourceRequest(resourceName = "exec1", amount = 1),

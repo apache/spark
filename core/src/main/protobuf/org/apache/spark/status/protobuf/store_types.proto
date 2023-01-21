@@ -161,14 +161,14 @@ message ExecutorStageSummaryWrapper {
 }
 
 message ExecutorResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   int64 amount = 2;
-  string discoveryScript = 3;
-  string vendor = 4;
+  optional string discoveryScript = 3;
+  optional string vendor = 4;
 }
 
 message TaskResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   double amount = 2;
 }
 
@@ -179,9 +179,9 @@ message ResourceProfileInfo {
 }
 
 message RuntimeInfo {
-  string java_version = 1;
-  string java_home = 2;
-  string scala_version = 3;
+  optional string java_version = 1;
+  optional string java_home = 2;
+  optional string scala_version = 3;
 }
 
 message PairStrings {
