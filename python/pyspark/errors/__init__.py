@@ -55,6 +55,4 @@ __all__ = [
     "SparkConnectAnalysisException",
     "SparkConnectParseException",
     "SparkConnectTempTableAlreadyExistsException",
-    "PySparkTypeError",
-    "PySparkValueError",
 ]
