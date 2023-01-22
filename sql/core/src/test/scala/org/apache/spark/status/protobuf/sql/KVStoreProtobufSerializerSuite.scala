@@ -241,7 +241,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
   test("StreamingQueryData") {
     val id = UUID.randomUUID()
-    val input = new StreamingQueryData(
+    val normal = new StreamingQueryData(
       name = "some-query",
       id = id,
       runId = s"run-id-$id",
@@ -250,14 +250,25 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       startTimestamp = 1L,
       endTimestamp = Some(2L)
     )
-    val bytes = serializer.serialize(input)
-    val result = serializer.deserialize(bytes, classOf[StreamingQueryData])
-    assert(result.name == input.name)
-    assert(result.id == input.id)
-    assert(result.runId == input.runId)
-    assert(result.isActive == input.isActive)
-    assert(result.exception == input.exception)
-    assert(result.startTimestamp == input.startTimestamp)
-    assert(result.endTimestamp == input.endTimestamp)
+    val withNull = new StreamingQueryData(
+      name = null,
+      id = null,
+      runId = null,
+      isActive = false,
+      exception = None,
+      startTimestamp = 1L,
+      endTimestamp = None
+    )
+    Seq(normal, withNull).foreach { input =>
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[StreamingQueryData])
+      assert(result.name == input.name)
+      assert(result.id == input.id)
+      assert(result.runId == input.runId)
+      assert(result.isActive == input.isActive)
+      assert(result.exception == input.exception)
+      assert(result.startTimestamp == input.startTimestamp)
+      assert(result.endTimestamp == input.endTimestamp)
+    }
   }
 }

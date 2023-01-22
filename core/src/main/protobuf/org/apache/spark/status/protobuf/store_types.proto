@@ -229,10 +229,10 @@ message ApplicationInfoWrapper {
 }
 
 message StreamBlockData {
-  string name = 1;
-  string executor_id = 2;
-  string host_port = 3;
-  string storage_level = 4;
+  optional string name = 1;
+  optional string executor_id = 2;
+  optional string host_port = 3;
+  optional string storage_level = 4;
   bool use_memory = 5;
   bool use_disk = 6;
   bool deserialized = 7;
@@ -495,9 +495,9 @@ message RDDOperationGraphWrapper {
 }
 
 message StreamingQueryData {
-  string name = 1;
-  string id = 2;
-  string run_id = 3;
+  optional string name = 1;
+  optional string id = 2;
+  optional string run_id = 3;
   bool is_active = 4;
   optional string exception = 5;
   int64 start_timestamp = 6;
@@ -518,10 +518,10 @@ message TaskData {
   int64 launch_time = 5;
   optional int64 result_fetch_start = 6;
   optional int64 duration = 7;
-  string executor_id = 8;
-  string host = 9;
-  string status = 10;
-  string task_locality = 11;
+  optional string executor_id = 8;
+  optional string host = 9;
+  optional string status = 10;
+  optional string task_locality = 11;
   bool speculative = 12;
   repeated AccumulableInfo accumulator_updates = 13;
   optional string error_message = 14;
@@ -582,10 +582,10 @@ message StageData {
   int64 shuffle_write_time = 37;
   int64 shuffle_write_records = 38;
 
-  string name = 39;
+  optional string name = 39;
   optional string description = 40;
-  string details = 41;
-  string scheduling_pool = 42;
+  optional string details = 41;
+  optional string scheduling_pool = 42;
 
   repeated int64 rdd_ids = 43;
   repeated AccumulableInfo accumulator_updates = 44;

@@ -516,7 +516,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Stream Block Data") {
-    val input = new StreamBlockData(
+    val normal = new StreamBlockData(
       name = "a",
       executorId = "executor-1",
       hostPort = "123",
@@ -526,17 +526,29 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       deserialized = true,
       memSize = 1L,
       diskSize = 2L)
-    val bytes = serializer.serialize(input)
-    val result = serializer.deserialize(bytes, classOf[StreamBlockData])
-    assert(result.name == input.name)
-    assert(result.executorId == input.executorId)
-    assert(result.hostPort == input.hostPort)
-    assert(result.storageLevel == input.storageLevel)
-    assert(result.useMemory == input.useMemory)
-    assert(result.useDisk == input.useDisk)
-    assert(result.deserialized == input.deserialized)
-    assert(result.memSize == input.memSize)
-    assert(result.diskSize == input.diskSize)
+    val withNull = new StreamBlockData(
+      name = null,
+      executorId = null,
+      hostPort = null,
+      storageLevel = null,
+      useMemory = true,
+      useDisk = false,
+      deserialized = true,
+      memSize = 1L,
+      diskSize = 2L)
+    Seq(normal, withNull).foreach { input =>
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[StreamBlockData])
+      assert(result.name == input.name)
+      assert(result.executorId == input.executorId)
+      assert(result.hostPort == input.hostPort)
+      assert(result.storageLevel == input.storageLevel)
+      assert(result.useMemory == input.useMemory)
+      assert(result.useDisk == input.useDisk)
+      assert(result.deserialized == input.deserialized)
+      assert(result.memSize == input.memSize)
+      assert(result.diskSize == input.diskSize)
+    }
   }
 
   test("Resource Profile") {
@@ -956,6 +968,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Stage Data") {
+    testStageDataSerDe("name", "test details", "test scheduling pool")
+  }
+
+  test("Stage Data with null strings") {
+    testStageDataSerDe(null, null, null)
+  }
+
+  private def testStageDataSerDe(name: String, details: String, schedulingPool: String): Unit = {
     val accumulatorUpdates = Seq(
       new AccumulableInfo(1L, "duration", Some("update"), "value1"),
       new AccumulableInfo(2L, "duration2", None, "value2")
@@ -1038,10 +1058,10 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       launchTime = new Date(1123456L),
       resultFetchStart = Some(new Date(1223456L)),
       duration = Some(110000L),
-      executorId = "executor_id_2",
-      host = "host_name_2",
-      status = "SUCCESS",
-      taskLocality = "LOCAL",
+      executorId = null,
+      host = null,
+      status = null,
+      taskLocality = null,
       speculative = false,
       accumulatorUpdates = accumulatorUpdates,
       errorMessage = Some("error_2"),
@@ -1229,10 +1249,10 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       shuffleWriteBytes = 41L,
       shuffleWriteTime = 42L,
       shuffleWriteRecords = 43L,
-      name = "name",
+      name = name,
       description = Some("test description"),
-      details = "test details",
-      schedulingPool = "test scheduling pool",
+      details = details,
+      schedulingPool = schedulingPool,
       rddIds = Seq(1, 2, 3, 4, 5, 6),
       accumulatorUpdates = accumulatorUpdates,
       tasks = tasks,
