@@ -1432,6 +1432,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
+    "message" : [
+      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"
@@ -1702,12 +1708,6 @@
       }
     },
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
-    "message" : [
-      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
-      "Invalid expressions: [<invalidExprSqls>]"
-    ]
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
