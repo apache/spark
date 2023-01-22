@@ -1070,6 +1070,16 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.array_contains(sdf.a, sdf.f)).toPandas(),
         )
 
+        # test array_append
+        self.assert_eq(
+            cdf.select(CF.array_append(cdf.a, CF.lit("ab"))).toPandas(),
+            sdf.select(SF.array_append(sdf.a, SF.lit("ab"))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_append(cdf.a, cdf.f)).toPandas(),
+            sdf.select(SF.array_append(sdf.a, sdf.f)).toPandas(),
+        )
+
         # test array_join
         self.assert_eq(
             cdf.select(
