@@ -61,6 +61,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
 
   val schedulerAllocFile = sc.conf.get(SCHEDULER_ALLOCATION_FILE)
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
+  val DEFAULT_SCHEDULER_TEMPLATE_FILE = "fairscheduler-default.xml.template"
   val FAIR_SCHEDULER_PROPERTIES = SparkContext.SPARK_SCHEDULER_POOL
   val DEFAULT_POOL_NAME = "default"
   val MINIMUM_SHARES_PROPERTY = "minShare"
@@ -86,10 +87,16 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
           logInfo(s"Creating Fair Scheduler pools from default file: $DEFAULT_SCHEDULER_FILE")
           Some((is, DEFAULT_SCHEDULER_FILE))
         } else {
-          logWarning("Fair Scheduler configuration file not found so jobs will be scheduled in " +
-            s"FIFO order. To use fair scheduling, configure pools in $DEFAULT_SCHEDULER_FILE or " +
-            s"set ${SCHEDULER_ALLOCATION_FILE.key} to a file that contains the configuration.")
-          None
+          val is = Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_TEMPLATE_FILE)
+          if (is != null) {
+            logInfo(s"Creating Fair Scheduler pools from default file: $DEFAULT_SCHEDULER_FILE")
+            Some((is, DEFAULT_SCHEDULER_TEMPLATE_FILE))
+          } else {
+            logWarning("Fair Scheduler configuration file not found so jobs will be scheduled in " +
+              s"FIFO order. To use fair scheduling, configure pools in $DEFAULT_SCHEDULER_FILE " +
+              s"or set ${SCHEDULER_ALLOCATION_FILE.key} to a file that contains the configuration.")
+            None
+          }
         }
       }
 
