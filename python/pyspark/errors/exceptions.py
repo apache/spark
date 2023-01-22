@@ -311,12 +311,9 @@ class SparkConnectGrpcException(SparkConnectException):
         message: Optional[str] = None,
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
-        plan: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> None:
         self.message = message  # type: ignore[assignment]
-        if plan is not None:
-            self.message = f"{self.message}\nPlan: {plan}"
         if reason is not None:
             self.message = f"({reason}) {self.message}"
 
@@ -331,6 +328,25 @@ class SparkConnectAnalysisException(SparkConnectGrpcException):
     """
     Failed to analyze a SQL query plan from Spark Connect server.
     """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        error_class: Optional[str] = None,
+        message_parameters: Optional[Dict[str, str]] = None,
+        plan: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        self.message = message  # type: ignore[assignment]
+        if plan is not None:
+            self.message = f"{self.message}\nPlan: {plan}"
+
+        super().__init__(
+            message=self.message,
+            error_class=error_class,
+            message_parameters=message_parameters,
+            reason=reason,
+        )
 
 
 class SparkConnectParseException(SparkConnectGrpcException):

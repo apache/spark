@@ -618,9 +618,7 @@ class SparkConnectClient(object):
                             info.metadata["message"], plan=info.metadata["plan"]
                         ) from None
                     elif reason == "org.apache.spark.sql.catalyst.parser.ParseException":
-                        raise SparkConnectParseException(
-                            info.metadata["message"], plan=info.metadata["plan"]
-                        ) from None
+                        raise SparkConnectParseException(info.metadata["message"]) from None
                     elif (
                         reason
                         == "org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException"
