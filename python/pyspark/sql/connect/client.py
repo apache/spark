@@ -569,6 +569,7 @@ class SparkConnectClient(object):
                             "Received incorrect session identifier for request."
                         )
                     return AnalyzeResult.fromProto(resp)
+            raise SparkConnectException("Invalid state during retry exception handling.")
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
