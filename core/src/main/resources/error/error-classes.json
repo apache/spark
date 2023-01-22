@@ -933,6 +933,12 @@
     ],
     "sqlState" : "42604"
   },
+  "INVALID_USAGE_OF_STAR" : {
+    "message" : [
+      "Invalid usage of <elem> in <prettyName>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -2109,11 +2115,6 @@
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1020" : {
-    "message" : [
-      "Invalid usage of <elem> in <prettyName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1021" : {

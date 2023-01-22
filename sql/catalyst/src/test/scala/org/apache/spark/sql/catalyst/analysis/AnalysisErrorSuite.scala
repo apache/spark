@@ -329,10 +329,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`havingCondition`", "proposal" -> "`max(b)`"))
 
-  errorTest(
+  errorClassTest(
     "unresolved star expansion in max",
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
-    "Invalid usage of '*' in expression 'sum'." :: Nil)
+    errorClass = "INVALID_USAGE_OF_STAR",
+    messageParameters = Map("elem" -> "'*'", "prettyName" -> "expression 'sum'")
+  )
 
   errorClassTest(
     "sorting by unsupported column types",
@@ -1050,15 +1052,17 @@ class AnalysisErrorSuite extends AnalysisTest {
     val t2 = LocalRelation(b, c).as("t2")
 
     // SELECT * FROM t1 WHERE a = (SELECT sum(c) FROM t2 WHERE t1.* = t2.b)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
-      "Invalid usage of '*' in Filter" :: Nil
+      expectedErrorClass = "INVALID_USAGE_OF_STAR",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
     )
 
     // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
-      "Invalid usage of '*' in Filter" :: Nil
+      expectedErrorClass = "INVALID_USAGE_OF_STAR",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
     )
   }
 

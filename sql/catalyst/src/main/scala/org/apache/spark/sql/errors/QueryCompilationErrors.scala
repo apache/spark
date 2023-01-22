@@ -466,7 +466,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
     val elem = Seq(starMsg, resExprMsg).flatten.mkString(" and ")
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1020",
+      errorClass = "INVALID_USAGE_OF_STAR",
       messageParameters = Map("elem" -> elem, "prettyName" -> prettyName))
   }
 
