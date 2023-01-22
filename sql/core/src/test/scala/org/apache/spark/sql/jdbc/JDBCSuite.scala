@@ -1001,7 +1001,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Dialect Limit and Top implementation") {
+  test("SPARK-42128: Dialect Limit and Top implementation") {
     // Dialects that support LIMIT N.
     val limitDialects = Seq(
       JdbcDialects.get("jdbc:mysql"),
