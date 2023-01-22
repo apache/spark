@@ -81,7 +81,8 @@ class ApplicationEnvironmentInfoWrapperSerializer
       scalaVersion = getStringField(rt.hasScalaVersion, () => rt.getScalaVersion)
     )
     val pairSSToTuple = (pair: StoreTypes.PairStrings) => {
-      (pair.getValue1, pair.getValue2)
+      (getStringField(pair.hasValue1, pair.getValue1),
+        getStringField(pair.hasValue2, pair.getValue2))
     }
     new ApplicationEnvironmentInfo(
       runtime = runtime,
@@ -97,8 +98,8 @@ class ApplicationEnvironmentInfoWrapperSerializer
 
   private def serializePairStrings(pair: (String, String)): StoreTypes.PairStrings = {
     val builder = StoreTypes.PairStrings.newBuilder()
-    builder.setValue1(pair._1)
-    builder.setValue2(pair._2)
+    setStringField(pair._1, builder.setValue1)
+    setStringField(pair._2, builder.setValue2)
     builder.build()
   }
 
