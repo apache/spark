@@ -1329,4 +1329,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
       parsePlan("SELECT c FROM a WHERE c < 20"))
   }
+
+  test("SPARK-41489: type of filter expression should be a bool") {
+    assertAnalysisErrorClass(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id)
+         |SELECT *
+         |FROM t1
+         |WHERE 'true'""".stripMargin),
+      expectedErrorClass = "INVALID_TYPE_FOR_FILTER_EXPR",
+      expectedMessageParameters = Map("filter" -> "'true'", "type" -> "string"),
+      queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
+  }
 }

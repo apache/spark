@@ -933,6 +933,12 @@
     ],
     "sqlState" : "42604"
   },
+  "INVALID_TYPE_FOR_FILTER_EXPR" : {
+    "message" : [
+      "Filter expression '<filter>' of type <type> is not a boolean."
+    ],
+    "sqlState" : "428H2"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -5155,11 +5161,6 @@
   "_LEGACY_ERROR_TEMP_2414" : {
     "message" : [
       "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2415" : {
-    "message" : [
-      "filter expression '<filter>' of type <type> is not a boolean."
     ]
   },
   "_LEGACY_ERROR_TEMP_2416" : {

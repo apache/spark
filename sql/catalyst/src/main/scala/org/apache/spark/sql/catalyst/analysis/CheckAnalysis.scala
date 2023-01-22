@@ -355,7 +355,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2415",
+              errorClass = "INVALID_TYPE_FOR_FILTER_EXPR",
               messageParameters = Map(
                 "filter" -> f.condition.sql,
                 "type" -> f.condition.dataType.catalogString))
