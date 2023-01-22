@@ -23,7 +23,7 @@ import collection.JavaConverters._
 
 import org.apache.spark.status.ApplicationInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils._
 
 
 class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrapper] {
@@ -44,8 +44,8 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrap
 
   private def serializeApplicationInfo(info: ApplicationInfo): StoreTypes.ApplicationInfo = {
     val builder = StoreTypes.ApplicationInfo.newBuilder()
-    builder.setId(info.id)
-      .setName(info.name)
+    setStringField(info.id, builder.setId)
+    setStringField(info.name, builder.setName)
     info.coresGranted.foreach { c =>
       builder.setCoresGranted(c)
     }
@@ -71,8 +71,8 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrap
     val memoryPerExecutorMB = getOptional(info.hasMemoryPerExecutorMb, info.getMemoryPerExecutorMb)
     val attempts = info.getAttemptsList.asScala.map(deserializeApplicationAttemptInfo)
     ApplicationInfo(
-      id = info.getId,
-      name = info.getName,
+      id = getStringField(info.hasId, () => info.getId),
+      name = getStringField(info.hasName, () => info.getName),
       coresGranted = coresGranted,
       maxCores = maxCores,
       coresPerExecutor = coresPerExecutor,
@@ -88,9 +88,9 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrap
       .setEndTime(info.endTime.getTime)
       .setLastUpdated(info.lastUpdated.getTime)
       .setDuration(info.duration)
-      .setSparkUser(info.sparkUser)
       .setCompleted(info.completed)
-      .setAppSparkVersion(info.appSparkVersion)
+    setStringField(info.sparkUser, builder.setSparkUser)
+    setStringField(info.appSparkVersion, builder.setAppSparkVersion)
     info.attemptId.foreach{ id =>
       builder.setAttemptId(id)
     }
@@ -107,9 +107,9 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrap
       endTime = new Date(info.getEndTime),
       lastUpdated = new Date(info.getLastUpdated),
       duration = info.getDuration,
-      sparkUser = info.getSparkUser,
+      sparkUser = getStringField(info.hasSparkUser, () => info.getSparkUser),
       completed = info.getCompleted,
-      appSparkVersion = info.getAppSparkVersion
+      appSparkVersion = getStringField(info.hasAppSparkVersion, () => info.getAppSparkVersion)
     )
   }
 }

@@ -20,7 +20,7 @@ import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
-private[spark] object Connect {
+object Connect {
 
   val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
