@@ -30,22 +30,39 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
 
   test("SQLExecutionUIData") {
-    val input = SqlResourceSuite.sqlExecutionUIData
-    val bytes = serializer.serialize(input)
-    val result = serializer.deserialize(bytes, classOf[SQLExecutionUIData])
-    assert(result.executionId == input.executionId)
-    assert(result.rootExecutionId == input.rootExecutionId)
-    assert(result.description == input.description)
-    assert(result.details == input.details)
-    assert(result.physicalPlanDescription == input.physicalPlanDescription)
-    assert(result.modifiedConfigs == input.modifiedConfigs)
-    assert(result.metrics == input.metrics)
-    assert(result.submissionTime == input.submissionTime)
-    assert(result.completionTime == input.completionTime)
-    assert(result.errorMessage == input.errorMessage)
-    assert(result.jobs == input.jobs)
-    assert(result.stages == input.stages)
-    assert(result.metricValues == input.metricValues)
+    val normal = SqlResourceSuite.sqlExecutionUIData
+    val withNull = new SQLExecutionUIData(
+      executionId = normal.executionId,
+      rootExecutionId = normal.rootExecutionId,
+      description = null,
+      details = null,
+      physicalPlanDescription = null,
+      modifiedConfigs = normal.modifiedConfigs,
+      metrics = Seq(SQLPlanMetric(null, 0, null)),
+      submissionTime = normal.submissionTime,
+      completionTime = normal.completionTime,
+      errorMessage = normal.errorMessage,
+      jobs = normal.jobs,
+      stages = normal.stages,
+      metricValues = normal.metricValues
+    )
+    Seq(normal, withNull).foreach { input =>
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[SQLExecutionUIData])
+      assert(result.executionId == input.executionId)
+      assert(result.rootExecutionId == input.rootExecutionId)
+      assert(result.description == input.description)
+      assert(result.details == input.details)
+      assert(result.physicalPlanDescription == input.physicalPlanDescription)
+      assert(result.modifiedConfigs == input.modifiedConfigs)
+      assert(result.metrics == input.metrics)
+      assert(result.submissionTime == input.submissionTime)
+      assert(result.completionTime == input.completionTime)
+      assert(result.errorMessage == input.errorMessage)
+      assert(result.jobs == input.jobs)
+      assert(result.stages == input.stages)
+      assert(result.metricValues == input.metricValues)
+    }
   }
 
   test("SQLExecutionUIData with metricValues is empty map and null") {
@@ -93,30 +110,59 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("Spark Plan Graph") {
+    val node0: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
+      node = new SparkPlanGraphNode(
+        id = 12,
+        name = "name_12",
+        desc = "desc_12",
+        metrics = Seq(
+          SQLPlanMetric(
+            name = "name_13",
+            accumulatorId = 13,
+            metricType = "metric_13"
+          ),
+          SQLPlanMetric(
+            name = "name_14",
+            accumulatorId = 14,
+            metricType = "metric_14"
+          )
+        )
+      ),
+      cluster = null
+    )
+
+    val node1: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
+      node = new SparkPlanGraphNode(
+        id = 13,
+        name = null,
+        desc = null,
+        metrics = Seq(
+          SQLPlanMetric(
+            name = null,
+            accumulatorId = 13,
+            metricType = null
+          )
+        )
+      ),
+      cluster = null
+    )
+
+    val node2: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
+      node = null,
+      cluster = new SparkPlanGraphClusterWrapper(
+        id = 6,
+        name = null,
+        desc = null,
+        nodes = Seq.empty,
+        metrics = Seq.empty
+      )
+    )
+
     val cluster = new SparkPlanGraphClusterWrapper(
       id = 5,
       name = "name_5",
       desc = "desc_5",
-      nodes = Seq(new SparkPlanGraphNodeWrapper(
-        node = new SparkPlanGraphNode(
-          id = 12,
-          name = "name_12",
-          desc = "desc_12",
-          metrics = Seq(
-            SQLPlanMetric(
-              name = "name_13",
-              accumulatorId = 13,
-              metricType = "metric_13"
-            ),
-            SQLPlanMetric(
-              name = "name_14",
-              accumulatorId = 14,
-              metricType = "metric_14"
-            )
-          )
-        ),
-        cluster = null
-      )),
+      nodes = Seq(node0, node1, node2),
       metrics = Seq(
         SQLPlanMetric(
           name = "name_6",
