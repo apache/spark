@@ -68,7 +68,7 @@ abstract class V2SessionCatalogTableBaseSuite extends V2SessionCatalogBaseSuite
     val catalog = newCatalog()
     catalog.createNamespace(Array("db"), emptyProps)
     catalog.createNamespace(Array("db2"),
-      Map(SupportsNamespaces.PROP_LOCATION -> "file:///db2.db").asJava)
+      Map(SupportsNamespaces.PROP_LOCATION -> "file:///tmp/db2.db").asJava)
     catalog.createNamespace(Array("ns"), emptyProps)
     catalog.createNamespace(Array("ns2"), emptyProps)
   }
