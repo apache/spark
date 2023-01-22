@@ -57,7 +57,7 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(session: SparkSession) {
+class SparkConnectPlanner(val session: SparkSession) {
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
@@ -691,9 +691,12 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       logical.OneRowRelation()
     }
-    val projection =
-      rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
-    logical.Project(projectList = projection.toSeq, child = baseRel)
+
+    val projection = rel.getExpressionsList.asScala.toSeq
+      .map(transformExpression)
+      .map(toNamedExpression)
+
+    logical.Project(projectList = projection, child = baseRel)
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
@@ -743,6 +746,11 @@ class SparkConnectPlanner(session: SparkSession) {
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
+  }
+
+  private def toNamedExpression(expr: Expression): NamedExpression = expr match {
+    case named: NamedExpression => named
+    case expr => UnresolvedAlias(expr)
   }
 
   private def transformExpressionPlugin(extension: ProtoAny): Expression = {
@@ -1244,11 +1252,6 @@ class SparkConnectPlanner(session: SparkSession) {
       throw InvalidPlanInput("Aggregate needs a plan input")
     }
     val input = transformRelation(rel.getInput)
-
-    def toNamedExpression(expr: Expression): NamedExpression = expr match {
-      case named: NamedExpression => named
-      case expr => UnresolvedAlias(expr)
-    }
 
     val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq.map(transformExpression)
