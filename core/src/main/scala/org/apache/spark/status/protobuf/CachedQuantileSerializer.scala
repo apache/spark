@@ -18,6 +18,7 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.CachedQuantile
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
 class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
 
@@ -25,7 +26,6 @@ class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
     val builder = StoreTypes.CachedQuantile.newBuilder()
       .setStageId(data.stageId.toLong)
       .setStageAttemptId(data.stageAttemptId)
-      .setQuantile(data.quantile)
       .setTaskCount(data.taskCount)
       .setDuration(data.duration)
       .setExecutorDeserializeTime(data.executorDeserializeTime)
@@ -65,6 +65,7 @@ class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
       .setShuffleWriteBytes(data.shuffleWriteBytes)
       .setShuffleWriteRecords(data.shuffleWriteRecords)
       .setShuffleWriteTime(data.shuffleWriteTime)
+    setStringField(data.quantile, builder.setQuantile)
     builder.build().toByteArray
   }
 
@@ -73,7 +74,7 @@ class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
     new CachedQuantile(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
-      quantile = binary.getQuantile,
+      quantile = getStringField(binary.hasQuantile, binary.getQuantile),
       taskCount = binary.getTaskCount,
       duration = binary.getDuration,
       executorDeserializeTime = binary.getExecutorDeserializeTime,

@@ -161,14 +161,14 @@ message ExecutorStageSummaryWrapper {
 }
 
 message ExecutorResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   int64 amount = 2;
-  string discoveryScript = 3;
-  string vendor = 4;
+  optional string discoveryScript = 3;
+  optional string vendor = 4;
 }
 
 message TaskResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   double amount = 2;
 }
 
@@ -179,9 +179,9 @@ message ResourceProfileInfo {
 }
 
 message RuntimeInfo {
-  string java_version = 1;
-  string java_home = 2;
-  string scala_version = 3;
+  optional string java_version = 1;
+  optional string java_home = 2;
+  optional string scala_version = 3;
 }
 
 message PairStrings {
@@ -209,14 +209,14 @@ message ApplicationAttemptInfo {
   int64 end_time = 3;
   int64 last_updated = 4;
   int64 duration = 5;
-  string spark_user = 6;
+  optional string spark_user = 6;
   bool completed = 7;
-  string app_spark_version = 8;
+  optional string app_spark_version = 8;
 }
 
 message ApplicationInfo {
-  string id = 1;
-  string name = 2;
+  optional string id = 1;
+  optional string name = 2;
   optional int32 cores_granted = 3;
   optional int32 max_cores = 4;
   optional int32 cores_per_executor = 5;
@@ -241,7 +241,7 @@ message StreamBlockData {
 }
 
 message RDDDataDistribution {
-  string address = 1;
+  optional string address = 1;
   int64 memory_used = 2;
   int64 memory_remaining = 3;
   int64 disk_used = 4;
@@ -252,8 +252,8 @@ message RDDDataDistribution {
 }
 
 message RDDPartitionInfo {
-  string block_name = 1;
-  string storage_level = 2;
+  optional string block_name = 1;
+  optional string storage_level = 2;
   int64 memory_used = 3;
   int64 disk_used = 4;
   repeated string executors = 5;
@@ -261,7 +261,7 @@ message RDDPartitionInfo {
 
 message RDDStorageInfo {
   int32 id = 1;
-  string name = 2;
+  optional string name = 2;
   int32 num_partitions = 3;
   int32 num_cached_partitions = 4;
   string storage_level = 5;
@@ -282,7 +282,7 @@ message ResourceProfileWrapper {
 message CachedQuantile {
   int64 stage_id = 1;
   int32 stage_attempt_id = 2;
-  string quantile = 3;
+  optional string quantile = 3;
   int64 task_count = 4;
   double duration = 5;
   double executor_deserialize_time = 6;
@@ -365,8 +365,8 @@ message ResourceInformation {
 }
 
 message ExecutorSummary {
-  string id = 1;
-  string host_port = 2;
+  optional string id = 1;
+  optional string host_port = 2;
   bool is_active = 3;
   int32 rdd_blocks = 4;
   int64 memory_used = 5;
@@ -762,7 +762,7 @@ message AppSummary {
 }
 
 message PoolData {
-  string name = 1;
+  optional string name = 1;
   repeated int64 stage_ids = 2;
 }
 
