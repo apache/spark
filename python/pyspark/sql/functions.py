@@ -7812,6 +7812,9 @@ def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or str
