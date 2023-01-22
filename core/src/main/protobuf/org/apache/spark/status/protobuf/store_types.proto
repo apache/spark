@@ -185,8 +185,8 @@ message RuntimeInfo {
 }
 
 message PairStrings {
-  string value1 = 1;
-  string value2 = 2;
+  optional string value1 = 1;
+  optional string value2 = 2;
 }
 
 message ApplicationEnvironmentInfo {
@@ -472,16 +472,16 @@ enum DeterministicLevel {
 
 message RDDOperationNode {
   int32 id = 1;
-  string name = 2;
+  optional string name = 2;
   bool cached = 3;
   bool barrier = 4;
-  string callsite = 5;
+  optional string callsite = 5;
   DeterministicLevel output_deterministic_level = 6;
 }
 
 message RDDOperationClusterWrapper {
-  string id = 1;
-  string name = 2;
+  optional string id = 1;
+  optional string name = 2;
   repeated RDDOperationNode child_nodes = 3;
   repeated RDDOperationClusterWrapper child_clusters = 4;
 }

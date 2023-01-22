@@ -259,9 +259,11 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           javaVersion = javaVersion,
           javaHome = javaHome,
           scalaVersion = scalaVersion),
-        sparkProperties = Seq(("spark.conf.1", "1"), ("spark.conf.2", "2")),
-        hadoopProperties = Seq(("hadoop.conf.conf1", "1"), ("hadoop.conf2", "val2")),
-        systemProperties = Seq(("sys.prop.1", "value1"), ("sys.prop.2", "value2")),
+        sparkProperties = Seq(("spark.conf.1", "1"), ("spark.conf.2", "2"), (null, null)),
+        hadoopProperties =
+          Seq(("hadoop.conf.conf1", "1"), ("hadoop.conf2", "val2"), (null, "val3")),
+        systemProperties =
+          Seq(("sys.prop.1", "value1"), ("sys.prop.2", "value2"), ("sys.prop.3", null)),
         metricsProperties = Seq(("metric.1", "klass1"), ("metric2", "klass2")),
         classpathEntries = Seq(("/jar1", "System"), ("/jar2", "User")),
         resourceProfiles = Seq(new ResourceProfileInfo(
@@ -875,20 +877,41 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
             cached = true,
             barrier = false,
             callsite = "callsite_1",
-            outputDeterministicLevel = DeterministicLevel.INDETERMINATE)),
-        childClusters = Seq(new RDDOperationClusterWrapper(
-          id = "id_1",
-          name = "name1",
-          childNodes = Seq(
-            RDDOperationNode(
-              id = 15,
-              name = "name3",
-              cached = false,
-              barrier = true,
-              callsite = "callsite_2",
-              outputDeterministicLevel = DeterministicLevel.UNORDERED)),
-          childClusters = Seq.empty
-        ))
+            outputDeterministicLevel = DeterministicLevel.INDETERMINATE),
+          RDDOperationNode(
+            id = 20,
+            name = null,
+            cached = true,
+            barrier = false,
+            callsite = null,
+            outputDeterministicLevel = DeterministicLevel.DETERMINATE)),
+        childClusters = Seq(
+          new RDDOperationClusterWrapper(
+            id = "id_1",
+            name = "name1",
+            childNodes = Seq(
+              RDDOperationNode(
+                id = 15,
+                name = "name3",
+                cached = false,
+                barrier = true,
+                callsite = "callsite_2",
+                outputDeterministicLevel = DeterministicLevel.UNORDERED)),
+            childClusters = Seq.empty
+          ),
+          new RDDOperationClusterWrapper(
+            id = null,
+            name = null,
+            childNodes = Seq(
+              RDDOperationNode(
+                id = 21,
+                name = null,
+                cached = false,
+                barrier = true,
+                callsite = null,
+                outputDeterministicLevel = DeterministicLevel.UNORDERED)),
+            childClusters = Seq.empty
+          ))
       )
     )
     val bytes = serializer.serialize(input)
