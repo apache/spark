@@ -2664,11 +2664,13 @@ def approx_count_distinct_sketch(col: "ColumnOrName", rsd: Optional[float] = Non
     Examples
     --------
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df.agg(approx_count_distinct_sketch("value").alias('hll_sketch')).show()
+    >>> df = df.agg(approx_count_distinct_sketch("value").alias('sketch'))
+    >>> df = df.withColumn(approx_count_distinct_eval_sketch("sketch")).alias('distinct_cnt')
+    >>> dr.drop('sketch').show()
     +---------------+
-    |     hll_sketch|
+    |   distinct_cnt|
     +---------------+
-    |<binary sketch>|
+    |              3|
     +---------------+
     """
     if rsd is None:
@@ -2697,12 +2699,13 @@ def approx_count_distinct_eval_sketch(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df = df.agg(approx_count_distinct_sketch("value")).alias('sketch')
-    >>> df.withColumn(approx_count_distinct_eval_sketch("sketch")).alias('distinct_cnt').show()
-    +---------------+---------------+
-    |     hll_sketch|   distinct_cnt|
-    +---------------+---------------+
-    |<binary sketch>|              3|
-    +---------------+---------------+
+    >>> df = df.withColumn(approx_count_distinct_eval_sketch("sketch")).alias('distinct_cnt')
+    >>> dr.drop('sketch').show()
+    +---------------+
+    |   distinct_cnt|
+    +---------------+
+    |              3|
+    +---------------+
     """
     return _invoke_function_over_columns("approx_count_distinct_eval_sketch", col)
 
