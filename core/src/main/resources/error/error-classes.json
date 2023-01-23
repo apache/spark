@@ -613,7 +613,7 @@
         ]
       }
     },
-    "sqlState" : "42000"
+    "sqlState" : "42K01"
   },
   "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
     "message" : [
