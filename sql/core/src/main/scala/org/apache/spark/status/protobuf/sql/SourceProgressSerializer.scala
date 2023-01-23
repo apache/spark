@@ -21,7 +21,7 @@ import java.util.{HashMap => JHashMap, List => JList}
 
 import org.apache.spark.sql.streaming.SourceProgress
 import org.apache.spark.status.protobuf.StoreTypes
-import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
+import org.apache.spark.status.protobuf.Utils.{getStringField, setJMapField, setStringField}
 
 private[protobuf] object SourceProgressSerializer {
 
@@ -34,9 +34,7 @@ private[protobuf] object SourceProgressSerializer {
     builder.setNumInputRows(source.numInputRows)
     builder.setInputRowsPerSecond(source.inputRowsPerSecond)
     builder.setProcessedRowsPerSecond(source.processedRowsPerSecond)
-    if (source.metrics != null) {
-      builder.putAllMetrics(source.metrics)
-    }
+    setJMapField(source.metrics, builder.putAllMetrics)
     builder.build()
   }
 

@@ -35,6 +35,7 @@ private[protobuf] object StreamingQueryProgressSerializer {
     .build()
 
   def serialize(process: StreamingQueryProgress): StoreTypes.StreamingQueryProgress = {
+    import org.apache.spark.status.protobuf.Utils.setJMapField
     val builder = StoreTypes.StreamingQueryProgress.newBuilder()
     if (process.id != null) {
       builder.setId(process.id.toString)
@@ -46,19 +47,15 @@ private[protobuf] object StreamingQueryProgressSerializer {
     setStringField(process.timestamp, builder.setTimestamp)
     builder.setBatchId(process.batchId)
     builder.setBatchDuration(process.batchDuration)
-    if (process.durationMs != null) {
-      builder.putAllDurationMs(process.durationMs)
-    }
-    if (process.eventTime != null) {
-      builder.putAllEventTime(process.eventTime)
-    }
+    setJMapField(process.durationMs, builder.putAllDurationMs)
+    setJMapField(process.eventTime, builder.putAllEventTime)
     process.stateOperators.foreach(
       s => builder.addStateOperators(StateOperatorProgressSerializer.serialize(s)))
     process.sources.foreach(
       s => builder.addSources(SourceProgressSerializer.serialize(s))
     )
     builder.setSink(SinkProgressSerializer.serialize(process.sink))
-    if (process.observedMetrics != null) {
+    if (process.observedMetrics != null && !process.observedMetrics.isEmpty) {
       process.observedMetrics.forEach {
         case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
       }

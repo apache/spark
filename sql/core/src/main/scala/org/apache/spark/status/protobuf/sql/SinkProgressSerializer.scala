@@ -26,12 +26,11 @@ import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 private[protobuf] object SinkProgressSerializer {
 
   def serialize(sink: SinkProgress): StoreTypes.SinkProgress = {
+    import org.apache.spark.status.protobuf.Utils.setJMapField
     val builder = StoreTypes.SinkProgress.newBuilder()
     setStringField(sink.description, builder.setDescription)
     builder.setNumOutputRows(sink.numOutputRows)
-    if (sink.metrics != null) {
-      builder.putAllMetrics(sink.metrics)
-    }
+    setJMapField(sink.metrics, builder.putAllMetrics)
     builder.build()
   }
 

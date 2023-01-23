@@ -26,6 +26,7 @@ import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 object StateOperatorProgressSerializer {
 
   def serialize(stateOperator: StateOperatorProgress): StoreTypes.StateOperatorProgress = {
+    import org.apache.spark.status.protobuf.Utils.setJMapField
     val builder = StoreTypes.StateOperatorProgress.newBuilder()
     setStringField(stateOperator.operatorName, builder.setOperatorName)
     builder.setNumRowsTotal(stateOperator.numRowsTotal)
@@ -38,9 +39,7 @@ object StateOperatorProgressSerializer {
     builder.setNumRowsDroppedByWatermark(stateOperator.numRowsDroppedByWatermark)
     builder.setNumShufflePartitions(stateOperator.numShufflePartitions)
     builder.setNumStateStoreInstances(stateOperator.numStateStoreInstances)
-    if (stateOperator.customMetrics != null) {
-      builder.putAllCustomMetrics(stateOperator.customMetrics)
-    }
+    setJMapField(stateOperator.customMetrics, builder.putAllCustomMetrics)
     builder.build()
   }
 
