@@ -545,7 +545,9 @@ class SparkConnectClient(object):
         else:  # formatted
             req.explain.explain_mode = pb2.Explain.ExplainMode.FORMATTED
         try:
-            for attempt in Retrying(SparkConnectClient.retry_exception, **self._retry_policy):
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
                 with attempt:
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
                     if resp.client_id != self._session_id:
@@ -570,7 +572,9 @@ class SparkConnectClient(object):
         """
         logger.info("Execute")
         try:
-            for attempt in Retrying(SparkConnectClient.retry_exception, **self._retry_policy):
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
                 with attempt:
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                         if b.client_id != self._session_id:
@@ -591,7 +595,9 @@ class SparkConnectClient(object):
         batches: List[pa.RecordBatch] = []
 
         try:
-            for attempt in Retrying(SparkConnectClient.retry_exception, **self._retry_policy):
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
                 with attempt:
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                         if b.client_id != self._session_id:
@@ -744,7 +750,7 @@ class Retrying:
 
     .. code-block:: python
 
-        for attempt in Retrying(lambda x: isinstance(x, TransientError)):
+        for attempt in Retrying(can_retry=lambda x: isinstance(x, TransientError)):
             with attempt:
                 # do the work.
 
@@ -752,11 +758,11 @@ class Retrying:
 
     def __init__(
         self,
+        max_retries: int,
+        initial_backoff: int,
+        max_backoff: int,
+        backoff_multiplier: float,
         can_retry: Callable[..., bool] = lambda x: True,
-        max_retries: int = 15,
-        initial_backoff: int = 50,
-        max_backoff: int = 60000,
-        backoff_multiplier: float = 4.0,
     ) -> None:
         self._can_retry = can_retry
         self._max_retries = max_retries

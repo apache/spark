@@ -23,6 +23,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
+from pyspark.sql.connect.client import Retrying
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -36,7 +37,6 @@ from pyspark.sql.types import (
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.sql.connect.client import Retrying
 
 from pyspark.errors import (
     SparkConnectException,
@@ -2616,7 +2616,13 @@ class ClientTests(unittest.TestCase):
 
         # Check that if we have less than 4 retries all is ok.
         call_wrap = {"counter": 0}
-        for attempt in Retrying(lambda x: True, max_retries=4, backoff_multiplier=1):
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
 
@@ -2624,7 +2630,11 @@ class ClientTests(unittest.TestCase):
         call_wrap = {"counter": 0}
         with self.assertRaises(TestError):
             for attempt in Retrying(
-                lambda x: True, max_retries=2, max_backoff=50, backoff_multiplier=1
+                can_retry=lambda x: True,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+                initial_backoff=50,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -2633,7 +2643,11 @@ class ClientTests(unittest.TestCase):
         # Check that if we have less than 4 retries all is ok.
         call_wrap = {"counter": 0}
         for attempt in Retrying(
-            lambda x: x.code() == grpc.StatusCode.UNAVAILABLE, max_retries=4, backoff_multiplier=1
+            can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -2642,10 +2656,11 @@ class ClientTests(unittest.TestCase):
         call_wrap = {"counter": 0}
         with self.assertRaises(TestError):
             for attempt in Retrying(
-                lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
                 max_retries=2,
                 max_backoff=50,
                 backoff_multiplier=1,
+                initial_backoff=50,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -2654,10 +2669,11 @@ class ClientTests(unittest.TestCase):
         call_wrap = {"counter": 0}
         with self.assertRaises(TestError):
             for attempt in Retrying(
-                lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
-                max_retries=0,
-                max_backoff=50,
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=4,
                 backoff_multiplier=1,
+                initial_backoff=1,
+                max_backoff=10,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
