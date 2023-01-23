@@ -19,18 +19,24 @@ package org.apache.spark.status.protobuf.sql
 
 import org.apache.spark.sql.execution.ui.SQLPlanMetric
 import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.status.protobuf.Utils._
+import org.apache.spark.util.Utils.weakIntern
 
 object SQLPlanMetricSerializer {
 
   def serialize(metric: SQLPlanMetric): StoreTypes.SQLPlanMetric = {
-    StoreTypes.SQLPlanMetric.newBuilder()
-      .setName(metric.name)
-      .setAccumulatorId(metric.accumulatorId)
-      .setMetricType(metric.metricType)
-      .build()
+    val builder = StoreTypes.SQLPlanMetric.newBuilder()
+    setStringField(metric.name, builder.setName)
+    builder.setAccumulatorId(metric.accumulatorId)
+    setStringField(metric.metricType, builder.setMetricType)
+    builder.build()
   }
 
   def deserialize(metrics: StoreTypes.SQLPlanMetric): SQLPlanMetric = {
-    SQLPlanMetric(metrics.getName, metrics.getAccumulatorId, metrics.getMetricType)
+    SQLPlanMetric(
+      name = getStringField(metrics.hasName, () => weakIntern(metrics.getName)),
+      accumulatorId = metrics.getAccumulatorId,
+      metricType = getStringField(metrics.hasMetricType, () => weakIntern(metrics.getMetricType))
+    )
   }
 }

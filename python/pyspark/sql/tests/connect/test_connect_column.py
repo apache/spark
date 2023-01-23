@@ -55,7 +55,7 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.connect.client import SparkConnectException
+from pyspark.errors import SparkConnectException
 
 if should_test_connect:
     import pandas as pd

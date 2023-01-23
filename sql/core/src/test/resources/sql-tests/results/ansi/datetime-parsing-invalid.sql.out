@@ -163,7 +163,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31"
+    "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31."
   }
 }
 
@@ -179,7 +179,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Conflict found: Field MonthOfYear 11 differs from MonthOfYear 12 derived from 1970-12-31"
+    "message" : "Conflict found: Field MonthOfYear 11 differs from MonthOfYear 12 derived from 1970-12-31."
   }
 }
 
@@ -211,7 +211,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31"
+    "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31."
   }
 }
 
