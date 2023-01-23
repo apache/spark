@@ -592,6 +592,11 @@
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
   },
+  "INCOMPATIBLE_TEMP_VIEW_SCHEMA_CHANGE" : {
+    "message" : [
+      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>."
+    ]
+  },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
@@ -2777,11 +2782,6 @@
   "_LEGACY_ERROR_TEMP_1175" : {
     "message" : [
       "Unsupported data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1177" : {
-    "message" : [
-      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1178" : {

@@ -1766,7 +1766,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           "viewDDL" -> v))
     }.getOrElse {
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1177",
+        errorClass = "INCOMPATIBLE_TEMP_VIEW_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,

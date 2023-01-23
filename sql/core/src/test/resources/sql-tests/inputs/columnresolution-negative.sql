@@ -33,10 +33,17 @@ SELECT mydb1.t1.i1 FROM t1;
 
 -- Negative tests: view cannot resolve column after incompatible schema change
 USE mydb1;
-CREATE VIEW v AS SELECT * FROM t1;
+CREATE VIEW v1 AS SELECT * FROM t1;
 DROP TABLE t1;
 CREATE TABLE t1 USING parquet AS SELECT 1 AS i2;
-SELECT * FROM v;
+SELECT * FROM v1;
+
+-- Negative tests: temp view cannot resolve column after incompatible schema change
+USE mydb2;
+CREATE TEMP VIEW v2 AS SELECT * FROM t1;
+DROP TABLE t1;
+CREATE TABLE t1 USING parquet AS SELECT 1 AS i2;
+SELECT * FROM v2;
 
 -- reset
 DROP DATABASE mydb1 CASCADE;
