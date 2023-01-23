@@ -1132,7 +1132,7 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<id:int, name:struct<first:string>>")
   }
 
-  testSchemaPruning("SPARK-?????: GetArrayItem and GetMapItem with non-foldable index") {
+  testSchemaPruning("SPARK-42163: GetArrayItem and GetMapItem with non-foldable index") {
     // Technically, there's no reason that we can't support a non-foldable index, it's just tricky
     // with the existing pruning code. If we ever do support it, this test can be modified to check
     // for a narrower scan schema.
