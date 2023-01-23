@@ -827,9 +827,9 @@ class SparkConnectPlanner(val session: SparkSession) {
    *   Expression.
    */
   private def transformScalarInlineUserDefinedFunction(
-      fun: proto.Expression.ScalarInlineUserDefinedFunction): Expression = {
+      fun: proto.ScalarInlineUserDefinedFunction): Expression = {
     fun.getFunctionCase match {
-      case proto.Expression.ScalarInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+      case proto.ScalarInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         transformPythonUDF(fun)
       case _ =>
         throw InvalidPlanInput(
@@ -845,8 +845,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    * @return
    *   PythonUDF.
    */
-  private def transformPythonUDF(
-      fun: proto.Expression.ScalarInlineUserDefinedFunction): PythonUDF = {
+  private def transformPythonUDF(fun: proto.ScalarInlineUserDefinedFunction): PythonUDF = {
     val udf = fun.getPythonUdf
     PythonUDF(
       name = fun.getFunctionName,
@@ -863,7 +862,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       udfDeterministic = fun.getDeterministic)
   }
 
-  private def transformPythonFunction(fun: proto.Expression.PythonUDF): SimplePythonFunction = {
+  private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray,
       // Empty environment variables

@@ -493,8 +493,8 @@ class PythonUDF:
         self._eval_type = eval_type
         self._command = command
 
-    def to_plan(self, session: "SparkConnectClient") -> proto.Expression.PythonUDF:
-        expr = proto.Expression.PythonUDF()
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
+        expr = proto.PythonUDF()
         expr.output_type = self._output_type
         expr.eval_type = self._eval_type
         expr.command = self._command
