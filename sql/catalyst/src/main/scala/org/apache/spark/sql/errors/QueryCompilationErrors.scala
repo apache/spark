@@ -1749,7 +1749,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("dataType" -> field.dataType.catalogString))
   }
 
-  def incompatibleViewSchemaChange(
+  def incompatibleViewSchemaChangeError(
       viewName: String,
       colName: String,
       expectedNum: Int,
@@ -1757,7 +1757,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       viewDDL: Option[String]): Throwable = {
     viewDDL.map { v =>
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1176",
+        errorClass = "INCOMPATIBLE_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,

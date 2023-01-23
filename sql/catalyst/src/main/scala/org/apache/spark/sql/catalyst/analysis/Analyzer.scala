@@ -2065,7 +2065,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           val attrCandidates = getAttrCandidates()
           val matched = attrCandidates.filter(a => resolver(a.name, colName))
           if (matched.length != expectedNumCandidates) {
-            throw QueryCompilationErrors.incompatibleViewSchemaChange(
+            throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
               viewName, colName, expectedNumCandidates, matched, viewDDL)
           }
           matched(ordinal)
