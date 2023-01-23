@@ -1757,7 +1757,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       viewDDL: Option[String]): Throwable = {
     viewDDL.map { v =>
       new AnalysisException(
-        errorClass = "INCOMPATIBLE_SCHEMA_CHANGE",
+        errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,
