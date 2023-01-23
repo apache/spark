@@ -824,7 +824,7 @@ kubernetes = Module(
     name="kubernetes",
     dependencies=[],
     source_file_regexes=["resource-managers/kubernetes"],
-    build_profile_flags=["-Pkubernetes"],
+    build_profile_flags=["-Pkubernetes", "-Pvolcano"],
     sbt_test_goals=["kubernetes/test"],
 )
 
