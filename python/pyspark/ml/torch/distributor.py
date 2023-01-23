@@ -489,27 +489,27 @@ class TorchDistributor(Distributor):
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
 
-            # The idea of setting the random port to 0 doesn't seem to work?
-            def get_free_port(address: str) -> int:
-                import socket
-                import random
+            def get_free_port(address: str, context: "BarrierTaskContext") -> int:
+                port = ""
+                if context.partitionId() == 0:
+                    try:
+                        import socket
 
-                MAX_NUM_ATTEMPTS = 100
-
-                for _ in range(MAX_NUM_ATTEMPTS):
-                    time.sleep(0.1)
-                    port = random.randint(32768, 61000)
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    if not (sock.connect_ex((address, port)) == 0):
-                        return port
-
-                raise RuntimeError("Failed to find free port for distributed training.")
+                        sock = socket.socket()
+                        sock.bind((address, 0))
+                        port = sock.getsockname()[1]
+                    except socket.error:
+                        pass
+                available_port = context.allGather(str(port))[0]
+                if not available_port:
+                    raise RuntimeError("Failed to find free port for distributed training.")
+                return int(available_port)
 
             def set_torch_config(context: "BarrierTaskContext") -> None:
                 addrs = [e.address.split(":")[0] for e in context.getTaskInfos()]
 
                 os.environ["MASTER_ADDR"] = str(addrs[0])
-                os.environ["MASTER_PORT"] = str(get_free_port(addrs[0]))
+                os.environ["MASTER_PORT"] = str(get_free_port(addrs[0], context))
                 os.environ["WORLD_SIZE"] = str(num_processes)
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
