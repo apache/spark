@@ -89,6 +89,7 @@ class ExampleCommandPlugin extends CommandPlugin {
       return None
     }
     val cmd = command.unpack(classOf[proto.ExamplePluginCommand])
+    assert(planner.session != null)
     SparkContext.getActive.get.setLocalProperty("testingProperty", cmd.getCustomField)
     Some()
   }

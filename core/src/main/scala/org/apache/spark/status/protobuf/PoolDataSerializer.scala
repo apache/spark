@@ -20,12 +20,13 @@ package org.apache.spark.status.protobuf
 import scala.collection.JavaConverters._
 
 import org.apache.spark.status.PoolData
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
 class PoolDataSerializer extends ProtobufSerDe[PoolData] {
 
   override def serialize(input: PoolData): Array[Byte] = {
     val builder = StoreTypes.PoolData.newBuilder()
-    builder.setName(input.name)
+    setStringField(input.name, builder.setName)
     input.stageIds.foreach(id => builder.addStageIds(id.toLong))
     builder.build().toByteArray
   }
@@ -33,7 +34,7 @@ class PoolDataSerializer extends ProtobufSerDe[PoolData] {
   override def deserialize(bytes: Array[Byte]): PoolData = {
     val poolData = StoreTypes.PoolData.parseFrom(bytes)
     new PoolData(
-      name = poolData.getName,
+      name = getStringField(poolData.hasName, poolData.getName),
       stageIds = poolData.getStageIdsList.asScala.map(_.toInt).toSet
     )
   }

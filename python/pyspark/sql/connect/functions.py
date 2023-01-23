@@ -1140,6 +1140,13 @@ def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName
 array.__doc__ = pysparkfuncs.array.__doc__
 
 
+def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_append", col1, col2)
+
+
+array_append.__doc__ = pysparkfuncs.array_append.__doc__
+
+
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_contains", _to_col(col), lit(value))
 

@@ -17,8 +17,6 @@
 
 package org.apache.spark.status.protobuf
 
-import com.google.protobuf.MessageOrBuilder
-
 object Utils {
   def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
     Some(result())
@@ -26,7 +24,7 @@ object Utils {
     None
   }
 
-  def setStringField(input: String, f: String => MessageOrBuilder): Unit = {
+  def setStringField(input: String, f: String => Any): Unit = {
     if (input != null) {
       f(input)
     }
