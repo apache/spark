@@ -497,23 +497,6 @@ class DataType(google.protobuf.message.Message):
     class StructField(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        class MetadataEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            KEY_FIELD_NUMBER: builtins.int
-            VALUE_FIELD_NUMBER: builtins.int
-            key: builtins.str
-            value: builtins.str
-            def __init__(
-                self,
-                *,
-                key: builtins.str = ...,
-                value: builtins.str = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-            ) -> None: ...
-
         NAME_FIELD_NUMBER: builtins.int
         DATA_TYPE_FIELD_NUMBER: builtins.int
         NULLABLE_FIELD_NUMBER: builtins.int
@@ -522,24 +505,26 @@ class DataType(google.protobuf.message.Message):
         @property
         def data_type(self) -> global___DataType: ...
         nullable: builtins.bool
-        @property
-        def metadata(
-            self,
-        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
+        metadata: builtins.str
         def __init__(
             self,
             *,
             name: builtins.str = ...,
             data_type: global___DataType | None = ...,
             nullable: builtins.bool = ...,
-            metadata: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            metadata: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["data_type", b"data_type"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_metadata", b"_metadata", "data_type", b"data_type", "metadata", b"metadata"
+            ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_metadata",
+                b"_metadata",
                 "data_type",
                 b"data_type",
                 "metadata",
@@ -550,6 +535,9 @@ class DataType(google.protobuf.message.Message):
                 b"nullable",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
+        ) -> typing_extensions.Literal["metadata"] | None: ...
 
     class Struct(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

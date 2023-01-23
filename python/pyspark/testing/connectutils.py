@@ -14,17 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import shutil
+import tempfile
 import typing
 import os
 import functools
 import unittest
 
+from pyspark import Row
+from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    SQLTestUtils,
 )
+from pyspark.sql.session import SparkSession as PySparkSession
 
 
 grpc_requirement_message = None
@@ -34,8 +40,29 @@ except ImportError as e:
     grpc_requirement_message = str(e)
 have_grpc = grpc_requirement_message is None
 
+
+grpc_status_requirement_message = None
+try:
+    import grpc_status
+except ImportError as e:
+    grpc_status_requirement_message = str(e)
+have_grpc_status = grpc_status_requirement_message is None
+
+googleapis_common_protos_requirement_message = None
+try:
+    from google.rpc import error_details_pb2
+except ImportError as e:
+    googleapis_common_protos_requirement_message = str(e)
+have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
+
 connect_not_compiled_message = None
-if have_pandas and have_pyarrow and have_grpc:
+if (
+    have_pandas
+    and have_pyarrow
+    and have_grpc
+    and have_grpc_status
+    and have_googleapis_common_protos
+):
     from pyspark.sql.connect import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL
     from pyspark.testing.utils import search_jar
@@ -62,6 +89,8 @@ connect_requirement_message = (
     or pyarrow_requirement_message
     or grpc_requirement_message
     or connect_not_compiled_message
+    or googleapis_common_protos_requirement_message
+    or grpc_status_requirement_message
 )
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
@@ -131,3 +160,23 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")
         cls.connect.drop_hook("with_plan")
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUtils):
+    """
+    Spark Connect version of :class:`pyspark.testing.sqlutils.ReusedSQLTestCase`.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = PySparkSession.builder.appName(cls.__name__).remote("local[4]").getOrCreate()
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        cls.df = cls.spark.createDataFrame(cls.testData)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        cls.spark.stop()

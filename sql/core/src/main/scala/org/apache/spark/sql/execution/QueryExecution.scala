@@ -411,7 +411,7 @@ object QueryExecution {
 
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
-   * These rules will make sure subqueries are planned, make use the data partitioning and ordering
+   * These rules will make sure subqueries are planned, make sure the data partitioning and ordering
    * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
    * and subqueries.
    */

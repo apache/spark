@@ -389,6 +389,7 @@ object MapGroups {
       func: (K, Iterator[T]) => TraversableOnce[U],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
+      dataOrder: Seq[SortOrder],
       child: LogicalPlan): LogicalPlan = {
     val mapped = new MapGroups(
       func.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
@@ -396,6 +397,7 @@ object MapGroups {
       UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,
+      dataOrder,
       CatalystSerde.generateObjAttr[U],
       child)
     CatalystSerde.serialize[U](mapped)
@@ -405,7 +407,8 @@ object MapGroups {
 /**
  * Applies func to each unique group in `child`, based on the evaluation of `groupingAttributes`.
  * Func is invoked with an object representation of the grouping key an iterator containing the
- * object representation of all the rows with that key.
+ * object representation of all the rows with that key. Given an additional `dataOrder`, data in
+ * the iterator will be sorted accordingly. That sorting does not add computational complexity.
  *
  * @param keyDeserializer used to extract the key object for each group.
  * @param valueDeserializer used to extract the items in the iterator from an input row.
@@ -416,6 +419,7 @@ case class MapGroups(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
+    dataOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
   override protected def withNewChildInternal(newChild: LogicalPlan): MapGroups =
@@ -649,6 +653,8 @@ object CoGroup {
       rightGroup: Seq[Attribute],
       leftAttr: Seq[Attribute],
       rightAttr: Seq[Attribute],
+      leftOrder: Seq[SortOrder],
+      rightOrder: Seq[SortOrder],
       left: LogicalPlan,
       right: LogicalPlan): LogicalPlan = {
     require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
@@ -664,6 +670,8 @@ object CoGroup {
       rightGroup,
       leftAttr,
       rightAttr,
+      leftOrder,
+      rightOrder,
       CatalystSerde.generateObjAttr[OUT],
       left,
       right)
@@ -684,6 +692,8 @@ case class CoGroup(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
+    leftOrder: Seq[SortOrder],
+    rightOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {

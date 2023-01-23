@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -668,6 +668,7 @@ object FunctionRegistry {
     expression[ArraySort]("array_sort"),
     expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
+    expression[ArrayCompact]("array_compact"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
@@ -686,6 +687,7 @@ object FunctionRegistry {
     expression[Shuffle]("shuffle"),
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
+    expression[ArrayAppend]("array_append"),
     expression[Reverse]("reverse"),
     expression[Concat]("concat"),
     expression[Flatten]("flatten"),
@@ -699,6 +701,7 @@ object FunctionRegistry {
     expression[ArrayExists]("exists"),
     expression[ArrayForAll]("forall"),
     expression[ArrayAggregate]("aggregate"),
+    expression[ArrayAggregate]("reduce", setAlias = true, Some("3.4.0")),
     expression[TransformValues]("transform_values"),
     expression[TransformKeys]("transform_keys"),
     expression[MapZipWith]("map_zip_with"),
@@ -960,8 +963,27 @@ object TableFunctionRegistry {
     (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
+  def generator[T <: Generator : ClassTag](name: String, outer: Boolean = false)
+      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
+    val newBuilder = (expressions: Seq[Expression]) => {
+      val generator = builder(expressions)
+      assert(generator.isInstanceOf[Generator])
+      Generate(
+        generator,
+        unrequiredChildIndex = Nil,
+        outer = outer,
+        qualifier = None,
+        generatorOutput = Nil,
+        child = OneRowRelation())
+    }
+    (name, (info, newBuilder))
+  }
+
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
-    logicalPlan[Range]("range")
+    logicalPlan[Range]("range"),
+    generator[Explode]("explode"),
+    generator[Explode]("explode_outer", outer = true)
   )
 
   val builtin: SimpleTableFunctionRegistry = {

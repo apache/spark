@@ -492,7 +492,8 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
-  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
+  def showDagVizForJob(jobId: Int,
+      graphs: collection.Seq[RDDOperationGraph]): collection.Seq[Node] = {
     showDagViz(graphs, forJob = true)
   }
 
@@ -503,7 +504,8 @@ private[spark] object UIUtils extends Logging {
    * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
    * reflected there.
    */
-  private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
+  private def showDagViz(
+      graphs: collection.Seq[RDDOperationGraph], forJob: Boolean): collection.Seq[Node] = {
     <div>
       <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
             class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>

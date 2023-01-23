@@ -211,7 +211,7 @@ abstract class OrderPreservingUnaryNode extends UnaryNode {
 
 object LogicalPlanIntegrity {
 
-  private def canGetOutputAttrs(p: LogicalPlan): Boolean = {
+  def canGetOutputAttrs(p: LogicalPlan): Boolean = {
     p.resolved && !p.expressions.exists { e =>
       e.exists {
         // We cannot call `output` in plans with a `ScalarSubquery` expr having no column,

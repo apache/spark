@@ -2,140 +2,140 @@
 SQL Single Numeric Column Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2695           2754          83          5.8         171.4       1.0X
+Sum                                                3068           3127          83          5.1         195.1       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2688           2695          11          5.9         170.9       1.0X
+Sum                                                3002           3012          14          5.2         190.9       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2671           2694          33          5.9         169.8       1.0X
+Sum                                                2980           3017          52          5.3         189.4       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                3152           3157           7          5.0         200.4       1.0X
+Sum                                                3510           3518          11          4.5         223.2       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2810           2811           2          5.6         178.7       1.0X
+Sum                                                3170           3230          86          5.0         201.5       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2895           2904          12          5.4         184.1       1.0X
+Sum                                                3304           3372          96          4.8         210.0       1.0X
 
 
 ================================================================================================
 Int and String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of columns                                     4236           4241           7          2.5         404.0       1.0X
+Sum of columns                                     4970           5014          63          2.1         474.0       1.0X
 
 
 ================================================================================================
 Partitioned Table Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Partitioned Table:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Data column                                        3264           3274          15          4.8         207.5       1.0X
-Partition column                                   2972           2977           7          5.3         189.0       1.1X
-Both columns                                       3297           3305          10          4.8         209.6       1.0X
+Data column                                        3534           3545          16          4.5         224.7       1.0X
+Partition column                                   3491           3545          76          4.5         222.0       1.0X
+Both columns                                       3864           3956         131          4.1         245.6       0.9X
 
 
 ================================================================================================
 Repeated String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               2857           2865          11          3.7         272.5       1.0X
+Sum of string length                               3921           3945          34          2.7         373.9       1.0X
 
 
 ================================================================================================
 String with Nulls Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               4737           4741           6          2.2         451.7       1.0X
+Sum of string length                               5389           5395           8          1.9         514.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               3192           3196           5          3.3         304.4       1.0X
+Sum of string length                               3786           3944         223          2.8         361.1       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               2076           2082           9          5.1         198.0       1.0X
+Sum of string length                               2251           2258          10          4.7         214.7       1.0X
 
 
 ================================================================================================
 Select All From Wide Columns
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Wide Column Scan from 1000 columns:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Select of all columns                             30202          30288         122          0.0       60403.4       1.0X
+Select of all columns                             40682          41052         524          0.0       81363.6       1.0X
 
 
 ================================================================================================
 Single Column Scan From Wide Columns
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               4658           4666          11          0.2        4442.5       1.0X
+Sum of single column                               4451           4519          96          0.2        4245.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Single Column Scan from 200 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               9166           9184          25          0.1        8741.2       1.0X
+Sum of single column                               8677           8767         127          0.1        8275.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Single Column Scan from 300 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                              13728          13731           5          0.1       13091.6       1.0X
+Sum of single column                              12971          13068         138          0.1       12370.1       1.0X
 
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-w/o filters                                        8053           8078          25          0.1        8053.4       1.0X
-pushdown disabled                                  7954           7960           5          0.1        7953.6       1.0X
-w/ filters                                         3892           3905          16          0.3        3891.8       2.1X
+w/o filters                                        8651           8695          42          0.1        8650.8       1.0X
+pushdown disabled                                  8305           8412         113          0.1        8304.6       1.0X
+w/ filters                                         3595           3667          71          0.3        3594.8       2.4X
 

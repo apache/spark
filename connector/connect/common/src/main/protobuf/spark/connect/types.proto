@@ -152,7 +152,7 @@ message DataType {
     string name = 1;
     DataType data_type = 2;
     bool nullable = 3;
-    map<string, string> metadata = 4;
+    optional string metadata = 4;
   }
 
   message Struct {

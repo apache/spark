@@ -18,12 +18,12 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.mutable
 
+import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
-import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
@@ -153,7 +153,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     val instance = new SparkConnectService(false)
 
     // Add an always crashing UDF
-    val session = SparkConnectService.getOrCreateIsolatedSession("c1").session
+    val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
     val instaKill: Long => Long = { _ =>
       throw new Exception("Kaboom")
     }
@@ -172,6 +172,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
+      .setClientId("session")
       .build()
 
     // The observer is executed inside this thread. So
@@ -184,7 +185,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         }
 
         override def onError(throwable: Throwable): Unit = {
-          assert(throwable.isInstanceOf[SparkException])
+          assert(throwable.isInstanceOf[StatusRuntimeException])
         }
 
         override def onCompleted(): Unit = {

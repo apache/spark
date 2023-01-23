@@ -20,9 +20,9 @@ from typing import (
     Dict,
     List,
     Optional,
-    Sequence,
     Tuple,
     Union,
+    Sequence,
     TYPE_CHECKING,
     overload,
     Callable,
@@ -33,168 +33,48 @@ from typing import (
 import sys
 import random
 import pandas
+import json
 import warnings
 from collections.abc import Iterable
 
-import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.readwriter import DataFrameWriter
-from pyspark.sql.connect.column import (
-    Column,
-    scalar_function,
-    sql_expression,
-    UnresolvedRegex,
-)
-from pyspark.sql.connect.functions import col, lit
-from pyspark.sql.types import (
-    DataType,
-    StructType,
-    Row,
-)
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.sql.types import Row, StructType
+from pyspark.sql.dataframe import (
+    DataFrame as PySparkDataFrame,
+    DataFrameNaFunctions as PySparkDataFrameNaFunctions,
+    DataFrameStatFunctions as PySparkDataFrameStatFunctions,
+)
+
+import pyspark.sql.connect.plan as plan
+from pyspark.sql.connect.group import GroupedData
+from pyspark.sql.connect.readwriter import DataFrameWriter
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import UnresolvedRegex
+from pyspark.sql.connect.functions import (
+    _to_col,
+    _invoke_function,
+    col,
+    lit,
+    expr as sql_expression,
+)
+from pyspark.sql.connect.types import from_arrow_schema
+
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        LiteralType,
+        PrimitiveType,
+        OptionalPrimitiveType,
+    )
     from pyspark.sql.connect.session import SparkSession
 
 
-class GroupedData(object):
-    def __init__(self, df: "DataFrame", *grouping_cols: Union[Column, str]) -> None:
-        self._df = df
-        self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
-
-    @overload
-    def agg(self, *exprs: Column) -> "DataFrame":
-        ...
-
-    @overload
-    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
-        ...
-
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
-        """Compute aggregates and returns the result as a :class:`DataFrame`.
-
-        The available aggregate functions can be:
-
-        1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
-
-        2. group aggregate pandas UDFs, created with :func:`pyspark.sql.functions.pandas_udf`
-
-           .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
-               a full shuffle is required. Also, all the data of a group will be loaded into
-               memory, so the user should be aware of the potential OOM risk if data is skewed
-               and certain groups are too large to fit in memory.
-
-           .. seealso:: :func:`pyspark.sql.functions.pandas_udf`
-
-        If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
-        is the column to perform aggregation on, and the value is the aggregate function.
-
-        Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        exprs : dict
-            a dict mapping from column name (string) to aggregate functions (string),
-            or a list of :class:`Column`.
-
-        Notes
-        -----
-        Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
-        in a single call to this function.
-
-        Examples
-        --------
-        >>> from pyspark.sql import functions as F
-        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")], ["age", "name"])
-        >>> df.show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        |  3|Alice|
-        |  5|  Bob|
-        | 10|  Bob|
-        +---+-----+
-
-        Group-by name, and count each group.
-
-        >>> df.groupBy(df.name).agg({"*": "count"}).sort("name").show()
-        +-----+--------+
-        | name|count(1)|
-        +-----+--------+
-        |Alice|       2|
-        |  Bob|       2|
-        +-----+--------+
-
-        Group-by name, and calculate the minimum age.
-
-        >>> df.groupBy(df.name).agg(F.min(df.age)).sort("name").show()
-        +-----+--------+
-        | name|min(age)|
-        +-----+--------+
-        |Alice|       2|
-        |  Bob|       5|
-        +-----+--------+
-        """
-        assert exprs, "exprs should not be empty"
-        if len(exprs) == 1 and isinstance(exprs[0], dict):
-            # Convert the dict into key value pairs
-            measures = [scalar_function(exprs[0][k], col(k)) for k in exprs[0]]
-        else:
-            # Columns
-            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            measures = cast(List[Column], list(exprs))
-
-        res = DataFrame.withPlan(
-            plan.Aggregate(
-                child=self._df._plan,
-                grouping_cols=self._grouping_cols,
-                measures=measures,
-            ),
-            session=self._df._session,
-        )
-        return res
-
-    def _map_cols_to_expression(self, fun: str, param: Union[Column, str]) -> Sequence[Column]:
-        return [
-            scalar_function(fun, col(param)) if isinstance(param, str) else param,
-        ]
-
-    def min(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("min", col)
-        return self.agg(*expr)
-
-    def max(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("max", col)
-        return self.agg(*expr)
-
-    def sum(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("sum", col)
-        return self.agg(*expr)
-
-    def avg(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("avg", col)
-        return self.agg(*expr)
-
-    def count(self) -> "DataFrame":
-        return self.agg(scalar_function("count", lit(1)))
-
-
-class DataFrame(object):
-    """Every DataFrame object essentially is a Relation that is refined using the
-    member functions. Calling a method on a dataframe will essentially return a copy
-    of the DataFrame with the changes applied.
-    """
-
+class DataFrame:
     def __init__(
         self,
         session: "SparkSession",
-        data: Optional[List[Any]] = None,
         schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
@@ -210,40 +90,22 @@ class DataFrame(object):
         assert self._plan is not None
         return DataFrameWriter(self._plan, self._session)
 
-    @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
-        """Main initialization method used to construct a new data frame with a child plan."""
-        new_frame = DataFrame(session=session)
-        new_frame._plan = plan
-        return new_frame
+    write.__doc__ = PySparkDataFrame.write.__doc__
 
     def isEmpty(self) -> bool:
-        """Returns ``True`` if this :class:`DataFrame` is empty.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        bool
-            Whether it's empty DataFrame or not.
-        """
         return len(self.take(1)) == 0
 
+    isEmpty.__doc__ = PySparkDataFrame.isEmpty.__doc__
+
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
+    select.__doc__ = PySparkDataFrame.select.__doc__
+
     def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
-        """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
-
-        This is a variant of :func:`select` that accepts SQL expressions.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`DataFrame`
-            A DataFrame with new/old columns transformed by expressions.
-        """
         sql_expr = []
         if len(expr) == 1 and isinstance(expr[0], list):
             expr = expr[0]  # type: ignore[assignment]
@@ -255,12 +117,14 @@ class DataFrame(object):
 
         return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
+    selectExpr.__doc__ = PySparkDataFrame.selectExpr.__doc__
+
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         if not exprs:
             raise ValueError("Argument 'exprs' must not be empty")
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [scalar_function(f, col(e)) for e, f in exprs[0].items()]
+            measures = [_invoke_function(f, col(e)) for e, f in exprs[0].items()]
             return self.groupBy().agg(*measures)
         else:
             # other expressions
@@ -268,91 +132,46 @@ class DataFrame(object):
             exprs = cast(Tuple[Column, ...], exprs)
             return self.groupBy().agg(*exprs)
 
+    agg.__doc__ = PySparkDataFrame.agg.__doc__
+
     def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
 
-    def approxQuantile(self, col: Column, probabilities: Any, relativeError: Any) -> "DataFrame":
-        ...
+    alias.__doc__ = PySparkDataFrame.alias.__doc__
 
     def colRegex(self, colName: str) -> Column:
-        """
-        Selects column based on the column name specified as a regex and returns it
-        as :class:`Column`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        colName : str
-            string, column name specified as a regex.
-
-        Returns
-        -------
-        :class:`Column`
-        """
         return Column(UnresolvedRegex(colName))
+
+    colRegex.__doc__ = PySparkDataFrame.colRegex.__doc__
 
     @property
     def dtypes(self) -> List[Tuple[str, str]]:
-        """Returns all column names and their data types as a list.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        list
-            List of columns as tuple pairs.
-        """
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
+
+    dtypes.__doc__ = PySparkDataFrame.dtypes.__doc__
 
     @property
     def columns(self) -> List[str]:
-        """Returns the list of columns of the current data frame."""
         if self._plan is None:
             return []
 
         return self.schema.names
 
+    columns.__doc__ = PySparkDataFrame.columns.__doc__
+
+    @property
     def sparkSession(self) -> "SparkSession":
-        """Returns Spark session that created this :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`SparkSession`
-        """
         return self._session
 
+    sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
+
     def count(self) -> int:
-        """Returns the number of rows in this :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        int
-            Number of rows.
-        """
-        pdd = self.agg(scalar_function("count", lit(1))).toPandas()
+        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
+    count.__doc__ = PySparkDataFrame.count.__doc__
+
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
-        """
-        Returns the cartesian product with another :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Right side of the cartesian product.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Joined DataFrame.
-        """
         if self._plan is None:
             raise Exception("Cannot cartesian join when self._plan is empty.")
         if other._plan is None:
@@ -363,23 +182,9 @@ class DataFrame(object):
             session=self._session,
         )
 
+    crossJoin.__doc__ = PySparkDataFrame.crossJoin.__doc__
+
     def coalesce(self, numPartitions: int) -> "DataFrame":
-        """
-        Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
-
-        Coalesce does not trigger a shuffle.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        numPartitions : int
-            specify the target number of partitions
-
-        Returns
-        -------
-        :class:`DataFrame`
-        """
         if not numPartitions > 0:
             raise ValueError("numPartitions must be positive.")
         return DataFrame.withPlan(
@@ -387,46 +192,94 @@ class DataFrame(object):
             self._session,
         )
 
-    def repartition(self, numPartitions: int) -> "DataFrame":
-        """
-        Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
+    coalesce.__doc__ = PySparkDataFrame.coalesce.__doc__
 
-        Repartition will shuffle source partition into partitions specified by numPartitions.
+    @overload
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
 
-        .. versionadded:: 3.4.0
+    @overload
+    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
 
-        Parameters
-        ----------
-        numPartitions : int
-            specify the target number of partitions
+    def repartition(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                return DataFrame.withPlan(
+                    plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
+                    self._session,
+                )
+            else:
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, list(cols)),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, list(cols)),
+                self.sparkSession,
+            )
+        else:
+            raise TypeError("numPartitions should be an int or Column")
 
-        Returns
-        -------
-        :class:`DataFrame`
-        """
-        if not numPartitions > 0:
-            raise ValueError("numPartitions must be positive.")
-        return DataFrame.withPlan(
-            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
-            self._session,
-        )
+    repartition.__doc__ = PySparkDataFrame.repartition.__doc__
+
+    @overload
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartitionByRange(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        def _convert_col(col: "ColumnOrName") -> "ColumnOrName":
+            from pyspark.sql.connect.expressions import SortOrder, ColumnReference
+
+            if isinstance(col, Column):
+                if isinstance(col._expr, SortOrder):
+                    return col
+                else:
+                    return Column(SortOrder(col._expr))
+            else:
+                return Column(SortOrder(ColumnReference(col)))
+
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                raise ValueError("At least one partition-by expression must be specified.")
+            else:
+                sort = []
+                sort.extend([_convert_col(c) for c in cols])
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, sort),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            sort = []
+            sort.extend([_convert_col(c) for c in cols])
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, sort),
+                self.sparkSession,
+            )
+        else:
+            raise TypeError("numPartitions should be an int, string or Column")
+
+    repartitionByRange.__doc__ = PySparkDataFrame.repartitionByRange.__doc__
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
-        """Return a new :class:`DataFrame` with duplicate rows removed,
-        optionally only deduplicating based on certain columns.
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise TypeError("Parameter 'subset' must be a list of columns")
 
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        subset : List of column names, optional
-            List of columns to use for duplicate comparison (default All columns).
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame without duplicated rows.
-        """
         if subset is None:
             return DataFrame.withPlan(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
@@ -436,38 +289,18 @@ class DataFrame(object):
                 plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
             )
 
+    dropDuplicates.__doc__ = PySparkDataFrame.dropDuplicates.__doc__
+
     drop_duplicates = dropDuplicates
 
     def distinct(self) -> "DataFrame":
-        """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with distinct rows.
-        """
         return DataFrame.withPlan(
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
         )
 
+    distinct.__doc__ = PySparkDataFrame.distinct.__doc__
+
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":
-        """Returns a new :class:`DataFrame` without specified columns.
-        This is a no-op if schema doesn't contain the given column name(s).
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        cols: str or :class:`Column`
-            a name of the column, or the :class:`Column` to drop
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame without given columns.
-        """
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise TypeError(
@@ -484,44 +317,74 @@ class DataFrame(object):
             session=self._session,
         )
 
+    drop.__doc__ = PySparkDataFrame.drop.__doc__
+
     def filter(self, condition: Union[Column, str]) -> "DataFrame":
-        """Filters rows using the given condition.
-
-        :func:`where` is an alias for :func:`filter`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        condition : :class:`Column` or str
-            a :class:`Column` of :class:`types.BooleanType`
-            or a string of SQL expression.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Filtered DataFrame.
-        """
         if isinstance(condition, str):
             expr = sql_expression(condition)
         else:
             expr = condition
         return DataFrame.withPlan(plan.Filter(child=self._plan, filter=expr), session=self._session)
 
+    filter.__doc__ = PySparkDataFrame.filter.__doc__
+
     def first(self) -> Optional[Row]:
-        """Returns the first row as a :class:`Row`.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`Row`
-           First row if :class:`DataFrame` is not empty, otherwise ``None``.
-        """
         return self.head()
 
+    first.__doc__ = PySparkDataFrame.first.__doc__
+
     def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
-        return GroupedData(self, *cols)
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(self[c])
+            else:
+                raise TypeError(
+                    f"groupBy requires all cols be Column or str, but got {type(c).__name__} {c}"
+                )
+
+        return GroupedData(df=self, group_type="groupby", grouping_cols=_cols)
+
+    groupBy.__doc__ = PySparkDataFrame.groupBy.__doc__
+
+    groupby = groupBy
+
+    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(self[c])
+            else:
+                raise TypeError(
+                    f"rollup requires all cols be Column or str, but got {type(c).__name__} {c}"
+                )
+
+        return GroupedData(df=self, group_type="rollup", grouping_cols=_cols)
+
+    rollup.__doc__ = PySparkDataFrame.rollup.__doc__
+
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(self[c])
+            else:
+                raise TypeError(
+                    f"cube requires all cols be Column or str, but got {type(c).__name__} {c}"
+                )
+
+        return GroupedData(df=self, group_type="cube", grouping_cols=_cols)
+
+    cube.__doc__ = PySparkDataFrame.cube.__doc__
 
     @overload
     def head(self) -> Optional[Row]:
@@ -532,42 +395,17 @@ class DataFrame(object):
         ...
 
     def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
-        """Returns the first ``n`` rows.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        n : int, optional
-            default 1. Number of rows to return.
-
-        Returns
-        -------
-        If n is greater than 1, return a list of :class:`Row`.
-        If n is 1, return a single Row.
-        """
         if n is None:
             rs = self.head(1)
             return rs[0] if rs else None
         return self.take(n)
 
+    head.__doc__ = PySparkDataFrame.head.__doc__
+
     def take(self, num: int) -> List[Row]:
-        """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        num : int
-            Number of records to return. Will return this number of records
-            or all records if the DataFrame contains less than this number of records..
-
-        Returns
-        -------
-        list
-            List of rows
-        """
         return self.limit(num).collect()
+
+    take.__doc__ = PySparkDataFrame.take.__doc__
 
     # TODO: extend `on` to also be type List[Column].
     def join(
@@ -586,179 +424,145 @@ class DataFrame(object):
             session=self._session,
         )
 
+    join.__doc__ = PySparkDataFrame.join.__doc__
+
     def limit(self, n: int) -> "DataFrame":
-        """Limits the result count to the number specified.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        num : int
-            Number of records to return. Will return this number of records
-            or all records if the DataFrame contains less than this number of records.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Subset of the records
-        """
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
-    def offset(self, n: int) -> "DataFrame":
-        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        num : int
-            Number of records to return. Will return this number of records
-            or all records if the DataFrame contains less than this number of records.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Subset of the records
-        """
-        return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+    limit.__doc__ = PySparkDataFrame.limit.__doc__
 
     def tail(self, num: int) -> List[Row]:
-        """
-        Returns the last ``num`` rows as a :class:`list` of :class:`Row`.
-
-        Running tail requires moving data into the application's driver process, and doing so with
-        a very large ``num`` can crash the driver process with OutOfMemoryError.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        num : int
-            Number of records to return. Will return this number of records
-            or all records if the DataFrame contains less than this number of records.
-
-        Returns
-        -------
-        list
-            List of rows
-        """
         return DataFrame.withPlan(
             plan.Tail(child=self._plan, limit=num), session=self._session
         ).collect()
 
-    def sort(self, *cols: "ColumnOrName") -> "DataFrame":
-        """Sort by a specific column"""
+    tail.__doc__ = PySparkDataFrame.tail.__doc__
+
+    def _sort_cols(
+        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+    ) -> List[Column]:
+        """Return a JVM Seq of Columns that describes the sort order"""
+        if cols is None:
+            raise ValueError("should sort by at least one column")
+
+        _cols: List[Column] = []
+        if len(cols) == 1 and isinstance(cols[0], list):
+            _cols = [_to_col(c) for c in cols[0]]
+        else:
+            _cols = [_to_col(cast("ColumnOrName", c)) for c in cols]
+
+        ascending = kwargs.get("ascending", True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                _cols = [c.desc() for c in _cols]
+        elif isinstance(ascending, list):
+            _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
+        else:
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
+
+        return _cols
+
+    def sort(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=True,
+            ),
+            session=self._session,
         )
+
+    sort.__doc__ = PySparkDataFrame.sort.__doc__
 
     orderBy = sort
 
-    def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
-        """Sort within each partition by a specific column"""
+    def sortWithinPartitions(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=False,
+            ),
+            session=self._session,
         )
+
+    sortWithinPartitions.__doc__ = PySparkDataFrame.sortWithinPartitions.__doc__
 
     def sample(
         self,
-        fraction: float,
-        *,
-        withReplacement: bool = False,
+        withReplacement: Optional[Union[float, bool]] = None,
+        fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> "DataFrame":
-        """Returns a sampled subset of this :class:`DataFrame`.
 
-        .. versionadded:: 3.4.0
+        # For the cases below:
+        #   sample(True, 0.5 [, seed])
+        #   sample(True, fraction=0.5 [, seed])
+        #   sample(withReplacement=False, fraction=0.5 [, seed])
+        is_withReplacement_set = type(withReplacement) == bool and isinstance(fraction, float)
 
-        Parameters
-        ----------
-        withReplacement : bool, optional
-            Sample with replacement or not (default ``False``).
-        fraction : float
-            Fraction of rows to generate, range [0.0, 1.0].
-        seed : int, optional
-            Seed for sampling (default a random seed).
+        # For the case below:
+        #   sample(faction=0.5 [, seed])
+        is_withReplacement_omitted_kwargs = withReplacement is None and isinstance(fraction, float)
 
-        Returns
-        -------
-        :class:`DataFrame`
-            Sampled rows from given DataFrame.
+        # For the case below:
+        #   sample(0.5 [, seed])
+        is_withReplacement_omitted_args = isinstance(withReplacement, float)
 
-        Notes
-        -----
-        This is not guaranteed to provide exactly the fraction specified of the total
-        count of the given :class:`DataFrame`.
-
-        `fraction` is required and, `withReplacement` and `seed` are optional.
-        """
-        if not isinstance(fraction, float):
-            raise TypeError(f"'fraction' must be float, but got {type(fraction).__name__}")
-        if not isinstance(withReplacement, bool):
+        if not (
+            is_withReplacement_set
+            or is_withReplacement_omitted_kwargs
+            or is_withReplacement_omitted_args
+        ):
+            argtypes = [
+                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None
+            ]
             raise TypeError(
-                f"'withReplacement' must be bool, but got {type(withReplacement).__name__}"
+                "withReplacement (optional), fraction (required) and seed (optional)"
+                " should be a bool, float and number; however, "
+                "got [%s]." % ", ".join(argtypes)
             )
-        if seed is not None and not isinstance(seed, int):
-            raise TypeError(f"'seed' must be None or int, but got {type(seed).__name__}")
+
+        if is_withReplacement_omitted_args:
+            if fraction is not None:
+                seed = cast(int, fraction)
+            fraction = withReplacement
+            withReplacement = None
+
+        if withReplacement is None:
+            withReplacement = False
+
+        seed = int(seed) if seed is not None else None
 
         return DataFrame.withPlan(
             plan.Sample(
                 child=self._plan,
                 lower_bound=0.0,
-                upper_bound=fraction,
-                with_replacement=withReplacement,
+                upper_bound=fraction,  # type: ignore[arg-type]
+                with_replacement=withReplacement,  # type: ignore[arg-type]
                 seed=seed,
             ),
             session=self._session,
         )
 
+    sample.__doc__ = PySparkDataFrame.sample.__doc__
+
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` by renaming an existing column.
-        This is a no-op if schema doesn't contain the given column name.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        existing : str
-            string, name of the existing column to rename.
-        new : str
-            string, new name of the column.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with renamed column.
-        """
         return self.withColumnsRenamed({existing: new})
 
+    withColumnRenamed.__doc__ = PySparkDataFrame.withColumnRenamed.__doc__
+
     def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
-        """
-        Returns a new :class:`DataFrame` by renaming multiple columns.
-        This is a no-op if schema doesn't contain the given column names.
-
-        .. versionadded:: 3.4.0
-           Added support for multiple columns renaming
-
-        Parameters
-        ----------
-        colsMap : dict
-            a dict of existing column names and corresponding desired column names.
-            Currently, only single map is supported.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with renamed columns.
-
-        See Also
-        --------
-        :meth:`withColumnRenamed`
-        """
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of existing column name and new column name.")
 
-        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
+        return DataFrame.withPlan(plan.WithColumnsRenamed(self._plan, colsMap), self._session)
+
+    withColumnsRenamed.__doc__ = PySparkDataFrame.withColumnsRenamed.__doc__
 
     def _show_string(
         self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
@@ -780,68 +584,62 @@ class DataFrame(object):
                 )
 
         pdf = DataFrame.withPlan(
-            plan.ShowString(child=self._plan, numRows=n, truncate=_truncate, vertical=vertical),
+            plan.ShowString(child=self._plan, num_rows=n, truncate=_truncate, vertical=vertical),
             session=self._session,
         ).toPandas()
         assert pdf is not None
         return pdf["show_string"][0]
 
     def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
-        """
-        Returns a new :class:`DataFrame` by adding multiple columns or replacing the
-        existing columns that have the same names.
-
-        The colsMap is a map of column name and column, the column must only refer to attributes
-        supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        colsMap : dict
-            a dict of column name and :class:`Column`.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with new or replaced columns.
-        """
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of column name and column.")
 
+        names: List[str] = []
+        columns: List[Column] = []
+        for columnName, column in colsMap.items():
+            names.append(columnName)
+            columns.append(column)
+
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, colsMap),
+            plan.WithColumns(
+                self._plan,
+                columnNames=names,
+                columns=columns,
+            ),
             session=self._session,
         )
 
+    withColumns.__doc__ = PySparkDataFrame.withColumns.__doc__
+
     def withColumn(self, colName: str, col: Column) -> "DataFrame":
-        """
-        Returns a new :class:`DataFrame` by adding a column or replacing the
-        existing column that has the same name.
-
-        The column expression must be an expression over this :class:`DataFrame`; attempting to add
-        a column from some other :class:`DataFrame` will raise an error.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        colName : str
-            string, name of the new column.
-        col : :class:`Column`
-            a :class:`Column` expression for the new column.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with new or replaced column.
-        """
         if not isinstance(col, Column):
             raise TypeError("col should be Column")
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, {colName: col}),
+            plan.WithColumns(
+                self._plan,
+                columnNames=[colName],
+                columns=[col],
+            ),
             session=self._session,
         )
+
+    withColumn.__doc__ = PySparkDataFrame.withColumn.__doc__
+
+    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(
+                self._plan,
+                columnNames=[columnName],
+                columns=[self[columnName]],
+                metadata=[json.dumps(metadata)],
+            ),
+            session=self._session,
+        )
+
+    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
 
     def unpivot(
         self,
@@ -850,27 +648,7 @@ class DataFrame(object):
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
-        """
-        Returns a new :class:`DataFrame` by unpivot a DataFrame from wide format to long format,
-        optionally leaving identifier columns set.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        ids : list
-            Id columns.
-        values : list, optional
-            Value columns to unpivot.
-        variableColumnName : str
-            Name of the variable column.
-        valueColumnName : str
-            Name of the value column.
-
-        Returns
-        -------
-        :class:`DataFrame`
-        """
+        assert ids is not None, "ids must not be None"
 
         def to_jcols(
             cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
@@ -892,57 +670,40 @@ class DataFrame(object):
             self._session,
         )
 
+    unpivot.__doc__ = PySparkDataFrame.unpivot.__doc__
+
     melt = unpivot
 
-    def hint(self, name: str, *params: Any) -> "DataFrame":
-        """
-        Specifies some hint on the current DataFrame. As an example, the following code specifies
-        that one of the plan can be broadcasted: `df1.join(df2.hint("broadcast"))`
+    def hint(
+        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+    ) -> "DataFrame":
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]  # type: ignore[assignment]
 
-        .. versionadded:: 3.4.0
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
-        Parameters
-        ----------
-        name: str
-            the name of the hint, for example, "broadcast", "SHUFFLE_MERGE" and "shuffle_hash".
-        params: tuple
-            the parameters of the hint, theoretically a parameter can be any type, however, at
-            present, we only support int and str since only a limited number of hints are available,
-            for example, in `REPARTITION(3, c)` the "REPARTITION" is hint name and "3" is partition
-            number and "c" is partition expression.
+        allowed_types = (str, list, float, int)
+        for p in parameters:
+            if not isinstance(p, allowed_types):
+                raise TypeError(
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)
+                    )
+                )
 
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with the hint
-        """
         return DataFrame.withPlan(
-            plan.Hint(self._plan, name, list(params)),
+            plan.Hint(self._plan, name, list(parameters)),
             session=self._session,
         )
+
+    hint.__doc__ = PySparkDataFrame.hint.__doc__
 
     def randomSplit(
         self,
         weights: List[float],
         seed: Optional[int] = None,
     ) -> List["DataFrame"]:
-        """Randomly splits this :class:`DataFrame` with the provided weights.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        weights : list
-            list of doubles as weights with which to split the :class:`DataFrame`.
-            Weights will be normalized if they don't sum up to 1.0.
-        seed : int, optional
-            The seed for sampling.
-
-        Returns
-        -------
-        list
-            List of DataFrames.
-        """
         for w in weights:
             if w < 0.0:
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
@@ -967,7 +728,7 @@ class DataFrame(object):
                     upper_bound=upperBound,
                     with_replacement=False,
                     seed=int(seed),
-                    force_stable_sort=True,
+                    deterministic_order=True,
                 ),
                 session=self._session,
             )
@@ -976,260 +737,90 @@ class DataFrame(object):
 
         return splits
 
+    randomSplit.__doc__ = PySparkDataFrame.randomSplit.__doc__
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
-        """
-        Prints the first ``n`` rows to the console.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        n : int, optional
-            Number of rows to show.
-        truncate : bool or int, optional
-            If set to ``True``, truncate strings longer than 20 chars by default.
-            If set to a number greater than one, truncates long strings to length ``truncate``
-            and align cells right.
-        vertical : bool, optional
-            If set to ``True``, print output rows vertically (one line
-            per column value).
-        """
         print(self._show_string(n, truncate, vertical))
 
+    show.__doc__ = PySparkDataFrame.show.__doc__
+
     def union(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing union of rows in this and another
-        :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be unioned
-
-        Returns
-        -------
-        :class:`DataFrame`
-
-        See Also
-        --------
-        DataFrame.unionAll
-
-        Notes
-        -----
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
-
-        Also as standard in SQL, this function resolves columns by position (not by name).
-        """
         return self.unionAll(other)
 
+    union.__doc__ = PySparkDataFrame.union.__doc__
+
     def unionAll(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing union of rows in this and another
-        :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be combined
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Combined DataFrame
-
-        Notes
-        -----
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
-
-        Also as standard in SQL, this function resolves columns by position (not by name).
-
-        :func:`unionAll` is an alias to :func:`union`
-
-        See Also
-        --------
-        DataFrame.union
-        """
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
 
+    unionAll.__doc__ = PySparkDataFrame.unionAll.__doc__
+
     def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
-        """Returns a new :class:`DataFrame` containing union of rows in this and another
-        :class:`DataFrame`.
-
-        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
-        union (that does deduplication of elements), use this function followed by :func:`distinct`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be combined.
-        allowMissingColumns : bool, optional, default False
-           Specify whether to allow missing columns.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Combined DataFrame.
-        """
         if other._plan is None:
             raise ValueError("Argument to UnionByName does not contain a valid plan.")
         return DataFrame.withPlan(
             plan.SetOperation(
-                self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
+                self._plan,
+                other._plan,
+                "union",
+                by_name=True,
+                allow_missing_columns=allowMissingColumns,
             ),
             session=self._session,
         )
 
+    unionByName.__doc__ = PySparkDataFrame.unionByName.__doc__
+
     def subtract(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
-        but not in another :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be subtracted.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Subtracted DataFrame.
-
-        Notes
-        -----
-        This is equivalent to `EXCEPT DISTINCT` in SQL.
-        """
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
         )
 
+    subtract.__doc__ = PySparkDataFrame.subtract.__doc__
+
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
-        not in another :class:`DataFrame` while preserving duplicates.
-
-        This is equivalent to `EXCEPT ALL` in SQL.
-        As standard in SQL, this function resolves columns by position (not by name).
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            The other :class:`DataFrame` to compare to.
-
-        Returns
-        -------
-        :class:`DataFrame`
-        """
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "except", is_all=True), session=self._session
         )
 
+    exceptAll.__doc__ = PySparkDataFrame.exceptAll.__doc__
+
     def intersect(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing rows only in
-        both this :class:`DataFrame` and another :class:`DataFrame`.
-        Note that any duplicates are removed. To preserve duplicates
-        use :func:`intersectAll`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be combined.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Combined DataFrame.
-
-        Notes
-        -----
-        This is equivalent to `INTERSECT` in SQL.
-        """
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
             session=self._session,
         )
 
+    intersect.__doc__ = PySparkDataFrame.intersect.__doc__
+
     def intersectAll(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame`
-        and another :class:`DataFrame` while preserving duplicates.
-
-        This is equivalent to `INTERSECT ALL` in SQL. As standard in SQL, this function
-        resolves columns by position (not by name).
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be combined.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Combined DataFrame.
-        """
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
             session=self._session,
         )
 
+    intersectAll.__doc__ = PySparkDataFrame.intersectAll.__doc__
+
     def where(self, condition: Union[Column, str]) -> "DataFrame":
         return self.filter(condition)
 
+    where.__doc__ = PySparkDataFrame.where.__doc__
+
     @property
     def na(self) -> "DataFrameNaFunctions":
-        """Returns a :class:`DataFrameNaFunctions` for handling missing values.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`DataFrameNaFunctions`
-        """
         return DataFrameNaFunctions(self)
+
+    na.__doc__ = PySparkDataFrame.na.__doc__
 
     def fillna(
         self,
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
-        """Replace null values, alias for ``na.fill()``.
-        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        value : int, float, string, bool or dict
-            Value to replace null values with.
-            If the value is a dict, then `subset` is ignored and `value` must be a mapping
-            from column name (string) to replacement value. The replacement value must be
-            an int, float, boolean, or string.
-        subset : str, tuple or list, optional
-            optional list of column names to consider.
-            Columns specified in subset that do not have matching data type are ignored.
-            For example, if `value` is a string, and cols contains a non-string column,
-            then the non-string column is simply ignored.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with replaced null values.
-        """
         if not isinstance(value, (float, int, str, bool, dict)):
             raise TypeError(
                 f"value should be a float, int, string, bool or dict, "
@@ -1278,35 +869,14 @@ class DataFrame(object):
             session=self._session,
         )
 
+    fillna.__doc__ = PySparkDataFrame.fillna.__doc__
+
     def dropna(
         self,
         how: str = "any",
         thresh: Optional[int] = None,
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
-        """Returns a new :class:`DataFrame` omitting rows with null values.
-        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        how : str, optional
-            'any' or 'all'.
-            If 'any', drop a row if it contains any nulls.
-            If 'all', drop a row only if all its values are null.
-        thresh: int, optional
-            default None
-            If specified, drop rows that have less than `thresh` non-null values.
-            This overwrites the `how` parameter.
-        subset : str, tuple or list, optional
-            optional list of column names to consider.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with null only rows excluded.
-        """
         min_non_nulls: Optional[int] = None
 
         if how is not None:
@@ -1349,6 +919,8 @@ class DataFrame(object):
             session=self._session,
         )
 
+    dropna.__doc__ = PySparkDataFrame.dropna.__doc__
+
     def replace(
         self,
         to_replace: Union[
@@ -1359,40 +931,6 @@ class DataFrame(object):
         ] = _NoValue,
         subset: Optional[List[str]] = None,
     ) -> "DataFrame":
-        """Returns a new :class:`DataFrame` replacing a value with another value.
-        :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
-        aliases of each other.
-        Values to_replace and value must have the same type and can only be numerics, booleans,
-        or strings. Value can have None. When replacing, the new value will be cast
-        to the type of the existing column.
-        For numeric replacements all values to be replaced should have unique
-        floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
-        and arbitrary replacement will be used.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        to_replace : bool, int, float, string, list or dict
-            Value to be replaced.
-            If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
-            must be a mapping between a value and a replacement.
-        value : bool, int, float, string or None, optional
-            The replacement value must be a bool, int, float, string or None. If `value` is a
-            list, `value` should be of the same length and type as `to_replace`.
-            If `value` is a scalar and `to_replace` is a sequence, then `value` is
-            used as a replacement for each item in `to_replace`.
-        subset : list, optional
-            optional list of column names to consider.
-            Columns specified in subset that do not have matching data type are ignored.
-            For example, if `value` is a string, and subset contains a non-string column,
-            then the non-string column is simply ignored.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with replaced values.
-        """
         if value is _NoValue:
             if isinstance(to_replace, dict):
                 value = None
@@ -1480,51 +1018,15 @@ class DataFrame(object):
             session=self._session,
         )
 
+    replace.__doc__ = PySparkDataFrame.replace.__doc__
+
     @property
     def stat(self) -> "DataFrameStatFunctions":
-        """Returns a :class:`DataFrameStatFunctions` for statistic functions.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`DataFrameStatFunctions`
-        """
         return DataFrameStatFunctions(self)
 
+    stat.__doc__ = PySparkDataFrame.stat.__doc__
+
     def summary(self, *statistics: str) -> "DataFrame":
-        """Computes specified statistics for numeric and string columns.
-
-        .. versionadded:: 3.4.0
-
-        Available statistics are:
-        count
-        mean
-        stddev
-        min
-        max
-        arbitrary approximate percentiles specified as a percentage (e.g. 75%)
-        count_distinct
-        approx_count_distinct
-
-        Notes
-        -----
-        If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
-        'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
-        This function is meant for exploratory data analysis, as we make no guarantee about the
-        backward compatibility of the schema of the resulting :class:`DataFrame`. If you want to
-        programmatically compute summary statistics, use the `agg` function instead.
-
-        Parameters
-        ----------
-        statistics : str, list, optional
-             Statistics from above list to be computed.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            A new DataFrame that computes specified statistics for given DataFrame.
-        """
         _statistics: List[str] = list(statistics)
         for s in _statistics:
             if not isinstance(s, str):
@@ -1534,66 +1036,113 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def describe(self, *cols: str) -> "DataFrame":
-        """Computes basic statistics for numeric and string columns.
+    summary.__doc__ = PySparkDataFrame.summary.__doc__
 
-        .. versionadded:: 3.4.0
+    def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]  # type: ignore[assignment]
 
-        This include count, mean, stddev, min, and max. If no columns are
-        given, this function computes statistics for all numerical or string columns.
-
-        Notes
-        -----
-        This function is meant for exploratory data analysis, as we make no
-        guarantee about the backward compatibility of the schema of the resulting
-        :class:`DataFrame`.
-        Use summary for expanded statistics and control over which statistics to compute.
-
-        Parameters
-        ----------
-        cols : str, list, optional
-             Column name or list of column names to describe by (default All columns).
-
-        Returns
-        -------
-        :class:`DataFrame`
-            A new DataFrame that describes (provides statistics) given DataFrame.
-        """
-        _cols: List[str] = list(cols)
-        for s in _cols:
-            if not isinstance(s, str):
-                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+        _cols = []
+        for column in cols:
+            if isinstance(column, str):
+                _cols.append(column)
+            else:
+                _cols.extend([s for s in column])
         return DataFrame.withPlan(
             plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
         )
 
+    describe.__doc__ = PySparkDataFrame.describe.__doc__
+
+    def cov(self, col1: str, col2: str) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        pdf = DataFrame.withPlan(
+            plan.StatCov(child=self._plan, col1=col1, col2=col2),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["cov"][0]
+
+    cov.__doc__ = PySparkDataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+            )
+        pdf = DataFrame.withPlan(
+            plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["corr"][0]
+
+    corr.__doc__ = PySparkDataFrame.corr.__doc__
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        if not isinstance(col, (str, list, tuple)):
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
+
+        isStr = isinstance(col, str)
+
+        if isinstance(col, tuple):
+            col = list(col)
+        elif isStr:
+            col = [cast(str, col)]
+
+        for c in col:
+            if not isinstance(c, str):
+                raise TypeError("columns should be strings, but got %r" % type(c))
+
+        if not isinstance(probabilities, (list, tuple)):
+            raise TypeError("probabilities should be a list or tuple")
+        if isinstance(probabilities, tuple):
+            probabilities = list(probabilities)
+        for p in probabilities:
+            if not isinstance(p, (float, int)) or p < 0 or p > 1:
+                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
+
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
+        relativeError = float(relativeError)
+        pdf = DataFrame.withPlan(
+            plan.StatApproxQuantile(
+                child=self._plan,
+                cols=list(col),
+                probabilities=probabilities,
+                relativeError=relativeError,
+            ),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        jaq = pdf["approx_quantile"][0]
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
+
+    approxQuantile.__doc__ = PySparkDataFrame.approxQuantile.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
-        """
-        Computes a pair-wise frequency table of the given columns. Also known as a contingency
-        table. The number of distinct values for each column should be less than 1e4. At most 1e6
-        non-zero pair frequencies will be returned.
-        The first column of each row will be the distinct values of `col1` and the column names
-        will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
-        Pairs that have no occurrences will have zero as their counts.
-        :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        col1 : str
-            The name of the first column. Distinct items will make the first item of
-            each row.
-        col2 : str
-            The name of the second column. Distinct items will make the column names
-            of the :class:`DataFrame`.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Frequency matrix of two columns.
-        """
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
         if not isinstance(col2, str):
@@ -1602,6 +1151,47 @@ class DataFrame(object):
             plan.StatCrosstab(child=self._plan, col1=col1, col2=col2),
             session=self._session,
         )
+
+    crosstab.__doc__ = PySparkDataFrame.crosstab.__doc__
+
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> "DataFrame":
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise TypeError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame.withPlan(
+            plan.StatFreqItems(child=self._plan, cols=cols, support=support),
+            session=self._session,
+        )
+
+    freqItems.__doc__ = PySparkDataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> "DataFrame":
+        from pyspark.sql.connect.expressions import ColumnReference
+
+        if isinstance(col, str):
+            col = Column(ColumnReference(col))
+        elif not isinstance(col, Column):
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, str)):
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        return DataFrame.withPlan(
+            plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
+            session=self._session,
+        )
+
+    sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
     def _get_alias(self) -> Optional[str]:
         p = self._plan
@@ -1614,13 +1204,30 @@ class DataFrame(object):
     def __getattr__(self, name: str) -> "Column":
         return self[name]
 
-    def __getitem__(self, name: str) -> "Column":
-        # Check for alias
-        alias = self._get_alias()
-        if alias is not None:
-            return col(alias)
+    @overload
+    def __getitem__(self, item: Union[int, str]) -> Column:
+        ...
+
+    @overload
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
+        ...
+
+    def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
+        if isinstance(item, str):
+            # Check for alias
+            alias = self._get_alias()
+            if alias is not None:
+                return col(alias)
+            else:
+                return col(item)
+        elif isinstance(item, Column):
+            return self.filter(item)
+        elif isinstance(item, (list, tuple)):
+            return self.select(*item)
+        elif isinstance(item, int):
+            return col(self.columns[item])
         else:
-            return col(name)
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def _print_plan(self) -> str:
         if self._plan:
@@ -1628,11 +1235,22 @@ class DataFrame(object):
         return ""
 
     def collect(self) -> List[Row]:
-        pdf = self.toPandas()
-        if pdf is not None:
-            return list(pdf.apply(lambda row: Row(**row), axis=1))
-        else:
-            return []
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+        table = self._session.client.to_table(query)
+
+        schema = from_arrow_schema(table.schema)
+
+        assert schema is not None and isinstance(schema, StructType)
+
+        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+
+        return ArrowTableToRowsConversion.convert(table, schema)
+
+    collect.__doc__ = PySparkDataFrame.collect.__doc__
 
     def toPandas(self) -> "pandas.DataFrame":
         if self._plan is None:
@@ -1640,18 +1258,12 @@ class DataFrame(object):
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._to_pandas(query)
+        return self._session.client.to_pandas(query)
+
+    toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 
     @property
     def schema(self) -> StructType:
-        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`StructType`
-        """
         if self._schema is None:
             if self._plan is not None:
                 query = self._plan.to_proto(self._session.client)
@@ -1664,46 +1276,24 @@ class DataFrame(object):
         else:
             return self._schema
 
-    @property
+    schema.__doc__ = PySparkDataFrame.schema.__doc__
+
     def isLocal(self) -> bool:
-        """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
-        (without any Spark executors).
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        bool
-        """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).is_local
 
+    isLocal.__doc__ = PySparkDataFrame.isLocal.__doc__
+
     @property
     def isStreaming(self) -> bool:
-        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
-        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
-        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
-        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
-        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
-        is a streaming source present.
-
-        .. versionadded:: 3.4.0
-
-        Notes
-        -----
-        This API is evolving.
-
-        Returns
-        -------
-        bool
-            Whether it's streaming DataFrame or not.
-        """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).is_streaming
+
+    isStreaming.__doc__ = PySparkDataFrame.isStreaming.__doc__
 
     def _tree_string(self) -> str:
         if self._plan is None:
@@ -1712,145 +1302,40 @@ class DataFrame(object):
         return self._session.client._analyze(query).tree_string
 
     def printSchema(self) -> None:
-        """Prints out the schema in the tree format.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        None
-        """
         print(self._tree_string())
 
+    printSchema.__doc__ = PySparkDataFrame.printSchema.__doc__
+
     def inputFiles(self) -> List[str]:
-        """
-        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
-        This method simply asks each constituent BaseRelation for its respective files and
-        takes the union of all results. Depending on the source relations, this may not find
-        all input files. Duplicates are removed.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        list
-            List of file paths.
-        """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
 
-    def to(self, schema: DataType) -> "DataFrame":
-        """
-        Returns a new :class:`DataFrame` where each row is reconciled to match the specified
-        schema.
+    inputFiles.__doc__ = PySparkDataFrame.inputFiles.__doc__
 
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        schema : :class:`StructType`
-            Specified schema.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Reconciled DataFrame.
-
-        Notes
-        -----
-        * Reorder columns and/or inner fields by name to match the specified schema.
-
-        * Project away columns and/or inner fields that are not needed by the specified schema.
-            Missing columns and/or inner fields (present in the specified schema but not input
-            DataFrame) lead to failures.
-
-        * Cast the columns and/or inner fields to match the data types in the specified schema,
-            if the types are compatible, e.g., numeric to numeric (error if overflows), but
-            not string to int.
-
-        * Carry over the metadata from the specified schema, while the columns and/or inner fields
-            still keep their own metadata if not overwritten by the specified schema.
-
-        * Fail if the nullability is not compatible. For example, the column and/or inner field
-            is nullable but the specified schema requires them to be not nullable.
-        """
+    def to(self, schema: StructType) -> "DataFrame":
         assert schema is not None
         return DataFrame.withPlan(
             plan.ToSchema(child=self._plan, schema=schema),
             session=self._session,
         )
 
+    to.__doc__ = PySparkDataFrame.to.__doc__
+
     def toDF(self, *cols: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` that with new specified column names
+        return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
 
-        Parameters
-        ----------
-        *cols : tuple
-            a tuple of string new column name or :class:`Column`. The length of the
-            list needs to be the same as the number of columns in the initial
-            :class:`DataFrame`
-
-        Returns
-        -------
-        :class:`DataFrame`
-            DataFrame with new column names.
-        """
-        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
+    toDF.__doc__ = PySparkDataFrame.toDF.__doc__
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
-        """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        func : function
-            a function that takes and returns a :class:`DataFrame`.
-        *args
-            Positional arguments to pass to func.
-
-        **kwargs
-            Keyword arguments to pass to func.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Transformed DataFrame.
-
-        Examples
-        --------
-        >>> from pyspark.sql.connect.functions import col
-        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
-        >>> def cast_all_to_int(input_df):
-        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
-        >>> def sort_columns_asc(input_df):
-        ...     return input_df.select(*sorted(input_df.columns))
-        >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
-        +-----+---+
-        |float|int|
-        +-----+---+
-        |    1|  1|
-        |    2|  2|
-        +-----+---+
-
-        >>> def add_n(input_df, n):
-        ...     return input_df.select([(col(col_name) + n).alias(col_name)
-        ...                             for col_name in input_df.columns])
-        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
-        +---+-----+
-        |int|float|
-        +---+-----+
-        | 12| 12.0|
-        | 13| 13.0|
-        +---+-----+
-        """
         result = func(self, *args, **kwargs)
         assert isinstance(
             result, DataFrame
         ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
         return result
+
+    transform.__doc__ = PySparkDataFrame.transform.__doc__
 
     def _explain_string(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
@@ -1902,99 +1387,41 @@ class DataFrame(object):
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
-        """Retruns plans in string for debugging purpose.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        extended : bool, optional
-            default ``False``. If ``False``, returns only the physical plan.
-            When this is a string without specifying the ``mode``, it works as the mode is
-            specified.
-        mode : str, optional
-            specifies the expected output format of plans.
-
-            * ``simple``: Print only a physical plan.
-            * ``extended``: Print both logical and physical plans.
-            * ``codegen``: Print a physical plan and generated codes if they are available.
-            * ``cost``: Print a logical plan and statistics if they are available.
-            * ``formatted``: Split explain output into two sections: a physical plan outline \
-                and node details.
-        """
         print(self._explain_string(extended=extended, mode=mode))
 
+    explain.__doc__ = PySparkDataFrame.explain.__doc__
+
     def createTempView(self, name: str) -> None:
-        """Creates a local temporary view with this :class:`DataFrame`.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
-        catalog.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        name : str
-            Name of the view.
-        """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
         ).command(session=self._session.client)
         self._session.client.execute_command(command)
 
+    createTempView.__doc__ = PySparkDataFrame.createTempView.__doc__
+
     def createOrReplaceTempView(self, name: str) -> None:
-        """Creates or replaces a local temporary view with this :class:`DataFrame`.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        name : str
-            Name of the view.
-        """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=True
         ).command(session=self._session.client)
         self._session.client.execute_command(command)
 
+    createOrReplaceTempView.__doc__ = PySparkDataFrame.createOrReplaceTempView.__doc__
+
     def createGlobalTempView(self, name: str) -> None:
-        """Creates a global temporary view with this :class:`DataFrame`.
-
-        The lifetime of this temporary view is tied to this Spark application.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        name : str
-            Name of the view.
-        """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
         ).command(session=self._session.client)
         self._session.client.execute_command(command)
 
+    createGlobalTempView.__doc__ = PySparkDataFrame.createGlobalTempView.__doc__
+
     def createOrReplaceGlobalTempView(self, name: str) -> None:
-        """Creates or replaces a global temporary view using the given name.
-
-        The lifetime of this temporary view is tied to this Spark application.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        name : str
-            Name of the view.
-        """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session.client)
         self._session.client.execute_command(command)
+
+    createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
     def rdd(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
@@ -2062,13 +1489,40 @@ class DataFrame(object):
     def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("sameSemantics() is not implemented.")
 
+    def writeTo(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("writeTo() is not implemented.")
+
+    # SparkConnect specific API
+    def offset(self, n: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or all records if the DataFrame contains less than this number of records.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+        """
+        return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+
+    @classmethod
+    def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
+        """
+        Main initialization method used to construct a new data frame with a child plan.
+        This is for internal purpose.
+        """
+        new_frame = DataFrame(session=session)
+        new_frame._plan = plan
+        return new_frame
+
 
 class DataFrameNaFunctions:
-    """Functionality for working with missing data in :class:`DataFrame`.
-
-    .. versionadded:: 3.4.0
-    """
-
     def __init__(self, df: DataFrame):
         self.df = df
 
@@ -2104,16 +1558,112 @@ class DataFrameNaFunctions:
     replace.__doc__ = DataFrame.replace.__doc__
 
 
+DataFrameNaFunctions.__doc__ = PySparkDataFrameNaFunctions.__doc__
+
+
 class DataFrameStatFunctions:
-    """Functionality for statistic functions with :class:`DataFrame`.
-
-    .. versionadded:: 3.4.0
-    """
-
     def __init__(self, df: DataFrame):
         self.df = df
+
+    def cov(self, col1: str, col2: str) -> float:
+        return self.df.cov(col1, col2)
+
+    cov.__doc__ = DataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        return self.df.approxQuantile(col, probabilities, relativeError)
+
+    approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
+
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> DataFrame:
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> DataFrame:
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
+
+
+DataFrameStatFunctions.__doc__ = PySparkDataFrameStatFunctions.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.dataframe
+
+        globs = pyspark.sql.connect.dataframe.__dict__.copy()
+        # Spark Connect does not support RDD but the tests depend on them.
+        del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
+
+        # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
+
+        # TODO(SPARK-41823): ambiguous column names
+        del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
+
+        # TODO(SPARK-41625): Support Structured Streaming
+        del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
+
+        # TODO(SPARK-41818): Support saveAsTable
+        del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
+
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.dataframe tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.dataframe,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.dataframe doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

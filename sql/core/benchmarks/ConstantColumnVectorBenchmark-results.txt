@@ -1,280 +1,280 @@
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with StringType, row length = 1:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                    1              1           0     681069.6           0.0       1.0X
-OnHeapColumnVector                                   3073           3073           0        133.3           7.5       0.0X
-OffHeapColumnVector                                  3502           3503           2        117.0           8.6       0.0X
+ConstantColumnVector                                    0              1           0     882378.3           0.0       1.0X
+OnHeapColumnVector                                   4258           4258           0         96.2          10.4       0.0X
+OffHeapColumnVector                                  5390           5391           1         76.0          13.2       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with StringType, row length = 5:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                    1              1           0     680956.3           0.0       1.0X
-OnHeapColumnVector                                   3773           3773           0        108.6           9.2       0.0X
-OffHeapColumnVector                                  4834           4839           7         84.7          11.8       0.0X
+ConstantColumnVector                                    0              0           0     851382.2           0.0       1.0X
+OnHeapColumnVector                                   6044           6052          11         67.8          14.8       0.0X
+OffHeapColumnVector                                  6537           6538           1         62.7          16.0       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with StringType, row length = 10:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                     1              1           0     681069.6           0.0       1.0X
-OnHeapColumnVector                                    3980           3980           0        102.9           9.7       0.0X
-OffHeapColumnVector                                   4706           4706           1         87.0          11.5       0.0X
+ConstantColumnVector                                     0              0           0     851382.2           0.0       1.0X
+OnHeapColumnVector                                    6296           6304          11         65.1          15.4       0.0X
+OffHeapColumnVector                                   6450           6455           7         63.5          15.7       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with StringType, row length = 15:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                     1              1           0     681069.6           0.0       1.0X
-OnHeapColumnVector                                    4000           4001           1        102.4           9.8       0.0X
-OffHeapColumnVector                                   4834           4835           1         84.7          11.8       0.0X
+ConstantColumnVector                                     0              0           0     851382.2           0.0       1.0X
+OnHeapColumnVector                                    6391           6397           8         64.1          15.6       0.0X
+OffHeapColumnVector                                   6352           6353           1         64.5          15.5       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with StringType, row length = 20:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                     1              1           0     681069.6           0.0       1.0X
-OnHeapColumnVector                                    4400           4400           0         93.1          10.7       0.0X
-OffHeapColumnVector                                   4593           4594           2         89.2          11.2       0.0X
+ConstantColumnVector                                     0              0           0     851384.0           0.0       1.0X
+OnHeapColumnVector                                    7076           7101          35         57.9          17.3       0.0X
+OffHeapColumnVector                                   7406           7408           3         55.3          18.1       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with StringType, row length = 30:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                     1              1           0     681073.0           0.0       1.0X
-OnHeapColumnVector                                    4781           4781           0         85.7          11.7       0.0X
-OffHeapColumnVector                                   5185           5187           3         79.0          12.7       0.0X
+ConstantColumnVector                                     0              0           0     851384.0           0.0       1.0X
+OnHeapColumnVector                                    7452           7453           2         55.0          18.2       0.0X
+OffHeapColumnVector                                   7646           7646           0         53.6          18.7       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with IntegerType:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                  0              0           0    1021433.6           0.0       1.0X
-OnHeapColumnVector                                   70             70           0       5845.6           0.2       0.0X
-OffHeapColumnVector                                 139            139           0       2937.7           0.3       0.0X
+ConstantColumnVector                                  1              1           0     537674.6           0.0       1.0X
+OnHeapColumnVector                                   43             43           0       9531.8           0.1       0.0X
+OffHeapColumnVector                                  85             85           0       4831.2           0.2       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with LongType:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                  0              0           0     942911.9           0.0       1.0X
-OnHeapColumnVector                                   61             63           1       6759.3           0.1       0.0X
-OffHeapColumnVector                                 157            158           1       2612.7           0.4       0.0X
+ConstantColumnVector                                  1              1           0     408619.7           0.0       1.0X
+OnHeapColumnVector                                   36             37           0      11426.8           0.1       0.0X
+OffHeapColumnVector                                  85             85           0       4819.1           0.2       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with FloatType:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                  1              1           0     817232.1           0.0       1.0X
-OnHeapColumnVector                                   70             70           0       5819.5           0.2       0.0X
-OffHeapColumnVector                                 139            139           0       2944.1           0.3       0.0X
+ConstantColumnVector                                  1              1           0     408619.7           0.0       1.0X
+OnHeapColumnVector                                   44             44           0       9381.0           0.1       0.0X
+OffHeapColumnVector                                  85             85           0       4808.6           0.2       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write with DoubleType:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                  1              1           0     766171.7           0.0       1.0X
-OnHeapColumnVector                                   55             59           1       7504.8           0.1       0.0X
-OffHeapColumnVector                                 154            157           1       2662.4           0.4       0.0X
+ConstantColumnVector                                  1              1           0     408619.7           0.0       1.0X
+OnHeapColumnVector                                   36             37           0      11387.5           0.1       0.0X
+OffHeapColumnVector                                  85             85           0       4803.3           0.2       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with StringType, row length = 1:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                1188           1190           3        344.7           2.9       1.0X
-OnHeapColumnVector                                  2907           2907           1        140.9           7.1       0.4X
-OffHeapColumnVector                                 4290           4295           7         95.5          10.5       0.3X
+ConstantColumnVector                                1733           1736           4        236.3           4.2       1.0X
+OnHeapColumnVector                                  1920           1922           4        213.4           4.7       0.9X
+OffHeapColumnVector                                 4355           4356           2         94.0          10.6       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with StringType, row length = 5:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                1168           1172           6        350.6           2.9       1.0X
-OnHeapColumnVector                                  5766           5770           6         71.0          14.1       0.2X
-OffHeapColumnVector                                 4278           4281           5         95.7          10.4       0.3X
+ConstantColumnVector                                1730           1732           3        236.8           4.2       1.0X
+OnHeapColumnVector                                  4932           4958          36         83.1          12.0       0.4X
+OffHeapColumnVector                                 4342           4348           9         94.3          10.6       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with StringType, row length = 10:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                 1163           1165           4        352.3           2.8       1.0X
-OnHeapColumnVector                                   5761           5762           2         71.1          14.1       0.2X
-OffHeapColumnVector                                  4233           4249          23         96.8          10.3       0.3X
+ConstantColumnVector                                 1724           1728           5        237.6           4.2       1.0X
+OnHeapColumnVector                                   4964           4980          23         82.5          12.1       0.3X
+OffHeapColumnVector                                  4343           4344           1         94.3          10.6       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with StringType, row length = 15:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                 1158           1163           6        353.7           2.8       1.0X
-OnHeapColumnVector                                   5750           5754           5         71.2          14.0       0.2X
-OffHeapColumnVector                                  4231           4232           2         96.8          10.3       0.3X
+ConstantColumnVector                                 1723           1724           1        237.7           4.2       1.0X
+OnHeapColumnVector                                   4950           4955           8         82.8          12.1       0.3X
+OffHeapColumnVector                                  4332           4334           4         94.6          10.6       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with StringType, row length = 20:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                 1162           1164           2        352.4           2.8       1.0X
-OnHeapColumnVector                                   6277           6278           2         65.3          15.3       0.2X
-OffHeapColumnVector                                  4220           4236          22         97.1          10.3       0.3X
+ConstantColumnVector                                 1726           1726           0        237.3           4.2       1.0X
+OnHeapColumnVector                                   4933           4950          24         83.0          12.0       0.3X
+OffHeapColumnVector                                  4339           4340           1         94.4          10.6       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with StringType, row length = 30:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                 1159           1160           1        353.4           2.8       1.0X
-OnHeapColumnVector                                   6281           6284           4         65.2          15.3       0.2X
-OffHeapColumnVector                                  4233           4245          17         96.8          10.3       0.3X
+ConstantColumnVector                                 1726           1726           1        237.4           4.2       1.0X
+OnHeapColumnVector                                   4937           4942           7         83.0          12.1       0.3X
+OffHeapColumnVector                                  4344           4348           6         94.3          10.6       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with IntegerType:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1361           1362           1        300.9           3.3       1.0X
-OnHeapColumnVector                                 1807           1808           3        226.7           4.4       0.8X
-OffHeapColumnVector                                2808           2811           4        145.8           6.9       0.5X
+ConstantColumnVector                               2774           2774           1        147.7           6.8       1.0X
+OnHeapColumnVector                                 3114           3114           1        131.5           7.6       0.9X
+OffHeapColumnVector                                3119           3122           5        131.3           7.6       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with LongType:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1315           1317           3        311.5           3.2       1.0X
-OnHeapColumnVector                                 2318           2318           1        176.7           5.7       0.6X
-OffHeapColumnVector                                2512           2513           1        163.0           6.1       0.5X
+ConstantColumnVector                               1211           1212           2        338.4           3.0       1.0X
+OnHeapColumnVector                                 1455           1457           3        281.5           3.6       0.8X
+OffHeapColumnVector                                2436           2444          11        168.1           5.9       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with FloatType:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1177           1179           2        347.9           2.9       1.0X
-OnHeapColumnVector                                 1334           1335           1        307.0           3.3       0.9X
-OffHeapColumnVector                                1837           1838           1        222.9           4.5       0.6X
+ConstantColumnVector                               1325           1325           0        309.2           3.2       1.0X
+OnHeapColumnVector                                 1209           1210           1        338.7           3.0       1.1X
+OffHeapColumnVector                                1837           1839           3        222.9           4.5       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test read with DoubleType:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1178           1178           0        347.8           2.9       1.0X
-OnHeapColumnVector                                 1330           1331           1        307.9           3.2       0.9X
-OffHeapColumnVector                                1835           1837           2        223.2           4.5       0.6X
+ConstantColumnVector                               1331           1331           0        307.8           3.2       1.0X
+OnHeapColumnVector                                 1222           1224           2        335.1           3.0       1.1X
+OffHeapColumnVector                                1876           1876           0        218.3           4.6       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with StringType, row length = 1:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                          1164           1166           2        351.8           2.8       1.0X
-OnHeapColumnVector                                            5884           5884           0         69.6          14.4       0.2X
-OffHeapColumnVector                                           4744           4746           4         86.3          11.6       0.2X
+ConstantColumnVector                                           861            863           2        475.8           2.1       1.0X
+OnHeapColumnVector                                            4674           4675           1         87.6          11.4       0.2X
+OffHeapColumnVector                                           4792           4794           3         85.5          11.7       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with StringType, row length = 5:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                          1162           1164           4        352.6           2.8       1.0X
-OnHeapColumnVector                                            5545           5546           2         73.9          13.5       0.2X
-OffHeapColumnVector                                           4754           4756           4         86.2          11.6       0.2X
+ConstantColumnVector                                           875            878           2        468.3           2.1       1.0X
+OnHeapColumnVector                                            4982           4986           5         82.2          12.2       0.2X
+OffHeapColumnVector                                           4790           4792           3         85.5          11.7       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with StringType, row length = 10:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                           1164           1165           2        352.0           2.8       1.0X
-OnHeapColumnVector                                             5539           5541           2         73.9          13.5       0.2X
-OffHeapColumnVector                                            4745           4749           6         86.3          11.6       0.2X
+ConstantColumnVector                                            863            869           8        474.8           2.1       1.0X
+OnHeapColumnVector                                             4972           4980          10         82.4          12.1       0.2X
+OffHeapColumnVector                                            4800           4849          70         85.3          11.7       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with StringType, row length = 15:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                           1168           1168           1        350.8           2.9       1.0X
-OnHeapColumnVector                                             5541           5543           2         73.9          13.5       0.2X
-OffHeapColumnVector                                            4755           4756           2         86.1          11.6       0.2X
+ConstantColumnVector                                            865            866           1        473.6           2.1       1.0X
+OnHeapColumnVector                                             4981           4983           2         82.2          12.2       0.2X
+OffHeapColumnVector                                            4789           4794           6         85.5          11.7       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with StringType, row length = 20:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                           1163           1163           1        352.3           2.8       1.0X
-OnHeapColumnVector                                             5541           5542           2         73.9          13.5       0.2X
-OffHeapColumnVector                                            4755           4758           4         86.1          11.6       0.2X
+ConstantColumnVector                                            870            878           8        470.8           2.1       1.0X
+OnHeapColumnVector                                             4988           4991           4         82.1          12.2       0.2X
+OffHeapColumnVector                                            4803           4805           3         85.3          11.7       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with StringType, row length = 30:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                                           1168           1168           0        350.8           2.9       1.0X
-OnHeapColumnVector                                             5538           5539           3         74.0          13.5       0.2X
-OffHeapColumnVector                                            4757           4758           0         86.1          11.6       0.2X
+ConstantColumnVector                                            866            912          74        473.2           2.1       1.0X
+OnHeapColumnVector                                             4976           4984          11         82.3          12.1       0.2X
+OffHeapColumnVector                                            4797           4801           5         85.4          11.7       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with IntegerType:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1099           1102           4        372.6           2.7       1.0X
-OnHeapColumnVector                                 3025           3026           1        135.4           7.4       0.4X
-OffHeapColumnVector                                2800           2804           5        146.3           6.8       0.4X
+ConstantColumnVector                               2887           2890           3        141.9           7.0       1.0X
+OnHeapColumnVector                                 3141           3141           0        130.4           7.7       0.9X
+OffHeapColumnVector                                3065           3066           1        133.6           7.5       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with LongType:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               2466           2469           3        166.1           6.0       1.0X
-OnHeapColumnVector                                 2778           2779           1        147.4           6.8       0.9X
-OffHeapColumnVector                                2511           2514           5        163.1           6.1       1.0X
+ConstantColumnVector                               2210           2215           7        185.3           5.4       1.0X
+OnHeapColumnVector                                 2506           2509           5        163.4           6.1       0.9X
+OffHeapColumnVector                                2437           2439           2        168.0           6.0       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with FloatType:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1841           1843           3        222.5           4.5       1.0X
-OnHeapColumnVector                                 2237           2238           2        183.1           5.5       0.8X
-OffHeapColumnVector                                1791           1793           4        228.8           4.4       1.0X
+ConstantColumnVector                               1554           1555           1        263.6           3.8       1.0X
+OnHeapColumnVector                                 1862           1863           1        220.0           4.5       0.8X
+OffHeapColumnVector                                1802           1804           3        227.3           4.4       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test write and read with DoubleType:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1645           1647           3        249.0           4.0       1.0X
-OnHeapColumnVector                                 2223           2225           3        184.2           5.4       0.7X
-OffHeapColumnVector                                1767           1769           3        231.8           4.3       0.9X
+ConstantColumnVector                               1326           1326           1        309.0           3.2       1.0X
+OnHeapColumnVector                                 1918           1919           1        213.5           4.7       0.7X
+OffHeapColumnVector                                2109           2126          24        194.2           5.1       0.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test isNull with StringType:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1098           1100           2        373.0           2.7       1.0X
-OnHeapColumnVector                                 1437           1438           2        285.0           3.5       0.8X
-OffHeapColumnVector                                1166           1168           3        351.2           2.8       0.9X
+ConstantColumnVector                               1263           1263           0        324.4           3.1       1.0X
+OnHeapColumnVector                                 1155           1162          10        354.6           2.8       1.1X
+OffHeapColumnVector                                1269           1271           4        322.8           3.1       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test isNull with IntegerType:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1097           1101           5        373.2           2.7       1.0X
-OnHeapColumnVector                                 1432           1433           1        286.1           3.5       0.8X
-OffHeapColumnVector                                1171           1173           2        349.7           2.9       0.9X
+ConstantColumnVector                               1265           1272          10        323.9           3.1       1.0X
+OnHeapColumnVector                                 1167           1172           7        351.1           2.8       1.1X
+OffHeapColumnVector                                1269           1271           2        322.7           3.1       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test isNull with LongType:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1103           1109           8        371.2           2.7       1.0X
-OnHeapColumnVector                                 1440           1443           4        284.5           3.5       0.8X
-OffHeapColumnVector                                1177           1178           3        348.1           2.9       0.9X
+ConstantColumnVector                               1263           1264           1        324.3           3.1       1.0X
+OnHeapColumnVector                                 1179           1184           8        347.5           2.9       1.1X
+OffHeapColumnVector                                1269           1272           4        322.7           3.1       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test isNull with FloatType:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1112           1113           1        368.3           2.7       1.0X
-OnHeapColumnVector                                 1449           1451           2        282.6           3.5       0.8X
-OffHeapColumnVector                                1179           1180           1        347.3           2.9       0.9X
+ConstantColumnVector                               1267           1267           0        323.3           3.1       1.0X
+OnHeapColumnVector                                 1169           1175           9        350.5           2.9       1.1X
+OffHeapColumnVector                                1266           1269           3        323.5           3.1       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1023-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Test isNull with DoubleType:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ConstantColumnVector                               1109           1110           1        369.4           2.7       1.0X
-OnHeapColumnVector                                 1451           1451           1        282.4           3.5       0.8X
-OffHeapColumnVector                                1175           1179           4        348.5           2.9       0.9X
+ConstantColumnVector                               1262           1263           0        324.5           3.1       1.0X
+OnHeapColumnVector                                 1164           1176          16        351.8           2.8       1.1X
+OffHeapColumnVector                                1269           1270           1        322.9           3.1       1.0X
 

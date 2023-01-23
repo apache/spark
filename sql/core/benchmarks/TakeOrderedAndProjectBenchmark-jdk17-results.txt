@@ -2,11 +2,11 @@
 TakeOrderedAndProject
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.3+7-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TakeOrderedAndProject with SMJ:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-TakeOrderedAndProject with SMJ for doExecute                 339            364          30          0.0       33873.3       1.0X
-TakeOrderedAndProject with SMJ for executeCollect            129            146          22          0.1       12949.3       2.6X
+TakeOrderedAndProject with SMJ for doExecute                 213            226          18          0.0       21323.1       1.0X
+TakeOrderedAndProject with SMJ for executeCollect            137            150          19          0.1       13664.5       1.6X
 
 

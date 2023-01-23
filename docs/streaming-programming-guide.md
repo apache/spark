@@ -725,7 +725,7 @@ of its creation, the new data will be picked up.
 
 In contrast, Object Stores such as Amazon S3 and Azure Storage usually have slow rename operations, as the
 data is actually copied.
-Furthermore, renamed object may have the time of the `rename()` operation as its modification time, so
+Furthermore, a renamed object may have the time of the `rename()` operation as its modification time, so
 may not be considered part of the window which the original create time implied they were.
 
 Careful testing is needed against the target object store to verify that the timestamp behavior
@@ -1140,7 +1140,7 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 
 #### Join Operations
 {:.no_toc}
-Finally, its worth highlighting how easily you can perform different kinds of joins in Spark Streaming.
+Finally, it's worth highlighting how easily you can perform different kinds of joins in Spark Streaming.
 
 
 ##### Stream-stream joins
@@ -1236,7 +1236,7 @@ For the Python API, see [DStream](api/python/reference/api/pyspark.streaming.DSt
 ***
 
 ## Output Operations on DStreams
-Output operations allow DStream's data to be pushed out to external systems like a database or a file systems.
+Output operations allow DStream's data to be pushed out to external systems like a database or a file system.
 Since the output operations actually allow the transformed data to be consumed by external systems,
 they trigger the actual execution of all the DStream transformations (similar to actions for RDDs).
 Currently, the following output operations are defined:
@@ -1293,7 +1293,7 @@ Currently, the following output operations are defined:
 However, it is important to understand how to use this primitive correctly and efficiently.
 Some of the common mistakes to avoid are as follows.
 
-Often writing data to external system requires creating a connection object
+Often writing data to external systems requires creating a connection object
 (e.g. TCP connection to a remote server) and using it to send data to a remote system.
 For this purpose, a developer may inadvertently try creating a connection object at
 the Spark driver, and then try to use it in a Spark worker to save records in the RDDs.
@@ -1481,7 +1481,7 @@ Note that the connections in the pool should be lazily created on demand and tim
 ***
 
 ## DataFrame and SQL Operations
-You can easily use [DataFrames and SQL](sql-programming-guide.html) operations on streaming data. You have to create a SparkSession using the SparkContext that the StreamingContext is using. Furthermore, this has to done such that it can be restarted on driver failures. This is done by creating a lazily instantiated singleton instance of SparkSession. This is shown in the following example. It modifies the earlier [word count example](#a-quick-example) to generate word counts using DataFrames and SQL. Each RDD is converted to a DataFrame, registered as a temporary table and then queried using SQL.
+You can easily use [DataFrames and SQL](sql-programming-guide.html) operations on streaming data. You have to create a SparkSession using the SparkContext that the StreamingContext is using. Furthermore, this has to be done such that it can be restarted on driver failures. This is done by creating a lazily instantiated singleton instance of SparkSession. This is shown in the following example. It modifies the earlier [word count example](#a-quick-example) to generate word counts using DataFrames and SQL. Each RDD is converted to a DataFrame, registered as a temporary table and then queried using SQL.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1604,7 +1604,7 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_
 </div>
 </div>
 
-You can also run SQL queries on tables defined on streaming data from a different thread (that is, asynchronous to the running StreamingContext). Just make sure that you set the StreamingContext to remember a sufficient amount of streaming data such that the query can run. Otherwise the StreamingContext, which is unaware of the any asynchronous SQL queries, will delete off old streaming data before the query can complete. For example, if you want to query the last batch, but your query can take 5 minutes to run, then call `streamingContext.remember(Minutes(5))` (in Scala, or equivalent in other languages).
+You can also run SQL queries on tables defined on streaming data from a different thread (that is, asynchronous to the running StreamingContext). Just make sure that you set the StreamingContext to remember a sufficient amount of streaming data such that the query can run. Otherwise the StreamingContext, which is unaware of any of the asynchronous SQL queries, will delete off old streaming data before the query can complete. For example, if you want to query the last batch, but your query can take 5 minutes to run, then call `streamingContext.remember(Minutes(5))` (in Scala, or equivalent in other languages).
 
 See the [DataFrames and SQL](sql-programming-guide.html) guide to learn more about DataFrames.
 
@@ -1986,7 +1986,7 @@ This section discusses the steps to deploy a Spark Streaming application.
 ### Requirements
 {:.no_toc}
 
-To run a Spark Streaming applications, you need to have the following.
+To run Spark Streaming applications, you need to have the following.
 
 - *Cluster with a cluster manager* - This is the general requirement of any Spark application,
   and discussed in detail in the [deployment guide](cluster-overview.html).
@@ -2052,13 +2052,13 @@ To run a Spark Streaming applications, you need to have the following.
   enabled. If encryption of the write-ahead log data is desired, it should be stored in a file
   system that supports encryption natively.
 
-- *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
+- *Setting the max receiving rate* - If the cluster resources are not large enough for the streaming
   application to process data as fast as it is being received, the receivers can be rate limited
   by setting a maximum rate limit in terms of records / sec.
   See the [configuration parameters](configuration.html#spark-streaming)
   `spark.streaming.receiver.maxRate` for receivers and `spark.streaming.kafka.maxRatePerPartition`
   for Direct Kafka approach. In Spark 1.5, we have introduced a feature called *backpressure* that
-  eliminate the need to set this rate limit, as Spark Streaming automatically figures out the
+  eliminates the need to set this rate limit, as Spark Streaming automatically figures out the
   rate limits and dynamically adjusts them if the processing conditions change. This backpressure
   can be enabled by setting the [configuration parameter](configuration.html#spark-streaming)
   `spark.streaming.backpressure.enabled` to `true`.
@@ -2071,7 +2071,7 @@ application code, then there are two possible mechanisms.
 
 - The upgraded Spark Streaming application is started and run in parallel to the existing application.
 Once the new one (receiving the same data as the old one) has been warmed up and is ready
-for prime time, the old one be can be brought down. Note that this can be done for data sources that support
+for prime time, the old one can be brought down. Note that this can be done for data sources that support
 sending the data to two destinations (i.e., the earlier and upgraded applications).
 
 - The existing application is shutdown gracefully (see
@@ -2122,7 +2122,7 @@ and it is likely to be improved upon (i.e., more information reported) in the fu
 # Performance Tuning
 Getting the best performance out of a Spark Streaming application on a cluster requires a bit of
 tuning. This section explains a number of the parameters and configurations that can be tuned to
-improve the performance of you application. At a high level, you need to consider two things:
+improve the performance of your application. At a high level, you need to consider two things:
 
 1. Reducing the processing time of each batch of data by efficiently using cluster resources.
 
@@ -2184,7 +2184,7 @@ which is determined by the [configuration parameter](configuration.html#spark-st
 blocks of data before storing inside Spark's memory. The number of blocks in each batch
 determines the number of tasks that will be used to process 
 the received data in a map-like transformation. The number of tasks per receiver per batch will be
-approximately (batch interval / block interval). For example, block interval of 200 ms will
+approximately (batch interval / block interval). For example, a block interval of 200 ms will
 create 10 tasks per 2 second batches. If the number of tasks is too low (that is, less than the number
 of cores per machine), then it will be inefficient as all available cores will not be used to
 process the data. To increase the number of tasks for a given batch interval, reduce the
@@ -2257,8 +2257,8 @@ is able to keep up with the data rate, you can check the value of the end-to-end
 by each processed batch (either look for "Total delay" in Spark driver log4j logs, or use the
 [StreamingListener](api/scala/org/apache/spark/streaming/scheduler/StreamingListener.html)
 interface).
-If the delay is maintained to be comparable to the batch size, then system is stable. Otherwise,
-if the delay is continuously increasing, it means that the system is unable to keep up and it
+If the delay is maintained to be comparable to the batch size, then the system is stable. Otherwise,
+if the delay is continuously increasing, it means that the system is unable to keep up and it is
 therefore unstable. Once you have an idea of a stable configuration, you can try increasing the
 data rate and/or reducing the batch size. Note that a momentary increase in the delay due to
 temporary data rate increases may be fine as long as the delay reduces back to a low value
@@ -2297,14 +2297,14 @@ consistent batch processing times. Make sure you set the CMS GC on both the driv
 {:.no_toc}
 - A DStream is associated with a single receiver. For attaining read parallelism multiple receivers i.e. multiple DStreams need to be created. A receiver is run within an executor. It occupies one core. Ensure that there are enough cores for processing after receiver slots are booked i.e. `spark.cores.max` should take the receiver slots into account. The receivers are allocated to executors in a round robin fashion.
 
-- When data is received from a stream source, receiver creates blocks of data.  A new block of data is generated every blockInterval milliseconds. N blocks of data are created during the batchInterval where N = batchInterval/blockInterval. These blocks are distributed by the BlockManager of the current executor to the block managers of other executors. After that, the Network Input Tracker running on the driver is informed about the block locations for further processing.
+- When data is received from a stream source, the receiver creates blocks of data.  A new block of data is generated every blockInterval milliseconds. N blocks of data are created during the batchInterval where N = batchInterval/blockInterval. These blocks are distributed by the BlockManager of the current executor to the block managers of other executors. After that, the Network Input Tracker running on the driver is informed about the block locations for further processing.
 
 - An RDD is created on the driver for the blocks created during the batchInterval. The blocks generated during the batchInterval are partitions of the RDD. Each partition is a task in spark. blockInterval== batchinterval would mean that a single partition is created and probably it is processed locally.
 
 - The map tasks on the blocks are processed in the executors (one that received the block, and another where the block was replicated) that has the blocks irrespective of block interval, unless non-local scheduling kicks in.
-Having bigger blockinterval means bigger blocks. A high value of `spark.locality.wait` increases the chance of processing a block on the local node. A balance needs to be found out between these two parameters to ensure that the bigger blocks are processed locally.
+Having a bigger blockinterval means bigger blocks. A high value of `spark.locality.wait` increases the chance of processing a block on the local node. A balance needs to be found out between these two parameters to ensure that the bigger blocks are processed locally.
 
-- Instead of relying on batchInterval and blockInterval, you can define the number of partitions by calling `inputDstream.repartition(n)`. This reshuffles the data in RDD randomly to create n number of partitions. Yes, for greater parallelism. Though comes at the cost of a shuffle. An RDD's processing is scheduled by driver's jobscheduler as a job. At a given point of time only one job is active. So, if one job is executing the other jobs are queued.
+- Instead of relying on batchInterval and blockInterval, you can define the number of partitions by calling `inputDstream.repartition(n)`. This reshuffles the data in RDD randomly to create n number of partitions. Yes, for greater parallelism. Though comes at the cost of a shuffle. An RDD's processing is scheduled by the driver's jobscheduler as a job. At a given point of time only one job is active. So, if one job is executing the other jobs are queued.
 
 - If you have two dstreams there will be two RDDs formed and there will be two jobs created which will be scheduled one after the another. To avoid this, you can union two dstreams. This will ensure that a single unionRDD is formed for the two RDDs of the dstreams. This unionRDD is then considered as a single job. However, the partitioning of the RDDs is not impacted.
 
@@ -2336,7 +2336,7 @@ the case for Spark Streaming as the data in most cases is received over the netw
 `fileStream` is used). To achieve the same fault-tolerance properties for all of the generated RDDs,
 the received data is replicated among multiple Spark executors in worker nodes in the cluster
 (default replication factor is 2). This leads to two kinds of data in the
-system that need to recovered in the event of failures:
+system that need to be recovered in the event of failures:
 
 1. *Data received and replicated* - This data survives failure of a single worker node as a copy
   of it exists on one of the other nodes.
@@ -2359,7 +2359,7 @@ With this basic knowledge, let us understand the fault-tolerance semantics of Sp
 The semantics of streaming systems are often captured in terms of how many times each record can be processed by the system. There are three types of guarantees that a system can provide under all possible operating conditions (despite failures, etc.)
 
 1. *At most once*: Each record will be either processed once or not processed at all.
-2. *At least once*: Each record will be processed one or more times. This is stronger than *at-most once* as it ensure that no data will be lost. But there may be duplicates.
+2. *At least once*: Each record will be processed one or more times. This is stronger than *at-most once* as it ensures that no data will be lost. But there may be duplicates.
 3. *Exactly once*: Each record will be processed exactly once - no data will be lost and no data will be processed multiple times. This is obviously the strongest guarantee of the three.
 
 ## Basic Semantics

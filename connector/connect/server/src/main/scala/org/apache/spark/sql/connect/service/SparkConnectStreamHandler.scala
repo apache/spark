@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -42,7 +41,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   def handle(v: ExecutePlanRequest): Unit = {
     val session =
-      SparkConnectService.getOrCreateIsolatedSession(v.getUserContext.getUserId).session
+      SparkConnectService
+        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getClientId)
+        .session
     v.getPlan.getOpTypeCase match {
       case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
       case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
@@ -51,14 +52,14 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     }
   }
 
-  def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
+  private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     processAsArrowBatches(request.getClientId, dataframe)
   }
 
-  def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
+  private def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
@@ -126,12 +127,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             }
             partitions(currentPartitionId) = null
 
-            error.foreach {
-              case NonFatal(e) =>
-                responseObserver.onError(e)
-                logError("Error while processing query.", e)
-                return
-              case other => throw other
+            error.foreach { case other =>
+              throw other
             }
             part
           }
@@ -170,7 +167,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     }
   }
 
-  def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
+  private def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
     // Send a last batch with the metrics
     ExecutePlanResponse
       .newBuilder()
@@ -179,7 +176,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       .build()
   }
 
-  def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
+  private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
     val planner = new SparkConnectPlanner(session)
     planner.process(command)
@@ -212,17 +209,17 @@ object MetricGenerator extends AdaptiveSparkPlanHelper {
     b.build()
   }
 
-  def transformChildren(p: SparkPlan): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
+  private def transformChildren(p: SparkPlan): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
     allChildren(p).flatMap(c => transformPlan(c, p.id))
   }
 
-  def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
+  private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
     case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
     case s: QueryStageExec => Seq(s.plan)
     case _ => p.children
   }
 
-  def transformPlan(
+  private def transformPlan(
       p: SparkPlan,
       parentId: Int): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
     val mv = p.metrics.map(m =>

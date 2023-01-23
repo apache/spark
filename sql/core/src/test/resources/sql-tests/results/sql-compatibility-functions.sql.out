@@ -95,6 +95,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
     "expectedNum" : "1",

@@ -39,7 +39,7 @@ private[spark] case class RpcAddress(_host: String, port: Int) {
 private[spark] object RpcAddress {
 
   /** Return the [[RpcAddress]] represented by `uri`. */
-  def fromURIString(uri: String): RpcAddress = {
+  def fromUrlString(uri: String): RpcAddress = {
     val uriObj = new java.net.URI(uri)
     RpcAddress(uriObj.getHost, uriObj.getPort)
   }

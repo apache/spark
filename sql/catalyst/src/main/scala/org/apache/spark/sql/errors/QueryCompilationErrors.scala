@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -74,11 +74,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
       messageParameters = Map(
-        "parameter" -> "strfmt",
-        "functionName" -> toSQLId("format_string"),
-        "expected" -> "expects %1$, %2$ and so on, but got %0$."))
+        "parameter" -> toSQLId("strfmt"),
+        "functionName" -> toSQLId("format_string")))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
@@ -161,6 +160,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "MISSING_STATIC_PARTITION_COLUMN",
       messageParameters = Map("columnName" -> staticName))
+  }
+
+  def staticPartitionInUserSpecifiedColumnsError(staticName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
+      messageParameters = Map("staticName" -> staticName))
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
@@ -772,10 +777,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("database" -> quoted))
   }
 
-  def cannotDropViewWithDropTableError(): Throwable = {
+  def wrongCommandForObjectTypeError(
+      operation: String,
+      requiredType: String,
+      objectName: String,
+      foundType: String,
+      alternative: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1056",
-      messageParameters = Map.empty)
+      errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+      messageParameters = Map(
+        "operation" -> operation,
+        "requiredType" -> requiredType,
+        "objectName" -> objectName,
+        "foundType" -> foundType,
+        "alternative" -> alternative
+      )
+    )
   }
 
   def showColumnsWithConflictDatabasesError(
@@ -1066,21 +1083,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "requiredType" -> requiredType))
   }
 
-  def invalidStringLiteralParameter(
-      funcName: String,
-      argName: String,
-      invalidValue: String,
-      allowedValues: Option[String] = None): Throwable = {
-    val endingMsg = allowedValues.map(" " + _).getOrElse("")
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1101",
-      messageParameters = Map(
-        "argName" -> argName,
-        "funcName" -> funcName,
-        "invalidValue" -> invalidValue,
-        "endingMsg" -> endingMsg))
-  }
-
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_EXTRACT_FIELD",
@@ -1170,7 +1172,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new CannotReplaceMissingTableException(tableIdentifier, cause)
   }
 
-  def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
+  private def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1113",
       messageParameters = Map(
@@ -1492,7 +1494,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1144",
       messageParameters = Map(
-        "targetSize" -> targetPartitionSchema.fields.size.toString,
+        "targetSize" -> targetPartitionSchema.fields.length.toString,
         "providedPartitionsSize" -> providedPartitionsSize.toString))
   }
 
@@ -2252,11 +2254,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1230",
-      messageParameters = Map(
-        "scale" -> scale.toString,
-        "config" -> LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key))
+    SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
+      s" Set the config ${toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)}" +
+      " to \"true\" to allow it.")
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
@@ -2405,22 +2405,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cmdOnlyWorksOnPartitionedTablesError(cmd: String, tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnPartitionedTablesError(
+      operation: String,
+      tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "NOT_A_PARTITIONED_TABLE",
       messageParameters = Map(
-        "cmd" -> cmd,
+        "operation" -> toSQLStmt(operation),
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "_LEGACY_ERROR_TEMP_2446",
       messageParameters = Map(
         "cmd" -> cmd,
         "tableIdentWithDB" -> tableIdentWithDB))
-    new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
-      s"location provided: $tableIdentWithDB")
   }
 
   def actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(
@@ -2874,9 +2874,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("quote" -> quote))
   }
 
-  def sortByNotUsedWithBucketByError(): Throwable = {
+  def sortByWithoutBucketingError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1311",
+      errorClass = "SORT_BY_WITHOUT_BUCKETING",
       messageParameters = Map.empty)
   }
 
@@ -3251,7 +3251,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Option(cause.getCause))
+      cause = Option(cause))
   }
 
   def cannotConvertSqlTypeToProtobufError(
@@ -3263,7 +3263,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Option(cause.getCause))
+      cause = Option(cause))
   }
 
   def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
@@ -3313,25 +3313,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("messageName" -> messageName))
   }
 
-  def descrioptorParseError(descFilePath: String, cause: Throwable): Throwable = {
+  def descriptorParseError(descFilePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
       messageParameters = Map("descFilePath" -> descFilePath),
-      cause = Option(cause.getCause))
+      cause = Option(cause))
   }
 
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
       messageParameters = Map("filePath" -> filePath),
-      cause = Option(cause.getCause))
+      cause = Option(cause))
   }
 
   def failedParsingDescriptorError(descFilePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
       messageParameters = Map("descFilePath" -> descFilePath),
-      cause = Option(cause.getCause))
+      cause = Option(cause))
   }
 
   def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {
@@ -3357,12 +3357,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "explanation" -> explanation
       ),
       cause = Option(cause))
-  }
-
-  def protobufMessageTypeError(protobufClassName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_PROTOBUF_MESSAGE_TYPE",
-      messageParameters = Map("protobufClassName" -> protobufClassName))
   }
 
   def protobufDescriptorDependencyError(dependencyName: String): Throwable = {
@@ -3418,5 +3412,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "aggFunc" -> toSQLExpr(aggExpr)
       )
     )
+  }
+
+  def dataTypeOperationUnsupportedError(): Throwable = {
+    SparkException.internalError(
+      "The operation `dataType` is not supported.")
+  }
+
+  def nullableRowIdError(nullableRowIdAttrs: Seq[AttributeReference]): Throwable = {
+    new AnalysisException(
+      errorClass = "NULLABLE_ROW_ID_ATTRIBUTES",
+      messageParameters = Map("nullableRowIdAttrs" -> nullableRowIdAttrs.mkString(", ")))
   }
 }

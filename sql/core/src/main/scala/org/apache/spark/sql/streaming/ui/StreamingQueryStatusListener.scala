@@ -115,7 +115,7 @@ private[sql] class StreamingQueryStatusListener(
   }
 }
 
-private[sql] class StreamingQueryData(
+private[spark] class StreamingQueryData(
     val name: String,
     val id: UUID,
     @KVIndexParam val runId: String,

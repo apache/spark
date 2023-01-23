@@ -18,49 +18,20 @@
 import functools
 from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
-import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
-from pyspark.sql.connect.column import Expression, UnresolvedFunction, Column
-from pyspark.sql.connect.functions import col
+
+import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import Expression
+from pyspark.sql.connect.functions import _invoke_function_over_columns
 
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         ColumnOrName,
-        FunctionBuilderCallable,
         UserDefinedFunctionCallable,
     )
     from pyspark.sql.connect.client import SparkConnectClient
-
-
-def _build(name: str, *args: "ColumnOrName") -> Column:
-    """
-    Simple wrapper function that converts the arguments into the appropriate types.
-    Parameters
-    ----------
-    name Name of the function to be called.
-    args The list of arguments.
-
-    Returns
-    -------
-    :class:`UnresolvedFunction`
-    """
-    cols = [arg if isinstance(arg, Column) else col(arg) for arg in args]
-    return Column(UnresolvedFunction(name, [col._expr for col in cols]))
-
-
-class FunctionBuilder:
-    """This class is used to build arbitrary functions used in expressions"""
-
-    def __getattr__(self, name: str) -> "FunctionBuilderCallable":
-        def _(*args: "ColumnOrName") -> Column:
-            return _build(name, *args)
-
-        _.__doc__ = f"""Function to apply {name}"""
-        return _
-
-
-functions = FunctionBuilder()
 
 
 class UserDefinedFunction(Expression):
@@ -94,7 +65,7 @@ class UserDefinedFunction(Expression):
         # Only do this once per session
         func_name = session.register_udf(self._func_ref, self._return_type)
         # Func name is used for the actual reference
-        return _build(func_name, *self._args).to_plan(session)
+        return _invoke_function_over_columns(func_name, *self._args).to_plan(session)
 
     def __str__(self) -> str:
         return f"UserDefinedFunction({self._func_name})"

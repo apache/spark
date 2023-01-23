@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
@@ -47,8 +47,6 @@ import org.apache.spark.sql.types._
  * There are a few important traits or abstract classes:
  *
  * - [[Nondeterministic]]: an expression that is not deterministic.
- * - [[Stateful]]: an expression that contains mutable state. For example, MonotonicallyIncreasingID
- *                 and Rand. A stateful expression is always non-deterministic.
  * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
@@ -126,6 +124,54 @@ abstract class Expression extends TreeNode[Expression] {
     AttributeSet.fromAttributeSets(children.map(_.references))
 
   def references: AttributeSet = _references
+
+  /**
+   * Returns true if the expression contains mutable state.
+   *
+   * A stateful expression should never be evaluated multiple times for a single row. This should
+   * only be a problem for interpreted execution. This can be prevented by creating fresh copies
+   * of the stateful expression before execution. A common example to trigger this issue:
+   * {{{
+   *   val rand = functions.rand()
+   *   df.select(rand, rand) // These 2 rand should not share a state.
+   * }}}
+   */
+  def stateful: Boolean = false
+
+  /**
+   * Returns a copy of this expression where all stateful expressions are replaced with fresh
+   * uninitialized copies. If the expression contains no stateful expressions then the original
+   * expression is returned.
+   */
+  def freshCopyIfContainsStatefulExpression(): Expression = {
+    val childrenIndexedSeq: IndexedSeq[Expression] = children match {
+      case types: IndexedSeq[Expression] => types
+      case other => other.toIndexedSeq
+    }
+    val newChildren = childrenIndexedSeq.map(_.freshCopyIfContainsStatefulExpression())
+    // A more efficient version of `children.zip(newChildren).exists(_ ne _)`
+    val anyChildChanged = {
+      val size = newChildren.length
+      var i = 0
+      var res: Boolean = false
+      while (!res && i < size) {
+        res |= (childrenIndexedSeq(i) ne newChildren(i))
+        i += 1
+      }
+      res
+    }
+    // If the children contain stateful expressions and get copied, or this expression is stateful,
+    // copy this expression with the new children.
+    if (anyChildChanged || stateful) {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newChildren)
+        res.copyTagsFrom(this)
+        res
+      }
+    } else {
+      this
+    }
+  }
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: InternalRow = null): Any
@@ -470,33 +516,6 @@ trait ConditionalExpression extends Expression {
    * so that we can eagerly evaluate the common expressions of a group.
    */
   def branchGroups: Seq[Seq[Expression]]
-}
-
-/**
- * An expression that contains mutable state. A stateful expression is always non-deterministic
- * because the results it produces during evaluation are not only dependent on the given input
- * but also on its internal state.
- *
- * The state of the expressions is generally not exposed in the parameter list and this makes
- * comparing stateful expressions problematic because similar stateful expressions (with the same
- * parameter list) but with different internal state will be considered equal. This is especially
- * problematic during tree transformations. In order to counter this the `fastEquals` method for
- * stateful expressions only returns `true` for the same reference.
- *
- * A stateful expression should never be evaluated multiple times for a single row. This should
- * only be a problem for interpreted execution. This can be prevented by creating fresh copies
- * of the stateful expression before execution, these can be made using the `freshCopy` function.
- */
-trait Stateful extends Nondeterministic {
-  /**
-   * Return a fresh uninitialized copy of the stateful expression.
-   */
-  def freshCopy(): Stateful
-
-  /**
-   * Only the same reference is considered equal.
-   */
-  override def fastEquals(other: TreeNode[_]): Boolean = this eq other
 }
 
 /**

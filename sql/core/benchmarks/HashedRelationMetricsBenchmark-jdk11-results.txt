@@ -2,10 +2,10 @@
 LongToUnsafeRowMap metrics
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 LongToUnsafeRowMap metrics:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-LongToUnsafeRowMap                                 2134           2308         246          0.2        4268.5       1.0X
+LongToUnsafeRowMap                                  520            555          31          1.0        1040.4       1.0X
 
 

@@ -430,7 +430,7 @@ class JacksonParser(
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
-      throw QueryExecutionErrors.failToParseValueForDataTypeError(parser, token, dataType)
+      throw QueryExecutionErrors.cannotParseJSONFieldError(parser, token, dataType)
   }
 
   /**

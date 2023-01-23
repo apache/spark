@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, EvalMode, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
@@ -1234,6 +1235,33 @@ class PlanResolutionSuite extends AnalysisTest {
         _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+    }
+  }
+
+  test("InsertIntoStatement byName") {
+    val tblName = "testcat.tab1"
+    val insertSql = s"INSERT INTO $tblName(i, s) VALUES (3, 'a')"
+    val insertParsed = parseAndResolve(insertSql)
+    val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
+    val overwriteParsed = parseAndResolve(overwriteSql)
+    insertParsed match {
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+        assert(isByName)
+      case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
+    }
+    overwriteParsed match {
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _) =>
+        assert(isByName)
+      case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
+    }
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
+      dynamicOverwriteParsed match {
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _) =>
+          assert(isByName)
+        case _ =>
+          fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
+      }
     }
   }
 

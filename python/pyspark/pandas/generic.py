@@ -671,8 +671,9 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
-            This behavior was inherited from Apache Spark. The number of files can
-            be controlled by `num_files`.
+            This behavior was inherited from Apache Spark. The number of partitions can
+            be controlled by `num_files`. This is deprecated.
+            Use `DataFrame.spark.repartition` instead.
 
         Parameters
         ----------
@@ -694,8 +695,8 @@ class Frame(object, metaclass=ABCMeta):
         escapechar: str, default None
             String of length 1. Character used to escape `sep` and `quotechar`
             when appropriate.
-        num_files: the number of files to be written in `path` directory when
-            this is a path.
+        num_files: the number of partitions to be written in `path` directory when
+            this is a path. This is deprecated. Use `DataFrame.spark.repartition` instead.
         mode: str
             Python write mode, default 'w'.
 
@@ -900,8 +901,9 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
-            This behavior was inherited from Apache Spark. The number of files can
-            be controlled by `num_files`.
+            This behavior was inherited from Apache Spark. The number of partitions can
+            be controlled by `num_files`. This is deprecated.
+            Use `DataFrame.spark.repartition` instead.
 
         .. note:: output JSON format is different from pandas'. It always uses `orient='records'`
             for its output. This behavior might have to change soon.
@@ -927,8 +929,8 @@ class Frame(object, metaclass=ABCMeta):
             A string representing the compression to use in the output file,
             only used when the first argument is a filename. By default, the
             compression is inferred from the filename.
-        num_files: the number of files to be written in `path` directory when
-            this is a path.
+        num_files: the number of partitions to be written in `path` directory when
+            this is a path. This is deprecated. Use `DataFrame.spark.repartition` instead.
         mode: str
             Python write mode, default 'w'.
 

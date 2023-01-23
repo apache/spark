@@ -70,12 +70,6 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithMutableProjection(Uuid(seed2)))
     assert(evaluateWithUnsafeProjection(Uuid(seed1)) !==
       evaluateWithUnsafeProjection(Uuid(seed2)))
-
-    val uuid = Uuid(seed1)
-    assert(uuid.fastEquals(uuid))
-    assert(!uuid.fastEquals(Uuid(seed1)))
-    assert(!uuid.fastEquals(uuid.freshCopy()))
-    assert(!uuid.fastEquals(Uuid(seed2)))
   }
 
   test("PrintToStderr") {

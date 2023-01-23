@@ -250,7 +250,12 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     withTable("temptable") {
       val df = sql("create table temptable using parquet as select * from range(2)")
       withNormalizedExplain(df, SimpleMode) { normalizedOutput =>
-        assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
+        // scalastyle:off
+        // == Physical Plan ==
+        // Execute CreateDataSourceTableAsSelectCommand
+        //   +- CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`temptable`, ErrorIfExists, Project [id#5L], [id]
+        // scalastyle:on
+        assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 2)
       }
     }
   }

@@ -19,8 +19,10 @@ syntax = 'proto3';
 
 package spark.connect;
 
+import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
+import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -48,8 +50,8 @@ message Relation {
     Range range = 15;
     SubqueryAlias subquery_alias = 16;
     Repartition repartition = 17;
-    RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
-    RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
+    ToDF to_df = 18;
+    WithColumnsRenamed with_columns_renamed = 19;
     ShowString show_string = 20;
     Drop drop = 21;
     Tail tail = 22;
@@ -57,6 +59,7 @@ message Relation {
     Hint hint = 24;
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
+    RepartitionByExpression repartition_by_expression = 27;
 
     // NA functions
     NAFill fill_na = 90;
@@ -67,7 +70,18 @@ message Relation {
     StatSummary summary = 100;
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
+    StatCov cov = 103;
+    StatCorr corr = 104;
+    StatApproxQuantile approx_quantile = 105;
+    StatFreqItems freq_items = 106;
+    StatSampleBy sample_by = 107;
 
+    // Catalog API (experimental / unstable)
+    Catalog catalog = 200;
+
+    // This field is used to mark extensions to the protocol. When plugins generate arbitrary
+    // relations they can add them here. During the planning the correct resolution is done.
+    google.protobuf.Any extension = 998;
     Unknown unknown = 999;
   }
 }
@@ -105,12 +119,17 @@ message Read {
     string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
+    //
+    // This schema string should be either DDL-formatted or JSON-formatted.
     optional string schema = 2;
 
     // Options for the data source. The context of this map varies based on the
     // data source format. This options could be empty for valid data source format.
     // The map key is case insensitive.
     map<string, string> options = 3;
+
+    // (Optional) A list of path for file-system backed data sources.
+    repeated string paths = 4;
   }
 }
 
@@ -197,6 +216,11 @@ message SetOperation {
   // Only UNION supports this option.
   optional bool by_name = 5;
 
+  // (Optional) If to perform the Set operation and allow missing columns.
+  //
+  // Only UNION supports this option.
+  optional bool allow_missing_columns = 6;
+
   enum SetOpType {
     SET_OP_TYPE_UNSPECIFIED = 0;
     SET_OP_TYPE_INTERSECT = 1;
@@ -235,11 +259,39 @@ message Tail {
 
 // Relation of type [[Aggregate]].
 message Aggregate {
-  // (Required) Input relation for a Aggregate.
+  // (Required) Input relation for a RelationalGroupedDataset.
   Relation input = 1;
 
-  repeated Expression grouping_expressions = 2;
-  repeated Expression result_expressions = 3;
+  // (Required) How the RelationalGroupedDataset was built.
+  GroupType group_type = 2;
+
+  // (Required) Expressions for grouping keys
+  repeated Expression grouping_expressions = 3;
+
+  // (Required) List of values that will be translated to columns in the output DataFrame.
+  repeated Expression aggregate_expressions = 4;
+
+  // (Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation.
+  Pivot pivot = 5;
+
+  enum GroupType {
+    GROUP_TYPE_UNSPECIFIED = 0;
+    GROUP_TYPE_GROUPBY = 1;
+    GROUP_TYPE_ROLLUP = 2;
+    GROUP_TYPE_CUBE = 3;
+    GROUP_TYPE_PIVOT = 4;
+  }
+
+  message Pivot {
+    // (Required) The column to pivot
+    Expression col = 1;
+
+    // (Optional) List of values that will be translated to columns in the output DataFrame.
+    //
+    // Note that if it is empty, the server side will immediately trigger a job to collect
+    // the distinct values of the column.
+    repeated Expression.Literal values = 2;
+  }
 }
 
 // Relation of type [[Sort]].
@@ -286,20 +338,16 @@ message Deduplicate {
 
 // A relation that does not need to be qualified by name.
 message LocalRelation {
-  // Local collection data serialized into Arrow IPC streaming format which contains
+  // (Optional) Local collection data serialized into Arrow IPC streaming format which contains
   // the schema of the data.
-  bytes data = 1;
+  optional bytes data = 1;
 
-  // (Optional) The user provided schema.
+  // (Optional) The schema of local data.
+  // It should be either a DDL-formatted type string or a JSON string.
   //
-  // The Sever side will update the column names and data types according to this schema.
-  oneof schema {
-
-    DataType datatype = 2;
-
-    // Server will use Catalyst parser to parse this string to DataType.
-    string datatype_str = 3;
-  }
+  // The server side will update the column names and data types according to this schema.
+  // If the 'data' is not provided, then this schema will be required.
+  optional string schema = 2;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -319,9 +367,10 @@ message Sample {
   // (Optional) The random seed.
   optional int64 seed = 5;
 
-  // (Optional) Explicitly sort the underlying plan to make the ordering deterministic.
-  // This flag is only used to randomly splits DataFrame with the provided weights.
-  optional bool force_stable_sort = 6;
+  // (Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
+  // This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
+  // provided weights. Otherwise, it is false.
+  bool deterministic_order = 6;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
@@ -371,7 +420,7 @@ message ShowString {
   Relation input = 1;
 
   // (Required) Number of rows to show.
-  int32 numRows = 2;
+  int32 num_rows = 2;
 
   // (Required) If set to more than 0, truncates strings to
   // `truncate` characters and all cells will be aligned right.
@@ -433,6 +482,106 @@ message StatCrosstab {
   // Distinct items will make the column names of the DataFrame.
   string col2 = 3;
 }
+
+// Calculate the sample covariance of two numerical columns of a DataFrame.
+// It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
+message StatCov {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+}
+
+// Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+// Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+// 'StatFunctions.pearsonCorrelation') to compute the results.
+message StatCorr {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+
+  // (Optional) Default value is 'pearson'.
+  //
+  // Currently only supports the Pearson Correlation Coefficient.
+  optional string method = 4;
+}
+
+// Calculates the approximate quantiles of numerical columns of a DataFrame.
+// It will invoke 'Dataset.stat.approxQuantile' (same as 'StatFunctions.approxQuantile')
+// to compute the results.
+message StatApproxQuantile {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The names of the numerical columns.
+  repeated string cols = 2;
+
+  // (Required) A list of quantile probabilities.
+  //
+  // Each number must belong to [0, 1].
+  // For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+  repeated double probabilities = 3;
+
+  // (Required) The relative target precision to achieve (greater than or equal to 0).
+  //
+  // If set to zero, the exact quantiles are computed, which could be very expensive.
+  // Note that values greater than 1 are accepted but give the same result as 1.
+  double relative_error = 4;
+}
+
+// Finding frequent items for columns, possibly with false positives.
+// It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+// to compute the results.
+message StatFreqItems {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The names of the columns to search frequent items in.
+  repeated string cols = 2;
+
+  // (Optional) The minimum frequency for an item to be considered `frequent`.
+  // Should be greater than 1e-4.
+  optional double support = 3;
+}
+
+
+// Returns a stratified sample without replacement based on the fraction
+// given on each stratum.
+// It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+// to compute the results.
+message StatSampleBy {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The column that defines strata.
+  Expression col = 2;
+
+  // (Required) Sampling fraction for each stratum.
+  //
+  // If a stratum is not specified, we treat its fraction as zero.
+  repeated Fraction fractions = 3;
+
+  // (Optional) The random seed.
+  optional int64 seed = 5;
+
+  message Fraction {
+    // (Required) The stratum.
+    Expression.Literal stratum = 1;
+
+    // (Required) The fraction value. Must be in [0, 1].
+    double fraction = 2;
+  }
+}
+
 
 // Replaces null values.
 // It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.
@@ -511,7 +660,7 @@ message NAReplace {
 
 
 // Rename columns on the input relation by the same length of names.
-message RenameColumnsBySameLengthNames {
+message ToDF {
   // (Required) The input relation of RenameColumnsBySameLengthNames.
   Relation input = 1;
 
@@ -524,7 +673,7 @@ message RenameColumnsBySameLengthNames {
 
 
 // Rename columns on the input relation by a map with name to name mapping.
-message RenameColumnsByNameToNameMap {
+message WithColumnsRenamed {
   // (Required) The input relation.
   Relation input = 1;
 
@@ -552,7 +701,7 @@ message WithColumns {
   // Only one name part is expected from each Expression.Alias.
   //
   // An exception is thrown when duplicated names are present in the mapping.
-  repeated Expression.Alias name_expr_list = 2;
+  repeated Expression.Alias aliases = 2;
 }
 
 // Specify a hint over a relation. Hint should have a name and optional parameters.
@@ -568,7 +717,7 @@ message Hint {
   string name = 2;
 
   // (Optional) Hint parameters.
-  repeated Expression.Literal parameters = 3;
+  repeated Expression parameters = 3;
 }
 
 // Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
@@ -597,4 +746,15 @@ message ToSchema {
   //
   // The Sever side will update the dataframe with this schema.
   DataType schema = 2;
+}
+
+message RepartitionByExpression {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The partitioning expressions.
+  repeated Expression partition_exprs = 2;
+
+  // (Optional) number of partitions, must be positive.
+  optional int32 num_partitions = 3;
 }

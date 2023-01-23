@@ -57,7 +57,12 @@ abstract class StringRegexExpression extends BinaryExpression
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
-    Pattern.compile(escape(str))
+    try {
+      Pattern.compile(escape(str))
+    } catch {
+      case e: PatternSyntaxException =>
+        throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
+    }
   }
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
@@ -634,7 +639,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     if (!p.equals(lastRegex)) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      try {
+        pattern = Pattern.compile(lastRegex.toString)
+      } catch {
+        case e: PatternSyntaxException =>
+          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
+      }
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
@@ -688,7 +698,11 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       if (!$regexp.equals($termLastRegex)) {
         // regex value changed
         $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
+        try {
+          $termPattern = $classNamePattern.compile($termLastRegex.toString());
+        } catch (java.util.regex.PatternSyntaxException e) {
+          throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
+        }
       }
       if (!$rep.equals($termLastReplacementInUTF8)) {
         // replacement string changed
@@ -769,8 +783,7 @@ abstract class RegExpExtractBase
         lastRegex = r
       } catch {
         case e: PatternSyntaxException =>
-          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern)
-
+          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
       }
     }
     pattern.matcher(s.toString)
@@ -793,7 +806,7 @@ abstract class RegExpExtractBase
       |    $termPattern = $classNamePattern.compile(r.toString());
       |    $termLastRegex = r;
       |  } catch (java.util.regex.PatternSyntaxException e) {
-      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
+      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
       |  }
       |}
       |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());

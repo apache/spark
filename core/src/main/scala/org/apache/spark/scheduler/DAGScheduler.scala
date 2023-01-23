@@ -1398,9 +1398,7 @@ private[spark] class DAGScheduler(
    */
   private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage): Unit = {
     assert(stage.shuffleDep.shuffleMergeAllowed && !stage.shuffleDep.isShuffleMergeFinalizedMarked)
-    if (stage.shuffleDep.getMergerLocs.isEmpty) {
-      getAndSetShufflePushMergerLocations(stage)
-    }
+    configureShufflePushMergerLocations(stage)
 
     val shuffleId = stage.shuffleDep.shuffleId
     val shuffleMergeId = stage.shuffleDep.shuffleMergeId
@@ -1415,17 +1413,17 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private def getAndSetShufflePushMergerLocations(stage: ShuffleMapStage): Seq[BlockManagerId] = {
+  private def configureShufflePushMergerLocations(stage: ShuffleMapStage): Unit = {
+    if (stage.shuffleDep.getMergerLocs.nonEmpty) return
     val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
       stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
+      mapOutputTracker.registerShufflePushMergerLocations(stage.shuffleDep.shuffleId, mergerLocs)
+      logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
+        s" shuffle merge ${stage.shuffleDep.shuffleMergeId} is" +
+        s" ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
     }
-
-    logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
-      s" shuffle merge ${stage.shuffleDep.shuffleMergeId} is" +
-      s" ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
-    mergerLocs
   }
 
   /** Called when stage's parents are available and we can now do its task. */
@@ -1590,9 +1588,14 @@ private[spark] class DAGScheduler(
     if (tasks.nonEmpty) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      val shuffleId = stage match {
+        case s: ShuffleMapStage => Some(s.shuffleDep.shuffleId)
+        case _: ResultStage => None
+      }
+
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
-        stage.resourceProfileId))
+        stage.resourceProfileId, shuffleId))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
@@ -2624,16 +2627,15 @@ private[spark] class DAGScheduler(
       shuffleIdToMapStage.filter { case (_, stage) =>
         stage.shuffleDep.shuffleMergeAllowed && stage.shuffleDep.getMergerLocs.isEmpty &&
           runningStages.contains(stage)
-      }.foreach { case(_, stage: ShuffleMapStage) =>
-          if (getAndSetShufflePushMergerLocations(stage).nonEmpty) {
-            logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
-              s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
-              s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
-              s" merger locations")
-            mapOutputTracker.registerShufflePushMergerLocations(stage.shuffleDep.shuffleId,
-              stage.shuffleDep.getMergerLocs)
-          }
+      }.foreach { case (_, stage: ShuffleMapStage) =>
+        configureShufflePushMergerLocations(stage)
+        if (stage.shuffleDep.getMergerLocs.nonEmpty) {
+          logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
+            s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
+            s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
+            s" merger locations")
         }
+      }
     }
   }
 
@@ -2729,7 +2731,7 @@ private[spark] class DAGScheduler(
 
   private def updateStageInfoForPushBasedShuffle(stage: Stage): Unit = {
     // With adaptive shuffle mergers, StageInfo's
-    // isPushBasedShuffleEnabled and shuffleMergers need to be updated at the end.
+    // isShufflePushEnabled and shuffleMergers need to be updated at the end.
     stage match {
       case s: ShuffleMapStage =>
         stage.latestInfo.setPushBasedShuffleEnabled(s.shuffleDep.shuffleMergeEnabled)

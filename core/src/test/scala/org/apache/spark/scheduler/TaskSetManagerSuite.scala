@@ -670,6 +670,42 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execA", "host1", ANY)._1.isDefined)
   }
 
+  test("SPARK-41469: task doesn't need to rerun on executor lost if shuffle data has migrated") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    sched.addExecutor("exec0", "host0")
+
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.registerShuffle(0, 2, 0)
+
+    val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0,
+      Seq(TaskLocation("host0", "exec0")), Seq(TaskLocation("host1", "exec1")))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    // Schedule task 0 and mark it as completed with shuffle map output registered
+    val taskDesc = manager.resourceOffer("exec0", "host0", PROCESS_LOCAL)._1
+    assert(taskDesc.isDefined)
+    val taskIndex = taskDesc.get.index
+    val taskId = taskDesc.get.taskId
+    manager.handleSuccessfulTask(taskId, createTaskResult(taskId.toInt))
+    mapOutputTracker.registerMapOutput(0, taskIndex,
+      MapStatus(BlockManagerId("exec0", "host0", 8848), Array(1024), taskId))
+
+    // Mock executor "exec0" decommission and migrate shuffle map output of task 0
+    manager.executorDecommission("exec0")
+    mapOutputTracker.updateMapOutput(0, taskId, BlockManagerId("exec1", "host1", 8848))
+
+    // Trigger executor "exec0" lost. Since the map output of task 0 has been migrated, it doesn't
+    // need to rerun. So task 0 should still remain in the successful status.
+    manager.executorLost("exec0", "host0", ExecutorDecommission())
+    assert(manager.successful(taskIndex))
+  }
+
   test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)
@@ -770,7 +806,7 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
     val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0,
-      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     assert(!manager.emittedTaskSizeWarning)
@@ -786,7 +822,7 @@ class TaskSetManagerSuite
 
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     intercept[TaskNotSerializableException] {
@@ -866,7 +902,7 @@ class TaskSetManagerSuite
         override def index: Int = 0
       }, 1, Seq(TaskLocation("host1", "execA")), new Properties, null)
     val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
-      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(0))
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer host1, which should be accepted as a PROCESS_LOCAL location
@@ -2192,7 +2228,7 @@ class TaskSetManagerSuite
 
     val tasks = Array.tabulate[Task[_]](2)(partition => new FakeLongTasks(stageId = 0, partition))
     val taskSet: TaskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)

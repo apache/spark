@@ -214,6 +214,25 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Union")
   }
 
+  test("Union By Name") {
+    val union = proto.Relation.newBuilder
+      .setSetOp(
+        proto.SetOperation.newBuilder
+          .setLeftInput(readRel)
+          .setRightInput(readRel)
+          .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_UNION)
+          .setByName(false)
+          .setAllowMissingColumns(true)
+          .build())
+      .build()
+    val msg = intercept[InvalidPlanInput] {
+      transform(union)
+    }
+    assert(
+      msg.getMessage.contains(
+        "UnionByName `allowMissingCol` can be true only if `byName` is true."))
+  }
+
   test("Simple Join") {
     val incompleteJoin =
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
@@ -303,8 +322,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addResultExpressions(sum)
+      .addAggregateExpressions(sum)
       .addGroupingExpressions(unresolvedAttribute)
+      .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
@@ -435,12 +455,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             proto.WithColumns
               .newBuilder()
               .setInput(readRel)
-              .addNameExprList(proto.Expression.Alias
+              .addAliases(proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
                   .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
-              .addNameExprList(proto.Expression.Alias
+              .addAliases(proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
@@ -458,7 +478,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             proto.WithColumns
               .newBuilder()
               .setInput(readRel)
-              .addNameExprList(
+              .addAliases(
                 proto.Expression.Alias
                   .newBuilder()
                   .addName("part1")
@@ -532,7 +552,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .addExpressions(
           proto.Expression
             .newBuilder()
-            .setUnresolvedStar(UnresolvedStar.newBuilder().addTarget("a").addTarget("b").build())
+            .setUnresolvedStar(UnresolvedStar.newBuilder().setUnparsedTarget("a.b.*").build())
             .build())
         .build()
 
@@ -590,7 +610,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue(10000)))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(10000)).build()))
         .build())
 
     val df = Dataset.ofRows(spark, logical)
@@ -635,7 +656,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue("id")))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue("id")).build()))
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
@@ -657,7 +679,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue(true)))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(true)).build()))
         .build())
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
@@ -704,5 +727,111 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         previousValue = v
       }
     }
+  }
+
+  test("RepartitionByExpression") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .setNumPartitions(3)
+            .addPartitionExprs(proto.Expression.newBuilder
+              .setExpressionString(proto.Expression.ExpressionString.newBuilder
+                .setExpression("id % 2"))))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 3)
+    val valueToPartition = df
+      .selectExpr("id", "spark_partition_id()")
+      .rdd
+      .map(row => (row.getLong(0), row.getInt(1)))
+      .collectAsMap()
+    for ((value, partition) <- valueToPartition) {
+      if (value % 2 == 0) {
+        assert(partition == valueToPartition(0), "dataframe is not partitioned by `id % 2`")
+      } else {
+        assert(partition == valueToPartition(1), "dataframe is not partitioned by `id % 2`")
+      }
+    }
+  }
+
+  test("Repartition by range") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .setNumPartitions(3)
+            .addPartitionExprs(
+              proto.Expression.newBuilder
+                .setSortOrder(
+                  proto.Expression.SortOrder.newBuilder
+                    .setDirectionValue(
+                      proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+                    .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+                    .setChild(proto.Expression
+                      .newBuilder()
+                      .setExpressionString(
+                        proto.Expression.ExpressionString.newBuilder().setExpression("id"))))))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 3)
+    df.rdd.foreachPartition { p =>
+      var previousValue = -1L
+      p.foreach { r =>
+        val v = r.getLong(0)
+        if (previousValue != -1L) {
+          assert(previousValue < v, "partition is not ordered.")
+        }
+        previousValue = v
+      }
+    }
+  }
+
+  test("RepartitionByExpression with wrong parameters") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .addPartitionExprs(proto.Expression.newBuilder
+              .setExpressionString(proto.Expression.ExpressionString.newBuilder
+                .setExpression("illegal"))))
+        .build())
+
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
 }

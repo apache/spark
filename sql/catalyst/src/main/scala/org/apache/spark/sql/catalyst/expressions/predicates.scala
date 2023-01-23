@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -36,26 +36,13 @@ import org.apache.spark.sql.types._
 /**
  * A base class for generated/interpreted predicate
  */
-abstract class BasePredicate {
+abstract class BasePredicate extends ExpressionsEvaluator {
   def eval(r: InternalRow): Boolean
-
-  /**
-   * Initializes internal states given the current partition index.
-   * This is used by nondeterministic expressions to set initial states.
-   * The default implementation does nothing.
-   */
-  def initialize(partitionIndex: Int): Unit = {}
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime =
-    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val expr = if (subExprEliminationEnabled) {
-    runtime.proxyExpressions(Seq(expression)).head
-  } else {
-    expression
-  }
+  private[this] val expr = prepareExpressions(Seq(expression), subExprEliminationEnabled).head
 
   override def eval(r: InternalRow): Boolean = {
     if (subExprEliminationEnabled) {
@@ -66,11 +53,7 @@ case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    super.initialize(partitionIndex)
-    expr.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    }
+    initializeExprs(Seq(expr), partitionIndex)
   }
 }
 
@@ -141,6 +124,15 @@ trait PredicateHelper extends AliasHelper with Logging {
         findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
+      case u: Union =>
+        val index = u.output.indexWhere(_.semanticEquals(exp))
+        if (index > -1) {
+          u.children
+            .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
+            .headOption
+        } else {
+          None
+        }
       case other =>
         other.children.flatMap {
           child => if (exp.references.subsetOf(child.outputSet)) {

@@ -342,6 +342,16 @@ Security options for the Spark History Server are covered more detail in the
     <td>2.3.0</td>
   </tr>
   <tr>
+    <td>spark.history.store.serializer</td>
+    <td>JSON</td>
+    <td>
+        Serializer for writing/reading in-memory UI objects to/from disk-based KV Store; JSON or PROTOBUF.
+        JSON serializer is the only choice before Spark 3.4.0, thus it is the default value.
+        PROTOBUF serializer is fast and compact, compared to the JSON serializer.
+    </td>
+    <td>3.4.0</td>
+  </tr>
+  <tr>
     <td>spark.history.custom.executor.log.url</td>
     <td>(none)</td>
     <td>
@@ -1410,6 +1420,21 @@ Note: applies to the shuffle service
 - registeredExecutorsSize
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
+
+
+- **note:** the metrics below apply when the server side configuration
+  `spark.shuffle.push.server.mergedShuffleFileManagerImpl` is set to
+  `org.apache.spark.network.shuffle.MergedShuffleFileManager` for Push-Based Shuffle
+- blockBytesWritten - the size of the pushed block data written to file in bytes
+- blockAppendCollisions - the number of shuffle push blocks collided in shuffle services
+  as another block for the same reduce partition were being written
+- lateBlockPushes - the number of shuffle push blocks that are received in shuffle service
+  after the specific shuffle merge has been finalized
+- deferredBlocks - the number of the current deferred block parts buffered in memory
+- deferredBlockBytes - the size of the current deferred block parts buffered in memory
+- staleBlockPushes - the number of stale shuffle block push requests
+- ignoredBlockBytes - the size of the pushed block data that are ignored after the shuffle
+  file is finalized or when a request is for a duplicate block
 
 # Advanced Instrumentation
 

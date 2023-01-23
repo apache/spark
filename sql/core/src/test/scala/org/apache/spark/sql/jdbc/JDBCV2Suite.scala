@@ -2650,7 +2650,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       },
       errorClass = "INDEX_ALREADY_EXISTS",
       parameters = Map(
-        "message" -> "Failed to create index people_index in test.people"
+        "indexName" -> "people_index",
+        "tableName" -> "test.people"
       )
     )
     assert(jdbcTable.indexExists("people_index"))
@@ -2666,9 +2667,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
       errorClass = "INDEX_NOT_FOUND",
-      parameters = Map(
-        "message" -> "Failed to drop index people_index in test.people"
-      )
+      parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
     )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()

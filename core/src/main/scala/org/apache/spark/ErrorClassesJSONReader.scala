@@ -20,7 +20,7 @@ package org.apache.spark
 import java.net.URL
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.Map
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
@@ -90,8 +90,8 @@ private object ErrorClassesJsonReader {
   private val mapper: JsonMapper = JsonMapper.builder()
     .addModule(DefaultScalaModule)
     .build()
-  private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
-    val map = mapper.readValue(url, new TypeReference[SortedMap[String, ErrorInfo]]() {})
+  private def readAsMap(url: URL): Map[String, ErrorInfo] = {
+    val map = mapper.readValue(url, new TypeReference[Map[String, ErrorInfo]]() {})
     val errorClassWithDots = map.collectFirst {
       case (errorClass, _) if errorClass.contains('.') => errorClass
       case (_, ErrorInfo(_, Some(map), _)) if map.keys.exists(_.contains('.')) =>

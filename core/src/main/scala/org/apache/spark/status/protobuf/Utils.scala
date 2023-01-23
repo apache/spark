@@ -23,4 +23,16 @@ object Utils {
   } else {
     None
   }
+
+  def setStringField(input: String, f: String => Any): Unit = {
+    if (input != null) {
+      f(input)
+    }
+  }
+
+  def getStringField(condition: Boolean, result: () => String): String = if (condition) {
+    result()
+  } else {
+    null
+  }
 }

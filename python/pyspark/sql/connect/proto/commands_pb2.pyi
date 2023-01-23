@@ -35,6 +35,7 @@ limitations under the License.
 """
 import builtins
 import collections.abc
+import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
@@ -61,18 +62,25 @@ class Command(google.protobuf.message.Message):
     CREATE_FUNCTION_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
     CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def create_function(self) -> global___CreateScalarFunction: ...
     @property
     def write_operation(self) -> global___WriteOperation: ...
     @property
     def create_dataframe_view(self) -> global___CreateDataFrameViewCommand: ...
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """This field is used to mark extensions to the protocol. When plugins generate arbitrary
+        Commands they can add them here. During the planning the correct resolution is done.
+        """
     def __init__(
         self,
         *,
         create_function: global___CreateScalarFunction | None = ...,
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -83,6 +91,8 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "create_function",
             b"create_function",
+            "extension",
+            b"extension",
             "write_operation",
             b"write_operation",
         ],
@@ -96,6 +106,8 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "create_function",
             b"create_function",
+            "extension",
+            b"extension",
             "write_operation",
             b"write_operation",
         ],
@@ -103,7 +115,7 @@ class Command(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
     ) -> typing_extensions.Literal[
-        "create_function", "write_operation", "create_dataframe_view"
+        "create_function", "write_operation", "create_dataframe_view", "extension"
     ] | None: ...
 
 global___Command = Command

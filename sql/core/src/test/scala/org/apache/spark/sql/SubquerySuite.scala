@@ -1019,6 +1019,17 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("SPARK-41912: Subquery does not validate CTE") {
+    val df = sql("""
+                   |    WITH
+                   |    cte1 as (SELECT 1 col1),
+                   |    cte2 as (SELECT (SELECT MAX(col1) FROM cte1))
+                   |    SELECT * FROM cte1
+                   |""".stripMargin
+    )
+    checkAnswer(df, Row(1) :: Nil)
+  }
+
   test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 1") {
     withTable("t1") {
       withTempPath { path =>
@@ -1450,7 +1461,7 @@ class SubquerySuite extends QueryTest
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
             fs.inputRDDs().forall(
               _.asInstanceOf[FileScanRDD].filePartitions.forall(
-                _.files.forall(_.filePath.contains("p=0"))))
+                _.files.forall(_.urlEncodedPath.contains("p=0"))))
         case _ => false
       })
     }
@@ -2452,16 +2463,24 @@ class SubquerySuite extends QueryTest
         Row(2))
 
       // Cannot use non-orderable data type in one row subquery that cannot be collapsed.
-        val error = intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
           sql(
-            """
-              |select (
+            """select (
               |  select concat(a, a) from
               |  (select upper(x['a'] + rand()) as a)
               |) from v1
-              |""".stripMargin).collect()
-        }
-        assert(error.getMessage.contains("Correlated column reference 'v1.x' cannot be map type"))
+              |""".stripMargin
+          ).collect()
+        },
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+        parameters = Map("expr" -> "v1.x", "dataType" -> "map"),
+        context = ExpectedContext(
+          fragment = "select upper(x['a'] + rand()) as a",
+          start = 39,
+          stop = 72)
+      )
     }
   }
 

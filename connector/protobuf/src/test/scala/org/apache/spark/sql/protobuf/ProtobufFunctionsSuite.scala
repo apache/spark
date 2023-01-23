@@ -1248,6 +1248,28 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     testFromProtobufWithOptions(df, expectedDfTwo, optionsTwo)
   }
 
+  test("Verify exceptions are correctly propagated with errors") {
+    // This triggers an query compilation error and ensures that original exception is
+    // also included in in the exception.
+
+    val invalidDescPath = "/non/existent/path.desc"
+
+    val ex = intercept[AnalysisException] {
+      Seq(Array[Byte]())
+        .toDF()
+        .select(
+          functions.from_protobuf($"value", "SomeMessage", invalidDescPath)
+        ).collect()
+    }
+    checkError(
+      ex,
+      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      parameters = Map("filePath" -> "/non/existent/path.desc")
+    )
+    assert(ex.getCause != null)
+    assert(ex.getCause.getMessage.matches(".*No such file.*"), ex.getCause.getMessage())
+  }
+
   def testFromProtobufWithOptions(
     df: DataFrame,
     expectedDf: DataFrame,

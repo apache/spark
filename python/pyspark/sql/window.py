@@ -21,7 +21,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
-from pyspark.sql.utils import try_remote_window
+from pyspark.sql.utils import try_remote_window, try_remote_windowspec
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, ColumnOrName_
@@ -41,7 +41,10 @@ class Window:
     """
     Utility functions for defining window in DataFrames.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -361,12 +364,15 @@ class WindowSpec:
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, jspec: JavaObject) -> None:
         self._jspec = jspec
 
-    @try_remote_window
+    @try_remote_windowspec
     def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
@@ -380,7 +386,7 @@ class WindowSpec:
         """
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
-    @try_remote_window
+    @try_remote_windowspec
     def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the ordering columns in a :class:`WindowSpec`.
@@ -394,7 +400,7 @@ class WindowSpec:
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
-    @try_remote_window
+    @try_remote_windowspec
     def rowsBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
@@ -426,7 +432,7 @@ class WindowSpec:
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
-    @try_remote_window
+    @try_remote_windowspec
     def rangeBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).

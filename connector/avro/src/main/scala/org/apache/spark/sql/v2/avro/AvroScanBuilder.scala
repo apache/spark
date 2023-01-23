@@ -18,14 +18,13 @@ package org.apache.spark.sql.v2.avro
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.StructFilters
-import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class AvroScanBuilder (
+case class AvroScanBuilder (
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
@@ -33,7 +32,7 @@ class AvroScanBuilder (
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
-  override def build(): Scan = {
+  override def build(): AvroScan = {
     AvroScan(
       sparkSession,
       fileIndex,

@@ -23,6 +23,8 @@ import tempfile
 import time
 import unittest
 from typing import cast
+import io
+from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
@@ -41,7 +43,7 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.errors import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SQLTestUtils,
@@ -74,7 +76,7 @@ class DataFrameTestsMixin:
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
-        df = self.sc.parallelize(vals).toDF()
+        df = self.spark.createDataFrame(vals)
         items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
         self.assertTrue(1 in items[0])
         self.assertTrue(-2.0 in items[1])
@@ -531,34 +533,36 @@ class DataFrameTestsMixin:
 
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
-        self.assertRaises(AssertionError, self.df.withColumns)
+        self.assertRaises(Exception, self.df.withColumns)
 
     def test_generic_hints(self):
-        from pyspark.sql import DataFrame
-
         df1 = self.spark.range(10e10).toDF("id")
         df2 = self.spark.range(10e10).toDF("id")
 
-        self.assertIsInstance(df1.hint("broadcast"), DataFrame)
-        self.assertIsInstance(df1.hint("broadcast", []), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast"), type(df1))
 
         # Dummy rules
-        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), DataFrame)
-        self.assertIsInstance(df1.hint("broadcast", ["foo", "bar"]), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), type(df1))
 
-        plan = df1.join(df2.hint("broadcast"), "id")._jdf.queryExecution().executedPlan()
-        self.assertEqual(1, plan.toString().count("BroadcastHashJoin"))
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df1.join(df2.hint("broadcast"), "id").explain(True)
+            self.assertEqual(1, buf.getvalue().count("BroadcastHashJoin"))
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
         hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
-        logical_plan = hinted_df._jdf.queryExecution().logical()
 
-        self.assertEqual(1, logical_plan.toString().count("1.2345"))
-        self.assertEqual(1, logical_plan.toString().count("what"))
-        self.assertEqual(3, logical_plan.toString().count("itworks"))
+        self.assertIsInstance(df.hint("broadcast", []), type(df))
+        self.assertIsInstance(df.hint("broadcast", ["foo", "bar"]), type(df))
+
+        with io.StringIO() as buf, redirect_stdout(buf):
+            hinted_df.explain(True)
+            explain_output = buf.getvalue()
+            self.assertGreaterEqual(explain_output.count("1.2345"), 1)
+            self.assertGreaterEqual(explain_output.count("what"), 1)
+            self.assertGreaterEqual(explain_output.count("itworks"), 1)
 
     def test_unpivot(self):
         # SPARK-39877: test the DataFrame.unpivot method
@@ -691,16 +695,6 @@ class DataFrameTestsMixin:
                         ],
                     )
 
-        with self.subTest(desc="with no value columns"):
-            for values in [[], ()]:
-                with self.subTest(values=values):
-                    with self.assertRaisesRegex(
-                        AnalysisException,
-                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
-                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
-                    ):
-                        df.unpivot("id", values, "var", "val")
-
         with self.subTest(desc="with single value column"):
             for values in ["int", ["int"], ("int",)]:
                 with self.subTest(values=values):
@@ -736,14 +730,6 @@ class DataFrameTestsMixin:
                         ],
                     )
 
-        with self.subTest(desc="with value columns without common data type"):
-            with self.assertRaisesRegex(
-                AnalysisException,
-                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
-                r"a least common type, some types do not: .*",
-            ):
-                df.unpivot("id", ["int", "str"], "var", "val")
-
         with self.subTest(desc="with columns"):
             for id in [df.id, [df.id], (df.id,)]:
                 for values in [[df.int, df.double], (df.int, df.double)]:
@@ -767,6 +753,35 @@ class DataFrameTestsMixin:
                 df.unpivot("id", ["int", "double"], "var", "val").collect(),
                 df.melt("id", ["int", "double"], "var", "val").collect(),
             )
+
+    def test_unpivot_negative(self):
+        # SPARK-39877: test the DataFrame.unpivot method
+        df = self.spark.createDataFrame(
+            [
+                (1, 10, 1.0, "one"),
+                (2, 20, 2.0, "two"),
+                (3, 30, 3.0, "three"),
+            ],
+            ["id", "int", "double", "str"],
+        )
+
+        with self.subTest(desc="with no value columns"):
+            for values in [[], ()]:
+                with self.subTest(values=values):
+                    with self.assertRaisesRegex(
+                        AnalysisException,
+                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
+                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
+                    ):
+                        df.unpivot("id", values, "var", "val").collect()
+
+        with self.subTest(desc="with value columns without common data type"):
+            with self.assertRaisesRegex(
+                AnalysisException,
+                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
+                r"a least common type, some types do not: .*",
+            ):
+                df.unpivot("id", ["int", "str"], "var", "val").collect()
 
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
@@ -1195,6 +1210,11 @@ class DataFrameTestsMixin:
         or "Pyarrow version must be 2.0.0 or higher",
     )
     def test_to_pandas_for_array_of_struct(self):
+        for is_arrow_enabled in [True, False]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": is_arrow_enabled}):
+                self.check_to_pandas_for_array_of_struct(is_arrow_enabled)
+
+    def check_to_pandas_for_array_of_struct(self, is_arrow_enabled):
         # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
         import numpy as np
         import pandas as pd
@@ -1203,15 +1223,14 @@ class DataFrameTestsMixin:
             [[[("a", 2, 3.0), ("a", 2, 3.0)]], [[("b", 5, 6.0), ("b", 5, 6.0)]]],
             "array_struct_col Array<struct<col1:string, col2:long, col3:double>>",
         )
-        for is_arrow_enabled in [True, False]:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": is_arrow_enabled}):
-                pdf = df.toPandas()
-                self.assertEqual(type(pdf), pd.DataFrame)
-                self.assertEqual(type(pdf["array_struct_col"]), pd.Series)
-                if is_arrow_enabled:
-                    self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
-                else:
-                    self.assertEqual(type(pdf["array_struct_col"][0]), list)
+
+        pdf = df.toPandas()
+        self.assertEqual(type(pdf), pd.DataFrame)
+        self.assertEqual(type(pdf["array_struct_col"]), pd.Series)
+        if is_arrow_enabled:
+            self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
+        else:
+            self.assertEqual(type(pdf["array_struct_col"][0]), list)
 
     def test_create_dataframe_from_array_of_long(self):
         import array
@@ -1231,15 +1250,15 @@ class DataFrameTestsMixin:
         )
         # test types are inferred correctly without specifying schema
         df = self.spark.createDataFrame(pdf)
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         # test with schema will accept pdf as input
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp_ntz")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampNTZType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampNTZType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):

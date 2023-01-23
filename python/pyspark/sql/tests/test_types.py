@@ -27,7 +27,7 @@ import unittest
 from pyspark.sql import Row
 from pyspark.sql.functions import col
 from pyspark.sql.udf import UserDefinedFunction
-from pyspark.sql.utils import AnalysisException
+from pyspark.errors import AnalysisException
 from pyspark.sql.types import (
     ByteType,
     ShortType,
@@ -68,7 +68,7 @@ from pyspark.testing.sqlutils import (
 )
 
 
-class TypesTests(ReusedSQLTestCase):
+class TypesTestsMixin:
     def test_apply_schema_to_row(self):
         df = self.spark.read.json(self.sc.parallelize(["""{"a":2}"""]))
         df2 = self.spark.createDataFrame(df.rdd.map(lambda x: x), df.schema)
@@ -343,6 +343,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(Row(f1=[1]), rows[2])
 
         df = self.spark.createDataFrame(data)
+        rows = df.collect()
         self.assertEqual(Row(f1=[]), rows[0])
         self.assertEqual(Row(f1=[None]), rows[1])
         self.assertEqual(Row(f1=[1]), rows[2])
@@ -479,7 +480,7 @@ class TypesTests(ReusedSQLTestCase):
     def test_convert_row_to_dict(self):
         row = Row(l=[Row(a=1, b="s")], d={"key": Row(c=1.0, d="2")})
         self.assertEqual(1, row.asDict()["l"][0].a)
-        df = self.sc.parallelize([row]).toDF()
+        df = self.spark.createDataFrame([row])
 
         with self.tempView("test"):
             df.createOrReplaceTempView("test")
@@ -787,11 +788,10 @@ class TypesTests(ReusedSQLTestCase):
                 StructField("f2", StringType(), True, {"a": None}),
             ]
         )
-        rdd = self.sc.parallelize([["a", "b"], ["c", "d"]])
-        self.spark.createDataFrame(rdd, schema)
+        self.spark.createDataFrame([["a", "b"], ["c", "d"]], schema)
 
     def test_access_nested_types(self):
-        df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
+        df = self.spark.createDataFrame([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})])
         self.assertEqual(1, df.select(df.l[0]).first()[0])
         self.assertEqual(1, df.select(df.l.getItem(0)).first()[0])
         self.assertEqual(1, df.select(df.r.a).first()[0])
@@ -1399,6 +1399,10 @@ class DataTypeVerificationTests(unittest.TestCase):
 
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
+
+
+class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

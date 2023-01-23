@@ -59,7 +59,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
 
       val reconstructedEvent = JsonProtocol.sparkEventFromJson(SQLExecutionStartJsonString)
       if (newExecutionStartEvent) {
-        val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail",
+        val expectedEvent = SparkListenerSQLExecutionStart(0, 0, "test desc", "test detail",
           "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
           Map("k1" -> "v1"))
         assert(reconstructedEvent == expectedEvent)

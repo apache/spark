@@ -513,6 +513,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MAX_SINGLE_PARTITION_BYTES = buildConf("spark.sql.maxSinglePartitionBytes")
+    .doc("The maximum number of bytes allowed for a single partition. Otherwise, The planner " +
+      "will introduce shuffle to improve parallelism.")
+    .version("3.4.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(Long.MaxValue)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -1160,7 +1167,7 @@ object SQLConf {
       .doc("Enables vectorized orc decoding for nested column.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
@@ -1402,6 +1409,18 @@ object SQLConf {
         "reported by a V2 data source through SupportsReportPartitioning, and will try to " +
         "avoid shuffle if necessary.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
+      .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
+        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning and if " +
+        "they share compatible partition keys, even if they don't have the exact same partition " +
+        "values, Spark will calculate a superset of partition values and pushdown that info to " +
+        "scan nodes, which will use empty partitions for the missing partition values on either " +
+        "side. This could help to eliminate unnecessary shuffles")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2749,6 +2768,15 @@ object SQLConf {
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
 
+  val PYTHON_UDF_ARROW_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
+      .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
+        "can only be enabled for atomic output types and input types except struct and map types " +
+        "when the given function takes at least one argument.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
       .internal()
@@ -2883,6 +2911,14 @@ object SQLConf {
     .version("3.0.0")
     .stringConf
     .createWithDefault("avro,csv,json,kafka,orc,parquet,text")
+
+  val ALLOW_EMPTY_SCHEMAS_FOR_WRITES = buildConf("spark.sql.legacy.allowEmptySchemaWrite")
+    .internal()
+    .doc("When this option is set to true, validation of empty or empty nested schemas that " +
+      "occurs when writing into a FileFormat based data source does not happen.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -3273,6 +3309,16 @@ object SQLConf {
         "text representation, e.g., string 'null', when the partition column is string type. " +
         "Otherwise, it is always parsed as a null literal in the partition spec.")
       .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL =
+    buildConf("spark.sql.legacy.keepPartitionSpecAsStringLiteral")
+      .internal()
+      .doc("If it is set to true, `PARTITION(col=05)` is parsed as a string literal of its " +
+        "text representation, e.g., string '05', when the partition column is string type. " +
+        "Otherwise, it is always parsed as a numeric literal in the partition spec.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4535,6 +4581,9 @@ class SQLConf extends Serializable with Logging {
 
   def v2BucketingEnabled: Boolean = getConf(SQLConf.V2_BUCKETING_ENABLED)
 
+  def v2BucketingPushPartValuesEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -4998,7 +5047,7 @@ class SQLConf extends Serializable with Logging {
   /**
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
-  def redactOptions[K, V](options: Seq[(K, V)]): Seq[(K, V)] = {
+  def redactOptions[K, V](options: collection.Seq[(K, V)]): collection.Seq[(K, V)] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))

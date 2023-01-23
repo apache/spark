@@ -200,7 +200,6 @@ class Column:
     ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
     Select a column out of a DataFrame
-
     >>> df.name
     Column<'name'>
     >>> df["name"]
@@ -209,9 +208,9 @@ class Column:
     Create from an expression
 
     >>> df.age + 1
-    Column<'(age + 1)'>
+    Column<...>
     >>> 1 / df.age
-    Column<'(1 / age)'>
+    Column<...>
     """
 
     def __init__(self, jc: JavaObject) -> None:
@@ -280,6 +279,7 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
+    # TODO(SPARK-41812): DataFrame.join: ambiguous column
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
@@ -315,9 +315,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
@@ -430,6 +430,9 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         key
@@ -468,6 +471,9 @@ class Column:
         An expression that gets a field by name in a :class:`StructType`.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -513,6 +519,9 @@ class Column:
         An expression that adds/replaces a field in :class:`StructType` by name.
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -560,6 +569,9 @@ class Column:
         This is a no-op if the schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1236,6 +1248,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         window : :class:`WindowSpec`
@@ -1249,8 +1264,7 @@ class Column:
         >>> from pyspark.sql import Window
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
+        >>> from pyspark.sql.functions import rank, min, desc
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.withColumn("rank", rank().over(window)) \

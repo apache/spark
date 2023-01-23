@@ -472,7 +472,7 @@ private[spark] class TaskSchedulerImpl(
     val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)
     // check if the ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return None
-    // only look at the resource other then cpus
+    // only look at the resource other than cpus
     val tsResources = taskSetProf.getCustomTaskResources()
     if (tsResources.isEmpty) return Some(Map.empty)
     val localTaskReqAssign = HashMap[String, ResourceInformation]()

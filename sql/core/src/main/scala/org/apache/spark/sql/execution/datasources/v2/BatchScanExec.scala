@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
@@ -39,14 +39,16 @@ case class BatchScanExec(
     runtimeFilters: Seq[Expression],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
-    @transient table: Table) extends DataSourceV2ScanExecBase {
+    @transient table: Table,
+    commonPartitionValues: Option[Seq[InternalRow]] = None) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
-      this.batch == other.batch && this.runtimeFilters == other.runtimeFilters
+      this.batch == other.batch && this.runtimeFilters == other.runtimeFilters &&
+          this.commonPartitionValues == other.commonPartitionValues
     case _ =>
       false
   }
@@ -82,7 +84,7 @@ case class BatchScanExec(
           val newRows = new InternalRowSet(p.expressions.map(_.dataType))
           newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
 
-          val oldRows = p.partitionValuesOpt.get.toSet
+          val oldRows = p.partitionValues.toSet
           // We require the new number of partition keys to be equal or less than the old number
           // of partition keys here. In the case of less than, empty partitions will be added for
           // those missing keys that are not present in the new input partitions.
@@ -110,6 +112,15 @@ case class BatchScanExec(
     }
   }
 
+  override def outputPartitioning: Partitioning = {
+    super.outputPartitioning match {
+      case k: KeyGroupedPartitioning if commonPartitionValues.isDefined =>
+        val values = commonPartitionValues.get
+        k.copy(numPartitions = values.length, partitionValues = values)
+      case p => p
+    }
+  }
+
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
@@ -123,9 +134,9 @@ case class BatchScanExec(
         case p: KeyGroupedPartitioning =>
           val partitionMapping = finalPartitions.map(s =>
             s.head.asInstanceOf[HasPartitionKey].partitionKey() -> s).toMap
-          finalPartitions = p.partitionValuesOpt.get.map { partKey =>
-            // Use empty partition for those partition keys that are not present
-            partitionMapping.getOrElse(partKey, Seq.empty)
+          finalPartitions = p.partitionValues.map { partValue =>
+            // Use empty partition for those partition values that are not present
+            partitionMapping.getOrElse(partValue, Seq.empty)
           }
         case _ =>
       }

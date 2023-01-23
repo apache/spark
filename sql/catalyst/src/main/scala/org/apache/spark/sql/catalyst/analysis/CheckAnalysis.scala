@@ -169,7 +169,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case u: UnresolvedRelation =>
         u.tableNotFound(u.multipartIdentifier)
 
-      case u: UnresolvedFunc =>
+      case u: UnresolvedFunctionName =>
         val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
@@ -235,6 +235,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
+
+        // Fail if we still have an unresolved all in group by. This needs to run before the
+        // general unresolved check below to throw a more tailored error message.
+        ResolveGroupByAll.checkAnalysis(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -919,7 +923,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
 
     // Validate the subquery plan.
-    checkAnalysis(expr.plan)
+    checkAnalysis0(expr.plan)
 
     // Check if there is outer attribute that cannot be found from the plan.
     checkOuterReference(plan, expr)
