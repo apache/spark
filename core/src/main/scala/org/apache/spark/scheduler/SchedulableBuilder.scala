@@ -89,8 +89,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
         } else {
           val is = Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_TEMPLATE_FILE)
           if (is != null) {
-            logInfo("Creating Fair Scheduler pools from default template file: " +
-              s"$DEFAULT_SCHEDULER_TEMPLATE_FILE.")
+            logInfo(s"Creating Fair Scheduler pools from default file: $DEFAULT_SCHEDULER_FILE")
             Some((is, DEFAULT_SCHEDULER_TEMPLATE_FILE))
           } else {
             logWarning("Fair Scheduler configuration file not found so jobs will be scheduled in " +
