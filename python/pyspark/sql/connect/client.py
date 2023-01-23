@@ -566,7 +566,8 @@ class SparkConnectClient(object):
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
                     if resp.client_id != self._session_id:
                         raise SparkConnectException(
-                            "Received incorrect session identifier for request."
+                            "Received incorrect session identifier for request:"
+                            f"{resp.client_id} != {self._session_id}"
                         )
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -590,7 +591,8 @@ class SparkConnectClient(object):
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                         if b.client_id != self._session_id:
                             raise SparkConnectException(
-                                "Received incorrect session identifier for request."
+                                "Received incorrect session identifier for request: "
+                                f"{b.client_id} != {self._session_id}"
                             )
                         continue
         except grpc.RpcError as rpc_error:
@@ -610,7 +612,8 @@ class SparkConnectClient(object):
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                         if b.client_id != self._session_id:
                             raise SparkConnectException(
-                                "Received incorrect session identifier for request."
+                                "Received incorrect session identifier for request: "
+                                f"{b.client_id} != {self._session_id}"
                             )
                         if b.metrics is not None:
                             logger.debug("Received metric batch.")
@@ -637,13 +640,16 @@ class SparkConnectClient(object):
         Error handling helper for dealing with GRPC Errors. On the server side, certain
         exceptions are enriched with additional RPC Status information. These are
         unpacked in this function and put into the exception.
+
         To avoid overloading the user with GRPC errors, this message explicitly
         swallows the error context from the call. This GRPC Error is logged however,
         and can be enabled.
+
         Parameters
         ----------
         rpc_error : grpc.RpcError
            RPC Error containing the details of the exception.
+
         Returns
         -------
         Throws the appropriate internal Python exception.
@@ -740,6 +746,8 @@ class Retrying:
 
     An example to use this class looks like this:
 
+    .. code-block:: python
+
         for attempt in Retrying(lambda x: isinstance(x, TransientError)):
             with attempt:
                 # do the work.
@@ -763,9 +771,10 @@ class Retrying:
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
         Generator function to wrap the exception producing code block.
+
         Returns
         -------
-
+        A generator that yields the current attempt.
         """
         retry_state = RetryState()
         while True:

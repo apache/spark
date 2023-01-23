@@ -36,7 +36,11 @@ from pyspark.sql.types import (
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.sql.connect.client import SparkConnectException, SparkConnectAnalysisException
+from pyspark.sql.connect.client import (
+    SparkConnectException,
+    SparkConnectAnalysisException,
+    Retrying,
+)
 
 if should_test_connect:
     import grpc
@@ -2606,8 +2610,6 @@ class ClientTests(unittest.TestCase):
             w["counter"] += 1
             if w["counter"] < retries:
                 raise TestError(code)
-
-        from pyspark.sql.connect.client import Retrying
 
         # Check that if we have less than 4 retries all is ok.
         call_wrap = {"counter": 0}
