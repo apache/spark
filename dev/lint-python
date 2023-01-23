@@ -164,9 +164,8 @@ function flake8_test {
     local FLAKE8_STATUS=
 
     if ! hash "$FLAKE8_BUILD" 2> /dev/null; then
-        echo "The flake8 command was not found."
-        echo "flake8 checks failed."
-        exit 1
+        echo "The flake8 command was not found. Skipping for now."
+        return
     fi
 
     _FLAKE8_VERSION=($($FLAKE8_BUILD --version))
