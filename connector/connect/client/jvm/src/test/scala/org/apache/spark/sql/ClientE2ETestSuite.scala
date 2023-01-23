@@ -45,6 +45,7 @@ class ClientE2ETestSuite extends RemoteSparkSession { // scalastyle:ignore funsu
     val array = result.toArray
     assert(array(0).getLong(0) == 0)
     assert(array(1).getLong(0) == 1)
+    assert(array(2).getLong(0) == 2)
   }
 
   // TODO test large result when we can create table or view

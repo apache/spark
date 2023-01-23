@@ -87,14 +87,12 @@ class DatasetSuite
 
     val builder = proto.Relation.newBuilder()
     val dummyCols = Seq[Column](Column("a"), Column("b"))
-    builder
-      .getProjectBuilder
+    builder.getProjectBuilder
       .setInput(df.plan.getRoot)
       .addAllExpressions(dummyCols.map(_.expr).asJava)
     val expectedPlan = proto.Plan.newBuilder().setRoot(builder).build()
 
-
-    df.select(dummyCols: _ *).analyze
+    df.select(dummyCols: _*).analyze
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }
@@ -104,12 +102,10 @@ class DatasetSuite
 
     val builder = proto.Relation.newBuilder()
     val dummyCondition = Column.fn("dummy func", Column("a"))
-    builder
-      .getFilterBuilder
+    builder.getFilterBuilder
       .setInput(df.plan.getRoot)
       .setCondition(dummyCondition.expr)
     val expectedPlan = proto.Plan.newBuilder().setRoot(builder).build()
-
 
     df.filter(dummyCondition).analyze
     val actualPlan = service.getAndClearLatestInputPlan()
