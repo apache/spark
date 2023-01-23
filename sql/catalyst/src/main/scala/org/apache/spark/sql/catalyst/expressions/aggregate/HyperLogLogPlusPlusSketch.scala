@@ -57,9 +57,9 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
   examples = """
     Examples:
       > WITH sketch AS (
-      >   SELECT _FUNC_(col1) AS hllsketch FROM VALUES (1), (1), (2), (2), (3) tab(col1)
-      > )
-      > SELECT approx_count_distinct_eval_sketch(s.hllsketch) FROM sketch s;
+          SELECT _FUNC_(col1) AS hllsketch FROM VALUES (1), (1), (2), (2), (3) tab(col1)
+        )
+        SELECT approx_count_distinct_eval_sketch(s.hllsketch) FROM sketch s;
        3
   """,
   group = "agg_funcs",
