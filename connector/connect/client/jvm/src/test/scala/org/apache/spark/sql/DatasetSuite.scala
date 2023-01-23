@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import io.grpc.Server
 import io.grpc.netty.NettyServerBuilder
 import java.util.concurrent.TimeUnit
@@ -31,12 +33,25 @@ class DatasetSuite
 
   private var server: Server = _
   private var service: DummySparkConnectService = _
-  private val SERVER_PORT = 15250
+  private var ss: SparkSession = _
 
-  private def startDummyServer(port: Int): Unit = {
+  private def getNewSparkSession(port: Int): SparkSession = {
+    assert(port != 0)
+    SparkSession
+      .builder()
+      .client(
+        SparkConnectClient
+          .builder()
+          .connectionString(s"sc://localhost:$port")
+          .build())
+      .build()
+  }
+
+  private def startDummyServer(): Unit = {
     service = new DummySparkConnectService()
     val sb = NettyServerBuilder
-      .forPort(port)
+      // Let server bind to any free port
+      .forPort(0)
       .addService(service)
 
     server = sb.build
@@ -45,7 +60,8 @@ class DatasetSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    startDummyServer(SERVER_PORT)
+    startDummyServer()
+    ss = getNewSparkSession(server.getPort)
   }
 
   override def afterEach(): Unit = {
@@ -56,20 +72,46 @@ class DatasetSuite
   }
 
   test("limit") {
-    val ss = SparkSession
-      .builder()
-      .client(
-        SparkConnectClient
-          .builder()
-          .connectionString(s"sc://localhost:$SERVER_PORT")
-          .build())
-      .build()
     val df = ss.newDataset(_ => ())
     val builder = proto.Relation.newBuilder()
     builder.getLimitBuilder.setInput(df.plan.getRoot).setLimit(10)
 
     val expectedPlan = proto.Plan.newBuilder().setRoot(builder).build()
     df.limit(10).analyze
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
+
+  test("select") {
+    val df = ss.newDataset(_ => ())
+
+    val builder = proto.Relation.newBuilder()
+    val dummyCols = Seq[Column](Column("a"), Column("b"))
+    builder
+      .getProjectBuilder
+      .setInput(df.plan.getRoot)
+      .addAllExpressions(dummyCols.map(_.expr).asJava)
+    val expectedPlan = proto.Plan.newBuilder().setRoot(builder).build()
+
+
+    df.select(dummyCols: _ *).analyze
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
+
+  test("filter") {
+    val df = ss.newDataset(_ => ())
+
+    val builder = proto.Relation.newBuilder()
+    val dummyCondition = Column.fn("dummy func", Column("a"))
+    builder
+      .getFilterBuilder
+      .setInput(df.plan.getRoot)
+      .setCondition(dummyCondition.expr)
+    val expectedPlan = proto.Plan.newBuilder().setRoot(builder).build()
+
+
+    df.filter(dummyCondition).analyze
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }
