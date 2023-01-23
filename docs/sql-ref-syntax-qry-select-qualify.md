@@ -21,9 +21,8 @@ license: |
 
 ### Description
 
-The `QUALIFY` clause is used to filter the results of
-[window functions](sql-ref-syntax-qry-select-window.md). To use QUALIFY, 
-at least one window function is required to be present in the SELECT list or the QUALIFY clause.
+The `QUALIFY` clause is used to filter the results of [window functions](sql-ref-syntax-qry-select-window.md).
+To use QUALIFY, at least one window function is required to be present in the [SELECT](sql-ref-syntax-qry-select.html) list or the QUALIFY clause.
 
 ### Syntax
 
