@@ -23,6 +23,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
+  "sqlState" : "42K07",
   "messageParameters" : {
     "inputSchema" : "\"1\""
   },
@@ -44,7 +45,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'InvalidType'",
     "hint" : ": extra input 'InvalidType'"
@@ -67,6 +68,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA.NON_STRUCT_TYPE",
+  "sqlState" : "42K07",
   "messageParameters" : {
     "dataType" : "\"ARRAY<INT>\"",
     "inputSchema" : "\"Array<int>\""
@@ -89,6 +91,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -107,6 +110,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
   },
@@ -128,6 +132,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "[2, 3]",
@@ -167,6 +172,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "csv",
     "sqlExpr" : "\"schema_of_csv(NULL)\""
@@ -197,6 +203,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"csvField\"",
     "inputName" : "csv",
@@ -245,6 +252,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -263,6 +271,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
   },

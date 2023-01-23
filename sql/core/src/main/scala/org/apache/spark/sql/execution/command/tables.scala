@@ -530,8 +530,8 @@ case class TruncateTableCommand(
                 fs.setPermission(path, permission)
               } catch {
                 case NonFatal(e) =>
-                  throw QueryExecutionErrors.failToSetOriginalPermissionBackError(
-                    permission, path, e)
+                  throw QueryExecutionErrors.cannotRestorePermissionsForPathError(
+                    permission, path)
               }
             }
             optAcls.foreach { acls =>

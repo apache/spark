@@ -140,33 +140,6 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
 
-    def check_error(
-        self,
-        exception: PySparkException,
-        error_class: str,
-        message_parameters: Optional[Dict[str, str]] = None,
-    ):
-        # Test if given error is an instance of PySparkException.
-        self.assertIsInstance(
-            exception,
-            PySparkException,
-            f"checkError requires 'PySparkException', got '{exception.__class__.__name__}'.",
-        )
-
-        # Test error class
-        expected = error_class
-        actual = exception.getErrorClass()
-        self.assertEqual(
-            expected, actual, f"Expected error class was '{expected}', got '{actual}'."
-        )
-
-        # Test message parameters
-        expected = message_parameters
-        actual = exception.getMessageParameters()
-        self.assertEqual(
-            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
-        )
-
 
 class ByteArrayOutput:
     def __init__(self):
@@ -202,3 +175,37 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
     else:
         return jars[0]
+
+
+class PySparkErrorTestUtils:
+    """
+    This util provide functions to accurate and consistent error testing
+    based on PySpark error classes.
+    """
+
+    def check_error(
+        self,
+        exception: PySparkException,
+        error_class: str,
+        message_parameters: Optional[Dict[str, str]] = None,
+    ):
+        # Test if given error is an instance of PySparkException.
+        self.assertIsInstance(
+            exception,
+            PySparkException,
+            f"checkError requires 'PySparkException', got '{exception.__class__.__name__}'.",
+        )
+
+        # Test error class
+        expected = error_class
+        actual = exception.getErrorClass()
+        self.assertEqual(
+            expected, actual, f"Expected error class was '{expected}', got '{actual}'."
+        )
+
+        # Test message parameters
+        expected = message_parameters
+        actual = exception.getMessageParameters()
+        self.assertEqual(
+            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+        )

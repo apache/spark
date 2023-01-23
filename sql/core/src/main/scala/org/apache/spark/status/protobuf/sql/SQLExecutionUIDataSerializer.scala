@@ -23,7 +23,7 @@ import collection.JavaConverters._
 
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.status.protobuf.{JobExecutionStatusSerializer, ProtobufSerDe, StoreTypes}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils._
 
 class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
 
@@ -31,11 +31,13 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
     val builder = StoreTypes.SQLExecutionUIData.newBuilder()
     builder.setExecutionId(ui.executionId)
     builder.setRootExecutionId(ui.rootExecutionId)
-    builder.setDescription(ui.description)
-    builder.setDetails(ui.details)
-    builder.setPhysicalPlanDescription(ui.physicalPlanDescription)
-    ui.modifiedConfigs.foreach {
-      case (k, v) => builder.putModifiedConfigs(k, v)
+    setStringField(ui.description, builder.setDescription)
+    setStringField(ui.details, builder.setDetails)
+    setStringField(ui.physicalPlanDescription, builder.setPhysicalPlanDescription)
+    if (ui.modifiedConfigs != null) {
+      ui.modifiedConfigs.foreach {
+        case (k, v) => builder.putModifiedConfigs(k, v)
+      }
     }
     ui.metrics.foreach(m => builder.addMetrics(SQLPlanMetricSerializer.serialize(m)))
     builder.setSubmissionTime(ui.submissionTime)
@@ -79,9 +81,10 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
     new SQLExecutionUIData(
       executionId = ui.getExecutionId,
       rootExecutionId = ui.getRootExecutionId,
-      description = ui.getDescription,
-      details = ui.getDetails,
-      physicalPlanDescription = ui.getPhysicalPlanDescription,
+      description = getStringField(ui.hasDescription, () => ui.getDescription),
+      details = getStringField(ui.hasDetails, () => ui.getDetails),
+      physicalPlanDescription =
+        getStringField(ui.hasPhysicalPlanDescription, () => ui.getPhysicalPlanDescription),
       modifiedConfigs = ui.getModifiedConfigsMap.asScala.toMap,
       metrics = metrics,
       submissionTime = ui.getSubmissionTime,

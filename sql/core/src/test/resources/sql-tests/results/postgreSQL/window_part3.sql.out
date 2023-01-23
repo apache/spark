@@ -257,6 +257,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
   },
@@ -377,7 +378,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
     "hint" : ""
@@ -421,7 +422,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
     "hint" : ": extra input 'BY'"
@@ -437,7 +438,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42000",
+  "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`range`",
     "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
@@ -460,6 +461,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0",
     "exprName" : "buckets",
@@ -484,6 +486,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0L",
     "exprName" : "offset",

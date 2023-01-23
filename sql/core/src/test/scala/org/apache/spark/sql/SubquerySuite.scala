@@ -1460,7 +1460,7 @@ class SubquerySuite extends QueryTest
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
             fs.inputRDDs().forall(
               _.asInstanceOf[FileScanRDD].filePartitions.forall(
-                _.files.forall(_.filePath.contains("p=0"))))
+                _.files.forall(_.urlEncodedPath.contains("p=0"))))
         case _ => false
       })
     }

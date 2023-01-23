@@ -378,12 +378,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     )
   }
 
-  def dataTypeOperationUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2009",
-      messageParameters = Map.empty)
-  }
-
   def mergeUnsupportedByWindowFunctionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2010",
@@ -1534,10 +1528,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "name" -> name))
   }
 
-  def malformedCSVRecordError(): SparkRuntimeException = {
+  def malformedCSVRecordError(badRecord: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2149",
-      messageParameters = Map.empty)
+      errorClass = "MALFORMED_CSV_RECORD",
+      messageParameters = Map("badRecord" -> badRecord))
   }
 
   def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
@@ -2245,16 +2239,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def failToSetOriginalPermissionBackError(
-      permission: FsPermission,
-      path: Path,
-      e: Throwable): Throwable = {
+  def cannotRestorePermissionsForPathError(permission: FsPermission, path: Path): Throwable = {
     new SparkSecurityException(
-      errorClass = "RESET_PERMISSION_TO_ORIGINAL",
+      errorClass = "CANNOT_RESTORE_PERMISSIONS_FOR_PATH",
       messageParameters = Map(
         "permission" -> permission.toString,
-        "path" -> path.toString,
-        "message" -> e.getMessage))
+        "path" -> path.toString))
   }
 
   def failToSetOriginalACLBackError(
@@ -2469,13 +2459,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def incorrectEndOffset(rowsPerSecond: Long,
       maxSeconds: Long,
       endSeconds: Long): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "INCORRECT_END_OFFSET",
-      messageParameters = Map(
-        "rowsPerSecond" -> rowsPerSecond.toString,
-        "maxSeconds" -> maxSeconds.toString,
-        "endSeconds" -> endSeconds.toString
-      ))
+    SparkException.internalError(
+      s"Max offset with ${rowsPerSecond.toString} rowsPerSecond is ${maxSeconds.toString}, " +
+        s"but it's ${endSeconds.toString} now.")
   }
 
   def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
@@ -2770,10 +2756,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
-  def nullComparisonResultError(): Throwable = {
+  def comparatorReturnsNull(firstValue: String, secondValue: String): Throwable = {
     new SparkException(
-      errorClass = "NULL_COMPARISON_RESULT",
-      messageParameters = Map.empty,
+      errorClass = "COMPARATOR_RETURNS_NULL",
+      messageParameters = Map("firstValue" -> firstValue, "secondValue" -> secondValue),
       cause = null)
   }
 

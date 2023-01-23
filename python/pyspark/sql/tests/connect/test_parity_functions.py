@@ -59,26 +59,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_lit_np_scalar(self):
         super().test_lit_np_scalar()
 
-    # TODO(SPARK-41902): Fix String representation of maps created by `map_from_arrays`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_map_functions(self):
-        super().test_map_functions()
-
-    # TODO(SPARK-41902): Parity in String representation of higher_order_function's output
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_nested_higher_order_function(self):
-        super().test_nested_higher_order_function()
-
-    # TODO(SPARK-41901): Parity in String representation of Column
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_overlay(self):
-        super().test_overlay()
-
-    # TODO(SPARK-41901): Parity in String representation of Column
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_percentile_approx(self):
-        super().test_percentile_approx()
-
     # TODO(SPARK-41897): Parity in Error types between pyspark and connect functions
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_raise_error(self):

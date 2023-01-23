@@ -28,6 +28,7 @@ import json
 import decimal
 import datetime
 import warnings
+from threading import Lock
 
 import numpy as np
 
@@ -155,7 +156,7 @@ class ColumnAlias(Expression):
             return exp
 
     def __repr__(self) -> str:
-        return f"Alias({self._parent}, ({','.join(self._alias)}))"
+        return f"{self._parent} AS {','.join(self._alias)}"
 
 
 class LiteralExpression(Expression):
@@ -240,7 +241,7 @@ class LiteralExpression(Expression):
                 value = DayTimeIntervalType().toInternal(value)
                 assert value is not None
             else:
-                raise ValueError(f"Unsupported Data Type {dataType}")
+                raise TypeError(f"Unsupported Data Type {dataType}")
 
         self._value = value
         self._dataType = dataType
@@ -277,7 +278,7 @@ class LiteralExpression(Expression):
                 dt = _from_numpy_type(value.dtype)
                 if dt is not None:
                     return dt
-            raise ValueError(f"Unsupported Data Type {type(value).__name__}")
+            raise TypeError(f"Unsupported Data Type {type(value).__name__}")
 
     @classmethod
     def _from_value(cls, value: Any) -> "LiteralExpression":
@@ -326,7 +327,7 @@ class LiteralExpression(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"Literal({self._value})"
+        return f"{self._value}"
 
 
 class ColumnReference(Expression):
@@ -335,10 +336,10 @@ class ColumnReference(Expression):
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, unparsed_identifier: str) -> None:
         super().__init__()
-        assert isinstance(name, str)
-        self._unparsed_identifier = name
+        assert isinstance(unparsed_identifier, str)
+        self._unparsed_identifier = unparsed_identifier
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -351,7 +352,44 @@ class ColumnReference(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"ColumnReference({self._unparsed_identifier})"
+        return f"{self._unparsed_identifier}"
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, ColumnReference)
+            and other._unparsed_identifier == self._unparsed_identifier
+        )
+
+
+class UnresolvedStar(Expression):
+    def __init__(self, unparsed_target: Optional[str]):
+        super().__init__()
+
+        if unparsed_target is not None:
+            assert isinstance(unparsed_target, str) and unparsed_target.endswith(".*")
+
+        self._unparsed_target = unparsed_target
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        expr = proto.Expression()
+        expr.unresolved_star.SetInParent()
+        if self._unparsed_target is not None:
+            expr.unresolved_star.unparsed_target = self._unparsed_target
+        return expr
+
+    def __repr__(self) -> str:
+        if self._unparsed_target is not None:
+            return f"unresolvedstar({self._unparsed_target})"
+        else:
+            return "unresolvedstar()"
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, UnresolvedStar)
+            and other._unparsed_target == self._unparsed_target
+        )
 
 
 class SQLExpression(Expression):
@@ -368,6 +406,9 @@ class SQLExpression(Expression):
         expr = proto.Expression()
         expr.expression_string.expression = self._expr
         return expr
+
+    def __eq__(self, other: Any) -> bool:
+        return other is not None and isinstance(other, SQLExpression) and other._expr == self._expr
 
 
 class SortOrder(Expression):
@@ -432,6 +473,7 @@ class UnresolvedFunction(Expression):
         return fun
 
     def __repr__(self) -> str:
+        # Default print handling:
         if self._is_distinct:
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
@@ -557,11 +599,53 @@ class CastExpression(Expression):
         return f"({self._expr} ({self._data_type}))"
 
 
+class UnresolvedNamedLambdaVariable(Expression):
+
+    _lock: Lock = Lock()
+    _nextVarNameId: int = 0
+
+    def __init__(
+        self,
+        name_parts: Sequence[str],
+    ) -> None:
+        super().__init__()
+
+        assert (
+            isinstance(name_parts, list)
+            and len(name_parts) > 0
+            and all(isinstance(p, str) for p in name_parts)
+        )
+
+        self._name_parts = name_parts
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.unresolved_named_lambda_variable.name_parts.extend(self._name_parts)
+        return expr
+
+    def __repr__(self) -> str:
+        return f"(UnresolvedNamedLambdaVariable({', '.join(self._name_parts)})"
+
+    @staticmethod
+    def fresh_var_name(name: str) -> str:
+        assert isinstance(name, str) and str != ""
+
+        _id: Optional[int] = None
+
+        with UnresolvedNamedLambdaVariable._lock:
+            _id = UnresolvedNamedLambdaVariable._nextVarNameId
+            UnresolvedNamedLambdaVariable._nextVarNameId += 1
+
+        assert _id is not None
+
+        return f"{name}_{_id}"
+
+
 class LambdaFunction(Expression):
     def __init__(
         self,
         function: Expression,
-        arguments: Sequence[str],
+        arguments: Sequence[UnresolvedNamedLambdaVariable],
     ) -> None:
         super().__init__()
 
@@ -570,17 +654,19 @@ class LambdaFunction(Expression):
         assert (
             isinstance(arguments, list)
             and len(arguments) > 0
-            and all(isinstance(arg, str) for arg in arguments)
+            and all(isinstance(arg, UnresolvedNamedLambdaVariable) for arg in arguments)
         )
 
         self._function = function
         self._arguments = arguments
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        fun = proto.Expression()
-        fun.lambda_function.function.CopyFrom(self._function.to_plan(session))
-        fun.lambda_function.arguments.extend(self._arguments)
-        return fun
+        expr = proto.Expression()
+        expr.lambda_function.function.CopyFrom(self._function.to_plan(session))
+        expr.lambda_function.arguments.extend(
+            [arg.to_plan(session).unresolved_named_lambda_variable for arg in self._arguments]
+        )
+        return expr
 
     def __repr__(self) -> str:
         return f"(LambdaFunction({str(self._function)}, {', '.join(self._arguments)})"

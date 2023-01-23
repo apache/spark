@@ -17,6 +17,7 @@
 
 import contextlib
 import os
+import shutil
 from six import StringIO  # type: ignore
 import stat
 import subprocess
@@ -24,7 +25,7 @@ import sys
 import time
 import tempfile
 import threading
-from typing import Callable, Dict
+from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
@@ -45,6 +46,74 @@ def patch_stdout() -> StringIO:
         yield io_out
     finally:
         sys.stdout = sys_stdout
+
+
+def create_training_function(mnist_dir_path: str) -> Callable:
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from torchvision import transforms, datasets  # type: ignore
+
+    batch_size = 100
+    num_epochs = 1
+    momentum = 0.5
+
+    train_dataset = datasets.MNIST(
+        mnist_dir_path,
+        train=True,
+        download=True,
+        transform=transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+        ),
+    )
+
+    class Net(nn.Module):
+        def __init__(self) -> None:
+            super(Net, self).__init__()
+            self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+            self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+            self.conv2_drop = nn.Dropout2d()
+            self.fc1 = nn.Linear(320, 50)
+            self.fc2 = nn.Linear(50, 10)
+
+        def forward(self, x: Any) -> Any:
+            x = F.relu(F.max_pool2d(self.conv1(x), 2))
+            x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+            x = x.view(-1, 320)
+            x = F.relu(self.fc1(x))
+            x = F.dropout(x, training=self.training)
+            x = self.fc2(x)
+            return F.log_softmax(x)
+
+    def train_fn(learning_rate: float) -> Any:
+        import torch
+        import torch.optim as optim
+        import torch.distributed as dist
+        from torch.nn.parallel import DistributedDataParallel as DDP
+        from torch.utils.data.distributed import DistributedSampler
+
+        dist.init_process_group("gloo")
+
+        train_sampler = DistributedSampler(dataset=train_dataset)  # type: ignore
+        data_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=batch_size, sampler=train_sampler
+        )
+
+        model = Net()
+        ddp_model = DDP(model)
+        optimizer = optim.SGD(ddp_model.parameters(), lr=learning_rate, momentum=momentum)
+        for epoch in range(1, num_epochs + 1):
+            model.train()
+            for _, (data, target) in enumerate(data_loader):
+                optimizer.zero_grad()
+                output = model(data)
+                loss = F.nll_loss(output, target)
+                loss.backward()
+                optimizer.step()
+            print(f"epoch {epoch} finished.")
+
+        return "success"
+
+    return train_fn
 
 
 class TorchDistributorBaselineUnitTests(unittest.TestCase):
@@ -73,7 +142,14 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         ]
         for num_processes, local_mode, use_gpu in inputs:
             with self.subTest():
-                TorchDistributor(num_processes, local_mode, use_gpu)
+                expected_params = {
+                    "num_processes": num_processes,
+                    "local_mode": local_mode,
+                    "use_gpu": use_gpu,
+                    "num_tasks": num_processes,
+                }
+                dist = TorchDistributor(num_processes, local_mode, use_gpu)
+                self.assertEqual(expected_params, dist.input_params)
 
     def test_validate_incorrect_inputs(self) -> None:
         inputs = [
@@ -153,7 +229,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         expected_local_mode_output = [
             sys.executable,
             "-m",
-            "pyspark.ml.torch.distributor.torch_run_process_wrapper",
+            "pyspark.ml.torch.torch_run_process_wrapper",
             "--standalone",
             "--nnodes=1",
             "--nproc_per_node=4",
@@ -168,32 +244,62 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
             expected_local_mode_output,
         )
 
+        distributed_mode_input_params = {"num_processes": 4, "local_mode": False}
+        input_env_vars = {"MASTER_ADDR": "localhost", "MASTER_PORT": "9350", "RANK": "3"}
+
+        args_number = [1, 3]  # testing conversion to strings
+        self.setup_env_vars(input_env_vars)
+        expected_distributed_mode_output = [
+            sys.executable,
+            "-m",
+            "pyspark.ml.torch.torch_run_process_wrapper",
+            "--nnodes=4",
+            "--node_rank=3",
+            "--rdzv_endpoint=localhost:9350",
+            "--rdzv_id=0",
+            "--nproc_per_node=1",
+            "train.py",
+            "1",
+            "3",
+        ]
+        self.assertEqual(
+            TorchDistributor._create_torchrun_command(
+                distributed_mode_input_params, train_path, *args_number
+            ),
+            expected_distributed_mode_output,
+        )
+        self.delete_env_vars(input_env_vars)
+
 
 class TorchDistributorLocalUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
-        self.tempFile.write(
+        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        self.gpu_discovery_script_file.write(
             b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
         )
-        self.tempFile.close()
+        self.gpu_discovery_script_file.close()
         # create temporary directory for Worker resources coordination
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
         os.chmod(
-            self.tempFile.name,
+            self.gpu_discovery_script_file.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
 
         conf = conf.set("spark.driver.resource.gpu.amount", "3")
-        conf = conf.set("spark.driver.resource.gpu.discoveryScript", self.tempFile.name)
+        conf = conf.set(
+            "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+        )
 
         self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
         self.spark = SparkSession(self.sc)
+        self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
-        os.unlink(self.tempFile.name)
+        shutil.rmtree(self.mnist_dir_path)
+        os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
 
     def setup_env_vars(self, input_map: Dict[str, str]) -> None:
@@ -215,9 +321,10 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 
         for num_processes in fails:
             with self.subTest():
-                with self.assertWarns(RuntimeWarning):
+                with self.assertLogs("TorchDistributor", level="WARNING") as log:
                     distributor = TorchDistributor(num_processes, True, True)
-                    distributor.num_processes = 3
+                    self.assertEqual(len(log.records), 1)
+                    self.assertEqual(distributor.num_processes, 3)
 
     def test_get_gpus_owned_local(self) -> None:
         addresses = ["0", "1", "2"]
@@ -255,25 +362,41 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
                 if cuda_env_var:
                     self.delete_env_vars({CUDA_VISIBLE_DEVICES: cuda_env_var})
 
+    def test_local_file_with_pytorch(self) -> None:
+        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        learning_rate_str = "0.01"
+        TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
+            test_file_path, learning_rate_str
+        )
+
+    def test_end_to_end_run_locally(self) -> None:
+        train_fn = create_training_function(self.mnist_dir_path)
+        output = TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
+            train_fn, 0.001
+        )
+        self.assertEqual(output, "success")
+
 
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
-        self.tempFile.write(
+        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        self.gpu_discovery_script_file.write(
             b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
         )
-        self.tempFile.close()
+        self.gpu_discovery_script_file.close()
         # create temporary directory for Worker resources coordination
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
         os.chmod(
-            self.tempFile.name,
+            self.gpu_discovery_script_file.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
 
-        conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
+        conf = conf.set(
+            "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+        )
         conf = conf.set("spark.worker.resource.gpu.amount", "3")
         conf = conf.set("spark.task.cpus", "2")
         conf = conf.set("spark.task.resource.gpu.amount", "1")
@@ -281,10 +404,29 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
 
         self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
         self.spark = SparkSession(self.sc)
+        self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
-        os.unlink(self.tempFile.name)
+        shutil.rmtree(self.mnist_dir_path)
+        os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
+
+    def test_dist_training_succeeds(self) -> None:
+        CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
+        inputs = [
+            ("0,1,2", 2, True, "0"),
+        ]
+
+        for i, (_, num_processes, use_gpu, expected) in enumerate(inputs):
+            with self.subTest(f"subtest: {i + 1}"):
+                dist = TorchDistributor(num_processes, False, use_gpu)
+                dist._run_training_on_pytorch_file = lambda *args: os.environ.get(  # type: ignore
+                    CUDA_VISIBLE_DEVICES, "NONE"
+                )
+                self.assertEqual(
+                    expected,
+                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "..."),
+                )
 
     def test_get_num_tasks_distributed(self) -> None:
         inputs = [(1, 8, 8), (2, 8, 4), (3, 8, 3)]
@@ -298,6 +440,20 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
                 self.assertEqual(distributor._get_num_tasks(), expected_output)
 
         self.spark.sparkContext._conf.set("spark.task.resource.gpu.amount", "1")
+
+    def test_distributed_file_with_pytorch(self) -> None:
+        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        learning_rate_str = "0.01"
+        TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
+            test_file_path, learning_rate_str
+        )
+
+    def test_end_to_end_run_distributedly(self) -> None:
+        train_fn = create_training_function(self.mnist_dir_path)
+        output = TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
+            train_fn, 0.001
+        )
+        self.assertEqual(output, "success")
 
 
 class TorchWrapperUnitTests(unittest.TestCase):

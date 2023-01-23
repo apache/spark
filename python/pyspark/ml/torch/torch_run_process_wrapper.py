@@ -53,7 +53,7 @@ if __name__ == "__main__":
     task = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
         env=os.environ,
     )

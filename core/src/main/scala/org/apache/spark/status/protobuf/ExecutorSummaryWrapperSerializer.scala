@@ -24,7 +24,8 @@ import collection.JavaConverters._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.ExecutorSummaryWrapper
 import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
 class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrapper] {
 
@@ -44,8 +45,6 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrap
   private def serializeExecutorSummary(
       input: ExecutorSummary): StoreTypes.ExecutorSummary = {
     val builder = StoreTypes.ExecutorSummary.newBuilder()
-      .setId(input.id)
-      .setHostPort(input.hostPort)
       .setIsActive(input.isActive)
       .setRddBlocks(input.rddBlocks)
       .setMemoryUsed(input.memoryUsed)
@@ -64,7 +63,8 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrap
       .setIsBlacklisted(input.isBlacklisted)
       .setMaxMemory(input.maxMemory)
       .setAddTime(input.addTime.getTime)
-
+    setStringField(input.id, builder.setId)
+    setStringField(input.hostPort, builder.setHostPort)
     input.removeTime.foreach {
       date => builder.setRemoveTime(date.getTime)
     }
@@ -109,8 +109,8 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrap
       getOptional(binary.hasMemoryMetrics,
         () => deserializeMemoryMetrics(binary.getMemoryMetrics))
     new ExecutorSummary(
-      id = binary.getId,
-      hostPort = binary.getHostPort,
+      id = getStringField(binary.hasId, binary.getId),
+      hostPort = getStringField(binary.hasHostPort, () => weakIntern(binary.getHostPort)),
       isActive = binary.getIsActive,
       rddBlocks = binary.getRddBlocks,
       memoryUsed = binary.getMemoryUsed,
@@ -171,7 +171,7 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrap
   private def deserializeResourceInformation(binary: StoreTypes.ResourceInformation):
     ResourceInformation = {
     new ResourceInformation(
-      name = binary.getName,
-      addresses = binary.getAddressesList.asScala.toArray)
+      name = weakIntern(binary.getName),
+      addresses = binary.getAddressesList.asScala.map(weakIntern).toArray)
   }
 }

@@ -49,6 +49,15 @@ class SparkConnectClient(
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse =
     stub.analyzePlan(request)
 
+  def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
+      .setPlan(plan)
+      .setUserContext(userContext)
+      .build()
+    stub.executePlan(request)
+  }
+
   /**
    * Shutdown the client's connection to the server.
    */
@@ -85,7 +94,7 @@ object SparkConnectClient {
       this
     }
 
-    object URIParams {
+    private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
       val PARAM_TOKEN = "token"
@@ -158,7 +167,8 @@ object SparkConnectClient {
 
     def build(): SparkConnectClient = {
       val channelBuilder = ManagedChannelBuilder.forAddress(host, port).usePlaintext()
-      new SparkConnectClient(userContextBuilder.build(), channelBuilder.build())
+      val channel: ManagedChannel = channelBuilder.build()
+      new SparkConnectClient(userContextBuilder.build(), channel)
     }
   }
 }

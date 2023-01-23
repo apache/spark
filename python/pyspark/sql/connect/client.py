@@ -36,6 +36,13 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
 import pyspark.sql.types
 from pyspark import cloudpickle
+from pyspark.errors import (
+    SparkConnectException,
+    SparkConnectGrpcException,
+    SparkConnectAnalysisException,
+    SparkConnectParseException,
+    SparkConnectTempTableAlreadyExistsException,
+)
 from pyspark.sql.types import (
     DataType,
     StructType,
@@ -62,29 +69,6 @@ def _configure_logging() -> logging.Logger:
 
 # Instantiate the logger based on the environment configuration.
 logger = _configure_logging()
-
-
-class SparkConnectException(Exception):
-    def __init__(self, message: str, reason: Optional[str] = None) -> None:
-        super(SparkConnectException, self).__init__(message)
-        self._reason = reason
-        self._message = message
-
-    def __str__(self) -> str:
-        if self._reason is not None:
-            return f"({self._reason}) {self._message}"
-        else:
-            return self._message
-
-
-class SparkConnectAnalysisException(SparkConnectException):
-    def __init__(self, reason: str, message: str, plan: str) -> None:
-        self._reason = reason
-        self._message = message
-        self._plan = plan
-
-    def __str__(self) -> str:
-        return f"{self._message}\nPlan: {self._plan}"
 
 
 class ChannelBuilder:
@@ -628,21 +612,31 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
-                    if info.reason == "org.apache.spark.sql.AnalysisException":
+                    reason = info.reason
+                    if reason == "org.apache.spark.sql.AnalysisException":
                         raise SparkConnectAnalysisException(
-                            info.reason, info.metadata["message"], info.metadata["plan"]
+                            info.metadata["message"], plan=info.metadata["plan"]
+                        ) from None
+                    elif reason == "org.apache.spark.sql.catalyst.parser.ParseException":
+                        raise SparkConnectParseException(info.metadata["message"]) from None
+                    elif (
+                        reason
+                        == "org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException"
+                    ):
+                        raise SparkConnectTempTableAlreadyExistsException(
+                            info.metadata["message"], plan=info.metadata["plan"]
                         ) from None
                     else:
-                        raise SparkConnectException(status.message, info.reason) from None
+                        raise SparkConnectGrpcException(
+                            status.message, reason=info.reason
+                        ) from None
 
-            raise SparkConnectException(status.message) from None
+            raise SparkConnectGrpcException(status.message) from None
         else:
-            raise SparkConnectException(str(rpc_error)) from None
+            raise SparkConnectGrpcException(str(rpc_error)) from None
 
 
 __all__ = [
     "ChannelBuilder",
     "SparkConnectClient",
-    "SparkConnectException",
-    "SparkConnectAnalysisException",
 ]

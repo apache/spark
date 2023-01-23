@@ -22,7 +22,12 @@ package org.apache.spark.status.protobuf;
  * Developer guides:
  *   - Coding style: https://developers.google.com/protocol-buffers/docs/style
  *   - Use int64 for job/stage IDs, in case of future extension in Spark core.
- *   - Use `weakIntern` on string values in create new objects during deserialization.
+ *   - For string fields:
+ *     - use `optional string` for protobuf definition
+ *     - on serialization, check if the string is null to avoid NPE
+ *     - on deserialization, set string fields as null if it is not set. Also, use `weakIntern` on
+ *       string values in create new objects during deserialization.
+ *     - add tests with null string inputs
  */
 
 enum JobExecutionStatus {
@@ -36,7 +41,7 @@ enum JobExecutionStatus {
 message JobData {
   // All IDs are int64 for extendability, even when they are currently int32 in Spark.
   int64 job_id = 1;
-  string name = 2;
+  optional string name = 2;
   optional string description = 3;
   optional int64 submission_time = 4;
   optional int64 completion_time = 5;
@@ -65,9 +70,9 @@ message JobDataWrapper {
 
 message AccumulableInfo {
   int64 id = 1;
-  string name = 2;
+  optional string name = 2;
   optional string update = 3;
-  string value = 4;
+  optional string value = 4;
 }
 
 message TaskDataWrapper {
@@ -78,10 +83,10 @@ message TaskDataWrapper {
   int64 launch_time = 5;
   int64 result_fetch_start = 6;
   int64 duration = 7;
-  string executor_id = 8;
-  string host = 9;
-  string status = 10;
-  string task_locality = 11;
+  optional string executor_id = 8;
+  optional string host = 9;
+  optional string status = 10;
+  optional string task_locality = 11;
   bool speculative = 12;
   repeated AccumulableInfo accumulator_updates = 13;
   optional string error_message = 14;
@@ -151,19 +156,19 @@ message ExecutorStageSummary {
 message ExecutorStageSummaryWrapper {
   int64 stage_id = 1;
   int32 stage_attempt_id = 2;
-  string executor_id = 3;
+  optional string executor_id = 3;
   ExecutorStageSummary info = 4;
 }
 
 message ExecutorResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   int64 amount = 2;
-  string discoveryScript = 3;
-  string vendor = 4;
+  optional string discoveryScript = 3;
+  optional string vendor = 4;
 }
 
 message TaskResourceRequest {
-  string resource_name = 1;
+  optional string resource_name = 1;
   double amount = 2;
 }
 
@@ -174,14 +179,14 @@ message ResourceProfileInfo {
 }
 
 message RuntimeInfo {
-  string java_version = 1;
-  string java_home = 2;
-  string scala_version = 3;
+  optional string java_version = 1;
+  optional string java_home = 2;
+  optional string scala_version = 3;
 }
 
 message PairStrings {
-  string value1 = 1;
-  string value2 = 2;
+  optional string value1 = 1;
+  optional string value2 = 2;
 }
 
 message ApplicationEnvironmentInfo {
@@ -204,14 +209,14 @@ message ApplicationAttemptInfo {
   int64 end_time = 3;
   int64 last_updated = 4;
   int64 duration = 5;
-  string spark_user = 6;
+  optional string spark_user = 6;
   bool completed = 7;
-  string app_spark_version = 8;
+  optional string app_spark_version = 8;
 }
 
 message ApplicationInfo {
-  string id = 1;
-  string name = 2;
+  optional string id = 1;
+  optional string name = 2;
   optional int32 cores_granted = 3;
   optional int32 max_cores = 4;
   optional int32 cores_per_executor = 5;
@@ -224,10 +229,10 @@ message ApplicationInfoWrapper {
 }
 
 message StreamBlockData {
-  string name = 1;
-  string executor_id = 2;
-  string host_port = 3;
-  string storage_level = 4;
+  optional string name = 1;
+  optional string executor_id = 2;
+  optional string host_port = 3;
+  optional string storage_level = 4;
   bool use_memory = 5;
   bool use_disk = 6;
   bool deserialized = 7;
@@ -236,7 +241,7 @@ message StreamBlockData {
 }
 
 message RDDDataDistribution {
-  string address = 1;
+  optional string address = 1;
   int64 memory_used = 2;
   int64 memory_remaining = 3;
   int64 disk_used = 4;
@@ -247,8 +252,8 @@ message RDDDataDistribution {
 }
 
 message RDDPartitionInfo {
-  string block_name = 1;
-  string storage_level = 2;
+  optional string block_name = 1;
+  optional string storage_level = 2;
   int64 memory_used = 3;
   int64 disk_used = 4;
   repeated string executors = 5;
@@ -256,7 +261,7 @@ message RDDPartitionInfo {
 
 message RDDStorageInfo {
   int32 id = 1;
-  string name = 2;
+  optional string name = 2;
   int32 num_partitions = 3;
   int32 num_cached_partitions = 4;
   string storage_level = 5;
@@ -277,7 +282,7 @@ message ResourceProfileWrapper {
 message CachedQuantile {
   int64 stage_id = 1;
   int32 stage_attempt_id = 2;
-  string quantile = 3;
+  optional string quantile = 3;
   int64 task_count = 4;
   double duration = 5;
   double executor_deserialize_time = 6;
@@ -334,8 +339,8 @@ message SpeculationStageSummaryWrapper {
 }
 
 message ProcessSummary {
-  string id = 1;
-  string host_port = 2;
+  optional string id = 1;
+  optional string host_port = 2;
   bool is_active = 3;
   int32 total_cores = 4;
   int64 add_time = 5;
@@ -360,8 +365,8 @@ message ResourceInformation {
 }
 
 message ExecutorSummary {
-  string id = 1;
-  string host_port = 2;
+  optional string id = 1;
+  optional string host_port = 2;
   bool is_active = 3;
   int32 rdd_blocks = 4;
   int64 memory_used = 5;
@@ -398,17 +403,17 @@ message ExecutorSummaryWrapper {
 }
 
 message SQLPlanMetric {
-  string name = 1;
+  optional string name = 1;
   int64 accumulator_id = 2;
-  string metric_type = 3;
+  optional string metric_type = 3;
 }
 
 message SQLExecutionUIData {
   int64 execution_id = 1;
   int64 root_execution_id = 2;
-  string description = 3;
-  string details = 4;
-  string physical_plan_description = 5;
+  optional string description = 3;
+  optional string details = 4;
+  optional string physical_plan_description = 5;
   map<string, string> modified_configs = 6;
   repeated SQLPlanMetric metrics = 7;
   int64 submission_time = 8;
@@ -422,15 +427,15 @@ message SQLExecutionUIData {
 
 message SparkPlanGraphNode {
   int64 id = 1;
-  string name = 2;
-  string desc = 3;
+  optional string name = 2;
+  optional string desc = 3;
   repeated SQLPlanMetric metrics = 4;
 }
 
 message SparkPlanGraphClusterWrapper {
   int64 id = 1;
-  string name = 2;
-  string desc = 3;
+  optional string name = 2;
+  optional string desc = 3;
   repeated SparkPlanGraphNodeWrapper nodes = 4;
   repeated SQLPlanMetric metrics = 5;
 }
@@ -467,16 +472,16 @@ enum DeterministicLevel {
 
 message RDDOperationNode {
   int32 id = 1;
-  string name = 2;
+  optional string name = 2;
   bool cached = 3;
   bool barrier = 4;
-  string callsite = 5;
+  optional string callsite = 5;
   DeterministicLevel output_deterministic_level = 6;
 }
 
 message RDDOperationClusterWrapper {
-  string id = 1;
-  string name = 2;
+  optional string id = 1;
+  optional string name = 2;
   repeated RDDOperationNode child_nodes = 3;
   repeated RDDOperationClusterWrapper child_clusters = 4;
 }
@@ -490,9 +495,9 @@ message RDDOperationGraphWrapper {
 }
 
 message StreamingQueryData {
-  string name = 1;
-  string id = 2;
-  string run_id = 3;
+  optional string name = 1;
+  optional string id = 2;
+  optional string run_id = 3;
   bool is_active = 4;
   optional string exception = 5;
   int64 start_timestamp = 6;
@@ -513,10 +518,10 @@ message TaskData {
   int64 launch_time = 5;
   optional int64 result_fetch_start = 6;
   optional int64 duration = 7;
-  string executor_id = 8;
-  string host = 9;
-  string status = 10;
-  string task_locality = 11;
+  optional string executor_id = 8;
+  optional string host = 9;
+  optional string status = 10;
+  optional string task_locality = 11;
   bool speculative = 12;
   repeated AccumulableInfo accumulator_updates = 13;
   optional string error_message = 14;
@@ -577,10 +582,10 @@ message StageData {
   int64 shuffle_write_time = 37;
   int64 shuffle_write_records = 38;
 
-  string name = 39;
+  optional string name = 39;
   optional string description = 40;
-  string details = 41;
-  string scheduling_pool = 42;
+  optional string details = 41;
+  optional string scheduling_pool = 42;
 
   repeated int64 rdd_ids = 43;
   repeated AccumulableInfo accumulator_updates = 44;
@@ -757,6 +762,6 @@ message AppSummary {
 }
 
 message PoolData {
-  string name = 1;
+  optional string name = 1;
   repeated int64 stage_ids = 2;
 }

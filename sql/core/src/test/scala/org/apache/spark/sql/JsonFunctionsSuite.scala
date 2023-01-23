@@ -458,7 +458,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df3.selectExpr("""from_json(value, 'time InvalidType')""")
       },
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map(
         "error" -> "'InvalidType'",
         "hint" -> ": extra input 'InvalidType'"

@@ -699,22 +699,33 @@ class Expression(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        TARGET_FIELD_NUMBER: builtins.int
-        @property
-        def target(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """(Optional) The target of the expansion, either be a table name or struct name, this
-            is a list of identifiers that is the path of the expansion.
-            """
+        UNPARSED_TARGET_FIELD_NUMBER: builtins.int
+        unparsed_target: builtins.str
+        """(Optional) The target of the expansion.
+
+        If set, it should end with '.*' and will be parsed by 'parseAttributeName'
+        in the server side.
+        """
         def __init__(
             self,
             *,
-            target: collections.abc.Iterable[builtins.str] | None = ...,
+            unparsed_target: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_unparsed_target", b"_unparsed_target", "unparsed_target", b"unparsed_target"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["target", b"target"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_unparsed_target", b"_unparsed_target", "unparsed_target", b"unparsed_target"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_unparsed_target", b"_unparsed_target"]
+        ) -> typing_extensions.Literal["unparsed_target"] | None: ...
 
     class UnresolvedRegex(google.protobuf.message.Message):
         """Represents all of the input attributes to a given relational operator, for example in
@@ -868,13 +879,16 @@ class Expression(google.protobuf.message.Message):
         @property
         def arguments(
             self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """(Required) Function variable names. Must contains 1 ~ 3 variables."""
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression.UnresolvedNamedLambdaVariable
+        ]:
+            """(Required) Function variables. Must contains 1 ~ 3 variables."""
         def __init__(
             self,
             *,
             function: global___Expression | None = ...,
-            arguments: collections.abc.Iterable[builtins.str] | None = ...,
+            arguments: collections.abc.Iterable[global___Expression.UnresolvedNamedLambdaVariable]
+            | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["function", b"function"]
@@ -884,6 +898,24 @@ class Expression(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "arguments", b"arguments", "function", b"function"
             ],
+        ) -> None: ...
+
+    class UnresolvedNamedLambdaVariable(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_PARTS_FIELD_NUMBER: builtins.int
+        @property
+        def name_parts(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) a list of name parts for the variable. Must not be empty."""
+        def __init__(
+            self,
+            *,
+            name_parts: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["name_parts", b"name_parts"]
         ) -> None: ...
 
     LITERAL_FIELD_NUMBER: builtins.int
@@ -899,6 +931,7 @@ class Expression(google.protobuf.message.Message):
     WINDOW_FIELD_NUMBER: builtins.int
     UNRESOLVED_EXTRACT_VALUE_FIELD_NUMBER: builtins.int
     UPDATE_FIELDS_FIELD_NUMBER: builtins.int
+    UNRESOLVED_NAMED_LAMBDA_VARIABLE_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -927,6 +960,10 @@ class Expression(google.protobuf.message.Message):
     @property
     def update_fields(self) -> global___Expression.UpdateFields: ...
     @property
+    def unresolved_named_lambda_variable(
+        self,
+    ) -> global___Expression.UnresolvedNamedLambdaVariable: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -947,6 +984,8 @@ class Expression(google.protobuf.message.Message):
         window: global___Expression.Window | None = ...,
         unresolved_extract_value: global___Expression.UnresolvedExtractValue | None = ...,
         update_fields: global___Expression.UpdateFields | None = ...,
+        unresolved_named_lambda_variable: global___Expression.UnresolvedNamedLambdaVariable
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -974,6 +1013,8 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_extract_value",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_named_lambda_variable",
+            b"unresolved_named_lambda_variable",
             "unresolved_regex",
             b"unresolved_regex",
             "unresolved_star",
@@ -1009,6 +1050,8 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_extract_value",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_named_lambda_variable",
+            b"unresolved_named_lambda_variable",
             "unresolved_regex",
             b"unresolved_regex",
             "unresolved_star",
@@ -1035,6 +1078,7 @@ class Expression(google.protobuf.message.Message):
         "window",
         "unresolved_extract_value",
         "update_fields",
+        "unresolved_named_lambda_variable",
         "extension",
     ] | None: ...
 
