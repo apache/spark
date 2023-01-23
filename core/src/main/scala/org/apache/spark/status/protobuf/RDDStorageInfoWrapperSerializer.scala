@@ -21,7 +21,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.status.RDDStorageInfoWrapper
 import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo, RDDStorageInfo}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
 class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrapper] {
 
@@ -41,7 +42,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
   private def serializeRDDStorageInfo(info: RDDStorageInfo): StoreTypes.RDDStorageInfo = {
     val builder = StoreTypes.RDDStorageInfo.newBuilder()
     builder.setId(info.id)
-    builder.setName(info.name)
+    setStringField(info.name, builder.setName)
     builder.setNumPartitions(info.numPartitions)
     builder.setNumCachedPartitions(info.numCachedPartitions)
     builder.setStorageLevel(info.storageLevel)
@@ -51,7 +52,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
     if (info.dataDistribution.isDefined) {
       info.dataDistribution.get.foreach { dd =>
         val dataDistributionBuilder = StoreTypes.RDDDataDistribution.newBuilder()
-        dataDistributionBuilder.setAddress(dd.address)
+        setStringField(dd.address, dataDistributionBuilder.setAddress)
         dataDistributionBuilder.setMemoryUsed(dd.memoryUsed)
         dataDistributionBuilder.setMemoryRemaining(dd.memoryRemaining)
         dataDistributionBuilder.setDiskUsed(dd.diskUsed)
@@ -66,8 +67,8 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
     if (info.partitions.isDefined) {
       info.partitions.get.foreach { p =>
         val partitionsBuilder = StoreTypes.RDDPartitionInfo.newBuilder()
-        partitionsBuilder.setBlockName(p.blockName)
-        partitionsBuilder.setStorageLevel(p.storageLevel)
+        setStringField(p.blockName, partitionsBuilder.setBlockName)
+        setStringField(p.storageLevel, partitionsBuilder.setStorageLevel)
         partitionsBuilder.setMemoryUsed(p.memoryUsed)
         partitionsBuilder.setDiskUsed(p.diskUsed)
         p.executors.foreach(partitionsBuilder.addExecutors)
@@ -81,7 +82,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
   private def deserializeRDDStorageInfo(info: StoreTypes.RDDStorageInfo): RDDStorageInfo = {
     new RDDStorageInfo(
       id = info.getId,
-      name = info.getName,
+      name = getStringField(info.hasName, info.getName),
       numPartitions = info.getNumPartitions,
       numCachedPartitions = info.getNumCachedPartitions,
       storageLevel = info.getStorageLevel,
@@ -102,7 +103,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
     RDDDataDistribution = {
 
     new RDDDataDistribution(
-      address = info.getAddress,
+      address = getStringField(info.hasAddress, info.getAddress),
       memoryUsed = info.getMemoryUsed,
       memoryRemaining = info.getMemoryRemaining,
       diskUsed = info.getDiskUsed,
@@ -117,8 +118,8 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
 
   private def deserializeRDDPartitionInfo(info: StoreTypes.RDDPartitionInfo): RDDPartitionInfo = {
     new RDDPartitionInfo(
-      blockName = info.getBlockName,
-      storageLevel = info.getStorageLevel,
+      blockName = getStringField(info.hasBlockName, info.getBlockName),
+      storageLevel = getStringField(info.hasStorageLevel, () => weakIntern(info.getStorageLevel)),
       memoryUsed = info.getMemoryUsed,
       diskUsed = info.getDiskUsed,
       executors = info.getExecutorsList.asScala

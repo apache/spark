@@ -248,9 +248,10 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 
         for num_processes in fails:
             with self.subTest():
-                with self.assertWarns(RuntimeWarning):
+                with self.assertLogs("TorchDistributor", level="WARNING") as log:
                     distributor = TorchDistributor(num_processes, True, True)
-                    distributor.num_processes = 3
+                    self.assertEqual(len(log.records), 1)
+                    self.assertEqual(distributor.num_processes, 3)
 
     def test_get_gpus_owned_local(self) -> None:
         addresses = ["0", "1", "2"]
@@ -287,6 +288,13 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
                 # cleanup
                 if cuda_env_var:
                     self.delete_env_vars({CUDA_VISIBLE_DEVICES: cuda_env_var})
+
+    def test_local_file_with_pytorch(self) -> None:
+        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        learning_rate_str = "0.01"
+        TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
+            test_file_path, learning_rate_str
+        )
 
 
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
@@ -348,6 +356,13 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
                 self.assertEqual(distributor._get_num_tasks(), expected_output)
 
         self.spark.sparkContext._conf.set("spark.task.resource.gpu.amount", "1")
+
+    def test_distributed_file_with_pytorch(self) -> None:
+        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        learning_rate_str = "0.01"
+        TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
+            test_file_path, learning_rate_str
+        )
 
 
 class TorchWrapperUnitTests(unittest.TestCase):

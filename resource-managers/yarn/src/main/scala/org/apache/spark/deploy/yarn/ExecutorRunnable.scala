@@ -160,32 +160,6 @@ private[yarn] class ExecutorRunnable(
       .filter { case (k, v) => SparkConf.isExecutorStartupConf(k) }
       .foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
 
-    // Commenting it out for now - so that people can refer to the properties if required. Remove
-    // it once cpuset version is pushed out.
-    // The context is, default gc for server class machines end up using all cores to do gc - hence
-    // if there are multiple containers in same node, spark gc effects all other containers
-    // performance (which can also be other spark containers)
-    // Instead of using this, rely on cpusets by YARN to enforce spark behaves 'properly' in
-    // multi-tenant environments. Not sure how default java gc behaves if it is limited to subset
-    // of cores on a node.
-    /*
-        else {
-          // If no java_opts specified, default to using -XX:+CMSIncrementalMode
-          // It might be possible that other modes/config is being done in
-          // spark.executor.extraJavaOptions, so we don't want to mess with it.
-          // In our expts, using (default) throughput collector has severe perf ramifications in
-          // multi-tenant machines
-          // The options are based on
-          // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use
-          // %20the%20Concurrent%20Low%20Pause%20Collector|outline
-          javaOpts += "-XX:+UseConcMarkSweepGC"
-          javaOpts += "-XX:+CMSIncrementalMode"
-          javaOpts += "-XX:+CMSIncrementalPacing"
-          javaOpts += "-XX:CMSIncrementalDutyCycleMin=0"
-          javaOpts += "-XX:CMSIncrementalDutyCycle=10"
-        }
-    */
-
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 

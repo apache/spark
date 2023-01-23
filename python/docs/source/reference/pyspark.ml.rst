@@ -196,6 +196,7 @@ Functions
 
     array_to_vector
     vector_to_array
+    predict_batch_udf
 
 
 Vector and Matrix
