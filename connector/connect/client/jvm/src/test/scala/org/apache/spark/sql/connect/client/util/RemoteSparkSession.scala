@@ -17,9 +17,11 @@
 package org.apache.spark.sql.connect.client.util
 
 import java.io.{BufferedOutputStream, File}
+import java.util.concurrent.TimeUnit
 
 import scala.io.Source
 
+import org.scalatest.Assertions.fail
 import org.scalatest.BeforeAndAfterAll
 import sys.process._
 
@@ -38,17 +40,21 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  * --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
  * }}}
  *
- * Set system property `SPARK_HOME` if the test is not executed from the Spark project top folder.
- * Set system property `DEBUG_SC_JVM_CLIENT=true` to print the server process output in the
- * console to debug server start stop problems.
+ * Set system property `spark.test.home` or env variable `SPARK_HOME` if the test is not executed
+ * from the Spark project top folder. Set system property `spark.debug.sc.jvm.client=true` to
+ * print the server process output in the console to debug server start stop problems.
  */
 object SparkConnectServerUtils {
   // System properties used for testing and debugging
-  private val SPARK_HOME = "SPARK_HOME"
-  private val ENV_DEBUG_SC_JVM_CLIENT = "DEBUG_SC_JVM_CLIENT"
+  private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
 
-  private val sparkHome = System.getProperty(SPARK_HOME, fileSparkHome())
-  private val isDebug = System.getProperty(ENV_DEBUG_SC_JVM_CLIENT, "false").toBoolean
+  protected lazy val sparkHome: String = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+  }
+  private val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
 
   // Log server start stop debug info into console
   // scalastyle:off println
@@ -103,16 +109,6 @@ object SparkConnectServerUtils {
     code
   }
 
-  private def fileSparkHome(): String = {
-    val path = new File("./").getCanonicalPath
-    if (path.endsWith("connector/connect/client/jvm")) {
-      // the current folder is the client project folder
-      new File("../../../../").getCanonicalPath
-    } else {
-      path
-    }
-  }
-
   private def findSparkConnectJar: String = {
     val target = "connector/connect/server/target"
     val parentDir = new File(sparkHome, target)
@@ -121,14 +117,14 @@ object SparkConnectServerUtils {
       s"Fail to locate the spark connect server target folder: '${parentDir.getCanonicalPath}'. " +
         s"SPARK_HOME='${new File(sparkHome).getCanonicalPath}'. " +
         "Make sure the spark connect server jar has been built " +
-        "and the system property `SPARK_HOME` is set correctly.")
+        "and the env variable `SPARK_HOME` is set correctly.")
     val jars = recursiveListFiles(parentDir).filter { f =>
       // SBT jar
       (f.getParentFile.getName.startsWith("scala-") &&
-        f.getName.startsWith("spark-connect-assembly") && f.getName.endsWith("SNAPSHOT.jar")) ||
+        f.getName.startsWith("spark-connect-assembly") && f.getName.endsWith(".jar")) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
-        f.getName.startsWith("spark-connect") && f.getName.endsWith("SNAPSHOT.jar"))
+        f.getName.startsWith("spark-connect") && f.getName.endsWith(".jar"))
     }
     // It is possible we found more than one: one built by maven, and another by SBT
     assert(
@@ -156,12 +152,12 @@ trait RemoteSparkSession
     spark = SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
 
     // Retry and wait for the server to start
-    val stop = System.currentTimeMillis() + 60000 * 1 // ~1 min
-    var sleepInternal = 1000 // 1s with * 2 backoff
+    val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
+    var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
     var success = false
     val error = new RuntimeException(s"Failed to start the test server on port $port.")
 
-    while (!success && System.currentTimeMillis() < stop) {
+    while (!success && System.nanoTime() < stop) {
       try {
         // Run a simple query to verify the server is really up and ready
         val result = spark
@@ -175,8 +171,8 @@ trait RemoteSparkSession
         // ignored the error
         case e: Throwable =>
           error.addSuppressed(e)
-          Thread.sleep(sleepInternal)
-          sleepInternal *= 2
+          Thread.sleep(sleepInternalMs)
+          sleepInternalMs *= 2
       }
     }
 
