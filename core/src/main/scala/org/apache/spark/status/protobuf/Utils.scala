@@ -38,9 +38,9 @@ object Utils {
     null
   }
 
-  def setJMapField[K, V](input: JMap[K, V], f: JMap[K, V] => Any): Unit = {
+  def setJMapField[K, V](input: JMap[K, V], putAllFunc: JMap[K, V] => Any): Unit = {
     if (input != null && !input.isEmpty) {
-      f(input)
+      putAllFunc(input)
     }
   }
 }
