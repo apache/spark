@@ -34,8 +34,8 @@ private[protobuf] object SourceProgressSerializer {
     builder.setNumInputRows(source.numInputRows)
     builder.setInputRowsPerSecond(source.inputRowsPerSecond)
     builder.setProcessedRowsPerSecond(source.processedRowsPerSecond)
-    source.metrics.forEach {
-      case (k, v) => builder.putMetrics(k, v)
+    if (source.metrics != null) {
+      builder.putAllMetrics(source.metrics)
     }
     builder.build()
   }

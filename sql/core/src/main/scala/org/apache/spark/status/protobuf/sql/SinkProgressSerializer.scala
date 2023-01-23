@@ -29,8 +29,8 @@ private[protobuf] object SinkProgressSerializer {
     val builder = StoreTypes.SinkProgress.newBuilder()
     setStringField(sink.description, builder.setDescription)
     builder.setNumOutputRows(sink.numOutputRows)
-    sink.metrics.forEach {
-      case (k, v) => builder.putMetrics(k, v)
+    if (sink.metrics != null) {
+      builder.putAllMetrics(sink.metrics)
     }
     builder.build()
   }

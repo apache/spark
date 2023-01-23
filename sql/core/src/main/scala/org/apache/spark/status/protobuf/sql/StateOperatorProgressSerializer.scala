@@ -38,8 +38,8 @@ object StateOperatorProgressSerializer {
     builder.setNumRowsDroppedByWatermark(stateOperator.numRowsDroppedByWatermark)
     builder.setNumShufflePartitions(stateOperator.numShufflePartitions)
     builder.setNumStateStoreInstances(stateOperator.numStateStoreInstances)
-    stateOperator.customMetrics.forEach {
-      case (k, v) => builder.putCustomMetrics(k, v)
+    if (stateOperator.customMetrics != null) {
+      builder.putAllCustomMetrics(stateOperator.customMetrics)
     }
     builder.build()
   }

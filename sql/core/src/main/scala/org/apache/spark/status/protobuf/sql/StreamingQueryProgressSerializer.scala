@@ -46,11 +46,11 @@ private[protobuf] object StreamingQueryProgressSerializer {
     setStringField(process.timestamp, builder.setTimestamp)
     builder.setBatchId(process.batchId)
     builder.setBatchDuration(process.batchDuration)
-    process.durationMs.forEach {
-      case (k, v) => builder.putDurationMs(k, v)
+    if (process.durationMs != null) {
+      builder.putAllDurationMs(process.durationMs)
     }
-    process.eventTime.forEach {
-      case (k, v) => builder.putEventTime(k, v)
+    if (process.eventTime != null) {
+      builder.putAllEventTime(process.eventTime)
     }
     process.stateOperators.foreach(
       s => builder.addStateOperators(StateOperatorProgressSerializer.serialize(s)))
@@ -58,8 +58,10 @@ private[protobuf] object StreamingQueryProgressSerializer {
       s => builder.addSources(SourceProgressSerializer.serialize(s))
     )
     builder.setSink(SinkProgressSerializer.serialize(process.sink))
-    process.observedMetrics.forEach {
-      case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
+    if (process.observedMetrics != null) {
+      process.observedMetrics.forEach {
+        case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
+      }
     }
     builder.build()
   }
