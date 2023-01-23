@@ -177,8 +177,7 @@ class V2CommandsCaseSensitivitySuite
   }
 
   test("AlterTable: add column resolution - column position referencing new column") {
-    alterTableTest(
-      AddColumns(
+    val alter = AddColumns(
         table,
         Seq(QualifiedColType(
           None,
@@ -195,9 +194,16 @@ class V2CommandsCaseSensitivitySuite
           true,
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("X"))),
-          None))),
-      Seq("Couldn't find the reference column for AFTER X at root")
-    )
+          None)))
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        assertAnalysisErrorClass(
+          inputPlan = alter,
+          expectedErrorClass = "FIELD_NOT_FOUND",
+          expectedMessageParameters = Map("fieldName" -> "`y`", "fields" -> "id, data, point, x")
+        )
+      }
+    }
   }
 
   test("AlterTable: add column resolution - nested positional") {
@@ -219,8 +225,7 @@ class V2CommandsCaseSensitivitySuite
   }
 
   test("AlterTable: add column resolution - column position referencing new nested column") {
-    alterTableTest(
-      AddColumns(
+    val alter = AddColumns(
         table,
         Seq(QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
@@ -237,9 +242,16 @@ class V2CommandsCaseSensitivitySuite
           true,
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))),
-          None))),
-      Seq("Couldn't find the reference column for AFTER Z at point")
-    )
+          None)))
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        assertAnalysisErrorClass(
+          inputPlan = alter,
+          expectedErrorClass = "FIELD_NOT_FOUND",
+          expectedMessageParameters = Map("fieldName" -> "`zz`", "fields" -> "x, y, z")
+        )
+      }
+    }
   }
 
   test("SPARK-36372: Adding duplicate columns should not be allowed") {
