@@ -797,6 +797,11 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS" : {
+    "message" : [
+      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
+    ]
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -2807,11 +2812,6 @@
   "_LEGACY_ERROR_TEMP_1184" : {
     "message" : [
       "Catalog <plugin> does not support <ability>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1185" : {
-    "message" : [
-      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
     ]
   },
   "_LEGACY_ERROR_TEMP_1186" : {

@@ -1867,7 +1867,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def identifierHavingMoreThanTwoNamePartsError(
       quoted: String, identifier: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1185",
+      errorClass = "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS",
       messageParameters = Map(
         "quoted" -> quoted,
         "identifier" -> identifier))
