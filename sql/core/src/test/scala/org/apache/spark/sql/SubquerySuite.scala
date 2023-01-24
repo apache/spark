@@ -545,12 +545,11 @@ class SubquerySuite extends QueryTest
     val exception1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
     }
-    checkErrorMatchPVals(
+    checkError(
       exception1,
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
         "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-      parameters = Map("treeNode" -> "(?s)Filter .*"),
-      sqlState = None,
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = "(select b from l l2 where l2.a = l1.a)", start = 10, stop = 47))
     val exception2 = intercept[AnalysisException] {

@@ -947,7 +947,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               expr.failAnalysis(
                 errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
                   "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                messageParameters = Map("treeNode" -> planToString(other)))
+                messageParameters = Map.empty)
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -962,7 +962,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 a.failAnalysis(
                   errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
                     "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                  messageParameters = Map("treeNode" -> planToString(a)))
+                  messageParameters = Map.empty)
               }
             case other =>
               other.failAnalysis(
