@@ -23,6 +23,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.MULTI_ADD_OPT_THRESHOLD
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
@@ -205,5 +207,19 @@ class CanonicalizeSuite extends SparkFunSuite {
     val literal5 = Literal.create(d, DecimalType(12, 6))
     assert(!Add(Add(literal4, literal5), literal1).semanticEquals(
       Add(Add(literal1, literal5), literal4)))
+  }
+
+  test("SPARK-42162: Add expression canonicalization should work with the MultiAdd memory" +
+    " optimization") {
+    val default = SQLConf.get.getConf(MULTI_ADD_OPT_THRESHOLD)
+    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, "3")
+    val d = Decimal(1.2)
+    val literal1 = Literal.create(d, DecimalType(2, 1))
+    val literal2 = Literal.create(d, DecimalType(2, 1))
+    val literal3 = Literal.create(d, DecimalType(3, 2))
+    assert(Add(literal1, Add(literal2, literal3))
+      .semanticEquals(Add(Add(literal2, literal1), literal3)))
+    assert(Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiAdd])
+    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, default.toString)
   }
 }

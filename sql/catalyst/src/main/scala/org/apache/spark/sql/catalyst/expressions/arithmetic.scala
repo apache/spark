@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreeP
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.MULTI_ADD_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -407,6 +408,74 @@ object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
+/**
+ * A helper class used by the Add expression during canonicalization. During
+ * canonicalization, when we have a long tree of Add operations, we use the MultiAdd expression
+ * to represent that tree instead of creating new Add objects. This class is added as a memory
+ * optimization for processing large Add operation trees without creating a large number of
+ * new intermediate objects.
+ * @param operands A sequence of operands that produces an Add tree.
+ * @param evalMode The expression evaluation mode.
+ */
+case class MultiAdd(operands: Seq[Expression], evalMode: EvalMode.Value) extends Unevaluable {
+  // When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
+  // needed are out of the range of available values, the scale is reduced up to 6, in order to
+  // prevent the truncation of the integer part of the decimals.
+  private def allowPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss
+
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: max(s1, s2) + max(p1-s1, p2-s2) + 1
+  // Result Scale:     max(s1, s2)
+  // scalastyle:on
+  private def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = max(s1, s2)
+    val resultPrecision = max(p1 - s1, p2 - s2) + resultScale + 1
+    if (allowPrecisionLoss) {
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
+    } else {
+      DecimalType.bounded(resultPrecision, resultScale)
+    }
+  }
+
+  // Helper method to deduce the data type of a single addition operation.
+  private def singleAddOpDataType(lType: DataType, rType: DataType): DataType = {
+    (lType, rType) match {
+      case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+        resultDecimalType(p1, s1, p2, s2)
+      case _ => lType
+    }
+  }
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression.  It is
+   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  override def dataType: DataType = {
+    operands.map(_.dataType).reduce((l, r) => singleAddOpDataType(l, r))
+  }
+
+  /**
+   * Returns whether this node is nullable. This node is nullable if any of its children is
+   * nullable.
+   */
+  override def nullable: Boolean = operands.exists(_.nullable)
+
+  /**
+   * Returns a Seq of the children of this node.
+   * Children should not change. Immutability required for containsChild optimization
+   */
+  override def children: Seq[Expression] = operands
+
+  /**
+   * Replaces the children of this node by the given children.
+   */
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    this.copy(operands = newChildren)
+}
+
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
   examples = """
@@ -479,8 +548,12 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    val reorderResult =
-      orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    val operands = orderCommutative({ case Add(l, r, _) => Seq(l, r) })
+    val reorderResult = if (operands.length < SQLConf.get.getConf(MULTI_ADD_OPT_THRESHOLD)) {
+      operands.reduce(Add(_, _, evalMode))
+    } else {
+      MultiAdd(operands, evalMode)
+    }
     if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
       reorderResult
     } else {

@@ -240,6 +240,15 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val MULTI_ADD_OPT_THRESHOLD =
+    buildConf("spark.sql.analyzer.canonicalization.multiAddMemoryOptThreshold")
+      .internal()
+      .doc("The minimum number of consecutive Add expressions to invoke the MultiAdd " +
+        "memory optimization during canonicalization.")
+      .version("3.3.0")
+      .intConf
+      .createWithDefault(10)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
