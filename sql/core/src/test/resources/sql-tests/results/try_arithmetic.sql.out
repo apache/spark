@@ -166,14 +166,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"INTERVAL '2' YEAR\"",
-    "inputType" : "\"INTERVAL YEAR\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"INTERVAL '2' YEAR + INTERVAL '02' SECOND\""
+    "left" : "\"INTERVAL YEAR\"",
+    "right" : "\"INTERVAL SECOND\"",
+    "sqlExpr" : "\"(INTERVAL '2' YEAR + INTERVAL '02' SECOND)\""
   },
   "queryContext" : [ {
     "objectType" : "",

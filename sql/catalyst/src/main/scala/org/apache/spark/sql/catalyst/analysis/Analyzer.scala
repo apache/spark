@@ -395,7 +395,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (_: YearMonthIntervalType, TimestampType | TimestampNTZType) =>
             TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) |
-               (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
+               (_: AnsiIntervalType, _: AnsiIntervalType) => a
           case (_: NullType, _: AnsiIntervalType) =>
             a.copy(left = Cast(a.left, a.right.dataType))
           case (_: AnsiIntervalType, _: NullType) =>
@@ -403,6 +403,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (DateType, CalendarIntervalType) =>
             DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
           case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
+          case (_, _: YearMonthIntervalType) => Cast(TimestampAddYMInterval(l, r), l.dataType)
           case (CalendarIntervalType, DateType) =>
             DateAddInterval(r, l, ansiEnabled = mode == EvalMode.ANSI)
           case (CalendarIntervalType | _: DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
@@ -420,7 +421,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
           case (CalendarIntervalType, CalendarIntervalType) |
-               (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
+               (_: AnsiIntervalType, _: AnsiIntervalType) => s
           case (_: NullType, _: AnsiIntervalType) =>
             s.copy(left = Cast(s.left, s.right.dataType))
           case (_: AnsiIntervalType, _: NullType) =>
@@ -430,6 +431,9 @@ class Analyzer(override val catalogManager: CatalogManager)
               UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
+          case (_, _: YearMonthIntervalType) => Cast(
+            DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI))),
+            l.dataType)
           case _ if AnyTimestampType.unapply(l) || AnyTimestampType.unapply(r) =>
             SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)

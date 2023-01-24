@@ -1934,14 +1934,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
-    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
+    "left" : "\"INTERVAL YEAR TO MONTH\"",
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1960,14 +1958,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
-    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
+    "left" : "\"INTERVAL DAY\"",
+    "right" : "\"INTERVAL YEAR TO MONTH\"",
+    "sqlExpr" : "\"(INTERVAL '3' DAY + INTERVAL '2-2' YEAR TO MONTH)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1986,14 +1982,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
-    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + (- INTERVAL '3' DAY)\""
+    "left" : "\"INTERVAL YEAR TO MONTH\"",
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(INTERVAL '2-2' YEAR TO MONTH - INTERVAL '3' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2062,12 +2056,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"INT\"",
-    "right" : "\"INTERVAL MONTH\"",
-    "sqlExpr" : "\"(1 + INTERVAL '2' MONTH)\""
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"1 + INTERVAL '2' MONTH\""
   },
   "queryContext" : [ {
     "objectType" : "",

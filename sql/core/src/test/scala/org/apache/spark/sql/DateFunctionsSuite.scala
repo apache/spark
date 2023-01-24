@@ -994,4 +994,19 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkTrunc("SECOND", "1961-04-12 00:01:02")
     checkTrunc("MINUTE", "1961-04-12 00:01:00")
   }
+
+  test("SPARK-41500: support operations with YearMonthIntervalType") {
+    checkAnswer(
+      spark.sql("select '2022-02-01' - interval 1 year"),
+      Seq(Row("2021-02-01 00:00:00")))
+    checkAnswer(
+      spark.sql("select '2022-02-01' + interval 11 year"),
+      Seq(Row("2033-02-01 00:00:00")))
+    checkAnswer(
+      spark.sql("select '2022-02-01' - interval 5 month"),
+      Seq(Row("2021-09-01 00:00:00")))
+    checkAnswer(
+      spark.sql("select '2022-02-01' + interval 10 month"),
+      Seq(Row("2022-12-01 00:00:00")))
+  }
 }

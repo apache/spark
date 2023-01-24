@@ -1189,6 +1189,8 @@ object TypeCoercion extends TypeCoercionBase {
         s.copy(left = newLeft, right = newRight)
 
       case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimestampAddYMInterval(StringType(), _, _) =>
+        t.copy(timestamp = Cast(t.timestamp, TimestampType))
     }
   }
 
