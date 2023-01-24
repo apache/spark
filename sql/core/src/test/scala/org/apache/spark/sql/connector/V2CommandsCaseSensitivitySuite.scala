@@ -160,8 +160,7 @@ class V2CommandsCaseSensitivitySuite
 
   test("AlterTable: add column resolution - positional") {
     Seq("ID", "iD").foreach { ref =>
-      alterTableTest(
-        AddColumns(
+      val alter = AddColumns(
           table,
           Seq(QualifiedColType(
             None,
@@ -170,9 +169,16 @@ class V2CommandsCaseSensitivitySuite
             true,
             None,
             Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
-            None))),
-        Seq("reference column", ref)
-      )
+            None)))
+      Seq(true, false).foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          assertAnalysisErrorClass(
+            inputPlan = alter,
+            expectedErrorClass = "FIELD_NOT_FOUND",
+            expectedMessageParameters = Map("fieldName" -> "`f`", "fields" -> "id, data, point")
+          )
+        }
+      }
     }
   }
 
@@ -208,8 +214,7 @@ class V2CommandsCaseSensitivitySuite
 
   test("AlterTable: add column resolution - nested positional") {
     Seq("X", "Y").foreach { ref =>
-      alterTableTest(
-        AddColumns(
+      val alter = AddColumns(
           table,
           Seq(QualifiedColType(
             Some(UnresolvedFieldName(Seq("point"))),
@@ -218,9 +223,16 @@ class V2CommandsCaseSensitivitySuite
             true,
             None,
             Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
-            None))),
-        Seq("reference column", ref)
-      )
+            None)))
+      Seq(true, false).foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          assertAnalysisErrorClass(
+            inputPlan = alter,
+            expectedErrorClass = "FIELD_NOT_FOUND",
+            expectedMessageParameters = Map("fieldName" -> "`z`", "fields" -> "x, y")
+          )
+        }
+      }
     }
   }
 
