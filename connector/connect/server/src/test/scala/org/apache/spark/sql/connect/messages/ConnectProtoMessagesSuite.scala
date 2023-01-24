@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.messages
 
 import com.google.protobuf.ByteString
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 
