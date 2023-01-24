@@ -576,16 +576,16 @@ class DatasetSuite extends QueryTest
   test("groupBy function, flatMapSorted") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
-    val grouped = ds.groupBy($"id").as[String, (String, Int, Int)]
+    val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
     val aggregated = grouped.flatMapSortedGroups($"seq", expr("length(key)"), $"value") {
       (g, iter) => Iterator(g, iter.mkString(", "))
     }
 
     checkDatasetUnorderly(
       aggregated,
-      "a", "[a,1,10], [a,2,20]",
-      "b", "[b,1,2], [b,2,1]",
-      "c", "[c,1,1]"
+      "a", "(a,1,10), (a,2,20)",
+      "b", "(b,1,2), (b,2,1)",
+      "c", "(c,1,1)"
     )
 
     // Star is not allowed as group sort column
@@ -648,16 +648,16 @@ class DatasetSuite extends QueryTest
   test("groupBy function, flatMapSorted desc") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
-    val grouped = ds.groupBy($"id").as[String, (String, Int, Int)]
+    val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
     val aggregated = grouped.flatMapSortedGroups($"seq".desc, expr("length(key)"), $"value") {
       (g, iter) => Iterator(g, iter.mkString(", "))
     }
 
     checkDatasetUnorderly(
       aggregated,
-      "a", "[a,2,20], [a,1,10]",
-      "b", "[b,2,1], [b,1,2]",
-      "c", "[c,1,1]"
+      "a", "(a,2,20), (a,1,10)",
+      "b", "(b,2,1), (b,1,2)",
+      "c", "(c,1,1)"
     )
   }
 

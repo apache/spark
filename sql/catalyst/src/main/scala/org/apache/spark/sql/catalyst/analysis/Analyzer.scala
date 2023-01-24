@@ -1597,6 +1597,14 @@ class Analyzer(override val catalogManager: CatalogManager)
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
+      // Left and right sort expression have to be resolved against the respective child plan
+      case cg: CoGroup if cg.leftOrder.exists(!_.resolved) || cg.rightOrder.exists(!_.resolved) =>
+        val resolvedLeftOrder = cg.leftOrder
+          .map(resolveExpressionByPlanOutput(_, cg.left).asInstanceOf[SortOrder])
+        val resolvedRightOrder = cg.rightOrder
+          .map(resolveExpressionByPlanOutput(_, cg.right).asInstanceOf[SortOrder])
+        cg.copy(leftOrder = resolvedLeftOrder, rightOrder = resolvedRightOrder)
+
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
