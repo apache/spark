@@ -972,11 +972,13 @@ class SubquerySuite extends QueryTest
       }
       withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.message.contains("Accessing outer query column is not allowed"))
+        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
       withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.message.contains("Accessing outer query column is not allowed"))
+        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
 
       {

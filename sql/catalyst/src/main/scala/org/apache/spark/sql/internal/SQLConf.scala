@@ -3170,7 +3170,7 @@ object SQLConf {
   val DECORRELATE_SET_OPS_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateSetOps.enabled")
       .internal()
-      .doc("Decorrelate subqueries with correlation under UNIONs.")
+      .doc("Decorrelate subqueries with correlation under set operators.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
