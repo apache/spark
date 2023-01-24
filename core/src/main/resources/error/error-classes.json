@@ -602,14 +602,14 @@
           "The definition of `ARRAY` type is incomplete. You must provide an element type. For example: `ARRAY\\<INT\\>`."
         ]
       },
-      "STRUCT" : {
-        "message" : [
-          "The definition of `STRUCT` type is incomplete. You must provide a field type. For example: `STRUCT\\<Field1:INT\\>`."
-        ]
-      },
       "MAP" : {
         "message" : [
           "The definition of `MAP` type is incomplete. You must provide a key type and a value type. For example: `MAP\\<TIMESTAMP, INT\\>`."
+        ]
+      },
+      "STRUCT" : {
+        "message" : [
+          "The definition of `STRUCT` type is incomplete. You must provide a field type. For example: `STRUCT\\<Field1:INT\\>`."
         ]
       }
     },
