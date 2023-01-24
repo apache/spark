@@ -645,6 +645,17 @@ case class DescribeTableCommand(
       } else if (isExtended) {
         describeFormattedTableInfo(metadata, result)
       }
+
+      // If any columns have default values, append them to the result.
+      if (metadata.schema.fields.exists(_.metadata.contains(
+        ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+        append(result, "", "", "")
+        append(result, "# Column Default Information", "", "")
+        metadata.schema.foreach { column =>
+          column.getCurrentDefaultValue().map(
+            append(result, column.name, column.dataType.simpleString, _))
+        }
+      }
     }
 
     result.toSeq
@@ -807,6 +818,10 @@ case class DescribeColumnCommand(
         hist <- c.histogram
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
+      val defaultKey = ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+      if (field.metadata.contains(defaultKey)) {
+        buffer += Row("default", field.metadata.getString(defaultKey))
+      }
     }
     buffer.toSeq
   }
