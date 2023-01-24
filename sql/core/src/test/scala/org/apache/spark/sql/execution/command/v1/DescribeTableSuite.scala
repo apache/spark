@@ -251,7 +251,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
     withTable("t") {
       spark.sql(s"CREATE TABLE t (id bigint default 42) $defaultUsing")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+      assert(descriptionDf.schema.map { field =>
+        (field.name, field.dataType)
+      } === Seq(
         ("col_name", StringType),
         ("data_type", StringType),
         ("comment", StringType)))
