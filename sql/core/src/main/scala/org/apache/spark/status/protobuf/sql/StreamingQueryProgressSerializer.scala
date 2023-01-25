@@ -54,12 +54,7 @@ private[protobuf] object StreamingQueryProgressSerializer {
       s => builder.addSources(SourceProgressSerializer.serialize(s))
     )
     builder.setSink(SinkProgressSerializer.serialize(process.sink))
-    def serializeMetrics(metrics: JMap[String, Row]): Unit = {
-      metrics.forEach {
-        case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
-      }
-    }
-    setJMapField(process.observedMetrics, serializeMetrics)
+    setJMapField(process.observedMetrics, putAllObservedMetrics(builder, _))
     builder.build()
   }
 
@@ -85,6 +80,14 @@ private[protobuf] object StreamingQueryProgressSerializer {
       sink = SinkProgressSerializer.deserialize(process.getSink),
       observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap)
     )
+  }
+
+  private def putAllObservedMetrics(
+      builder: StoreTypes.StreamingQueryProgress.Builder,
+      observedMetrics: JMap[String, Row]): Unit = {
+    observedMetrics.forEach {
+      case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
+    }
   }
 
   private def convertToObservedMetrics(input: JMap[String, String]): JHashMap[String, Row] = {
