@@ -260,21 +260,21 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .addArguments(unresolvedAttribute)
         .build())
 
-    val simpleJoin = proto.Relation.newBuilder
-      .setJoin(
-        proto.Join.newBuilder
-          .setLeft(readRel)
-          .setRight(readRel)
-          .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
-          .setJoinCondition(joinCondition)
-          .build())
-      .build()
+    val e0 = intercept[AnalysisException] {
+      val simpleJoin = proto.Relation.newBuilder
+        .setJoin(
+          proto.Join.newBuilder
+            .setLeft(readRel)
+            .setRight(readRel)
+            .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
+            .setJoinCondition(joinCondition)
+            .build())
+        .build()
+      transform(simpleJoin)
+    }
+    assert(e0.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND"))
 
-    val res = transform(simpleJoin)
-    assert(res.nodeName == "Join")
-    assert(res != null)
-
-    val e = intercept[InvalidPlanInput] {
+    val e1 = intercept[InvalidPlanInput] {
       val simpleJoin = proto.Relation.newBuilder
         .setJoin(
           proto.Join.newBuilder
@@ -286,7 +286,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       transform(simpleJoin)
     }
     assert(
-      e.getMessage.contains(
+      e1.getMessage.contains(
         "Using columns or join conditions cannot be set at the same time in Join"))
   }
 
