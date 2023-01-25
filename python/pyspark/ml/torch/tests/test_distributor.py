@@ -29,6 +29,12 @@ from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
+have_torch = True
+try:
+    import torch
+except ImportError as e:
+    have_torch = False
+
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
@@ -116,6 +122,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
     return train_fn
 
 
+@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
 class TorchDistributorBaselineUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         conf = SparkConf()
@@ -271,6 +278,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         self.delete_env_vars(input_env_vars)
 
 
+@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
 class TorchDistributorLocalUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
@@ -377,6 +385,7 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
         self.assertEqual(output, "success")
 
 
+@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
@@ -456,6 +465,7 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
         self.assertEqual(output, "success")
 
 
+@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
 class TorchWrapperUnitTests(unittest.TestCase):
     def test_clean_and_terminate(self) -> None:
         def kill_task(task: "subprocess.Popen") -> None:
