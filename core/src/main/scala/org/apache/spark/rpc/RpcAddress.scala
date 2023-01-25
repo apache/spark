@@ -31,8 +31,6 @@ private[spark] case class RpcAddress(host: String, port: Int) {
   def toSparkURL: String = "spark://" + hostPort
 
   override def toString: String = hostPort
-
-
 }
 
 
