@@ -99,7 +99,7 @@ DROP VIEW temp_Data_Source_View;
 DROP VIEW v;
 
 -- Show column default values
-CREATE TABLE d (a STRING, b INT DEFAULT 42) USING parquet COMMENT 'table_comment';
+CREATE TABLE d (a STRING DEFAULT 'show-create-table.sql', b INT DEFAULT 42) USING parquet COMMENT 'table_comment';
 
 DESC d;
 
@@ -108,3 +108,14 @@ DESC EXTENDED d;
 DESC TABLE EXTENDED d;
 
 DESC FORMATTED d;
+
+-- Show column default values with newlines in the string
+CREATE TABLE e (a STRING DEFAULT CONCAT('a\n b\n ', 'c\n d'), b INT DEFAULT 42) USING parquet COMMENT 'table_comment';
+
+DESC e;
+
+DESC EXTENDED e;
+
+DESC TABLE EXTENDED e;
+
+DESC FORMATTED e;

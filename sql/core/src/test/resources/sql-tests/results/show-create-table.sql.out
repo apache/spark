@@ -182,7 +182,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE tbl (a INT, b STRING DEFAULT 'abc', c INT DEFAULT 42) USING parquet
+CREATE TABLE tbl (a INT DEFAULT 42, b STRING DEFAULT 'abc, def', c INT DEFAULT 42) USING parquet
 COMMENT 'This is a comment'
 -- !query schema
 struct<>
@@ -196,8 +196,8 @@ SHOW CREATE TABLE tbl
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE default.tbl (
-  a INT,
-  b STRING DEFAULT 'abc',
+  a INT DEFAULT 42,
+  b STRING DEFAULT 'abc, def',
   c INT DEFAULT 42)
 USING parquet
 COMMENT 'This is a comment'

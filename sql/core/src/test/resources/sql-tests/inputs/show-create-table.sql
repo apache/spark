@@ -46,7 +46,7 @@ DROP TABLE tbl;
 
 
 -- default column values
-CREATE TABLE tbl (a INT, b STRING DEFAULT 'abc', c INT DEFAULT 42) USING parquet
+CREATE TABLE tbl (a INT DEFAULT 42, b STRING DEFAULT 'abc, def', c INT DEFAULT 42) USING parquet
 COMMENT 'This is a comment';
 
 SHOW CREATE TABLE tbl;

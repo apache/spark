@@ -169,9 +169,9 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |CREATE TABLE $t (
            |  a bigint NOT NULL,
            |  b bigint DEFAULT 42,
-           |  c string DEFAULT 'abc' COMMENT 'comment'
+           |  c string DEFAULT 'abc, "def"' COMMENT 'comment'
            |)
-           |using parquet
+           |USING parquet
            |COMMENT 'This is a comment'
         """.stripMargin)
       val showDDL = getShowCreateDDL(t)
@@ -179,7 +179,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
         s"CREATE TABLE $fullName (",
         "a BIGINT,",
         "b BIGINT DEFAULT 42,",
-        "c STRING DEFAULT 'abc' COMMENT 'comment')",
+        "c STRING DEFAULT 'abc, \"def\"' COMMENT 'comment')",
         "USING parquet",
         "COMMENT 'This is a comment'"
       ))
