@@ -19,7 +19,7 @@ import tempfile
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType
+from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -2282,15 +2282,52 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             ).toPandas(),
         )
 
+    def test_udf(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT a, b, c FROM VALUES
+            (1, 1.0, 'x'), (2, 2.0, 'y'), (3, 3.0, 'z')
+            AS tab(a, b, c)
+            """
+        # +---+---+---+
+        # |  a|  b|  c|
+        # +---+---+---+
+        # |  1|1.0|  x|
+        # |  2|2.0|  y|
+        # |  3|3.0|  z|
+        # +---+---+---+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # as a normal function
+        self.assert_eq(
+            cdf.withColumn("A", CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
+            sdf.withColumn("A", SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
+        )
+
+        # as a decorator
+        @CF.udf(StringType())
+        def cfun(x):
+            return x + "a"
+
+        @SF.udf(StringType())
+        def sfun(x):
+            return x + "a"
+
+        self.assert_eq(
+            cdf.withColumn("A", cfun(cdf.c)).toPandas(),
+            sdf.withColumn("A", sfun(sdf.c)).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41928: Disable unsupported functions.
 
         from pyspark.sql.connect import functions as CF
 
-        for f in (
-            "udf",
-            "pandas_udf",
-        ):
+        for f in ("pandas_udf",):
             with self.assertRaises(NotImplementedError):
                 getattr(CF, f)()
 
