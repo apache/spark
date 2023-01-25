@@ -1235,14 +1235,21 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
+  private def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
+    condition match {
+      case UnresolvedFunction(Seq("and"), Seq(cond1, cond2), _, _, _) =>
+        splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
+      case other => other :: Nil
+    }
+  }
+
   private def transformJoin(rel: proto.Join): LogicalPlan = {
     assert(rel.hasLeft && rel.hasRight, "Both join sides must be present")
     if (rel.hasJoinCondition && rel.getUsingColumnsCount > 0) {
       throw InvalidPlanInput(
         s"Using columns or join conditions cannot be set at the same time in Join")
     }
-    val joinCondition =
-      if (rel.hasJoinCondition) Some(transformExpression(rel.getJoinCondition)) else None
+
     val catalystJointype = transformJoinType(
       if (rel.getJoinType != null) rel.getJoinType else proto.Join.JoinType.JOIN_TYPE_INNER)
     val joinType = if (rel.getUsingColumnsCount > 0) {
@@ -1250,12 +1257,41 @@ class SparkConnectPlanner(val session: SparkSession) {
     } else {
       catalystJointype
     }
-    logical.Join(
-      left = transformRelation(rel.getLeft),
-      right = transformRelation(rel.getRight),
-      joinType = joinType,
-      condition = joinCondition,
-      hint = logical.JoinHint.NONE)
+
+    if (rel.hasJoinCondition) {
+      val leftDF = Dataset.ofRows(session, transformRelation(rel.getLeft))
+      val rightDF = Dataset.ofRows(session, transformRelation(rel.getRight))
+      val joinExprs = splitConjunctivePredicates(transformExpression(rel.getJoinCondition))
+        .map {
+          case func @ UnresolvedFunction(Seq(f), Seq(l, r), _, _, _)
+              if Seq("==", "<=>").contains(f) =>
+            val l2 = l match {
+              case UnresolvedAttribute(Seq(c)) => leftDF.apply(c).expr
+              case other => other
+            }
+            val r2 = r match {
+              case UnresolvedAttribute(Seq(c)) => rightDF.apply(c).expr
+              case other => other
+            }
+            func.copy(arguments = Seq(l2, r2))
+
+          case other => other
+        }
+        .reduce(And)
+
+      leftDF
+        .join(right = rightDF, joinExprs = Column(joinExprs), joinType = joinType.sql)
+        .logicalPlan
+
+    } else {
+
+      logical.Join(
+        left = transformRelation(rel.getLeft),
+        right = transformRelation(rel.getRight),
+        joinType = joinType,
+        condition = None,
+        hint = logical.JoinHint.NONE)
+    }
   }
 
   private def transformJoinType(t: proto.Join.JoinType): JoinType = {

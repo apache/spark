@@ -315,9 +315,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
