@@ -454,7 +454,7 @@ class SparkSession:
         return self._client.register_udf(function, return_type)
 
     @staticmethod
-    def _start_connect_server(master: str) -> None:
+    def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
         """
         Starts the Spark Connect server given the master.
 
@@ -493,6 +493,9 @@ class SparkSession:
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
             conf = SparkConf()
+            for k, v in opts.items():
+                conf.set(k, v)
+
             # Do not need to worry about the existing configurations because
             # Py4J gateway is not created yet, and `conf` instance is empty here.
             # The configurations belows are manually manipulated later to respect

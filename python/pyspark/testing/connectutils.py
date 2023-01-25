@@ -21,7 +21,7 @@ import os
 import functools
 import unittest
 
-from pyspark import Row
+from pyspark import Row, SparkConf
 from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
     have_pandas,
@@ -169,8 +169,20 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
     """
 
     @classmethod
+    def conf(cls):
+        """
+        Override this in subclasses to supply a more specific conf
+        """
+        return SparkConf(loadDefaults=False)
+
+    @classmethod
     def setUpClass(cls):
-        cls.spark = PySparkSession.builder.appName(cls.__name__).remote("local[4]").getOrCreate()
+        cls.spark = (
+            PySparkSession.builder.config(conf=cls.conf())
+            .appName(cls.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
