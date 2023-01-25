@@ -18,14 +18,14 @@
 from __future__ import absolute_import, division, print_function
 
 import contextlib
-from six import StringIO  # type: ignore
+from six import StringIO
 import sys
 import time
 from typing import Any, Callable
 import unittest
 
 import pyspark.ml.torch.log_communication
-from pyspark.ml.torch.log_communication import (  # type: ignore
+from pyspark.ml.torch.log_communication import (
     LogStreamingServer,
     LogStreamingClient,
     LogStreamingClientBase,
@@ -47,15 +47,11 @@ def patch_stderr() -> StringIO:
 
 class LogStreamingServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.default_truncate_msg_len = (
-            pyspark.ml.torch.log_communication._TRUNCATE_MSG_LEN  # type: ignore
-        )
-        pyspark.ml.torch.log_communication._TRUNCATE_MSG_LEN = 10  # type: ignore
+        self.default_truncate_msg_len = pyspark.ml.torch.log_communication._TRUNCATE_MSG_LEN
+        pyspark.ml.torch.log_communication._TRUNCATE_MSG_LEN = 10
 
     def tearDown(self) -> None:
-        pyspark.ml.torch.log_communication._TRUNCATE_MSG_LEN = (  # type: ignore
-            self.default_truncate_msg_len
-        )
+        pyspark.ml.torch.log_communication._TRUNCATE_MSG_LEN = self.default_truncate_msg_len
 
     def basic_test(self) -> None:
         server = LogStreamingServer()
@@ -165,10 +161,10 @@ class LogStreamingServiceTestCase(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.torch.tests.test_log_communication import *  # noqa: F401,F403 type: ignore
+    from pyspark.ml.torch.tests.test_log_communication import *  # noqa: F401,F403
 
     try:
-        import xmlrunner  # type: ignore
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
