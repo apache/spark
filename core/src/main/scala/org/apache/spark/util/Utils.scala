@@ -1118,7 +1118,7 @@ private[spark] object Utils extends Logging {
     // This means some invalid addresses are treated as v6 addresses, but since they are
     // not valid hostnames it doesn't matter.
     // See https://www.rfc-editor.org/rfc/rfc1123#page-13 for context around valid hostnames.
-    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]+)\]{0,1}$""".r
+    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]*)\]{0,1}$""".r
     host match {
       case addressRe(unbracketed) =>
         addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))

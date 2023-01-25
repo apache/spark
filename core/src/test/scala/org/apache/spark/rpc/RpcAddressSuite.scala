@@ -75,4 +75,9 @@ class RpcAddressSuite extends SparkFunSuite {
     val address = RpcAddress("::0:1", 1234)
     assert(address.toSparkURL == "spark://[::1]:1234")
   }
+
+  test("SPARK-42173: Consistent Sparse Mapping trailing 0s") {
+    val address = RpcAddress("2600::", 1234)
+    assert(address.toSparkURL == "spark://[2600::]:1234")
+  }
 }
