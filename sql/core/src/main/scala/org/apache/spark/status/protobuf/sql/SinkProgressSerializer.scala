@@ -17,26 +17,28 @@
 
 package org.apache.spark.status.protobuf.sql
 
-import org.apache.spark.sql.execution.ui.SQLPlanMetric
+import java.util.{HashMap => JHashMap}
+
+import org.apache.spark.sql.streaming.SinkProgress
 import org.apache.spark.status.protobuf.StoreTypes
-import org.apache.spark.status.protobuf.Utils._
-import org.apache.spark.util.Utils.weakIntern
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-object SQLPlanMetricSerializer {
+private[protobuf] object SinkProgressSerializer {
 
-  def serialize(metric: SQLPlanMetric): StoreTypes.SQLPlanMetric = {
-    val builder = StoreTypes.SQLPlanMetric.newBuilder()
-    setStringField(metric.name, builder.setName)
-    builder.setAccumulatorId(metric.accumulatorId)
-    setStringField(metric.metricType, builder.setMetricType)
+  def serialize(sink: SinkProgress): StoreTypes.SinkProgress = {
+    import org.apache.spark.status.protobuf.Utils.setJMapField
+    val builder = StoreTypes.SinkProgress.newBuilder()
+    setStringField(sink.description, builder.setDescription)
+    builder.setNumOutputRows(sink.numOutputRows)
+    setJMapField(sink.metrics, builder.putAllMetrics)
     builder.build()
   }
 
-  def deserialize(metrics: StoreTypes.SQLPlanMetric): SQLPlanMetric = {
-    SQLPlanMetric(
-      name = getStringField(metrics.hasName, () => weakIntern(metrics.getName)),
-      accumulatorId = metrics.getAccumulatorId,
-      metricType = getStringField(metrics.hasMetricType, () => weakIntern(metrics.getMetricType))
+  def deserialize(sink: StoreTypes.SinkProgress): SinkProgress = {
+    new SinkProgress(
+      description = getStringField(sink.hasDescription, () => sink.getDescription),
+      numOutputRows = sink.getNumOutputRows,
+      metrics = new JHashMap(sink.getMetricsMap)
     )
   }
 }
