@@ -26,7 +26,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.status.protobuf.StoreTypes
-import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
+import org.apache.spark.status.protobuf.Utils.{getStringField, setJMapField, setStringField}
 
 private[protobuf] object StreamingQueryProgressSerializer {
 
@@ -35,7 +35,6 @@ private[protobuf] object StreamingQueryProgressSerializer {
     .build()
 
   def serialize(process: StreamingQueryProgress): StoreTypes.StreamingQueryProgress = {
-    import org.apache.spark.status.protobuf.Utils.setJMapField
     val builder = StoreTypes.StreamingQueryProgress.newBuilder()
     if (process.id != null) {
       builder.setId(process.id.toString)
@@ -55,11 +54,12 @@ private[protobuf] object StreamingQueryProgressSerializer {
       s => builder.addSources(SourceProgressSerializer.serialize(s))
     )
     builder.setSink(SinkProgressSerializer.serialize(process.sink))
-    if (process.observedMetrics != null && !process.observedMetrics.isEmpty) {
-      process.observedMetrics.forEach {
+    def serializeMetrics(metrics: JMap[String, Row]): Unit = {
+      metrics.forEach {
         case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
       }
     }
+    setJMapField(process.observedMetrics, serializeMetrics)
     builder.build()
   }
 
