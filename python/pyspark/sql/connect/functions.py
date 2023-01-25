@@ -17,6 +17,7 @@
 
 import inspect
 import warnings
+import functools
 from typing import (
     Any,
     Dict,
@@ -49,11 +50,16 @@ from pyspark.sql.connect.expressions import (
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
 )
+from pyspark.sql.connect.udf import _create_udf
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType
+from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        DataTypeOrString,
+        UserDefinedFunctionLike,
+    )
     from pyspark.sql.connect.dataframe import DataFrame
 
 
@@ -2401,8 +2407,24 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 
 
-def udf(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError("udf() is not implemented.")
+def udf(
+    f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
+    returnType: "DataTypeOrString" = StringType(),
+) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
+    from pyspark.rdd import PythonEvalType
+
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(
+            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+        )
+    else:
+        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+
+
+udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
 def pandas_udf(*args: Any, **kwargs: Any) -> None:
