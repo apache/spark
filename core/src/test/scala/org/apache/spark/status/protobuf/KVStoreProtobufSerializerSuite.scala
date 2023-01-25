@@ -30,6 +30,7 @@ import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, 
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
+import org.apache.spark.util.Utils.tryWithResource
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -42,11 +43,13 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     val containsStringRegex = "\\s*string .*"
     val invalidDefinition = new mutable.ArrayBuffer[(String, Int)]()
     var lineNumber = 1
-    Source.fromFile(protoFile.toFile.getCanonicalPath).getLines().foreach { line =>
-      if (line.matches(containsStringRegex)) {
-        invalidDefinition.append((line, lineNumber))
+    tryWithResource(Source.fromFile(protoFile.toFile.getCanonicalPath)) { file =>
+      file.getLines().foreach { line =>
+        if (line.matches(containsStringRegex)) {
+          invalidDefinition.append((line, lineNumber))
+        }
+        lineNumber += 1
       }
-      lineNumber += 1
     }
     val errorMessage = new StringBuilder()
     errorMessage.append(
