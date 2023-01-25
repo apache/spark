@@ -28,6 +28,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.types import DataType, StringType
+from pyspark.sql.utils import is_remote
 
 
 if TYPE_CHECKING:
@@ -90,7 +91,25 @@ class UserDefinedFunction:
             )
 
         self.func = func
-        self._returnType = returnType
+
+        if isinstance(returnType, str):
+            from pyspark.sql import SparkSession as PySparkSession
+
+            # Currently we don't have a way to have a current Spark session in Spark Connect, and
+            # pyspark.sql.SparkSession has a centralized logic to control the session creation.
+            # So uses pyspark.sql.SparkSession for now. Should replace this to using the current
+            # Spark session for Spark Connect in the future.
+            assert is_remote()
+
+            self._returnType = (  # a workaround to parse the DataType from DDL strings
+                PySparkSession.builder.remote()
+                .getOrCreate()
+                .createDataFrame(data=[], schema=returnType)
+                .schema.fields[0]
+                .dataType
+            )
+        else:
+            self._returnType = returnType
         self._name = name or (
             func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
         )
