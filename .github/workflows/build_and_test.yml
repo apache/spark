@@ -30,7 +30,7 @@ on:
         description: Branch to run the build against
         required: false
         type: string
-        default: master
+        default: branch-3.4
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
         required: false
@@ -58,7 +58,7 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: >-
         ${{
-          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
+          (inputs.branch == 'branch-3.4' && steps.infra-image-outputs.outputs.image_url)
           || 'dongjoon/apache-spark-github-action-image:20220207'
         }}
     steps:
@@ -274,7 +274,7 @@ jobs:
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
-      inputs.branch == 'master'
+      inputs.branch == 'branch-3.4'
     runs-on: ubuntu-latest
     permissions:
       packages: write
