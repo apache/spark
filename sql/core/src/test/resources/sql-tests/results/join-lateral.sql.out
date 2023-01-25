@@ -24,6 +24,14 @@ struct<>
 
 
 -- !query
+CREATE VIEW t4(c1, c2) AS VALUES (0, 1), (0, 2), (1, 1), (1, 3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM t1, LATERAL (SELECT c1)
 -- !query schema
 struct<c1:int,c2:int,c1:int>
@@ -841,6 +849,278 @@ NULL	[4]	NULL
 
 
 -- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT sum(t2.c2) over (order by t2.c1)
+  FROM   t2
+  WHERE  t2.c1 >= t1.c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (c1#x >= outer(c1#x))\n+- SubqueryAlias spark_catalog.default.t2\n   +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 108,
+    "fragment" : "SELECT sum(t2.c2) over (order by t2.c1)\n  FROM   t2\n  WHERE  t2.c1 >= t1.c1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1)
+-- !query schema
+struct<c1:int,c2:int,c2:int>
+-- !query output
+0	1	1
+0	1	2
+0	1	2
+0	1	3
+1	2	1
+1	2	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2)
+-- !query schema
+struct<c1:int,c2:int,c2:int>
+-- !query output
+0	1	2
+0	1	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT COUNT(t2.c2)
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION DISTINCT
+  SELECT COUNT(t4.c2)
+  FROM   t4
+  WHERE  t4.c1 > t1.c2)
+-- !query schema
+struct<c1:int,c2:int,count(c2):bigint>
+-- !query output
+0	1	0
+0	1	2
+1	2	0
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1, t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2, t4.c1
+  FROM   t4
+  WHERE  t4.c1 = t1.c1)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	2
+0	1	0	3
+0	1	1	0
+0	1	2	0
+1	2	1	1
+1	2	3	1
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4)
+-- !query schema
+struct<c1:int,c2:int,c2:int>
+-- !query output
+0	1	1
+0	1	1
+0	1	2
+0	1	2
+0	1	3
+0	1	3
+1	2	1
+1	2	1
+1	2	2
+1	2	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4)
+-- !query schema
+struct<c1:int,c2:int,c2:int>
+-- !query output
+0	1	1
+0	1	1
+0	1	2
+0	1	2
+0	1	3
+0	1	3
+1	2	1
+1	2	1
+1	2	2
+1	2	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  GROUP BY t2.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2)
+-- !query schema
+struct<c1:int,c2:int,c2:int>
+-- !query output
+0	1	2
+0	1	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1 - t1.c1
+  FROM   t2
+  GROUP BY t2.c1 - t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(c1 - c1)\",\"(c1 - c1) AS `(c1 - outer(spark_catalog.default.t1.c1))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 90,
+    "fragment" : "GROUP BY t2.c1 - t1.c1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT sum(t2.c2) over (order by t2.c1)
+  FROM   t2
+  WHERE  t2.c1 >= t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (c1#x >= outer(c1#x))\n+- SubqueryAlias spark_catalog.default.t2\n   +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 108,
+    "fragment" : "SELECT sum(t2.c2) over (order by t2.c1)\n  FROM   t2\n  WHERE  t2.c1 >= t1.c1"
+  } ]
+}
+
+
+-- !query
+(SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1))
+UNION ALL
+(SELECT * FROM t1 JOIN t4)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	1
+0	1	0	2
+0	1	0	2
+0	1	0	3
+0	1	1	1
+0	1	1	3
+1	2	0	1
+1	2	0	2
+1	2	1	1
+1	2	1	3
+
+
+-- !query
+(SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1))
+UNION ALL
+(SELECT * FROM t2 JOIN LATERAL
+  (SELECT t1.c2
+  FROM   t1
+  WHERE  t2.c1 <= t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 < t2.c1))
+-- !query schema
+struct<c1:int,c2:int,c2:int>
+-- !query output
+0	1	1
+0	1	2
+0	1	2
+0	1	3
+0	2	1
+0	2	2
+0	3	1
+0	3	2
+1	2	1
+1	2	3
+
+
+-- !query
 SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2))
 -- !query schema
 struct<col:int>
@@ -993,6 +1273,14 @@ struct<>
 
 -- !query
 DROP VIEW t3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW t4
 -- !query schema
 struct<>
 -- !query output

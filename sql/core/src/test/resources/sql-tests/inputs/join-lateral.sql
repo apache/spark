@@ -3,6 +3,7 @@
 CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2);
 CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);
 CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4));
+CREATE VIEW t4(c1, c2) AS VALUES (0, 1), (0, 2), (1, 1), (1, 3);
 
 -- lateral join with single column select
 SELECT * FROM t1, LATERAL (SELECT c1);
@@ -177,6 +178,123 @@ SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE_OUTER(c2));
 SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
 SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
 
+-- Window func - unsupported
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT sum(t2.c2) over (order by t2.c1)
+  FROM   t2
+  WHERE  t2.c1 >= t1.c1);
+
+-- lateral join with union
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- COUNT bug with UNION in subquery
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT COUNT(t2.c2)
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION DISTINCT
+  SELECT COUNT(t4.c2)
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- Both correlated and uncorrelated children
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1, t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2, t4.c1
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4);
+
+-- Correlation under group by
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  GROUP BY t2.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2);
+
+-- Correlation in group by
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1 - t1.c1
+  FROM   t2
+  GROUP BY t2.c1 - t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2);
+
+-- Window func - unsupported
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT sum(t2.c2) over (order by t2.c1)
+  FROM   t2
+  WHERE  t2.c1 >= t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4);
+
+-- lateral join under union
+(SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1))
+UNION ALL
+(SELECT * FROM t1 JOIN t4);
+
+-- union above and below lateral join
+(SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1))
+UNION ALL
+(SELECT * FROM t2 JOIN LATERAL
+  (SELECT t1.c2
+  FROM   t1
+  WHERE  t2.c1 <= t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 < t2.c1));
+
 -- SPARK-41961: lateral join with table-valued functions
 SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2));
 SELECT * FROM t1, LATERAL RANGE(3);
@@ -200,3 +318,4 @@ SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)) l(x) JOIN EXPLOD
 DROP VIEW t1;
 DROP VIEW t2;
 DROP VIEW t3;
+DROP VIEW t4;

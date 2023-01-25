@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
@@ -934,6 +934,76 @@ class SubquerySuite extends QueryTest
           fragment = "select c1 from  t2 where t1.c1 = 2 and t1.c1=t2.c1",
           start = 41,
           stop = 90))
+    }
+  }
+
+  test("SPARK-36124: Correlated subqueries with union") {
+    withTempView("t0", "t1", "t2") {
+      Seq((1, 1), (2, 0)).toDF("t0a", "t0b").createOrReplaceTempView("t0")
+      Seq((1, 1, 3)).toDF("t1a", "t1b", "t1c").createOrReplaceTempView("t1")
+      Seq((1, 1, 5), (2, 2, 7)).toDF("t2a", "t2b", "t2c").createOrReplaceTempView("t2")
+
+      // Union with different outer refs
+      val query =
+        """
+          | SELECT t0a, (SELECT sum(t1c) FROM
+          |   (SELECT t1c
+          |   FROM   t1
+          |   WHERE  t1a = t0a
+          |   UNION ALL
+          |   SELECT t2c
+          |   FROM   t2
+          |   WHERE  t2b = t0b)
+          | )
+          | FROM t0""".stripMargin
+
+      {
+        val df = sql(query)
+        checkAnswer(df,
+          Row(1, 8) :: Row(2, null) :: Nil)
+
+        val optimizedPlan = df.queryExecution.optimizedPlan
+        val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
+        assert(aggregate.groupingExpressions.size == 2)
+        val union = optimizedPlan.collectFirst { case u: Union => u }.get
+        assert(union.output.size == 3)
+        assert(optimizedPlan.resolved)
+      }
+      withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+        val error = intercept[AnalysisException] { sql(query) }
+        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+      }
+      withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
+        val error = intercept[AnalysisException] { sql(query) }
+        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+      }
+
+      {
+        // Union with same outer refs
+        val df = sql(
+            """
+              | SELECT t0a, (SELECT sum(t1c) FROM
+              |   (SELECT t1c
+              |   FROM   t1
+              |   WHERE  t1a = t0a
+              |   UNION ALL
+              |   SELECT t2c
+              |   FROM   t2
+              |   WHERE  t2a = t0a)
+              | )
+              | FROM t0""".stripMargin)
+        checkAnswer(df,
+          Row(1, 8) :: Row(2, 7) :: Nil)
+
+        val optimizedPlan = df.queryExecution.optimizedPlan
+        val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
+        assert(aggregate.groupingExpressions.size == 1)
+        val union = optimizedPlan.collectFirst { case u: Union => u }.get
+        assert(union.output.size == 2)
+        assert(optimizedPlan.resolved)
+      }
     }
   }
 
