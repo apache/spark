@@ -3167,6 +3167,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_SET_OPS_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateSetOps.enabled")
+      .internal()
+      .doc("Decorrelate subqueries with correlation under set operators.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZE_ONE_ROW_RELATION_SUBQUERY =
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery")
       .internal()
