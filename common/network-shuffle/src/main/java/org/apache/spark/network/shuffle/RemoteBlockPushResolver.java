@@ -1363,8 +1363,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     /**
-     * For the block bytes in the deferred buffers that are ignored, capture them
-     * and update pushMergeMetrics's ignoredBlockBytes.
+     * Update ignoredBlockBytes in pushMergeMetrics.
      */
     private void updateIgnoredBytes(Long numBytes) {
       if (numBytes > 0) {
