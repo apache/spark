@@ -990,6 +990,15 @@ abstract class RDD[T: ClassTag](
     zipPartitions(rdd2, rdd3, rdd4, preservesPartitioning = false)(f)
   }
 
+  def zipPartitions[V: ClassTag](rdds: List[RDD[_]], preservesPartitioning: Boolean)(
+    f: (List[Iterator[_]]) => Iterator[V]): RDD[V] = withScope {
+    new ZippedPartitionsRDDN(sc, sc.clean(f), this :: rdds, preservesPartitioning)
+  }
+
+  def zipPartitions[V: ClassTag](rdds: List[RDD[_]])(
+    f: List[Iterator[_]] => Iterator[V]): RDD[V] = withScope {
+    zipPartitions(rdds, preservesPartitioning = false)(f)
+  }
 
   // Actions (launch a job to return a value to the user program)
 

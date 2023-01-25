@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, NaryLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.WriteFilesSpec
@@ -645,3 +645,28 @@ trait BinaryExecNode extends SparkPlan with BinaryLike[SparkPlan] {
     }
   }
 }
+
+trait NaryExecNode extends SparkPlan with NaryLike[SparkPlan] {
+
+  override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(conf.maxToStringFields)
+
+    val outputStrs = childrenNodes.zipWithIndex.map({ case (index, output) =>
+      s"${ExplainUtils.generateFieldString("output " + index, output)}\n"
+    })
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |$outputStrs
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |$outputStrs
+         |""".stripMargin
+    }
+  }
+}
+

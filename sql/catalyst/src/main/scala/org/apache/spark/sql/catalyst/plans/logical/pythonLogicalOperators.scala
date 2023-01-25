@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.trees.NaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
@@ -99,6 +100,38 @@ case class FlatMapCoGroupsInPandas(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInPandas =
     copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe This is
+ * used by DataFrame.groupby().cogroup().apply().
+ */
+case class FlatMapCoGroupsInPandasMulti(
+     groupingLens: List[Int],
+     functionExpr: Expression,
+     output: Seq[Attribute],
+     plans: List[LogicalPlan],
+     passKey: Boolean)
+  extends LogicalPlan with NaryLike[LogicalPlan] {
+
+  override val producedAttributes: AttributeSet = AttributeSet(output)
+  override lazy val references: AttributeSet =
+    AttributeSet(attributes.flatten ++ functionExpr.references) -- producedAttributes
+
+  def attributes: List[Seq[Attribute]] = plans
+    .map(_.output)
+    .zip(groupingLens)
+    .map(a => a._1.take(a._2))
+
+  override def childrenNodes: Seq[LogicalPlan] = plans
+
+  override protected def withNewChildrenInternal(newChildren: List[LogicalPlan]): LogicalPlan =
+    copy(
+      groupingLens = groupingLens,
+      functionExpr = functionExpr,
+      output = output,
+      plans = newChildren,
+      passKey = passKey)
 }
 
 /**

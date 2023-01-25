@@ -106,6 +106,7 @@ if TYPE_CHECKING:
         PandasCogroupedMapUDFType,
         ArrowMapIterUDFType,
         PandasGroupedMapUDFWithStateType,
+        PandasMultiCogroupedMapUDFType,
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
@@ -149,6 +150,7 @@ class PythonEvalType:
     SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
+    SQL_MULTICOGROUPED_MAP_PANDAS_UDF: "PandasMultiCogroupedMapUDFType" = 209
 
 
 def portable_hash(x: Hashable) -> int:

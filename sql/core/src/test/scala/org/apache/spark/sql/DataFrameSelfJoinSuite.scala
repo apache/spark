@@ -402,6 +402,23 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df11.join(df12, df11("x") === df12("y")))
     assertAmbiguousSelfJoin(df12.join(df11, df11("x") === df12("y")))
 
+
+    // Test for FlatMapCoGroupsInPandasMulti
+    val flatMapMultiCoGroupsInPandasUDF = PythonUDF("flagMapMultiCoGroupsInPandasUDF", null,
+      StructType(Seq(StructField("x", LongType), StructField("y", LongType),
+        StructField("z", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
+      true)
+    val dfMulti1 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
+      Seq(df1.groupBy($"key2"), df1.groupBy($"key1")), flatMapMultiCoGroupsInPandasUDF)
+    val dfMulti2 = dfMulti1.filter($"x" > 0)
+    val dfMulti3 = dfMulti1.filter($"x" > 0)
+    assertAmbiguousSelfJoin(dfMulti1.join(dfMulti2, dfMulti1("x") === dfMulti2("y")))
+    assertAmbiguousSelfJoin(dfMulti2.join(dfMulti1, dfMulti1("x") === dfMulti2("y")))
+    assertAmbiguousSelfJoin(dfMulti1.join(dfMulti3, dfMulti1("x") === dfMulti3("z")))
+    assertAmbiguousSelfJoin(dfMulti3.join(dfMulti1, dfMulti1("x") === dfMulti3("z")))
+
     // Test for AttachDistributedSequence
     val df13 = df1.withSequenceColumn("seq")
     val df14 = df13.filter($"value" === "A2")

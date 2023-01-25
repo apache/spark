@@ -2916,6 +2916,31 @@ class DataFrameSuite extends QueryTest
     assert(actual != null)
   }
 
+  test("SPARK-12345: flatMapCoGroupsInPandas should fail with different number of keys") {
+    val df1 = Seq((1, 2, "A1"), (2, 1, "A2")).toDF("key1", "key2", "value")
+    val df2 = df1.filter($"value" === "A2")
+    val df3 = df1.filter($"value" === "A1")
+
+    val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapMultiCoGroupsInPandasUDF", null,
+      StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
+      true)
+
+    // the number of keys must match
+    val exception1 = intercept[IllegalArgumentException] {
+      df1.groupBy($"key1", $"key2").flatMapCoGroupsInPandas(
+        List(df2.groupBy($"key2"), df3.groupBy($"value")), flatMapCoGroupsInPandasUDF)
+    }
+    assert(exception1.getMessage.contains("Cogroup keys must have same size"))
+
+    // but different keys are allowed
+    val actual = df1.groupBy($"key1").flatMapCoGroupsInPandas(
+      List(df2.groupBy($"key2"), df3.groupBy($"value")), flatMapCoGroupsInPandasUDF)
+    // can't evaluate the DataFrame as there is no PythonFunction given
+    assert(actual != null)
+  }
+
   test("emptyDataFrame should be foldable") {
     val emptyDf = spark.emptyDataFrame.withColumn("id", lit(1L))
     val joined = spark.range(10).join(emptyDf, "id")

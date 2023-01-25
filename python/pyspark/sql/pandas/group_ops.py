@@ -341,7 +341,7 @@ class PandasGroupedOpsMixin:
         )
         return DataFrame(jdf, self.session)
 
-    def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
+    def cogroup(self, *other: "GroupedData") -> "PandasCogroupedOps":
         """
         Cogroups this group with another group so that we can run cogrouped operations.
 
@@ -353,7 +353,7 @@ class PandasGroupedOpsMixin:
 
         assert isinstance(self, GroupedData)
 
-        return PandasCogroupedOps(self, other)
+        return PandasCogroupedOps(self, *other)
 
 
 class PandasCogroupedOps:
@@ -368,12 +368,15 @@ class PandasCogroupedOps:
     This API is experimental.
     """
 
-    def __init__(self, gd1: "GroupedData", gd2: "GroupedData"):
+    def __init__(self, gd1: "GroupedData", *gds: "GroupedData"):
         self._gd1 = gd1
-        self._gd2 = gd2
+        self._gds = gds
 
     def applyInPandas(
-        self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
+        self,
+        func: "PandasCogroupedMapFunction",
+        schema: Union[StructType, str],
+        pass_key: bool = False,
     ) -> DataFrame:
         """
         Applies a function to each cogroup using pandas and returns the result
@@ -462,13 +465,27 @@ class PandasCogroupedOps:
         from pyspark.sql.pandas.functions import pandas_udf
 
         # The usage of the pandas_udf is internal so type checking is disabled.
-        udf = pandas_udf(
-            func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
-        )  # type: ignore[call-overload]
+        if len(self._gds) > 1:
+            udf = pandas_udf(
+                func, returnType=schema, functionType=PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF
+            )  # type: ignore[call-overload]
 
-        all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
-        udf_column = udf(*all_cols)
-        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc.expr())
+            all_cols = self._extract_cols(self._gd1)
+            for gd in self._gds:
+                all_cols.extend(self._extract_cols(gd))
+            udf_column_expr = udf(*all_cols)._jc.expr()
+            all_jgds = self._gd1.session.sparkContext._jvm.PythonUtils.toSeq([gd._jgd for gd in self._gds])
+            jdf = self._gd1._jgd.flatMapCoGroupsInPandas(all_jgds, udf_column_expr, pass_key)
+        elif len(self._gds) == 1:
+            udf = pandas_udf(
+                func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
+            )  # type
+            _gd2 = self._gds[0]
+            all_cols = self._extract_cols(self._gd1) + self._extract_cols(_gd2)
+            udf_column = udf(*all_cols)
+            jdf = self._gd1._jgd.flatMapCoGroupsInPandas(_gd2._jgd, udf_column._jc.expr())
+        else:
+            raise ValueError("Incorrect number of dataframes passed!")
         return DataFrame(jdf, self._gd1.session)
 
     @staticmethod
