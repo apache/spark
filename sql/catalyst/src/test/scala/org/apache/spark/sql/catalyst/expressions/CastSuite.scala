@@ -619,6 +619,11 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
   }
 
+  test("SPARK-42176: cast boolean to timestamp") {
+    checkEvaluation(cast(true, TimestampType), 1L)
+    checkEvaluation(cast(false, TimestampType), 0L)
+  }
+
   private def castOverflowErrMsg(targetType: DataType): String = {
     s"""cannot be cast to "${targetType.sql}" due to an overflow."""
   }
