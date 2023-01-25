@@ -314,6 +314,18 @@ SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3));
 SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3) WHERE t1.c2 > 1);
 SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)) l(x) JOIN EXPLODE(ARRAY(c2, c1)) r(y) ON x = y);
 
+-- SPARK-42119: lateral join with table-valued functions inline and inline_outer;
+CREATE OR REPLACE TEMPORARY VIEW array_struct(id, arr) AS VALUES
+    (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
+    (2, ARRAY()),
+    (3, ARRAY(STRUCT(3, 'c')));
+SELECT * FROM t1, LATERAL INLINE(ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b')));
+SELECT c1, t.* FROM t1, LATERAL INLINE(ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))) t(x, y);
+SELECT * FROM array_struct JOIN LATERAL INLINE(arr);
+SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k;
+SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr);
+DROP VIEW array_struct;
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;

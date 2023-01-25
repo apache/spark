@@ -1256,6 +1256,78 @@ struct<c1:int,c2:int,x:int,y:int>
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW array_struct(id, arr) AS VALUES
+    (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
+    (2, ARRAY()),
+    (3, ARRAY(STRUCT(3, 'c')))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1, LATERAL INLINE(ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b')))
+-- !query schema
+struct<c1:int,c2:int,col1:int,col2:string>
+-- !query output
+0	1	1	a
+0	1	2	b
+1	2	1	a
+1	2	2	b
+
+
+-- !query
+SELECT c1, t.* FROM t1, LATERAL INLINE(ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))) t(x, y)
+-- !query schema
+struct<c1:int,x:int,y:string>
+-- !query output
+0	1	a
+0	2	b
+1	1	a
+1	2	b
+
+
+-- !query
+SELECT * FROM array_struct JOIN LATERAL INLINE(arr)
+-- !query schema
+struct<id:int,arr:array<struct<col1:int,col2:string>>,col1:int,col2:string>
+-- !query output
+1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	1	a
+1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	2	b
+3	[{"col1":3,"col2":"c"}]	3	c
+
+
+-- !query
+SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k
+-- !query schema
+struct<id:int,arr:array<struct<col1:int,col2:string>>,k:int,v:string>
+-- !query output
+1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	1	a
+2	[]	NULL	NULL
+3	[{"col1":3,"col2":"c"}]	3	c
+
+
+-- !query
+SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr)
+-- !query schema
+struct<id:int,arr:array<struct<col1:int,col2:string>>,col1:int,col2:string>
+-- !query output
+1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	1	a
+1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	2	b
+2	[]	NULL	NULL
+3	[{"col1":3,"col2":"c"}]	3	c
+
+
+-- !query
+DROP VIEW array_struct
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>
