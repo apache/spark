@@ -1434,7 +1434,7 @@
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
-      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
+      "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
       "Invalid expressions: [<invalidExprSqls>]"
     ]
   },

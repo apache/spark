@@ -727,7 +727,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             other.failAnalysis(
               errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
-                "operator" -> other.nodeName,
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           // This should not happen, resolved Project or Aggregate should restore or resolve
