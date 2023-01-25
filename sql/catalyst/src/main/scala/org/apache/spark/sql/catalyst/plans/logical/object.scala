@@ -689,18 +689,16 @@ object CoGroup {
       attrs.map(attr => duplicateAttributes.getOrElse(attr, attr))
     }
 
-    val (dedupRightGroup, dedupRightAttr, dedupRightOrder, dedupRight) =
+    // rightOrder is resolved against right plan, so deduplication not needed
+    val (dedupRightGroup, dedupRightAttr, dedupRight) =
       if (duplicateAttributes.nonEmpty) {
         (
           dedup(rightGroup).map(_.toAttribute),
           dedup(rightAttr).map(_.toAttribute),
-          rightOrder.map(_.transformDown {
-            case a: Attribute => duplicateAttributes.getOrElse(a, a)
-          }.asInstanceOf[SortOrder]),
           Project(dedup(right.output), right)
         )
       } else {
-        (rightGroup, rightAttr, rightOrder, right)
+        (rightGroup, rightAttr, right)
       }
 
     val cogrouped = CoGroup(
@@ -715,7 +713,7 @@ object CoGroup {
       leftAttr,
       dedupRightAttr,
       leftOrder,
-      dedupRightOrder,
+      rightOrder,
       CatalystSerde.generateObjAttr[OUT],
       left,
       dedupRight)
