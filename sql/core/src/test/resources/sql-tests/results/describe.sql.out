@@ -691,7 +691,7 @@ a                   	string
 b                   	int                 	                    
                     	                    	                    
 # Column Default Values	                    	                    
-a                   	string              	'default-value'
+a                   	string              	'default-value'     
 b                   	int                 	42
 
 
@@ -716,7 +716,7 @@ Comment             	table_comment
 Location [not included in comparison]/{warehouse_dir}/d	                    
                     	                    	                    
 # Column Default Values	                    	                    
-a                   	string              	'default-value'
+a                   	string              	'default-value'     
 b                   	int                 	42
 
 
@@ -741,7 +741,7 @@ Comment             	table_comment
 Location [not included in comparison]/{warehouse_dir}/d	                    
                     	                    	                    
 # Column Default Values	                    	                    
-a                   	string              	'default-value'
+a                   	string              	'default-value'     
 b                   	int                 	42
 
 
@@ -766,7 +766,7 @@ Comment             	table_comment
 Location [not included in comparison]/{warehouse_dir}/d	                    
                     	                    	                    
 # Column Default Values	                    	                    
-a                   	string              	'default-value'
+a                   	string              	'default-value'     
 b                   	int                 	42
 
 
