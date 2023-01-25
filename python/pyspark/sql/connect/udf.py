@@ -28,7 +28,6 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.types import DataType, StringType
-from pyspark.sql.utils import is_remote
 
 
 if TYPE_CHECKING:

@@ -48,7 +48,6 @@ from pyspark.sql.types import (
     StructType,
     StructField,
 )
-from pyspark.sql.utils import is_remote
 
 
 def _configure_logging() -> logging.Logger:
@@ -370,21 +369,6 @@ class SparkConnectClient(object):
     ) -> str:
         """Create a temporary UDF in the session catalog on the other side. We generate a
         temporary name for it."""
-        if isinstance(return_type, str):
-            # Currently we don't have a way to have a current Spark session in Spark Connect, and
-            # pyspark.sql.SparkSession has a centralized logic to control the session creation.
-            # So uses pyspark.sql.SparkSession for now. Should replace this to using the current
-            # Spark session for Spark Connect in the future.
-            from pyspark.sql import SparkSession as PySparkSession
-
-            return_type_schema = (  # a workaround to parse the DataType from DDL strings
-                PySparkSession.builder.getOrCreate()
-                .createDataFrame(data=[], schema=return_type)
-                .schema
-            )
-            assert len(return_type_schema.fields) == 1, "returnType should be singular"
-            return_type = return_type_schema.fields[0].dataType
-
         name = f"fun_{uuid.uuid4().hex}"
         fun = pb2.CreateScalarFunction()
         fun.parts.append(name)
