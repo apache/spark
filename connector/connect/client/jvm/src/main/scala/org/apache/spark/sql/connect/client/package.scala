@@ -14,33 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.connect
 
-package org.apache.spark.status.protobuf
+package object client {
 
-import java.util.{Map => JMap}
-
-object Utils {
-  def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
-    Some(result())
-  } else {
-    None
+  private[sql] def unsupported(): Nothing = {
+    throw new UnsupportedOperationException
   }
 
-  def setStringField(input: String, f: String => Any): Unit = {
-    if (input != null) {
-      f(input)
-    }
-  }
-
-  def getStringField(condition: Boolean, result: () => String): String = if (condition) {
-    result()
-  } else {
-    null
-  }
-
-  def setJMapField[K, V](input: JMap[K, V], putAllFunc: JMap[K, V] => Any): Unit = {
-    if (input != null && !input.isEmpty) {
-      putAllFunc(input)
-    }
+  private[sql] def unsupported(message: String): Nothing = {
+    throw new UnsupportedOperationException(message)
   }
 }

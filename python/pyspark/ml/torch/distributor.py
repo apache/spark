@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import cloudpickle  # type: ignore
 from contextlib import contextmanager
 import collections
 import logging
@@ -31,6 +30,7 @@ import textwrap
 import time
 from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
+from pyspark import cloudpickle
 from pyspark.sql import SparkSession
 from pyspark.ml.torch.log_communication import (  # type: ignore
     get_driver_host,
