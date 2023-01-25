@@ -774,7 +774,7 @@ case class Cast(
         }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => if (b) 1L else 0)
+      buildCast[Boolean](_, b => if (b) 1L else 0L)
     case LongType =>
       buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
