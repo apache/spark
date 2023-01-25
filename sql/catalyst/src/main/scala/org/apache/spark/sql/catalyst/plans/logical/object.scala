@@ -679,15 +679,16 @@ object CoGroup {
     require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
 
     // SPARK-42132: The DeduplicateRelations rule would replace duplicate attributes
-    // in leftGroup and leftAttr as well, but not in rightDeserializer
-    // aliasing those attributes here deduplicates them as well
+    // in the right plan and rewrite rightGroup and rightAttr. But it would also rewrite
+    // leftGroup and leftAttr, which is wrong. Additionally, it does not rewrite rightDeserializer.
+    // Aliasing duplicate attributes in the right plan deduplicates them and stops
+    // DeduplicateRelations to do harm.
     val duplicateAttributes = AttributeMap(
       right.output.filter(left.output.contains).map(a => a -> Alias(a, a.name)())
     )
 
-    def dedup(attrs: Seq[Attribute]): Seq[NamedExpression] = {
+    def dedup(attrs: Seq[Attribute]): Seq[NamedExpression] =
       attrs.map(attr => duplicateAttributes.getOrElse(attr, attr))
-    }
 
     // rightOrder is resolved against right plan, so deduplication not needed
     val (dedupRightGroup, dedupRightAttr, dedupRight) =

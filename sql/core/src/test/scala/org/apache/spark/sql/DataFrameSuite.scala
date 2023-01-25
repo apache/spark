@@ -2943,25 +2943,29 @@ class DataFrameSuite extends QueryTest
     val right_grouped_df = df.groupBy("id").as[Long, Long]
 
     val cogroup_df = left_grouped_df.cogroup(right_grouped_df) {
-      case (key, left, right) => left
+      case (key, left, right) => left.zip(right)
     }
 
     val actual = cogroup_df.sort().collect()
-    assert(actual === Seq(0, 1, 2))
+    assert(actual === Seq((0, 0), (1, 1), (2, 2)))
   }
 
   test("SPARK-42132: group.by: cogroupSorted with same plan on both sides") {
-    val df = spark.range(3)
+    val df = spark.range(3).join(spark.range(2).withColumnRenamed("id", "value"))
 
-    val left_grouped_df = df.groupBy("id").as[Long, Long]
-    val right_grouped_df = df.groupBy("id").as[Long, Long]
+    val left_grouped_df = df.groupBy("id").as[Long, (Long, Long)]
+    val right_grouped_df = df.groupBy("id").as[Long, (Long, Long)]
 
-    val cogroup_df = left_grouped_df.cogroupSorted(right_grouped_df)($"id")($"id") {
-      case (key, left, right) => left
+    val cogroup_df = left_grouped_df.cogroupSorted(right_grouped_df)($"value")($"value".desc) {
+      case (key, left, right) => left.zip(right)
     }
 
     val actual = cogroup_df.sort().collect()
-    assert(actual === Seq(0, 1, 2))
+    assert(actual === Seq(
+      ((0, 0), (0, 1)), ((0, 1), (0, 0)),
+      ((1, 0), (1, 1)), ((1, 1), (1, 0)),
+      ((2, 0), (2, 1)), ((2, 1), (2, 0))
+    ))
   }
 
   test("SPARK-40601: flatMapCoGroupsInPandas should fail with different number of keys") {
