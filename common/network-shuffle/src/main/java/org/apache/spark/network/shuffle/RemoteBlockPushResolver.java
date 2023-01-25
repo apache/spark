@@ -1365,7 +1365,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     /**
      * Update ignoredBlockBytes in pushMergeMetrics.
      */
-    private void updateIgnoredBytes(Long numBytes) {
+    private void updateIgnoredBytes(long numBytes) {
       if (numBytes > 0) {
         mergeManager.pushMergeMetrics.ignoredBlockBytes.mark(numBytes);
       }
@@ -1394,10 +1394,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId);
         boolean isTooLateBlockPush = isTooLate(info, partitionInfo.reduceId);
         if (isStaleBlockPush || isTooLateBlockPush) {
-          long deferredBytes = freeDeferredBufs();
+          updateIgnoredBytes(freeDeferredBufs() + buf.remaining());
           if (isTooLateBlockPush) {
             mergeManager.pushMergeMetrics.lateBlockPushes.mark();
-            updateIgnoredBytes(deferredBytes + buf.remaining());
           } else {
             mergeManager.pushMergeMetrics.staleBlockPushes.mark();
           }
@@ -1426,6 +1425,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             }
             writeBuf(buf);
           } catch (IOException ioe) {
+            // When server failed to write, capture the number of failed bytes to ignoreBlckBytes
+            // of pushMergeMetrics. The number of deferred bytes are already captured in
+            // incrementIOExceptionsAndAbortIfNecessary().
+            mergeManager.pushMergeMetrics.ignoredBlockBytes.mark(buf.remaining());
             incrementIOExceptionsAndAbortIfNecessary();
             // If the above doesn't throw a RuntimeException, then we propagate the IOException
             // back to the client so the block could be retried.
@@ -1484,7 +1487,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.TOO_LATE_BLOCK_PUSH));
         }
         if (isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId)) {
-          freeDeferredBufs();
+          updateIgnoredBytes(freeDeferredBufs());
           mergeManager.pushMergeMetrics.staleBlockPushes.mark();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
@@ -1570,6 +1573,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
       }
       isWriting = false;
+      updateIgnoredBytes(freeDeferredBufs());
     }
 
     @VisibleForTesting
@@ -2142,8 +2146,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
     // staleBlockPushes tracks the number of stale shuffle block push requests
     static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";
-    // ignoredBlockBytes tracks the size of the blocks that are ignored after the shuffle file is
-    // finalized or when a request is for a duplicate block
+    // ignoredBlockBytes tracks the size of the blocks that are ignored. The pushed block data are
+    // considered as ignored for these cases: 1. received after the shuffle file is finalized;
+    // 2. when a request is for a duplicate block; 3. the part that ESS failed to write.
     static final String IGNORED_BLOCK_BYTES_METRIC = "ignoredBlockBytes";
 
     private final Map<String, Metric> allMetrics;

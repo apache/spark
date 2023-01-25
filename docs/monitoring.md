@@ -1433,8 +1433,9 @@ Note: applies to the shuffle service
 - deferredBlocks - the number of the current deferred block parts buffered in memory
 - deferredBlockBytes - the size of the current deferred block parts buffered in memory
 - staleBlockPushes - the number of stale shuffle block push requests
-- ignoredBlockBytes - the size of the pushed block data that are ignored after the shuffle
-  file is finalized or when a request is for a duplicate block
+- ignoredBlockBytes - the size of the pushed block data that are ignored. The pushed block data are
+  considered as ignored for these cases: 1. received after the shuffle file is finalized; 2. when a
+  request is for a duplicate block; 3. the part that ESS failed to write.
 
 # Advanced Instrumentation
 
