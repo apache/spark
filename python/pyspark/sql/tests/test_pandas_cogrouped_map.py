@@ -257,7 +257,6 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         df = left_grouped_df.cogroup(right_grouped_df) \
             .applyInPandas(cogroup, schema="id long, day long, lefts integer, rights integer")
 
-        df.orderBy("id", "day").show(20)
         actual = df.orderBy("id", "day").take(days)
         self.assertEqual(actual, [Row(0, day, vals, vals) for day in range(days)])
 
