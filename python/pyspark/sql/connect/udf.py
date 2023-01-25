@@ -93,21 +93,19 @@ class UserDefinedFunction:
         self.func = func
 
         if isinstance(returnType, str):
-            from pyspark.sql import SparkSession as PySparkSession
-
             # Currently we don't have a way to have a current Spark session in Spark Connect, and
             # pyspark.sql.SparkSession has a centralized logic to control the session creation.
             # So uses pyspark.sql.SparkSession for now. Should replace this to using the current
             # Spark session for Spark Connect in the future.
-            assert is_remote()
+            from pyspark.sql import SparkSession as PySparkSession
 
-            self._returnType = (  # a workaround to parse the DataType from DDL strings
-                PySparkSession.builder.remote()
-                .getOrCreate()
+            return_type_schema = (  # a workaround to parse the DataType from DDL strings
+                PySparkSession.builder.getOrCreate()
                 .createDataFrame(data=[], schema=returnType)
-                .schema.fields[0]
-                .dataType
+                .schema
             )
+            assert len(return_type_schema.fields) == 1, "returnType should be singular"
+            self._returnType = return_type_schema.fields[0].dataType
         else:
             self._returnType = returnType
         self._name = name or (
