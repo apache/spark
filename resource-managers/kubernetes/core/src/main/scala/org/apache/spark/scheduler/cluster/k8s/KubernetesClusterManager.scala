@@ -26,21 +26,35 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubern
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.TASK_MAX_FAILURES
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
 
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
+  private def isLocal(conf: SparkConf): Boolean =
+    conf.get(KUBERNETES_DRIVER_MASTER_URL).startsWith("local")
+
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    new TaskSchedulerImpl(sc)
+    // When running locally, don't try to re-execute tasks on failure.
+    val maxTaskFailures = if (isLocal(sc.conf)) 1 else sc.conf.get(TASK_MAX_FAILURES)
+    new TaskSchedulerImpl(sc, maxTaskFailures, isLocal(sc.conf))
   }
 
   override def createSchedulerBackend(
       sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
+    if (isLocal(sc.conf)) {
+      val schedulerImpl = scheduler.asInstanceOf[TaskSchedulerImpl]
+      val backend = new LocalSchedulerBackend(sc.conf, schedulerImpl,
+        Runtime.getRuntime.availableProcessors())
+      schedulerImpl.initialize(backend)
+      return backend
+    }
     val wasSparkSubmittedInClusterMode = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
     val (authConfPrefix,
       apiServerUri,
