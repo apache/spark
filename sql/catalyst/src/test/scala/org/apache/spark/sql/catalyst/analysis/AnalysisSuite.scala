@@ -1337,8 +1337,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |SELECT *
          |FROM t1
          |WHERE 'true'""".stripMargin),
-      expectedErrorClass = "INVALID_TYPE_FOR_FILTER_EXPR",
-      expectedMessageParameters = Map("filter" -> "'true'", "type" -> "string"),
+      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"true\"", "filter" -> "'true'", "type" -> "string"),
       queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
   }
 }

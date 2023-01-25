@@ -300,6 +300,11 @@
           "The <functionName> does not support ordering on type <dataType>."
         ]
       },
+      "FILTER_NOT_BOOLEAN" : {
+        "message" : [
+          "Filter expression '<filter>' of type <type> is not a boolean."
+        ]
+      },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
         "message" : [
           "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
@@ -932,12 +937,6 @@
       "The value of the typed literal <valueType> is invalid: <value>."
     ],
     "sqlState" : "42604"
-  },
-  "INVALID_TYPE_FOR_FILTER_EXPR" : {
-    "message" : [
-      "Filter expression '<filter>' of type <type> is not a boolean."
-    ],
-    "sqlState" : "428H2"
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [

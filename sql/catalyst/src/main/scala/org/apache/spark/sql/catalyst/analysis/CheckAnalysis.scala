@@ -355,8 +355,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
-              errorClass = "INVALID_TYPE_FOR_FILTER_EXPR",
+              errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
               messageParameters = Map(
+                "sqlExpr" -> f.expressions.map(toSQLExpr).mkString(","),
                 "filter" -> f.condition.sql,
                 "type" -> f.condition.dataType.catalogString))
 
