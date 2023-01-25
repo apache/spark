@@ -26,7 +26,14 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 
 /**
- * This test requires the following artifacts built before running the tests:
+ * This test checks the binary compatibility of the connect client API against the spark SQL API
+ * using MiMa. We did not write this check using a SBT build rule as the rule cannot provide the
+ * same level of freedom as a test. With a test we can:
+ *   1. Specify any two jars to run the compatibility check.
+ *   1. Easily make the test automatically pick up all new methods added while the client is being
+ *      built.
+ *
+ * The test requires the following artifacts built before running:
  * {{{
  *     spark-sql
  *     spark-connect-client-jvm
@@ -34,8 +41,8 @@ import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
  * To build the above artifact, use e.g. `sbt package` or `mvn clean install -DskipTests`.
  *
  * When debugging this test, if any changes to the client API, the client jar need to be built
- * before re-running the test. An example workflow with SBT for this test:
- *   1. Compatibility test reported an unexpected client API change.
+ * before running the test. An example workflow with SBT for this test:
+ *   1. Compatibility test has reported an unexpected client API change.
  *   1. Fix the wrong client API.
  *   1. Build the client jar: `sbt package`
  *   1. Run the test again: `sbt "testOnly
@@ -51,7 +58,14 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   private lazy val sqlJar: File = findJar("sql/core", "spark-sql", "spark-sql")
 
-  test("compatibility mima tests") {
+  /**
+   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
+   * incompatibilities found in the new jar. The incompatibility result is then filtered using
+   * include and exclude rules. Include rules are first applied to find all client classes that
+   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
+   * the client classes.
+   */
+  test("compatibility MiMa tests") {
     val mima = new MiMaLib(Seq(clientJar, sqlJar))
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
