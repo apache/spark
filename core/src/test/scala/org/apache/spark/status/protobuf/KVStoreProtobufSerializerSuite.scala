@@ -19,6 +19,9 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
+import scala.collection.mutable
+import scala.io.Source
+
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
@@ -30,6 +33,32 @@ import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
+
+  test("All the string fields must be optional to avoid NPE") {
+    val protoFile = getWorkspaceFilePath(
+      "core", "src", "main", "protobuf", "org", "apache", "spark", "status", "protobuf",
+      "store_types.proto")
+
+    val containsStringRegex = "\\s*string .*"
+    val invalidDefinition = new mutable.ArrayBuffer[(String, Int)]()
+    var lineNumber = 1
+    Source.fromFile(protoFile.toFile.getCanonicalPath).getLines().foreach { line =>
+      if (line.matches(containsStringRegex)) {
+        invalidDefinition.append((line, lineNumber))
+      }
+      lineNumber += 1
+    }
+    val errorMessage = new StringBuilder()
+    errorMessage.append(
+      """
+        |All the string fields should be defined as `optional string` for handling null string.
+        |Please update the following fields:
+        |""".stripMargin)
+    invalidDefinition.foreach { case (line, num) =>
+      errorMessage.append(s"line #$num: $line\n")
+    }
+    assert(invalidDefinition.isEmpty, errorMessage)
+  }
 
   test("Job data") {
     Seq(
@@ -463,7 +492,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           name = null,
           numPartitions = 8,
           numCachedPartitions = 5,
-          storageLevel = "IN_MEMORY",
+          storageLevel = null,
           memoryUsed = 100,
           diskUsed = 2560,
           dataDistribution = None,
@@ -714,7 +743,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     val peakMemoryMetric =
       Some(new ExecutorMetrics(Array(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 1024L)))
     val resources =
-      Map("resource1" -> new ResourceInformation("re1", Array("add1", "add2")))
+      Map("resource1" -> new ResourceInformation("re1", Array("add1", "add2")),
+        "resource1" -> new ResourceInformation(null, null))
     Seq(("id_1", "localhost:7777"), (null, "")).foreach { case (id, hostPort) =>
       val input = new ExecutorSummaryWrapper(
         info = new ExecutorSummary(
@@ -816,9 +846,13 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       result.info.resources.keys.foreach { k =>
         assert(input.info.resources.contains(k))
         assert(result.info.resources(k).name == input.info.resources(k).name)
-        result.info.resources(k).addresses.zip(input.info.resources(k).addresses).foreach {
-          case (a1, a2) =>
-            assert(a1 == a2)
+        if (input.info.resources(k).addresses != null) {
+          result.info.resources(k).addresses.zip(input.info.resources(k).addresses).foreach {
+            case (a1, a2) =>
+              assert(a1 == a2)
+          }
+        } else {
+          assert(result.info.resources(k).addresses.isEmpty)
         }
       }
 

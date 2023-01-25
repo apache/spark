@@ -264,7 +264,7 @@ message RDDStorageInfo {
   optional string name = 2;
   int32 num_partitions = 3;
   int32 num_cached_partitions = 4;
-  string storage_level = 5;
+  optional string storage_level = 5;
   int64 memory_used = 6;
   int64 disk_used = 7;
   repeated RDDDataDistribution data_distribution = 8;
@@ -360,7 +360,7 @@ message MemoryMetrics {
 }
 
 message ResourceInformation {
-  string name = 1;
+  optional string name = 1;
   repeated string addresses = 2;
 }
 
