@@ -70,4 +70,9 @@ class RpcAddressSuite extends SparkFunSuite {
     val address = RpcAddress("::1", 1234)
     assert(address.toSparkURL == "spark://[::1]:1234")
   }
+
+  test("SPARK-42173: Consistent Sparse Mapping") {
+    val address = RpcAddress("::0:1", 1234)
+    assert(address.toSparkURL == "spark://[::1]:1234")
+  }
 }

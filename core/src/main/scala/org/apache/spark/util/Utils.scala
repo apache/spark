@@ -1110,6 +1110,23 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Normalize IPv6 IPs and no-op on all other hosts.
+   */
+  private[spark] def normalizeIpIfNeeded(host: String): String = {
+    // Is this a v6 address
+    if (host.contains(":")) {
+      // Drop the [] if they are present.
+      val addressRe = """^\[{0,1}(.+?)\]{0,1}$""".r
+      host match {
+        case addressRe(unbracketed) =>
+          addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))
+      }
+    } else {
+      host
+    }
+  }
+
+  /**
    * Checks if the host contains only valid hostname/ip without port
    * NOTE: Incase of IPV6 ip it should be enclosed inside []
    */
