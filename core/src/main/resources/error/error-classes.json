@@ -592,15 +592,10 @@
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
   },
-  "INCOMPATIBLE_TEMP_VIEW_SCHEMA_CHANGE" : {
-    "message" : [
-      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>."
-    ]
-  },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
-      "Please try to re-create the view by running: <viewDDL>"
+      "Please try to re-create the view by running: <suggestion>."
     ]
   },
   "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {

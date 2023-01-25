@@ -1763,15 +1763,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           "colName" -> colName,
           "expectedNum" -> expectedNum.toString,
           "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]"),
-          "viewDDL" -> v))
+          "suggestion" -> v))
     }.getOrElse {
       new AnalysisException(
-        errorClass = "INCOMPATIBLE_TEMP_VIEW_SCHEMA_CHANGE",
+        errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,
           "expectedNum" -> expectedNum.toString,
-          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]")))
+          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]"),
+          "suggestion" -> "CREATE OR REPLACE TEMPORARY VIEW"))
     }
   }
 
