@@ -99,7 +99,7 @@ DROP VIEW temp_Data_Source_View;
 DROP VIEW v;
 
 -- Show column default values
-CREATE TABLE d (a STRING DEFAULT 'show-create-table.sql', b INT DEFAULT 42) USING parquet COMMENT 'table_comment';
+CREATE TABLE d (a STRING DEFAULT 'default-value', b INT DEFAULT 42) USING parquet COMMENT 'table_comment';
 
 DESC d;
 

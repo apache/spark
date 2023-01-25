@@ -269,7 +269,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("Table", "t", ""),
           Row("Last Access", "UNKNOWN", ""),
           Row("", "", ""),
-          Row("# Column Default Information", "", ""),
+          Row("# Column Default Values", "", ""),
           Row("id", "bigint", "42")
         ))
     }
