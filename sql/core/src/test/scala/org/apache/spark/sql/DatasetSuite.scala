@@ -908,7 +908,6 @@ class DatasetSuite extends QueryTest
   }
 
   test("cogroup with groupByKey, mapValues and sorted") {
-    // TODO: test that column that exists only in one side is not projected
     val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
     val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
     val groupedLeft = left.groupByKey(_._1).mapValues(_._2)
