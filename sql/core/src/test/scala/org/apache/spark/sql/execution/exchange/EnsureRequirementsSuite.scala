@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, Literal, PythonUDF, RowFrame, SortOrder, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
