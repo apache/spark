@@ -586,10 +586,10 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         }
         checkError(
           exception = e,
-          errorClass = "_LEGACY_ERROR_TEMP_1176",
+          errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
           parameters = Map(
             "viewName" -> "`spark_catalog`.`default`.`test_view`",
-            "viewDDL" ->
+            "suggestion" ->
               "CREATE OR REPLACE VIEW spark_catalog.default.test_view  AS SELECT * FROM t",
             "actualCols" -> "[]", "colName" -> "col_j",
             "expectedNum" -> "1")
