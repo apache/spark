@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -287,7 +288,7 @@ case class AlterTableAddColumnsCommand(
   private def constantFoldCurrentDefaultsToExistDefaults(
       sparkSession: SparkSession, tableProvider: Option[String]): Seq[StructField] = {
     colsToAdd.map { col: StructField =>
-      if (col.metadata.contains(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      if (col.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
         val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           StructType(Array(col)), tableProvider, "ALTER TABLE ADD COLUMNS", true)
         foldedStructType.fields(0)
@@ -645,6 +646,16 @@ case class DescribeTableCommand(
       } else if (isExtended) {
         describeFormattedTableInfo(metadata, result)
       }
+
+      // If any columns have default values, append them to the result.
+      if (metadata.schema.fields.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+        append(result, "", "", "")
+        append(result, "# Column Default Values", "", "")
+        metadata.schema.foreach { column =>
+          column.getCurrentDefaultValue().map(
+            append(result, column.name, column.dataType.simpleString, _))
+        }
+      }
     }
 
     result.toSeq
@@ -807,6 +818,10 @@ case class DescribeColumnCommand(
         hist <- c.histogram
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
+      val defaultKey = CURRENT_DEFAULT_COLUMN_METADATA_KEY
+      if (field.metadata.contains(defaultKey)) {
+        buffer += Row("default", field.metadata.getString(defaultKey))
+      }
     }
     buffer.toSeq
   }
