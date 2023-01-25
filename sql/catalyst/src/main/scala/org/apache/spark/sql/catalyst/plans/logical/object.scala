@@ -681,15 +681,12 @@ object CoGroup {
     // SPARK-42132: The DeduplicateRelations rule would replace duplicate attributes
     // in leftGroup and leftAttr as well, but not in rightDeserializer
     // aliasing those attributes here deduplicates them as well
-    val duplicateAttributes = right.output.filter(left.output.contains)
-      .map(a => a -> Alias(a, a.name)()).toMap
+    val duplicateAttributes = AttributeMap(
+      right.output.filter(left.output.contains).map(a => a -> Alias(a, a.name)())
+    )
 
     def dedup(attrs: Seq[Attribute]): Seq[NamedExpression] = {
-      if (duplicateAttributes.nonEmpty) {
-        attrs.map(attr => duplicateAttributes.getOrElse(attr, attr))
-      } else {
-        attrs
-      }
+      attrs.map(attr => duplicateAttributes.getOrElse(attr, attr))
     }
 
     val (dedupRightGroup, dedupRightAttr, dedupRightOrder, dedupRight) =
@@ -697,7 +694,9 @@ object CoGroup {
         (
           dedup(rightGroup).map(_.toAttribute),
           dedup(rightAttr).map(_.toAttribute),
-          rightOrder,
+          rightOrder.map(_.transformDown {
+            case a: Attribute => duplicateAttributes.getOrElse(a, a)
+          }.asInstanceOf[SortOrder]),
           Project(dedup(right.output), right)
         )
       } else {
