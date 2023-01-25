@@ -163,15 +163,17 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrap
   private def serializeResourceInformation(info: ResourceInformation):
     StoreTypes.ResourceInformation = {
     val builder = StoreTypes.ResourceInformation.newBuilder()
-    builder.setName(info.name)
-    info.addresses.foreach(builder.addAddresses)
+    setStringField(info.name, builder.setName)
+    if (info.addresses != null) {
+      info.addresses.foreach(builder.addAddresses)
+    }
     builder.build()
   }
 
   private def deserializeResourceInformation(binary: StoreTypes.ResourceInformation):
     ResourceInformation = {
     new ResourceInformation(
-      name = weakIntern(binary.getName),
+      name = getStringField(binary.hasName, () => weakIntern(binary.getName)),
       addresses = binary.getAddressesList.asScala.map(weakIntern).toArray)
   }
 }
