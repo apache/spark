@@ -31,8 +31,8 @@ from unittest.mock import patch
 
 have_torch = True
 try:
-    import torch
-except ImportError as e:
+    import torch  # noqa: F401
+except ImportError:
     have_torch = False
 
 from pyspark import SparkConf, SparkContext
