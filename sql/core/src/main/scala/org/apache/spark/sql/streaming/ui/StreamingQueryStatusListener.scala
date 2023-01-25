@@ -141,7 +141,7 @@ private[sql] case class StreamingQueryUIData(
   }
 }
 
-private[sql] class StreamingQueryProgressWrapper(val progress: StreamingQueryProgress) {
+private[spark] class StreamingQueryProgressWrapper(val progress: StreamingQueryProgress) {
   @JsonIgnore @KVIndex
   private val uniqueId: String = getUniqueId(progress.runId, progress.batchId, progress.timestamp)
 
