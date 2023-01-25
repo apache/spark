@@ -122,7 +122,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
     return train_fn
 
 
-@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorBaselineUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         conf = SparkConf()
@@ -278,7 +278,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         self.delete_env_vars(input_env_vars)
 
 
-@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorLocalUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
@@ -385,7 +385,7 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
         self.assertEqual(output, "success")
 
 
-@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
@@ -465,7 +465,7 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
         self.assertEqual(output, "success")
 
 
-@unittest.skipIf(not have_torch, "torch is required")  # type: ignore
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchWrapperUnitTests(unittest.TestCase):
     def test_clean_and_terminate(self) -> None:
         def kill_task(task: "subprocess.Popen") -> None:
