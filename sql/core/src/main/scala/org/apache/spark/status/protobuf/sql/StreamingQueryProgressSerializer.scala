@@ -85,6 +85,8 @@ private[protobuf] object StreamingQueryProgressSerializer {
   private def putAllObservedMetrics(
       builder: StoreTypes.StreamingQueryProgress.Builder,
       observedMetrics: JMap[String, Row]): Unit = {
+    // Encode Row as Json to handle it as a string type in protobuf and this way
+    // is simpler than defining a message type corresponding to Row in protobuf.
     observedMetrics.forEach {
       case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
     }
