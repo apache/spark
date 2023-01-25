@@ -510,6 +510,10 @@ private[serializer] object KryoSerializer {
   // SQL / ML / MLlib classes once and then re-use that filtered list in newInstance() calls.
   private lazy val loadableSparkClasses: Seq[Class[_]] = {
     Seq(
+      "org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation",
+      "[Lorg.apache.spark.util.HadoopFSUtils$SerializableBlockLocation;",
+      "org.apache.spark.util.HadoopFSUtils$SerializableFileStatus",
+
       "org.apache.spark.sql.catalyst.expressions.BoundReference",
       "org.apache.spark.sql.catalyst.expressions.SortOrder",
       "[Lorg.apache.spark.sql.catalyst.expressions.SortOrder;",
@@ -536,6 +540,7 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.types.DecimalType",
       "org.apache.spark.sql.types.Decimal$DecimalAsIfIntegral$",
       "org.apache.spark.sql.types.Decimal$DecimalIsFractional$",
+      "org.apache.spark.sql.execution.command.PartitionStatistics",
       "org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTaskResult",
       "org.apache.spark.sql.execution.joins.EmptyHashedRelation$",
       "org.apache.spark.sql.execution.joins.LongHashedRelation",

@@ -72,7 +72,7 @@ object functions {
    * Converts a binary column of Protobuf format into its corresponding catalyst value.
    * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
    * shaded. Specifically, `com.google.protobuf.*` should be shaded to
-   * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
    * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
    * Protobuf files.
    *
@@ -92,7 +92,7 @@ object functions {
    * Converts a binary column of Protobuf format into its corresponding catalyst value.
    * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
    * shaded. Specifically, `com.google.protobuf.*` should be shaded to
-   * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
    * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
    * Protobuf files.
    *
@@ -157,7 +157,7 @@ object functions {
    * Converts a column into binary of protobuf format.
    * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
    * shaded. Specifically, `com.google.protobuf.*` should be shaded to
-   * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
    * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
    * Protobuf files.
    *
@@ -177,7 +177,7 @@ object functions {
    * Converts a column into binary of protobuf format.
    * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
    * shaded. Specifically, `com.google.protobuf.*` should be shaded to
-   * `org.sparkproject.spark-protobuf.protobuf.*`.
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
    * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
    * Protobuf files.
    *

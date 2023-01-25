@@ -19,12 +19,12 @@ import tempfile
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType
+from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.sql.connect.client import SparkConnectException
+from pyspark.errors import SparkConnectAnalysisException, SparkConnectException
 
 if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -898,7 +898,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             cdf.select(CF.rank().over(cdf.a))
 
         # invalid window function
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             cdf.select(cdf.b.over(CW.orderBy("b"))).show()
 
         # invalid window frame
@@ -912,34 +912,34 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             CF.lead("c", 1),
             CF.ntile(1),
         ]:
-            with self.assertRaises(SparkConnectException):
+            with self.assertRaises(SparkConnectAnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectException):
+            with self.assertRaises(SparkConnectAnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectException):
+            with self.assertRaises(SparkConnectAnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.unboundedPreceding, CW.currentRow))
                 ).show()
 
         # Function 'cume_dist' requires Windowframe(RangeFrame, UnboundedPreceding, CurrentRow)
         ccol = CF.cume_dist()
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow))
             ).show()
@@ -2282,15 +2282,52 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             ).toPandas(),
         )
 
+    def test_udf(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT a, b, c FROM VALUES
+            (1, 1.0, 'x'), (2, 2.0, 'y'), (3, 3.0, 'z')
+            AS tab(a, b, c)
+            """
+        # +---+---+---+
+        # |  a|  b|  c|
+        # +---+---+---+
+        # |  1|1.0|  x|
+        # |  2|2.0|  y|
+        # |  3|3.0|  z|
+        # +---+---+---+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # as a normal function
+        self.assert_eq(
+            cdf.withColumn("A", CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
+            sdf.withColumn("A", SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
+        )
+
+        # as a decorator
+        @CF.udf(StringType())
+        def cfun(x):
+            return x + "a"
+
+        @SF.udf(StringType())
+        def sfun(x):
+            return x + "a"
+
+        self.assert_eq(
+            cdf.withColumn("A", cfun(cdf.c)).toPandas(),
+            sdf.withColumn("A", sfun(sdf.c)).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41928: Disable unsupported functions.
 
         from pyspark.sql.connect import functions as CF
 
-        for f in (
-            "udf",
-            "pandas_udf",
-        ):
+        for f in ("pandas_udf",):
             with self.assertRaises(NotImplementedError):
                 getattr(CF, f)()
 

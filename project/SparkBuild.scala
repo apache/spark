@@ -930,7 +930,7 @@ object SparkProtobuf {
     },
 
     (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark-protobuf.protobuf.@1").inAll,
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark_protobuf.protobuf.@1").inAll,
     ),
 
     (assembly / assemblyMergeStrategy) := {

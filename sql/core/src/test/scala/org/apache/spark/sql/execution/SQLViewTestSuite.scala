@@ -584,8 +584,17 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         val e = intercept[AnalysisException] {
           sql(s"SELECT * FROM test_view")
         }
-        assert(e.getMessage.contains("re-create the view by running: CREATE OR REPLACE"))
-        val ddl = e.getMessage.split(": ").last
+        checkError(
+          exception = e,
+          errorClass = "_LEGACY_ERROR_TEMP_1176",
+          parameters = Map(
+            "viewName" -> "`spark_catalog`.`default`.`test_view`",
+            "viewDDL" ->
+              "CREATE OR REPLACE VIEW spark_catalog.default.test_view  AS SELECT * FROM t",
+            "actualCols" -> "[]", "colName" -> "col_j",
+            "expectedNum" -> "1")
+        )
+        val ddl = e.getMessageParameters.get("viewDDL")
         sql(ddl)
         checkAnswer(sql("select * FROM test_view"), Row(1))
       }

@@ -37,6 +37,11 @@ Classes
     PythonException
     UnknownException
     SparkUpgradeException
+    SparkConnectAnalysisException
+    SparkConnectException
+    SparkConnectGrpcException
+    SparkConnectParseException
+    SparkConnectTempTableAlreadyExistsException
 
 
 Methods

@@ -15,17 +15,22 @@
 # limitations under the License.
 #
 
+from contextlib import contextmanager
 import collections
 import logging
 import math
 import os
 import random
 import re
-import sys
+import shutil
 import subprocess
+import sys
+import tempfile
+import textwrap
 import time
-from typing import Union, Callable, List, Dict, Optional, Any
+from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
+from pyspark import cloudpickle
 from pyspark.sql import SparkSession
 from pyspark.ml.torch.log_communication import (  # type: ignore
     get_driver_host,
@@ -189,9 +194,9 @@ class Distributor:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
                     self.logger.warning(
-                        f"'num_processes' cannot be set to a value greater than the number of "
+                        "'num_processes' cannot be set to a value greater than the number of "
                         f"available GPUs on the driver, which is {num_available_gpus}. "
-                        f"'num_processes' was reset to be equal to the number of available GPUs.",
+                        "'num_processes' was reset to be equal to the number of available GPUs.",
                     )
                     self.num_processes = num_available_gpus
         return self.num_processes
@@ -220,7 +225,8 @@ class Distributor:
             name = self.__class__.__name__
             if ignore_ssl:
                 self.logger.warning(
-                    f"""
+                    textwrap.dedent(
+                        f"""
                     This cluster has TLS encryption enabled;
                     however, {name} does not
                     support data encryption in transit.
@@ -232,11 +238,12 @@ class Distributor:
                     parameters and possibly training data to
                     be sent between nodes unencrypted.
                     """,
-                    RuntimeWarning,
+                    )
                 )
                 return
             raise RuntimeError(
-                f"""
+                textwrap.dedent(
+                    f"""
                 This cluster has TLS encryption enabled;
                 however, {name} does not support
                 data encryption in transit. To override
@@ -246,6 +253,7 @@ class Distributor:
                 will cause model parameters and possibly training
                 data to be sent between nodes unencrypted.
                 """
+                )
             )
 
 
@@ -298,6 +306,10 @@ class TorchDistributor(Distributor):
     ...     use_gpu=True)
     >>> trainer = distributor.run(train)
     """
+
+    PICKLED_FUNC_FILE = "func.pickle"
+    TRAIN_FILE = "train.py"
+    PICKLED_OUTPUT_FILE = "output.pickle"
 
     def __init__(
         self,
@@ -357,12 +369,15 @@ class TorchDistributor(Distributor):
 
         args_string = list(map(str, args))  # converting all args to strings
 
-        return (
-            [sys.executable, "-m", "pyspark.ml.torch.torch_run_process_wrapper"]
-            + torchrun_args
-            + [f"--nproc_per_node={processes_per_node}"]
-            + [path_to_train_file, *args_string]
-        )
+        return [
+            sys.executable,
+            "-m",
+            "pyspark.ml.torch.torch_run_process_wrapper",
+            *torchrun_args,
+            f"--nproc_per_node={processes_per_node}",
+            path_to_train_file,
+            *args_string,
+        ]
 
     @staticmethod
     def _execute_command(
@@ -407,13 +422,13 @@ class TorchDistributor(Distributor):
                 last_n_msg = "task output is"
             task_output = "".join(tail)
             raise RuntimeError(
-                f"Command {cmd} failed with return code {task.returncode}."
+                f"Command {cmd} failed with return code {task.returncode}. "
                 f"The {last_n_msg} included below: {task_output}"
             )
 
     def _run_local_training(
         self,
-        framework_wrapper_fn: Optional[Callable],
+        framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
         *args: Any,
     ) -> Optional[Any]:
@@ -428,7 +443,7 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
             self.logger.info(f"Started local training with {self.num_processes} processes")
-            output = framework_wrapper_fn(self.input_params, train_object, *args)  # type: ignore
+            output = framework_wrapper_fn(self.input_params, train_object, *args)
             self.logger.info(f"Finished local training with {self.num_processes} processes")
 
         finally:
@@ -474,27 +489,27 @@ class TorchDistributor(Distributor):
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
 
-            # The idea of setting the random port to 0 doesn't seem to work?
-            def get_free_port(address: str) -> int:
-                import socket
-                import random
+            def get_free_port(address: str, context: "BarrierTaskContext") -> int:
+                port = ""
+                if context.partitionId() == 0:
+                    try:
+                        import socket
 
-                MAX_NUM_ATTEMPTS = 100
-
-                for _ in range(MAX_NUM_ATTEMPTS):
-                    time.sleep(0.1)
-                    port = random.randint(32768, 61000)
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    if not (sock.connect_ex((address, port)) == 0):
-                        return port
-
-                raise RuntimeError("Failed to find free port for distributed training.")
+                        sock = socket.socket()
+                        sock.bind((address, 0))
+                        port = sock.getsockname()[1]
+                    except socket.error:
+                        pass
+                available_port = context.allGather(str(port))[0]
+                if not available_port:
+                    raise RuntimeError("Failed to find free port for distributed training.")
+                return int(available_port)
 
             def set_torch_config(context: "BarrierTaskContext") -> None:
                 addrs = [e.address.split(":")[0] for e in context.getTaskInfos()]
 
                 os.environ["MASTER_ADDR"] = str(addrs[0])
-                os.environ["MASTER_PORT"] = str(get_free_port(addrs[0]))
+                os.environ["MASTER_PORT"] = str(get_free_port(addrs[0], context))
                 os.environ["WORLD_SIZE"] = str(num_processes)
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
@@ -531,7 +546,7 @@ class TorchDistributor(Distributor):
 
     def _run_distributed_training(
         self,
-        framework_wrapper_fn: Optional[Callable],
+        framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
         *args: Any,
     ) -> Optional[Any]:
@@ -577,6 +592,74 @@ class TorchDistributor(Distributor):
             training_command, log_streaming_client=log_streaming_client
         )
 
+    @staticmethod
+    @contextmanager
+    def _setup_files(train_fn: Callable, *args: Any) -> Generator[Tuple[str, str], None, None]:
+        save_dir = TorchDistributor._create_save_dir()
+        pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args)
+        output_file_path = os.path.join(save_dir, TorchDistributor.PICKLED_OUTPUT_FILE)
+        train_file_path = TorchDistributor._create_torchrun_train_file(
+            save_dir, pickle_file_path, output_file_path
+        )
+        try:
+            yield (train_file_path, output_file_path)
+        finally:
+            TorchDistributor._cleanup_files(save_dir)
+
+    @staticmethod
+    def _run_training_on_pytorch_function(
+        input_params: Dict[str, Any], train_fn: Callable, *args: Any
+    ) -> Any:
+        with TorchDistributor._setup_files(train_fn, *args) as (train_file_path, output_file_path):
+            args = []  # type: ignore
+            TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
+            output = TorchDistributor._get_pickled_output(output_file_path)
+        return output
+
+    @staticmethod
+    def _create_save_dir() -> str:
+        # TODO: need to do this in a safe way to avoid issues during concurrent runs
+        return tempfile.mkdtemp()
+
+    @staticmethod
+    def _cleanup_files(save_dir: str) -> None:
+        shutil.rmtree(save_dir, ignore_errors=True)
+
+    @staticmethod
+    def _save_pickled_function(save_dir: str, train_fn: Union[str, Callable], *args: Any) -> str:
+        saved_pickle_path = os.path.join(save_dir, TorchDistributor.PICKLED_FUNC_FILE)
+        with open(saved_pickle_path, "wb") as f:
+            cloudpickle.dump((train_fn, args), f)
+        return saved_pickle_path
+
+    @staticmethod
+    def _create_torchrun_train_file(
+        save_dir_path: str, pickle_file_path: str, output_file_path: str
+    ) -> str:
+        code = textwrap.dedent(
+            f"""
+                    import cloudpickle
+                    import os
+
+                    if __name__ == "__main__":
+                        with open("{pickle_file_path}", "rb") as f:
+                            train_fn, args = cloudpickle.load(f)
+                        output = train_fn(*args)
+                        with open("{output_file_path}", "wb") as f:
+                            cloudpickle.dump(output, f)
+                    """
+        )
+        saved_file_path = os.path.join(save_dir_path, TorchDistributor.TRAIN_FILE)
+        with open(saved_file_path, "w") as f:
+            f.write(code)
+        return saved_file_path
+
+    @staticmethod
+    def _get_pickled_output(output_file_path: str) -> Any:
+        with open(output_file_path, "rb") as f:
+            output = cloudpickle.load(f)
+        return output
+
     def run(self, train_object: Union[Callable, str], *args: Any) -> Optional[Any]:
         """Runs distributed training.
 
@@ -593,9 +676,12 @@ class TorchDistributor(Distributor):
             Returns the output of train_object called with args if train_object is a
             Callable with an expected output.
         """
-        framework_wrapper_fn = None
         if isinstance(train_object, str):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
+        else:
+            framework_wrapper_fn = (
+                TorchDistributor._run_training_on_pytorch_function  # type: ignore
+            )
         if self.local_mode:
             output = self._run_local_training(framework_wrapper_fn, train_object, *args)
         else:
