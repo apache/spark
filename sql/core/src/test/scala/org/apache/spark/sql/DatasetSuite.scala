@@ -930,13 +930,31 @@ class DatasetSuite extends QueryTest
     assert(actual === Seq((0, 0), (1, 1), (2, 2)))
   }
 
-  test("SPARK-42132: cogroup with sorted with same plan on both sides") {
-    val df = spark.range(3).join(spark.range(2).withColumnRenamed("id", "value"))
+  test("SPARK-42132: cogroup with sorted and same plan on both sides") {
+    val df = spark.range(3).join(spark.range(2)).as[(Long, Long)]
 
     val left_grouped_df = df.groupBy("id").as[Long, (Long, Long)]
     val right_grouped_df = df.groupBy("id").as[Long, (Long, Long)]
 
-    val cogroup_df = left_grouped_df.cogroupSorted(right_grouped_df)($"value")($"value".desc) {
+    val cogroup_df = left_grouped_df.cogroupSorted(right_grouped_df)($"id")($"id".desc) {
+      case (key, left, right) => left.zip(right)
+    }
+
+    val actual = cogroup_df.sort().collect()
+    assert(actual === Seq(
+      ((0, 0), (0, 1)), ((0, 1), (0, 0)),
+      ((1, 0), (1, 1)), ((1, 1), (1, 0)),
+      ((2, 0), (2, 1)), ((2, 1), (2, 0))
+    ))
+  }
+
+  test("SPARK-42132: cogroup groupby function with sorted and same plan on both sides") {
+    val df = spark.range(3).join(spark.range(2)).as[(Long, Long)]
+
+    val left_grouped_df = df.groupByKey(_._1)
+    val right_grouped_df = df.groupByKey(_._1)
+
+    val cogroup_df = left_grouped_df.cogroupSorted(right_grouped_df)($"id")($"id".desc) {
       case (key, left, right) => left.zip(right)
     }
 
