@@ -800,7 +800,8 @@
   "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS" : {
     "message" : [
       "<quoted> is not a valid <identifier> as it has more than 2 name parts."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
