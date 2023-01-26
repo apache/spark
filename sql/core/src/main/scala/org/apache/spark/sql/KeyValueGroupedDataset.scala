@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeSeq, CreateStruct, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ScopedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
@@ -200,10 +200,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def flatMapSortedGroups[U : Encoder](
       sortExprs: Column*)(
       f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
-    val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs.map(_.expr)).map(
-      // resolve sortOrder against dataAttributes, if unresolved against groupingAttributes
-      resolveWithDataOverGroupingAttributes(dataAttributes, groupingAttributes)
-    )
+    val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs.map(_.expr))
+      // SPARK-42199: resolve sort expressions only against data attributes, not grouping attributes
+      .map(scopeSortOrder(dataAttributes))
 
     Dataset[U](
       sparkSession,
@@ -973,11 +972,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(vExprEnc, dataAttributes).named)
-        // resolve namedColumns against dataAttributes, if unresolved against groupingAttributes
-        .map(
-          resolveWithDataOverGroupingAttributes(dataAttributes, groupingAttributes)
-        )
+      columns
+        // SPARK-42199: resolve these columns only against dataAttributes
+        .map(scopeTypedColumn(dataAttributes))
+        .map(_.withInputType(vExprEnc, dataAttributes).named)
     val keyColumn = TypedAggUtils.aggKeyColumn(kExprEnc, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sparkSession, aggregate)
@@ -1168,12 +1166,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
       case expr: Expression => SortOrder(expr, Ascending)
     }
 
-    val thisSortOrder: Seq[SortOrder] = thisSortExprs.map(toSortOrder).map(
-      resolveWithDataOverGroupingAttributes(dataAttributes, groupingAttributes)
-    )
-    val otherSortOrder: Seq[SortOrder] = otherSortExprs.map(toSortOrder).map(
-      resolveWithDataOverGroupingAttributes(other.dataAttributes, other.groupingAttributes)
-    )
+    // SPARK-42199: resolve these columns only against the respective dataAttributes
+    val thisSortOrder: Seq[SortOrder] = thisSortExprs
+          .map(toSortOrder)
+          .map(scopeSortOrder(dataAttributes))
+    val otherSortOrder: Seq[SortOrder] = otherSortExprs
+          .map(toSortOrder)
+          .map(scopeSortOrder(other.dataAttributes))
 
     implicit val uEncoder = other.vExprEnc
     Dataset[R](
@@ -1216,27 +1215,14 @@ class KeyValueGroupedDataset[K, V] private[sql](
       (key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 
-  /**
-   * Resolve attributes in given expression against this KeyValueGroupedDataset's data attributes.
-   * Those still unresolved, are resolve against the key attributes. Those still unresolved are
-   * kept as is.
-   *
-   * @param expr expression to resolve
-   * @tparam T specific type of expression
-   * @return expression with resolved attributes
-   */
-  private def resolveWithDataOverGroupingAttributes[T <: Expression](
-      dataAttributes: Seq[Attribute],
-      groupingAttributes: Seq[Attribute])(
-      expr: T): T = {
-    val resolver = sparkSession.sqlContext.conf.resolver
-    expr.transformDown {
-      case u @ UnresolvedAttribute(nameParts) =>
-        AttributeSeq(dataAttributes).resolve(nameParts, resolver)
-          .orElse(AttributeSeq(groupingAttributes).resolve(nameParts, resolver))
-          .getOrElse(u)
-    }.asInstanceOf[T]
-  }
+  private def scopeSortOrder(scope: Seq[Attribute])(sortOrder: SortOrder): SortOrder =
+    sortOrder.copy(child = ScopedExpression(sortOrder.child, scope))
+
+  private def scopeTypedColumn(
+      scope: Seq[Attribute])(
+      typedCol: TypedColumn[_, _]): TypedColumn[_, _] =
+    new TypedColumn(ScopedExpression(typedCol.expr, scope), typedCol.encoder)
+
 
   override def toString: String = {
     val builder = new StringBuilder
