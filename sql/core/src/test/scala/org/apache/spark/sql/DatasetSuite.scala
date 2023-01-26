@@ -567,6 +567,33 @@ class DatasetSuite extends QueryTest
       (1, 1))
   }
 
+  test("groupBy function, unresolved reference suggestions") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(10).groupByKey(id => id).agg(count("unknown"))
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`id`"))
+  }
+
+  test("groupBy function with mapValues, unresolved reference suggestions") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(10).groupByKey(id => id).mapValues(id => id).agg(count("unknown"))
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`value`"))
+  }
+
+  test("group by function, resolving aggregate ignores key column") {
+    val actual = spark.range(3)
+      .groupByKey(id => id)
+      .mapValues(id => id)
+      .agg(count("value"))
+      .collect()
+    assert(actual === Seq(Row(0, 1), Row(1, 1), Row(2, 1)))
+  }
+
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
