@@ -1041,9 +1041,11 @@ class FunctionsTestsMixin:
 
         with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "foobar") as cm:
             df.select(raise_error(df.id)).collect()
+        self.assertIn("foobar", str(cm.exception))
 
         with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "barfoo") as cm:
             df.select(raise_error("barfoo")).collect()
+        self.assertIn("barfoo", str(cm.exception))
 
         with self.assertRaises(PySparkTypeError) as pe:
             df.select(raise_error(None))
