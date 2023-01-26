@@ -2299,6 +2299,14 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             cdf.withColumn("A", CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
             sdf.withColumn("A", SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
         )
+        self.assert_eq(  # returnType as DDL strings
+            cdf.withColumn("C", CF.udf(lambda x: len(x), "int")(cdf.c)).toPandas(),
+            sdf.withColumn("C", SF.udf(lambda x: len(x), "int")(sdf.c)).toPandas(),
+        )
+        self.assert_eq(  # returnType as DataType
+            cdf.withColumn("C", CF.udf(lambda x: len(x), IntegerType())(cdf.c)).toPandas(),
+            sdf.withColumn("C", SF.udf(lambda x: len(x), IntegerType())(sdf.c)).toPandas(),
+        )
 
         # as a decorator
         @CF.udf(StringType())
