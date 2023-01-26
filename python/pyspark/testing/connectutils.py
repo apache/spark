@@ -55,7 +55,6 @@ except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
 
-connect_not_compiled_message = None
 if (
     have_pandas
     and have_pyarrow
@@ -63,19 +62,7 @@ if (
     and have_grpc_status
     and have_googleapis_common_protos
 ):
-    from pyspark.sql.connect import DataFrame
-    from pyspark.sql.connect.plan import Read, Range, SQL
-    from pyspark.testing.utils import search_jar
-    from pyspark.sql.connect.session import SparkSession
-
-    connect_jar = search_jar("connector/connect/server", "spark-connect-assembly-", "spark-connect")
-    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
-    connect_url = "--remote sc://localhost"
-    jars_args = "--jars %s" % connect_jar
-    plugin_args = "--conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin"
-    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join(
-        [connect_url, jars_args, plugin_args, existing_args]
-    )
+    connect_not_compiled_message = None
 else:
     connect_not_compiled_message = (
         "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
@@ -93,6 +80,11 @@ connect_requirement_message = (
     or grpc_status_requirement_message
 )
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
+
+if should_test_connect:
+    from pyspark.sql.connect import DataFrame
+    from pyspark.sql.connect.plan import Read, Range, SQL
+    from pyspark.sql.connect.session import SparkSession
 
 
 class MockRemoteSession:
