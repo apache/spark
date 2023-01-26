@@ -626,6 +626,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>(none)</td>
   <td>
   Comma-separated list of YARN node names which are excluded from resource allocation.
+  This only applies to executors spawned via dynamic allocation.
   </td>
   <td>3.0.0</td>
 </tr>
