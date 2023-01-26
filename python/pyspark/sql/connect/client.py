@@ -599,6 +599,7 @@ class SparkConnectClient(object):
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
             ):
                 with attempt:
+                    batches = []
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                         if b.client_id != self._session_id:
                             raise SparkConnectException(

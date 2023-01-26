@@ -20,6 +20,7 @@ import datetime
 import unittest
 import shutil
 import tempfile
+from collections import defaultdict
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
@@ -2610,12 +2611,28 @@ class ClientTests(unittest.TestCase):
                 return self._code
 
         def stub(retries, w, code):
-            w["counter"] += 1
-            if w["counter"] < retries:
+            w["attempts"] += 1
+            if w["attempts"] < retries:
+                w["raised"] += 1
                 raise TestError(code)
 
+        # Check that max_retries 1 is only one retry so two attempts.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=1,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(2, call_wrap["attempts"])
+        self.assertEqual(1, call_wrap["raised"])
+
         # Check that if we have less than 4 retries all is ok.
-        call_wrap = {"counter": 0}
+        call_wrap = defaultdict(int)
         for attempt in Retrying(
             can_retry=lambda x: True,
             max_retries=4,
@@ -2626,8 +2643,11 @@ class ClientTests(unittest.TestCase):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
 
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
         # Exceed the retries.
-        call_wrap = {"counter": 0}
+        call_wrap = defaultdict(int)
         with self.assertRaises(TestError):
             for attempt in Retrying(
                 can_retry=lambda x: True,
@@ -2639,9 +2659,12 @@ class ClientTests(unittest.TestCase):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
 
+        self.assertTrue(call_wrap["attempts"] < 5)
+        self.assertEqual(call_wrap["raised"], 3)
+
         # Check that only specific exceptions are retried.
         # Check that if we have less than 4 retries all is ok.
-        call_wrap = {"counter": 0}
+        call_wrap = defaultdict(int)
         for attempt in Retrying(
             can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
             max_retries=4,
@@ -2652,8 +2675,11 @@ class ClientTests(unittest.TestCase):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
 
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
         # Exceed the retries.
-        call_wrap = {"counter": 0}
+        call_wrap = defaultdict(int)
         with self.assertRaises(TestError):
             for attempt in Retrying(
                 can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
@@ -2665,8 +2691,11 @@ class ClientTests(unittest.TestCase):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
 
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 3)
+
         # Test that another error is always thrown.
-        call_wrap = {"counter": 0}
+        call_wrap = defaultdict(int)
         with self.assertRaises(TestError):
             for attempt in Retrying(
                 can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
@@ -2677,6 +2706,9 @@ class ClientTests(unittest.TestCase):
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(call_wrap["attempts"], 1)
+        self.assertEqual(call_wrap["raised"], 1)
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
