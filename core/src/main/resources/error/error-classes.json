@@ -581,6 +581,12 @@
     ],
     "sqlState" : "42805"
   },
+  "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
+    "message" : [
+      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
+    ],
+    "sqlState" : "42601"
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
@@ -796,12 +802,6 @@
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
     ],
     "sqlState" : "42602"
-  },
-  "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS" : {
-    "message" : [
-      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
-    ],
-    "sqlState" : "42601"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [

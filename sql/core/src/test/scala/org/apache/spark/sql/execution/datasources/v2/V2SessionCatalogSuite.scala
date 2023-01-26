@@ -1124,14 +1124,14 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: IdentifierHelper = Identifier.of(Array("a", "b"), "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
-      errorClass = "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS",
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map(
         "quoted" -> "a.b.c",
         "identifier" -> "TableIdentifier")
     )
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
-      errorClass = "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS",
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map(
         "quoted" -> "a.b.c",
         "identifier" -> "FunctionIdentifier")
@@ -1142,14 +1142,14 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: MultipartIdentifierHelper = Seq("a", "b", "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
-      errorClass = "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS",
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map(
         "quoted" -> "a.b.c",
         "identifier" -> "TableIdentifier")
     )
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
-      errorClass = "INVALID_IDENTIFIER_HAS_MORE_THAN_2_NAME_PARTS",
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map(
         "quoted" -> "a.b.c",
         "identifier" -> "FunctionIdentifier")
