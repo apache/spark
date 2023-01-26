@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
@@ -32,6 +32,7 @@ import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
+  import SparkMasterRegex._
 
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
@@ -39,8 +40,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     conf.get(KUBERNETES_DRIVER_MASTER_URL).startsWith("local")
 
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    // When running locally, don't try to re-execute tasks on failure.
-    val maxTaskFailures = if (isLocal(sc.conf)) 1 else sc.conf.get(TASK_MAX_FAILURES)
+    val maxTaskFailures = masterURL match {
+      case "local" | LOCAL_N_REGEX(_) => 1
+      case LOCAL_N_FAILURES_REGEX(_, maxFailures) => maxFailures.toInt
+      case _ => sc.conf.get(TASK_MAX_FAILURES)
+    }
     new TaskSchedulerImpl(sc, maxTaskFailures, isLocal(sc.conf))
   }
 
@@ -49,9 +53,16 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
     if (isLocal(sc.conf)) {
+      def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
+      val threadCount = masterURL match {
+        case LOCAL_N_REGEX(threads) =>
+          if (threads == "*") localCpuCount else 1
+        case LOCAL_N_FAILURES_REGEX(threads, _) =>
+          if (threads == "*") localCpuCount else 1
+        case _ => 1
+      }
       val schedulerImpl = scheduler.asInstanceOf[TaskSchedulerImpl]
-      val backend = new LocalSchedulerBackend(sc.conf, schedulerImpl,
-        Runtime.getRuntime.availableProcessors())
+      val backend = new LocalSchedulerBackend(sc.conf, schedulerImpl, threadCount)
       schedulerImpl.initialize(backend)
       return backend
     }
