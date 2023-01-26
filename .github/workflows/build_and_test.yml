@@ -152,7 +152,7 @@ jobs:
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
             mllib-local, mllib,
             yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
-            connect, protobuf
+            connect, connect-client-jvm, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
         excluded-tags: [""]
