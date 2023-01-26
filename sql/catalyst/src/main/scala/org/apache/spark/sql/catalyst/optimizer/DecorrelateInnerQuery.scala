@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -255,23 +256,68 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * Rewrites a domain join cond so that it can be pushed to the right side of a
    * union/intersect/except operator.
    */
-  def pushConditionsThroughUnion(
+  def pushDomainConditionsThroughSetOperation(
       conditions: Seq[Expression],
-      union: Union,
+      setOp: LogicalPlan, // Union or SetOperation
       child: LogicalPlan): Seq[Expression] = {
     // The output attributes are always equal to the left child's output
-    assert(union.output.size == child.output.size)
-    val map = AttributeMap(union.output.zip(child.output))
+    assert(setOp.output.size == child.output.size)
+    val map = AttributeMap(setOp.output.zip(child.output))
     conditions.map {
       // The left hand side is the domain attribute used in the inner query and the right hand side
       // is the attribute from the outer query. (See comment above in buildDomainAttrMap.)
       // We need to remap the attribute names used in the inner query (left hand side) to account
       // for the different names in each union child. We should not remap the attribute names used
       // in the outer query.
+      //
+      // Note: the reason this logic is necessary is that constructing the DomainJoins happens much
+      // earlier than rewriting the DomainJoins into actual joins, with many optimization steps in
+      // between, which could change the attributes involved (e.g. CollapseProject).
       case EqualNullSafe(left: Attribute, right: Expression) =>
         EqualNullSafe(map.getOrElse(left, left), right)
       case EqualTo(left: Attribute, right: Expression) =>
         EqualTo(map.getOrElse(left, left), right)
+    }
+  }
+
+  /**
+   * This is to handle INTERSECT/EXCEPT DISTINCT which are rewritten to left semi/anti join in
+   * ReplaceIntersectWithSemiJoin and ReplaceExceptWithAntiJoin.
+   *
+   * To rewrite the domain join on the right side, we need to remap the attributes in the domain
+   * join cond, using the mapping between left and right sides in the semi/anti join cond.
+  */
+  def pushDomainConditionsThroughSemiAntiJoin(
+      domainJoinConditions: Seq[Expression],
+      join: Join
+  ) : Seq[Expression] = {
+    // After DecorrelateInnerQuery, the domain join conds reference the output names of the
+    // INTERSECT/EXCEPT, which come from the left side. When rewriting the DomainJoin in the
+    // right child, we need to remap the domain attribute names to account for the different
+    // names in the left vs right child, similar to pushDomainConditionsThroughSetOperation.
+    // But after the rewrite to semi/anti join is performed, we instead need to do the remapping
+    // based on the semi/anti join cond which contains equi-joins between the left and right
+    // outputs.
+    //
+    // The domain conds will be like leftInner <=> outer, and the semi/anti join cond will be like
+    // leftInner <=> rightInner. We add additional domain conds rightInner <=> outer which are used
+    // to rewrite the right-side DomainJoin.
+    if (join.condition.isDefined
+      && SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED)) {
+      val transitiveConds = splitConjunctivePredicates(join.condition.get).collect {
+        case EqualNullSafe(joinLeft: Attribute, joinRight: Attribute) =>
+          domainJoinConditions.collect {
+            case EqualNullSafe(domainInner: Attribute, domainOuter: Expression)
+              if domainInner.semanticEquals(joinLeft) =>
+              EqualNullSafe(joinRight, domainOuter)
+            case EqualTo(domainInner: Attribute, domainOuter: Expression)
+              if domainInner.semanticEquals(joinLeft) =>
+              EqualTo(joinRight, domainOuter)
+          }
+      }.flatten
+      domainJoinConditions ++ transitiveConds
+    } else {
+      domainJoinConditions
     }
   }
 
@@ -336,9 +382,15 @@ object DecorrelateInnerQuery extends PredicateHelper {
         throw new IllegalStateException(
           s"Unable to rewrite domain join with conditions: $conditions\n$d.")
       }
-    case u: Union =>
-      u.mapChildren { child =>
-        rewriteDomainJoins(outerPlan, child, pushConditionsThroughUnion(conditions, u, child))
+    case s @ (_ : Union | _: SetOperation) =>
+      s.mapChildren { child =>
+        rewriteDomainJoins(outerPlan, child,
+          pushDomainConditionsThroughSetOperation(conditions, s, child))
+      }
+    case j: Join if j.joinType == LeftSemi || j.joinType == LeftAnti =>
+      j.mapChildren { child =>
+        rewriteDomainJoins(outerPlan, child,
+          pushDomainConditionsThroughSemiAntiJoin(conditions, j))
       }
     case p: LogicalPlan =>
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
@@ -723,7 +775,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 
-          case u: Union =>
+          case s @ (_ : Union | _: SetOperation) =>
             // Set ops are decorrelated by pushing the domain join into each child. For details see
             // https://docs.google.com/document/d/11b9ClCF2jYGU7vU2suOT7LRswYkg6tZ8_6xJbvxfh2I/edit
 
@@ -739,16 +791,16 @@ object DecorrelateInnerQuery extends PredicateHelper {
             //   select c, t_outer.a, t_outer.b from t1 join t_outer where t1.a = t_outer.a
             //   UNION ALL
             //   select c, t_outer.a, t_outer.b from t2 join t_outer where t2.b = t_outer.b
-            val collectedChildOuterReferences = collectOuterReferencesInPlanTree(u)
+            val collectedChildOuterReferences = collectOuterReferencesInPlanTree(s)
             val newOuterReferences = AttributeSet(
               parentOuterReferences ++ collectedChildOuterReferences)
 
             val childDecorrelateResults =
-              u.children.map { child =>
+              s.children.map { child =>
                 val (decorrelatedChild, newJoinCond, newOuterReferenceMap) =
                   decorrelate(child, newOuterReferences, aggregated, underSetOp = true)
                 // Create a Project to ensure that the domain attributes are added to the same
-                // positions in each child of the union. If we don't explicitly construct this
+                // positions in each child of the set op. If we don't explicitly construct this
                 // Project, they could get added at the beginning or the end of the output columns
                 // depending on the child plan.
                 // The inner expressions for the domain are the values of newOuterReferenceMap.
@@ -762,7 +814,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // names are from the first child
             val newJoinCond = childDecorrelateResults.head._2
             val newOuterReferenceMap = AttributeMap(childDecorrelateResults.head._3)
-            (u.withNewChildren(newChildren), newJoinCond, newOuterReferenceMap)
+            (s.withNewChildren(newChildren), newJoinCond, newOuterReferenceMap)
 
           case g: Generate if g.requiredChildOutput.isEmpty =>
             // Generate with non-empty required child output cannot host

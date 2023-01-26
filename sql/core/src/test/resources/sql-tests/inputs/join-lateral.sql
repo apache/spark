@@ -203,6 +203,44 @@ SELECT * FROM t1 JOIN LATERAL
   FROM   t4
   WHERE  t4.c1 > t1.c2);
 
+-- INTERSECT
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  INTERSECT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- EXCEPT
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
 -- COUNT bug with UNION in subquery
 SELECT * FROM t1 JOIN LATERAL
   (SELECT COUNT(t2.c2)
@@ -236,6 +274,46 @@ SELECT * FROM t1 JOIN LATERAL
   FROM   t2
   WHERE  t2.c1 = t1.c1
   UNION ALL
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  UNION DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4);
+  
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  INTERSECT DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4);
+  
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  EXCEPT DISTINCT
   SELECT t4.c2
   FROM   t4);
 
