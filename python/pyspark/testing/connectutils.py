@@ -25,7 +25,6 @@ from pyspark import Row, SparkConf
 from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
     have_pandas,
-    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
     SQLTestUtils,
@@ -55,27 +54,11 @@ except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
 
-if (
-    have_pandas
-    and have_pyarrow
-    and have_grpc
-    and have_grpc_status
-    and have_googleapis_common_protos
-):
-    connect_not_compiled_message = None
-else:
-    connect_not_compiled_message = (
-        "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
-        "not compiled into a JAR. To run these tests, you need to build Spark with "
-        "'build/sbt package' or 'build/mvn package' before running this test."
-    )
-
 
 connect_requirement_message = (
     pandas_requirement_message
     or pyarrow_requirement_message
     or grpc_requirement_message
-    or connect_not_compiled_message
     or googleapis_common_protos_requirement_message
     or grpc_status_requirement_message
 )
