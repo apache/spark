@@ -72,7 +72,7 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       IncludeByName("org.apache.spark.sql.Column"),
       IncludeByName("org.apache.spark.sql.Column$"),
       IncludeByName("org.apache.spark.sql.Dataset"),
-      // TODO Add the Dataset object definition
+      // TODO(SPARK-42175) Add the Dataset object definition
       // IncludeByName("org.apache.spark.sql.Dataset$"),
       IncludeByName("org.apache.spark.sql.DataFrame"),
       IncludeByName("org.apache.spark.sql.SparkSession"),
@@ -125,8 +125,8 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
   private def includeImplementedMethods(clientJar: File): Seq[IncludeByName] = {
     val clsNames = Seq(
       "org.apache.spark.sql.Column",
-      // TODO Add all overloading methods. Temporarily mute compatibility check for the Dataset
-      //  methods, as too many overload methods are missing.
+      // TODO(SPARK-42175) Add all overloading methods. Temporarily mute compatibility check for \
+      //  the Dataset methods, as too many overload methods are missing.
       // "org.apache.spark.sql.Dataset",
       "org.apache.spark.sql.SparkSession")
 
