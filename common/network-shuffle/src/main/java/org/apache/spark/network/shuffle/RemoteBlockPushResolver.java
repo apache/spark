@@ -701,7 +701,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         public void onData(String streamId, ByteBuffer buf) {
           // Ignore the requests. It reaches here either when a request is received after the
           // shuffle file is finalized or when a request is for a duplicate block.
-          pushMergeMetrics.ignoredBlockBytes.mark(buf.limit());
+          pushMergeMetrics.ignoredBlockBytes.mark(buf.remaining());
         }
 
         @Override
