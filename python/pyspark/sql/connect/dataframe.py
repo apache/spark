@@ -249,7 +249,7 @@ class DataFrame:
                 else:
                     return Column(SortOrder(col._expr))
             else:
-                return Column(SortOrder(ColumnReference(name=col)))
+                return Column(SortOrder(ColumnReference(col)))
 
         if isinstance(numPartitions, int):
             if not numPartitions > 0:
@@ -1176,7 +1176,7 @@ class DataFrame:
         from pyspark.sql.connect.expressions import ColumnReference
 
         if isinstance(col, str):
-            col = Column(ColumnReference(name=col))
+            col = Column(ColumnReference(col))
         elif not isinstance(col, Column):
             raise TypeError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):

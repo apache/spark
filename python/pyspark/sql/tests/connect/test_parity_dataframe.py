@@ -129,10 +129,9 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas(self):
         super().test_to_pandas()
 
-    # TODO(SPARK-41884): DataFrame `toPandas` parity in return types
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_for_array_of_struct(self):
-        super().test_to_pandas_for_array_of_struct()
+        # Spark Connect's implementation is based on Arrow.
+        super().check_to_pandas_for_array_of_struct(True)
 
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")

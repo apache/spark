@@ -43,9 +43,11 @@ import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesR
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
+@ExtendedSQLTest
 class ColumnarBatchSuite extends SparkFunSuite {
 
   private def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {

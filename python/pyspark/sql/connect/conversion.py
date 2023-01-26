@@ -92,7 +92,7 @@ class LocalDataToArrowConversion:
                 if value is None:
                     return None
                 else:
-                    assert isinstance(value, (Row, dict)), f"{type(value)} {value}"
+                    assert isinstance(value, (tuple, dict)), f"{type(value)} {value}"
 
                     _dict = {}
                     if isinstance(value, dict):

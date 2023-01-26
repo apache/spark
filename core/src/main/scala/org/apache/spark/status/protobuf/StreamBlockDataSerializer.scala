@@ -18,16 +18,18 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.StreamBlockData
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
 class StreamBlockDataSerializer extends ProtobufSerDe[StreamBlockData] {
 
   override def serialize(data: StreamBlockData): Array[Byte] = {
     val builder = StoreTypes.StreamBlockData.newBuilder()
-      .setName(data.name)
-      .setExecutorId(data.executorId)
-      .setHostPort(data.hostPort)
-      .setStorageLevel(data.storageLevel)
-      .setUseMemory(data.useMemory)
+    setStringField(data.name, builder.setName)
+    setStringField(data.executorId, builder.setExecutorId)
+    setStringField(data.hostPort, builder.setHostPort)
+    setStringField(data.storageLevel, builder.setStorageLevel)
+    builder.setUseMemory(data.useMemory)
       .setUseDisk(data.useDisk)
       .setDeserialized(data.deserialized)
       .setMemSize(data.memSize)
@@ -38,10 +40,11 @@ class StreamBlockDataSerializer extends ProtobufSerDe[StreamBlockData] {
   override def deserialize(bytes: Array[Byte]): StreamBlockData = {
     val binary = StoreTypes.StreamBlockData.parseFrom(bytes)
     new StreamBlockData(
-      name = binary.getName,
-      executorId = binary.getExecutorId,
-      hostPort = binary.getHostPort,
-      storageLevel = binary.getStorageLevel,
+      name = getStringField(binary.hasName, () => binary.getName),
+      executorId = getStringField(binary.hasExecutorId, () => weakIntern(binary.getExecutorId)),
+      hostPort = getStringField(binary.hasHostPort, () => weakIntern(binary.getHostPort)),
+      storageLevel =
+        getStringField(binary.hasStorageLevel, () => weakIntern(binary.getStorageLevel)),
       useMemory = binary.getUseMemory,
       useDisk = binary.getUseDisk,
       deserialized = binary.getDeserialized,

@@ -95,7 +95,10 @@ class PySparkException(Exception):
         return None
 
     def __str__(self) -> str:
-        return f"[{self.getErrorClass()}] {self.message}"
+        if self.getErrorClass() is not None:
+            return f"[{self.getErrorClass()}] {self.message}"
+        else:
+            return self.message
 
 
 class CapturedException(PySparkException):
@@ -288,5 +291,83 @@ class UnknownException(CapturedException):
 
 class SparkUpgradeException(CapturedException):
     """
-    Exception thrown because of Spark upgrade
+    Exception thrown because of Spark upgrade.
+    """
+
+
+class SparkConnectException(PySparkException):
+    """
+    Exception thrown from Spark Connect.
+    """
+
+
+class SparkConnectGrpcException(SparkConnectException):
+    """
+    Base class to handle the errors from GRPC.
+    """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        error_class: Optional[str] = None,
+        message_parameters: Optional[Dict[str, str]] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        self.message = message  # type: ignore[assignment]
+        if reason is not None:
+            self.message = f"({reason}) {self.message}"
+
+        super().__init__(
+            message=self.message,
+            error_class=error_class,
+            message_parameters=message_parameters,
+        )
+
+
+class SparkConnectAnalysisException(SparkConnectGrpcException):
+    """
+    Failed to analyze a SQL query plan from Spark Connect server.
+    """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        error_class: Optional[str] = None,
+        message_parameters: Optional[Dict[str, str]] = None,
+        plan: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        self.message = message  # type: ignore[assignment]
+        if plan is not None:
+            self.message = f"{self.message}\nPlan: {plan}"
+
+        super().__init__(
+            message=self.message,
+            error_class=error_class,
+            message_parameters=message_parameters,
+            reason=reason,
+        )
+
+
+class SparkConnectParseException(SparkConnectGrpcException):
+    """
+    Failed to parse a SQL command from Spark Connect server.
+    """
+
+
+class SparkConnectTempTableAlreadyExistsException(SparkConnectAnalysisException):
+    """
+    Failed to create temp view since it is already exists.
+    """
+
+
+class PySparkValueError(PySparkException, ValueError):
+    """
+    Wrapper class for ValueError to support error classes.
+    """
+
+
+class PySparkTypeError(PySparkException, TypeError):
+    """
+    Wrapper class for TypeError to support error classes.
     """

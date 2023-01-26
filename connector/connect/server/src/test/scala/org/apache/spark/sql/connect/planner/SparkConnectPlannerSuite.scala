@@ -552,7 +552,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .addExpressions(
           proto.Expression
             .newBuilder()
-            .setUnresolvedStar(UnresolvedStar.newBuilder().addTarget("a").addTarget("b").build())
+            .setUnresolvedStar(UnresolvedStar.newBuilder().setUnparsedTarget("a.b.*").build())
             .build())
         .build()
 

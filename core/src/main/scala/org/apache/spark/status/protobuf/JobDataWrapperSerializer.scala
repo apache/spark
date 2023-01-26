@@ -23,7 +23,7 @@ import collection.JavaConverters._
 
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 
 class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
 
@@ -49,7 +49,6 @@ class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
   private def serializeJobData(jobData: JobData): StoreTypes.JobData = {
     val jobDataBuilder = StoreTypes.JobData.newBuilder()
     jobDataBuilder.setJobId(jobData.jobId.toLong)
-      .setName(jobData.name)
       .setStatus(JobExecutionStatusSerializer.serialize(jobData.status))
       .setNumTasks(jobData.numTasks)
       .setNumActiveTasks(jobData.numActiveTasks)
@@ -62,7 +61,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
       .setNumCompletedStages(jobData.numCompletedStages)
       .setNumSkippedStages(jobData.numSkippedStages)
       .setNumFailedStages(jobData.numFailedStages)
-
+    setStringField(jobData.name, jobDataBuilder.setName)
     jobData.description.foreach(jobDataBuilder.setDescription)
     jobData.submissionTime.foreach { d =>
       jobDataBuilder.setSubmissionTime(d.getTime)
@@ -88,7 +87,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
 
     new JobData(
       jobId = info.getJobId.toInt,
-      name = info.getName,
+      name = getStringField(info.hasName, info.getName),
       description = description,
       submissionTime = submissionTime,
       completionTime = completionTime,

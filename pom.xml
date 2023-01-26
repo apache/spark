@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.4.0-SNAPSHOT</version>
+  <version>3.5.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -223,7 +223,7 @@
     <arrow.version>10.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.3.1</kubernetes-client.version>
+    <kubernetes-client.version>6.4.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -686,7 +686,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.8.3</version>
+        <version>7.9.2</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
