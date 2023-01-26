@@ -274,7 +274,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      SubstituteUnresolvedOrdinals,
+      ScopeExpressions),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -295,6 +296,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
+      new ResolveScopedExpression(resolver) ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -519,6 +521,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case e if !e.resolved => u
         case g: Generator => MultiAlias(g, Nil)
         case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
+        case se @ ScopedExpression(ne: NamedExpression, _) => Alias(se, ne.name)()
         case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
         case e if optGenAliasFunc.isDefined =>
           Alias(child, optGenAliasFunc.get.apply(e))()
@@ -1654,34 +1657,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
-      case mg: MapGroups if mg.dataOrder.exists(!_.resolved) =>
-        // Resolve against `AppendColumns`'s children, instead of `AppendColumns`,
-        // because `AppendColumns`'s serializer might produce conflict attribute
-        // names leading to ambiguous references exception.
-        val planForResolve = mg.child match {
-          case appendColumns: AppendColumns => appendColumns.child
-          case plan => plan
-        }
-        val resolvedOrder = mg.dataOrder
-          .map(resolveExpressionByPlanOutput(_, planForResolve).asInstanceOf[SortOrder])
-        mg.copy(dataOrder = resolvedOrder)
-
       // Left and right sort expression have to be resolved against the respective child plan only
       case cg: CoGroup if cg.leftOrder.exists(!_.resolved) || cg.rightOrder.exists(!_.resolved) =>
-        // Resolve against `AppendColumns`'s children, instead of `AppendColumns`,
-        // because `AppendColumns`'s serializer might produce conflict attribute
-        // names leading to ambiguous references exception.
-        val (leftPlanForResolve, rightPlanForResolve) = Seq(cg.left, cg.right).map {
-          case appendColumns: AppendColumns => appendColumns.child
-          case plan => plan
-        } match {
-          case Seq(left, right) => (left, right)
-        }
-
         val resolvedLeftOrder = cg.leftOrder
-          .map(resolveExpressionByPlanOutput(_, leftPlanForResolve).asInstanceOf[SortOrder])
+          .map(resolveExpressionByPlanOutput(_, cg.left).asInstanceOf[SortOrder])
         val resolvedRightOrder = cg.rightOrder
-          .map(resolveExpressionByPlanOutput(_, rightPlanForResolve).asInstanceOf[SortOrder])
+          .map(resolveExpressionByPlanOutput(_, cg.right).asInstanceOf[SortOrder])
 
         cg.copy(leftOrder = resolvedLeftOrder, rightOrder = resolvedRightOrder)
 
