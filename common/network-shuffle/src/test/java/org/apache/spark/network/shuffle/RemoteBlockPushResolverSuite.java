@@ -1066,6 +1066,8 @@ public class RemoteBlockPushResolverSuite {
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
+    // Trigger onFailure so that the staled bytes would be added into ignoredBytes
+    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
     assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
@@ -1073,8 +1075,6 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(errorCode.failureBlockId, stream1.getID());
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
-    // Trigger onFailure and the staled bytes would be added into ignoredBytes
-    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 2));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
@@ -1096,6 +1096,8 @@ public class RemoteBlockPushResolverSuite {
     // stream 1 push should be rejected as it is from an older shuffleMergeId
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
+    // Trigger onFailure so that the staled bytes would be added into ignoredBytes
+    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
     assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
@@ -1103,8 +1105,6 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(errorCode.failureBlockId, stream1.getID());
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
-    // Trigger onFailure and the staled bytes would be added into ignoredBytes
-    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     RuntimeException re = assertThrows(RuntimeException.class,
       () -> pushResolver.finalizeShuffleMerge(
               new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1)));
