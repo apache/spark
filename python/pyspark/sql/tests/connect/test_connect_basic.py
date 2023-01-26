@@ -24,12 +24,8 @@ import tempfile
 from collections import defaultdict
 
 from pyspark.testing.sqlutils import SQLTestUtils
-<<<<<<< HEAD
-from pyspark.sql import SparkSession, Row
-from pyspark.sql.connect.client import Retrying
-=======
 from pyspark.sql import SparkSession as PySparkSession, Row
->>>>>>> origin/master
+from pyspark.sql.connect.client import Retrying
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -40,18 +36,11 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
-<<<<<<< HEAD
-from pyspark.testing.utils import ReusedPySparkTestCase
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-
-=======
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
->>>>>>> origin/master
 from pyspark.errors import (
     SparkConnectException,
     SparkConnectAnalysisException,
@@ -2615,7 +2604,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 getattr(df.write, f)()
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
     def test_retry_error_handling(self):
         # Helper class for wrapping the test.
