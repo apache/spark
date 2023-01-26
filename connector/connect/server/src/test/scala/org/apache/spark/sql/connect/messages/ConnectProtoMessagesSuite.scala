@@ -51,7 +51,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     assert(extLit.getLiteral.getInteger == 32)
   }
 
-  test("ScalarInlineUserDefinedFunction") {
+  test("CommonUserDefinedFunction") {
     val arguments = proto.Expression
       .newBuilder()
       .setUnresolvedAttribute(
@@ -65,10 +65,10 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
       .setCommand(ByteString.copyFrom("command".getBytes()))
       .build()
 
-    val scalarInlineUserDefinedFunctionExpr = proto.Expression
+    val commonUserDefinedFunctionExpr = proto.Expression
       .newBuilder()
-      .setScalarInlineUserDefinedFunction(
-        proto.ScalarInlineUserDefinedFunction
+      .setCommonUserDefinedFunction(
+        proto.CommonUserDefinedFunction
           .newBuilder()
           .setFunctionName("f")
           .setDeterministic(true)
@@ -76,7 +76,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
           .setPythonUdf(pythonUdf))
       .build()
 
-    val fun = scalarInlineUserDefinedFunctionExpr.getScalarInlineUserDefinedFunction()
+    val fun = commonUserDefinedFunctionExpr.getCommonUserDefinedFunction()
     assert(fun.getFunctionName == "f")
     assert(fun.getDeterministic == true)
     assert(fun.getArgumentsCount == 1)

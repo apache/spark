@@ -507,8 +507,8 @@ class PythonUDF:
         )
 
 
-class ScalarInlineUserDefinedFunction(Expression):
-    """Represents a scalar inline user-defined function of any programming languages."""
+class CommonUserDefinedFunction(Expression):
+    """Represents common user-defined function of any programming languages."""
 
     def __init__(
         self,
@@ -524,15 +524,13 @@ class ScalarInlineUserDefinedFunction(Expression):
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         expr = proto.Expression()
-        expr.scalar_inline_user_defined_function.function_name = self._function_name
-        expr.scalar_inline_user_defined_function.deterministic = self._deterministic
+        expr.common_user_defined_function.function_name = self._function_name
+        expr.common_user_defined_function.deterministic = self._deterministic
         if len(self._arguments) > 0:
-            expr.scalar_inline_user_defined_function.arguments.extend(
+            expr.common_user_defined_function.arguments.extend(
                 [arg.to_plan(session) for arg in self._arguments]
             )
-        expr.scalar_inline_user_defined_function.python_udf.CopyFrom(
-            self._function.to_plan(session)
-        )
+        expr.common_user_defined_function.python_udf.CopyFrom(self._function.to_plan(session))
         return expr
 
     def __repr__(self) -> str:
