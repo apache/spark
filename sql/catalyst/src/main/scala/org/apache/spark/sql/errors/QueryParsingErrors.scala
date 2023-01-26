@@ -298,17 +298,17 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       case "array" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
-          messageParameters = Map.empty,
+          messageParameters = Map("elementType" -> "<INT>"),
           ctx)
       case "struct" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
-          messageParameters = Map.empty,
+          messageParameters = Map("fieldNameType" -> "<Field1:INT>"),
           ctx)
       case "map" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
-          messageParameters = Map.empty,
+          messageParameters = Map("keyValueTypes" -> "<TIMESTAMP, INT>"),
           ctx)
     }
   }

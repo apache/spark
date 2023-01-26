@@ -599,17 +599,17 @@
     "subClass" : {
       "ARRAY" : {
         "message" : [
-          "The definition of `ARRAY` type is incomplete. You must provide an element type. For example: `ARRAY\\<INT\\>`."
+          "The definition of `ARRAY` type is incomplete. You must provide an element type. For example: `ARRAY<elementType>`."
         ]
       },
       "MAP" : {
         "message" : [
-          "The definition of `MAP` type is incomplete. You must provide a key type and a value type. For example: `MAP\\<TIMESTAMP, INT\\>`."
+          "The definition of `MAP` type is incomplete. You must provide a key type and a value type. For example: `MAP<keyValueTypes>`."
         ]
       },
       "STRUCT" : {
         "message" : [
-          "The definition of `STRUCT` type is incomplete. You must provide a field type. For example: `STRUCT\\<Field1:INT\\>`."
+          "The definition of `STRUCT` type is incomplete. You must provide a field type. For example: `STRUCT<fieldNameType>`."
         ]
       }
     },
