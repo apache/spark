@@ -594,7 +594,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
             "actualCols" -> "[]", "colName" -> "col_j",
             "expectedNum" -> "1")
         )
-        val ddl = e.getMessageParameters.get("viewDDL")
+        val ddl = e.getMessageParameters.get("suggestion")
         sql(ddl)
         checkAnswer(sql("select * FROM test_view"), Row(1))
       }
