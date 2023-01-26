@@ -1915,6 +1915,30 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *
+   * This adds extra "key" columns to the dataset, as provided by the key encoder.
+   * Those columns can be referenced by expressions in
+   * [[org.apache.spark.sql.KeyValueGroupedDataset#agg]],
+   * [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapSortedGroups]],
+   * [[org.apache.spark.sql.KeyValueGroupedDataset#cogroupSorted]].
+   * However, if columns exist with same name before grouping, those have precedence
+   * over key columns:
+   *
+   * {{{
+   *   // dataset WITHOUT column 'value'
+   *   spark.range(10)
+   *     // adds "key" column 'value'
+   *     .groupByKey(id => id * 2)
+   *     // aggregate expression references "key" column 'value'
+   *     .agg(sum($"id" + $"value").as[Long])
+   *
+   *   // dataset with column 'value'
+   *   spark.range(10).withColumn("value", $"id")
+   *     // adds "key" column 'value'
+   *     .groupByKey(_.getLong(0) * 2)
+   *     // aggregate expression references dataset column 'value'
+   *     .agg(sum($"id" + $"value").as[Long])
+   * }}}
+   *
    * @group typedrel
    * @since 2.0.0
    */

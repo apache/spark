@@ -573,7 +573,7 @@ class DatasetSuite extends QueryTest
         spark.range(10).groupByKey(id => id).agg(count("unknown"))
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`id`"))
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`id`, `value`"))
   }
 
   test("groupBy function with mapValues, unresolved reference suggestions") {
@@ -582,16 +582,39 @@ class DatasetSuite extends QueryTest
         spark.range(10).groupByKey(id => id).mapValues(id => id).agg(count("unknown"))
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`value`"))
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`value`, `value`"))
   }
 
-  test("group by function, resolving aggregate ignores key column") {
-    val actual = spark.range(3)
-      .groupByKey(id => id)
-      .mapValues(id => id)
-      .agg(count("value"))
+  test("group by function, agg expr resolution precedence") {
+    val actual1 = spark.range(3)
+      .groupByKey(id => id)  // produces key column 'value'
+      .agg(sum("value").as[Long])  // key column can be referenced
       .collect()
-    assert(actual === Seq(Row(0, 1), Row(1, 1), Row(2, 1)))
+    assert(actual1.sorted === Seq((0, 0), (1, 1), (2, 2)))
+
+    val actual2 = spark.range(3)
+      .withColumnRenamed("id", "value").as[Long]  // add column 'value' to dataset
+      .groupByKey(value => value * 2)  // produces key column 'value'
+      .agg(sum("value").as[Long])  // value column has precedence over key column
+      .collect()
+    assert(actual2.sorted === Seq((0, 0), (2, 1), (4, 2)))
+
+    val actual3 = spark.range(3)
+      .withColumnRenamed("id", "value").as[Long]  // add column 'value' to dataset
+      .groupByKey(value => value * 2)  // produces key column 'value'
+      .mapValues(value => value * -1)  // replaces value column 'value'
+      .agg(sum("value").as[Long])  // value column has precedence over key column
+      .collect()
+    assert(actual3.sorted === Seq((0, 0), (2, -1), (4, -2)))
+
+    val actual4 = spark.range(3)
+      .withColumnRenamed("id", "value").as[Long]  // add column 'value' to dataset
+      .groupByKey(value => value * 2)  // produces key column 'value'
+      .mapValues(value => value * -1)  // replaces value column 'value'
+      .mapValues(value => value + 1)  // replaces value column with new 'value'
+      .agg(sum("value").as[Long])  // value column has precedence over key column
+      .collect()
+    assert(actual4.sorted === Seq((0, 1), (2, 0), (4, -1)))
   }
 
   test("groupBy function, map") {
@@ -725,6 +748,57 @@ class DatasetSuite extends QueryTest
       .keys
       .collect()
     assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
+  }
+
+  test("groupBy function, flatMapSorted expr resolution precedence") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+
+    // groupByKey produces key column 'value'
+    val grouped1 = ds.drop("value").groupByKey(v => v.getString(0))
+    // key column can be referenced
+    val aggregated1 = grouped1.flatMapSortedGroups($"value", $"seq") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated1,
+      "a", "[a,1], [a,2]",
+      "b", "[b,1], [b,2]",
+      "c", "[c,1]"
+    )
+
+
+    // groupByKey produces key column 'value'
+    val grouped2 = ds.groupByKey(v => v.getString(0))
+    // value column has precedence over key column
+    val aggregated2 = grouped2.flatMapSortedGroups($"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated2,
+      "a", "[a,1,10], [a,2,20]",
+      "b", "[b,2,1], [b,1,2]",
+      "c", "[c,1,1]"
+    )
+
+
+    // groupByKey produces key column 'value'
+    val grouped3 = ds.groupByKey(v => v.getString(0))
+      // mapValues replaces value column 'value'
+      .mapValues(v => v.getInt(1) * -1)
+    // value column has precedence over key column
+    val aggregated3 = grouped3.flatMapSortedGroups($"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated3,
+      "a", "-2, -1",
+      "b", "-2, -1",
+      "c", "-1"
+    )
   }
 
   test("groupBy function, mapValues, flatMap") {
@@ -997,6 +1071,59 @@ class DatasetSuite extends QueryTest
     )
     val joined = rhs.join(cogrouped, col("ID") === col("value"), "left")
     checkAnswer(joined, Row(0L, 123L, 0L) :: Nil)
+  }
+
+  test("SPARK-42199: cogroup sorted, sort expr resolution precedence") {
+    val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
+    val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
+
+    // groupByKey produces key column 'value'
+    val groupedLeft1 = left.groupByKey(_._1)
+    val groupedRight1 = right.groupByKey(_._1)
+    // key columns can be referenced
+    val actual1 = groupedLeft1.cogroupSorted(groupedRight1)($"value", $"_2")($"value", $"_2") {
+      (key, left, right) => Iterator(key -> (left.mkString + "#" + right.mkString))
+    }
+    checkDatasetUnorderly(
+      actual1,
+      1 -> "(1,a)#",
+      2 -> "#(2,q)",
+      3 -> "(3,abc)(3,ijk)(3,xyz)#(3,a)(3,w)",
+      5 -> "(5,hello)#(5,x)(5,y)(5,z)")
+
+
+    // dataset column 'value' coexists with key column 'value' produced by groupByKey
+    val groupedLeft2 = left.toDF("id", "value").groupByKey(_.getInt(0))
+    val groupedRight2 = right.toDF("id", "value").groupByKey(_.getInt(0))
+    // value columns have precedence over key columns
+    val actual2 = groupedLeft2.cogroupSorted(groupedRight2)($"value")($"value") {
+      (key, left, right) => Iterator(key -> (left.mkString + "#" + right.mkString))
+    }
+    checkDatasetUnorderly(
+      actual2,
+      1 -> "[1,a]#",
+      2 -> "#[2,q]",
+      3 -> "[3,abc][3,ijk][3,xyz]#[3,a][3,w]",
+      5 -> "[5,hello]#[5,x][5,y][5,z]")
+
+
+    val groupedLeft3 = left.toDF("id", "value")
+      // dataset column 'value' coexists with key column 'value' produced by groupByKey
+      .groupByKey(_.getInt(0))
+      // mapValues replaces value column 'value'
+      .mapValues(_.getInt(0) * -1)
+    val groupedRight3 = right.toDF("id", "value")
+      // dataset column 'value' coexists with key column 'value' produced by groupByKey
+      .groupByKey(_.getInt(0))
+      // mapValues replaces value column 'value'
+      .mapValues(_.getInt(0) * -1)
+    // value columns have precedence over key columns
+    val actual3 = groupedLeft3.cogroupSorted(groupedRight3)($"value")($"value") {
+      (key, left, right) => Iterator(key -> (left.mkString + "#" + right.mkString))
+    }
+    checkDatasetUnorderly(
+      actual3,
+      1 -> "-1#", 2 -> "#-2", 3 -> "-3-3-3#-3-3", 5 -> "-5#-5-5-5")
   }
 
   test("SPARK-34806: observation on datasets") {
