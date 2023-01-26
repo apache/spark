@@ -21,11 +21,12 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ScopedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.internal.ExpressionColumnNode
 import org.apache.spark.sql.internal.TypedAggUtils.{aggKeyColumn, withInputType}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
@@ -307,9 +308,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val keyAgEncoder = agnosticEncoderFor(kEncoder)
     val valueExprEncoder = encoderFor(vEncoder)
     val encoders = columns.map(c => agnosticEncoderFor(c.encoder))
-    val namedColumns = columns.map { c =>
-      withInputType(c.named, valueExprEncoder, dataAttributes)
-    }
+    val namedColumns =
+      columns
+        // SPARK-42199: resolve these aggregate expressions only against dataAttributes
+        // this is to hide key column from expression resolution
+        .map(scopeTypedColumn(dataAttributes))
+        .map(c => withInputType(c.named, valueExprEncoder, dataAttributes))
     val keyColumn = aggKeyColumn(keyAgEncoder, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     new Dataset(sparkSession, aggregate, ProductEncoder.tuple(keyAgEncoder +: encoders))
@@ -335,6 +339,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
         this.logicalPlan,
         other.logicalPlan))
   }
+
+  private def scopeTypedColumn(
+      scope: Seq[Attribute])(
+      typedCol: TypedColumn[_, _]): TypedColumn[_, _] =
+    new TypedColumn(ExpressionColumnNode(ScopedExpression(typedCol.expr, scope)), typedCol.encoder)
 
   override def toString: String = {
     val builder = new StringBuilder

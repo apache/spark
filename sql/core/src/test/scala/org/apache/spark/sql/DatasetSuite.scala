@@ -567,6 +567,68 @@ class DatasetSuite extends QueryTest
       (1, 1))
   }
 
+  test("SPARK-42199: groupBy function, agg, unresolved reference suggestions") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(10).groupByKey(id => id).agg(count("unknown"))
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`id`"),
+      context = ExpectedContext(fragment = "count", getCurrentClassCallSitePattern))
+  }
+
+  test("SPARK-42199: groupBy function, flatMapSortedGroups, unresolved reference suggestions") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(10).groupByKey(id => id).flatMapSortedGroups($"unknown") {
+          case (g, it) => Iterator((g, it.mkString(", ")))
+        }
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`id`"),
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
+  }
+
+  test("SPARK-42199: groupBy function, mapValues, agg, unresolved reference suggestions") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(10).groupByKey(id => id).mapValues(id => id).agg(count("unknown"))
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`value`"),
+      context = ExpectedContext(fragment = "count", getCurrentClassCallSitePattern))
+  }
+
+  test("SPARK-42199: groupBy function, mapValues, flatMapSortedGroups, " +
+    "unresolved reference suggestions") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(10).groupByKey(id => id).mapValues(id => id).flatMapSortedGroups($"unknown") {
+          case (g, it) => Iterator((g, it.mkString(", ")))
+        }
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`value`"),
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
+  }
+
+  test("SPARK-42199: groupBy function, agg expr resolution") {
+    val actual = spark.range(3)
+      .withColumnRenamed("id", "value").as[Long] // add column 'value' to dataset
+      .groupByKey(value => value * 2) // produces key column 'value'
+      .agg(sum("value").as[Long]) // 'value' does not resolve to key column
+      .collect()
+    assert(actual.sorted === Seq((0, 0), (2, 1), (4, 2)))
+
+    val actual2 = spark.range(3)
+      .withColumnRenamed("id", "value").as[Long] // add column 'value' to dataset
+      .groupByKey(value => value * 2) // produces key column 'value'
+      .mapValues(value => value * -1) // replaces value column 'value'
+      .agg(sum("value").as[Long]) // 'value' does not resolve to key column
+      .collect()
+    assert(actual2.sorted === Seq((0, 0), (2, -1), (4, -2)))
+  }
+
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
@@ -698,6 +760,42 @@ class DatasetSuite extends QueryTest
       .keys
       .collect()
     assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
+  }
+
+  test("SPARK-42199: groupBy function, flatMapSortedGroups expr resolution") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+
+    // groupByKey produces key column 'value'
+    val grouped = ds.groupByKey(v => v.getString(0))
+    // 'value' does not resolve to key column
+    val aggregated = grouped.flatMapSortedGroups($"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "[a,1,10], [a,2,20]",
+      "b", "[b,2,1], [b,1,2]",
+      "c", "[c,1,1]"
+    )
+
+
+    // groupByKey produces key column 'value'
+    val grouped2 = ds.groupByKey(v => v.getString(0))
+      // mapValues replaces value column 'value'
+      .mapValues(v => v.getInt(1) * -1)
+    // 'value' does not resolve to key column
+    val aggregated2 = grouped2.flatMapSortedGroups($"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated2,
+      "a", "-2, -1",
+      "b", "-2, -1",
+      "c", "-1"
+    )
   }
 
   test("groupBy function, mapValues, flatMap") {
@@ -970,6 +1068,44 @@ class DatasetSuite extends QueryTest
     )
     val joined = rhs.join(cogrouped, col("ID") === col("value"), "left")
     checkAnswer(joined, Row(0L, 123L, 0L) :: Nil)
+  }
+
+  test("SPARK-42199: cogroup sorted, sort expr resolution") {
+    val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abcx", 3 -> "ijk").toDF("id", "value")
+    val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDF("id", "value")
+
+    // dataset column 'value' coexists with key column 'value' produced by groupByKey
+    val groupedLeft = left.groupByKey(_.getInt(0))
+    val groupedRight = right.groupByKey(_.getInt(0))
+
+    // 'value' does not resolve to key column
+    val actual = groupedLeft.cogroupSorted(groupedRight)($"value")($"value".desc) {
+      (key, left, right) => Iterator(key -> (left.mkString + "#" + right.mkString))
+    }
+    checkDatasetUnorderly(
+      actual,
+      1 -> "[1,a]#",
+      2 -> "#[2,q]",
+      3 -> "[3,abcx][3,ijk][3,xyz]#[3,w][3,a]",
+      5 -> "[5,hello]#[5,z][5,y][5,x]")
+
+
+    val groupedLeft2 = groupedLeft
+      // mapValues replaces value column 'value'
+      .mapValues(_.getString(1).reverse)
+    val groupedRight2 = groupedRight
+      // mapValues replaces value column 'value'
+      .mapValues(_.getString(1).reverse)
+    // 'value' does not resolve to key column
+    val actual2 = groupedLeft2.cogroupSorted(groupedRight2)($"value")($"value".desc) {
+      (key, left, right) => Iterator(key -> (left.mkString + "#" + right.mkString))
+    }
+    checkDatasetUnorderly(
+      actual2,
+      1 -> "a#",
+      2 -> "#q",
+      3 -> "kjixcbazyx#wa",
+      5 -> "olleh#zyx")
   }
 
   test("SPARK-34806: observation on datasets") {

@@ -2255,6 +2255,9 @@ class SparkConnectPlanner(
     val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
     val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
       .map(expr => transformExpressionWithTypedReduceExpression(expr, ds.analyzedData))
+      // SPARK-42199: resolve these aggregate expressions only against dataAttributes
+      // this is to hide key column from expression resolution
+      .map(ScopedExpression(_, ds.dataAttributes))
       .map(toNamedExpression)
     logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
   }
