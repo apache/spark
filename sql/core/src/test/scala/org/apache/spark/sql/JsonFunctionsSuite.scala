@@ -27,6 +27,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -785,7 +786,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
         errorClass = "CANNOT_PARSE_JSON_FIELD",
         parameters = Map(
-          "fieldName" -> "a",
+          "fieldName" -> toSQLValue("a", StringType),
           "fieldValue" -> "1",
           "jsonType" -> "VALUE_STRING",
           "dataType" -> "\"INT\"")

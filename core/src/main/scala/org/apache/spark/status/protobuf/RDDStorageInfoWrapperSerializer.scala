@@ -45,7 +45,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
     setStringField(info.name, builder.setName)
     builder.setNumPartitions(info.numPartitions)
     builder.setNumCachedPartitions(info.numCachedPartitions)
-    builder.setStorageLevel(info.storageLevel)
+    setStringField(info.storageLevel, builder.setStorageLevel)
     builder.setMemoryUsed(info.memoryUsed)
     builder.setDiskUsed(info.diskUsed)
 
@@ -85,7 +85,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe[RDDStorageInfoWrappe
       name = getStringField(info.hasName, info.getName),
       numPartitions = info.getNumPartitions,
       numCachedPartitions = info.getNumCachedPartitions,
-      storageLevel = info.getStorageLevel,
+      storageLevel = getStringField(info.hasStorageLevel, info.getStorageLevel),
       memoryUsed = info.getMemoryUsed,
       diskUsed = info.getDiskUsed,
       dataDistribution =

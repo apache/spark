@@ -1667,7 +1667,7 @@
       },
       "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY" : {
         "message" : [
-          "Correlated scalar subqueries in the GROUP BY clause must also be in the aggregate expressions<treeNode>."
+          "Correlated scalar subqueries must be aggregated to return at most one row."
         ]
       },
       "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT" : {
