@@ -79,6 +79,9 @@ object BuildCommons {
   val testTempDir = s"$sparkHome/target/tmp"
 
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
+
+  // SPARK-42188: needs to be consistent with `protobuf.version` in `pom.xml`.
+  val protoVersion = "2.5.0"
 }
 
 object SparkBuild extends PomBuild {
@@ -703,9 +706,12 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
+  import BuildCommons.protoVersion
+
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
     dependencyOverrides += "org.apache.avro" % "avro" % "1.11.0")
