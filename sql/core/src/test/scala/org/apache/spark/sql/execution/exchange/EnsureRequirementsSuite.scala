@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
@@ -25,9 +27,12 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = Literal(1)
@@ -1101,6 +1106,57 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(right.partitionings.head.isInstanceOf[PartitioningCollection])
         case other => fail(other.toString)
       }
+    }
+  }
+
+  test("SPARK-42168: FlatMapCoGroupInPandas and Window function with differing key order") {
+    val lKey = AttributeReference("key", IntegerType)()
+    val lKey2 = AttributeReference("key2", IntegerType)()
+
+    val rKey = AttributeReference("key", IntegerType)()
+    val rKey2 = AttributeReference("key2", IntegerType)()
+    val rValue = AttributeReference("value", IntegerType)()
+
+    val left = DummySparkPlan()
+    val right = WindowExec(
+      Alias(
+        WindowExpression(
+          Sum(rValue).toAggregateExpression(),
+          WindowSpecDefinition(
+            Seq(rKey2, rKey),
+            Nil,
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+          )
+        ), "sum")() :: Nil,
+      Seq(rKey2, rKey),
+      Nil,
+      DummySparkPlan()
+    )
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+
+    val flapMapCoGroup = FlatMapCoGroupsInPandasExec(
+      Seq(lKey, lKey2),
+      Seq(rKey, rKey2),
+      pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil,
+      left,
+      right
+    )
+
+    val result = EnsureRequirements.apply(flapMapCoGroup)
+    result match {
+      case FlatMapCoGroupsInPandasExec(leftKeys, rightKeys, _, _,
+        SortExec(leftOrder, false, _, _), SortExec(rightOrder, false, _, _)) =>
+        assert(leftKeys === Seq(lKey, lKey2))
+        assert(rightKeys === Seq(rKey, rKey2))
+        assert(leftKeys.map(k => SortOrder(k, Ascending)) === leftOrder)
+        assert(rightKeys.map(k => SortOrder(k, Ascending)) === rightOrder)
+      case other => fail(other.toString)
     }
   }
 
