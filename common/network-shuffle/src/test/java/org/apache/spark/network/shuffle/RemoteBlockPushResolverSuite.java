@@ -1066,7 +1066,7 @@ public class RemoteBlockPushResolverSuite {
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
-    // Trigger onFailure so that the staled bytes would be added into ignoredBytes
+    // Trigger onFailure so that the stale bytes would be added into ignoredBytes
     stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
@@ -1096,7 +1096,7 @@ public class RemoteBlockPushResolverSuite {
     // stream 1 push should be rejected as it is from an older shuffleMergeId
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
-    // Trigger onFailure so that the staled bytes would be added into ignoredBytes
+    // Trigger onFailure so that the stale bytes would be added into ignoredBytes
     stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
