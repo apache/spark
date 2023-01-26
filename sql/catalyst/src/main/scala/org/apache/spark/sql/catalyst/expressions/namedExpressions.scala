@@ -416,6 +416,20 @@ case class PrettyAttribute(
 }
 
 /**
+ * An expression that has to be resolved against a scope of attributes.
+ */
+case class ScopedExpression(child: Expression, scope: AttributeSeq)
+  extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = child.nullable
+  override def prettyName: String = "scoped"
+
+  override def sql: String = s"$prettyName(${child.sql}, $scope)"
+
+  override def withNewChildInternal(newChild: Expression): ScopedExpression = copy(child = newChild)
+}
+
+/**
  * A place holder used to hold a reference that has been resolved to a field outside of the current
  * plan. This is used for correlated subqueries.
  */
