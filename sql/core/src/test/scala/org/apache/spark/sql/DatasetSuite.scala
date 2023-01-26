@@ -567,25 +567,25 @@ class DatasetSuite extends QueryTest
       (1, 1))
   }
 
-  test("groupBy function, unresolved reference suggestions") {
+  test("SPARK-42199: groupBy function, unresolved reference suggestions") {
     checkError(
       exception = intercept[AnalysisException] {
         spark.range(10).groupByKey(id => id).agg(count("unknown"))
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`id`, `value`"))
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`id`"))
   }
 
-  test("groupBy function with mapValues, unresolved reference suggestions") {
+  test("SPARK-42199: groupBy function with mapValues, unresolved reference suggestions") {
     checkError(
       exception = intercept[AnalysisException] {
         spark.range(10).groupByKey(id => id).mapValues(id => id).agg(count("unknown"))
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`value`, `value`"))
+      parameters = Map("objectName" -> "`unknown`", "proposal" -> "`value`"))
   }
 
-  test("group by function, agg expr resolution") {
+  test("SPARK-42199: group by function, agg expr resolution") {
     withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "WARN") {
       val actual2 = spark.range(3)
         .withColumnRenamed("id", "value").as[Long] // add column 'value' to dataset
@@ -737,7 +737,7 @@ class DatasetSuite extends QueryTest
     assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
   }
 
-  test("groupBy function, flatMapSorted expr resolution") {
+  test("SPARK-42199: groupBy function, flatMapSorted expr resolution") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
 

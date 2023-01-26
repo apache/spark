@@ -134,11 +134,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       operator: LogicalPlan,
       a: Attribute,
       errorClass: String): Nothing = {
+    failUnresolvedAttribute(a, operator.inputSet.toSeq, errorClass)
+  }
+
+  private def failUnresolvedAttribute(
+      a: Attribute,
+      candidates: Seq[Attribute],
+      errorClass: String): Nothing = {
     val missingCol = a.sql
-    val candidates = operator.inputSet.toSeq
-      .map(attr => attr.qualifier :+ attr.name)
+    val candidateNames = candidates.map(attr => attr.qualifier :+ attr.name)
     val orderedCandidates =
-      StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidates)
+      StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidateNames)
     throw QueryCompilationErrors.unresolvedAttributeError(
       errorClass, missingCol, orderedCandidates, a.origin)
   }
@@ -296,6 +302,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         ColumnDefinition.checkColumnDefinitions(operator)
 
         var stagedError: Option[() => Unit] = None
+
+        getAllExpressions(operator).foreach(_.foreach {
+          case se: ScopedExpression if !se.resolved =>
+            se.child.foreachUp {
+              case a: Attribute if !a.resolved =>
+                failUnresolvedAttribute(a, se.scope.attrs, "UNRESOLVED_COLUMN")
+            }
+          case _ =>
+        })
+
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")

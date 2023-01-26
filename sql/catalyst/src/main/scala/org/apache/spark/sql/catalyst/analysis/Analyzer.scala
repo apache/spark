@@ -3514,10 +3514,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveScopedExpression extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
       case se: ScopedExpression if se.resolved => se.child
-      case ScopedExpression(expr, attributes) =>
-        expr.transformDown {
+      case se @ ScopedExpression(expr, attributes) =>
+        val resolved = expr.transformDown {
           case u@UnresolvedAttribute(nameParts) =>
             attributes.resolve(nameParts, resolver).getOrElse(u)
+        }
+        if (resolved.fastEquals(expr)) {
+          se
+        } else {
+          resolved
         }
     }
   }
