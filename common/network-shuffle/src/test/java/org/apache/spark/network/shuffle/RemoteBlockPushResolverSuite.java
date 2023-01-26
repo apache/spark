@@ -1076,7 +1076,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 2));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
-    verifyMetrics(6, 0, 0, 0, 0, 2, 0);
+    verifyMetrics(6, 0, 0, 0, 0, 2, 4);
   }
 
   @Test
@@ -1111,7 +1111,7 @@ public class RemoteBlockPushResolverSuite {
 
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
-    verifyMetrics(6, 0, 0, 0, 0, 2, 0);
+    verifyMetrics(6, 0, 0, 0, 0, 2, 4);
   }
 
   @Test

@@ -1478,6 +1478,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (isTooLate(info, partitionInfo.reduceId)) {
           freeDeferredBufs();
           mergeManager.pushMergeMetrics.lateBlockPushes.mark();
+          updateIgnoredBlockBytes();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.TOO_LATE_BLOCK_PUSH));
@@ -1485,6 +1486,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId)) {
           freeDeferredBufs();
           mergeManager.pushMergeMetrics.staleBlockPushes.mark();
+          updateIgnoredBlockBytes();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.STALE_BLOCK_PUSH));
@@ -1556,6 +1558,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       } else {
         logger.debug("Encountered issue when merging {}", streamId, throwable);
       }
+      // The block was received by ESS but didn't get merged, so it is considered as "ignored".
+      // Capturing them in ignoredBlockBytes would help measure any server side improvement.
+      updateIgnoredBlockBytes();
       // Only update partitionInfo if the failure corresponds to a valid request. If the
       // request is too late, i.e. received after shuffle merge finalize or stale block push,
       // #onFailure will also be triggered, and we can just ignore. Also, if we couldn't find
@@ -1572,10 +1577,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
       }
       isWriting = false;
-      // The failed bytes (and the subsequent bytes) landed at ESS, hence we considered them
-      // also as the bytes being ignored. Including them as ignoredBlockBytes would also help
-      // measure any server side improvement.
-      updateIgnoredBlockBytes();
     }
 
     @VisibleForTesting
