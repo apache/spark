@@ -1478,7 +1478,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (isTooLate(info, partitionInfo.reduceId)) {
           freeDeferredBufs();
           mergeManager.pushMergeMetrics.lateBlockPushes.mark();
-          updateIgnoredBlockBytes();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.TOO_LATE_BLOCK_PUSH));
@@ -1486,7 +1485,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId)) {
           freeDeferredBufs();
           mergeManager.pushMergeMetrics.staleBlockPushes.mark();
-          updateIgnoredBlockBytes();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.STALE_BLOCK_PUSH));
