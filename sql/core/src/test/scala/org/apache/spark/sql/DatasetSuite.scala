@@ -573,7 +573,7 @@ class DatasetSuite extends QueryTest
       "a", "30", "b", "3", "c", "1")
   }
 
-  test("groupBy function, flatMapSorted") {
+  test("groupBy, flatMapSorted") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
@@ -599,7 +599,7 @@ class DatasetSuite extends QueryTest
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
   }
 
-  test("groupByKey function, flatMapSorted") {
+  test("groupBy function, flatMapSorted") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     // groupByKey Row => String adds key columns `value` to the dataframe
@@ -627,7 +627,7 @@ class DatasetSuite extends QueryTest
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
   }
 
-  test("groupBy function, flatMapSorted desc") {
+  test("groupBy, flatMapSorted desc") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
@@ -643,7 +643,7 @@ class DatasetSuite extends QueryTest
     )
   }
 
-  test("groupByKey function, flatMapSorted desc") {
+  test("groupBy function, flatMapSorted desc") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     // groupByKey Row => String adds key columns `value` to the dataframe
@@ -851,7 +851,7 @@ class DatasetSuite extends QueryTest
     }
   }
 
-  test("cogroup with groupByKey and sorted") {
+  test("cogroup with groupBy function and sorted") {
     val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
     val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
     // this groupByKey produces conflicting _1 and _2 columns
