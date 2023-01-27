@@ -31,6 +31,7 @@ import org.json4s.jackson.JsonMethods.compact
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
@@ -45,7 +46,8 @@ import org.apache.spark.util.Utils.weakIntern
  * repeated re-parsing of configuration values on each read.
  */
 private[spark] class JsonProtocolOptions(conf: SparkConf) {
-  val includeTaskMetricsAccumulables: Boolean = true
+  val includeTaskMetricsAccumulators: Boolean =
+    conf.get(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS)
 }
 
 /**
@@ -445,7 +447,7 @@ private[spark] object JsonProtocol {
     accumulablesToJson(
       stageInfo.accumulables.values,
       g,
-      includeTaskMetricsAccumulables = options.includeTaskMetricsAccumulables)
+      includeTaskMetricsAccumulators = options.includeTaskMetricsAccumulators)
     g.writeNumberField("Resource Profile Id", stageInfo.resourceProfileId)
     g.writeBooleanField("Shuffle Push Enabled", stageInfo.isShufflePushEnabled)
     g.writeNumberField("Shuffle Push Mergers Count", stageInfo.shuffleMergerCount)
@@ -474,23 +476,23 @@ private[spark] object JsonProtocol {
     accumulablesToJson(
       taskInfo.accumulables,
       g,
-      includeTaskMetricsAccumulables = options.includeTaskMetricsAccumulables)
+      includeTaskMetricsAccumulators = options.includeTaskMetricsAccumulators)
     g.writeEndObject()
   }
 
-  private[this] val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
+  private[util] val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
 
   private[this] val taskMetricAccumulableNames = TaskMetrics.empty.nameToAccums.keySet.toSet
 
   def accumulablesToJson(
       accumulables: Iterable[AccumulableInfo],
       g: JsonGenerator,
-      includeTaskMetricsAccumulables: Boolean = true): Unit = {
+    includeTaskMetricsAccumulators: Boolean = true): Unit = {
     g.writeStartArray()
     accumulables
         .filterNot { acc =>
           acc.name.exists(accumulableExcludeList.contains) ||
-          (!includeTaskMetricsAccumulables && acc.name.exists(taskMetricAccumulableNames.contains))
+          (!includeTaskMetricsAccumulators && acc.name.exists(taskMetricAccumulableNames.contains))
         }
         .toList
         .sortBy(_.id)

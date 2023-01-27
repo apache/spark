@@ -33,6 +33,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource._
@@ -776,6 +777,111 @@ class JsonProtocolSuite extends SparkFunSuite {
         |  "foo" : "foo"
         |}""".stripMargin
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
+  }
+
+  test("SPARK-42204: spark.eventLog.includeTaskMetricsAccumulators config") {
+    val includeConf = new JsonProtocolOptions(
+      new SparkConf().set(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS, true))
+    val excludeConf = new JsonProtocolOptions(
+      new SparkConf().set(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS, false))
+
+    val taskMetricsAccumulables = TaskMetrics
+      .empty
+      .nameToAccums
+      .filterKeys(!JsonProtocol.accumulableExcludeList.contains(_))
+      .values
+      .map(_.toInfo(Some(1), None))
+      .toSeq
+
+    val taskInfoWithTaskMetricsAccums = makeTaskInfo(222L, 333, 1, 333, 444L, false)
+    taskInfoWithTaskMetricsAccums.setAccumulables(taskMetricsAccumulables)
+    val taskInfoWithoutTaskMetricsAccums = makeTaskInfo(222L, 333, 1, 333, 444L, false)
+    taskInfoWithoutTaskMetricsAccums.setAccumulables(Seq.empty)
+
+    val stageInfoWithTaskMetricsAccums = makeStageInfo(100, 200, 300, 400L, 500L)
+    stageInfoWithTaskMetricsAccums.accumulables.clear()
+    stageInfoWithTaskMetricsAccums.accumulables ++= taskMetricsAccumulables.map(x => (x.id, x))
+    val stageInfoWithoutTaskMetricsAccums = makeStageInfo(100, 200, 300, 400L, 500L)
+    stageInfoWithoutTaskMetricsAccums.accumulables.clear()
+
+    // Test events which should be impacted by the config. Due to SPARK-42205 we need to test
+    // start events in addition to end events.
+
+    // TaskStart
+    {
+      val originalEvent = SparkListenerTaskStart(111, 0, taskInfoWithTaskMetricsAccums)
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(taskInfo = taskInfoWithoutTaskMetricsAccums)
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // TaskEnd
+    {
+      val originalEvent = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
+        taskInfoWithTaskMetricsAccums,
+        new ExecutorMetrics(Array(12L, 23L, 45L, 67L, 78L, 89L,
+          90L, 123L, 456L, 789L, 40L, 20L, 20L, 10L, 20L, 10L, 301L)),
+        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+          hasHadoopInput = false, hasOutput = false))
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(taskInfo = taskInfoWithoutTaskMetricsAccums)
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // StageSubmitted
+    {
+      val originalEvent = SparkListenerStageSubmitted(stageInfoWithTaskMetricsAccums, properties)
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(stageInfo = stageInfoWithoutTaskMetricsAccums)
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // StageCompleted
+    {
+      val originalEvent = SparkListenerStageCompleted(stageInfoWithTaskMetricsAccums)
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(stageInfo = stageInfoWithoutTaskMetricsAccums)
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // JobStart
+    {
+      val originalEvent =
+        SparkListenerJobStart(1, 1, Seq(stageInfoWithTaskMetricsAccums), properties)
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(stageInfos = Seq(stageInfoWithoutTaskMetricsAccums))
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // ExecutorMetricsUpdate events should be unaffected by the config:
+    val executorMetricsUpdate =
+      SparkListenerExecutorMetricsUpdate("0", Seq((0, 0, 0, taskMetricsAccumulables)))
+    assert(
+      sparkEventToJsonString(executorMetricsUpdate, includeConf) ===
+      sparkEventToJsonString(executorMetricsUpdate, excludeConf))
+    assertEquals(
+      JsonProtocol.sparkEventFromJson(sparkEventToJsonString(executorMetricsUpdate, includeConf)),
+      executorMetricsUpdate)
   }
 }
 
