@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
@@ -957,18 +958,17 @@ class SubquerySuite extends QueryTest
           | )
           | FROM t0""".stripMargin
 
-      {
-        val df = sql(query)
-        checkAnswer(df,
-          Row(1, 8) :: Row(2, null) :: Nil)
+      val df = sql(query)
+      checkAnswer(df,
+        Row(1, 8) :: Row(2, null) :: Nil)
 
-        val optimizedPlan = df.queryExecution.optimizedPlan
-        val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
-        assert(aggregate.groupingExpressions.size == 2)
-        val union = optimizedPlan.collectFirst { case u: Union => u }.get
-        assert(union.output.size == 3)
-        assert(optimizedPlan.resolved)
-      }
+      val optimizedPlan = df.queryExecution.optimizedPlan
+      val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
+      assert(aggregate.groupingExpressions.size == 2)
+      val union = optimizedPlan.collectFirst { case u: Union => u }.get
+      assert(union.output.size == 3)
+      assert(optimizedPlan.resolved)
+
       withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
         assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
@@ -1003,6 +1003,62 @@ class SubquerySuite extends QueryTest
         val union = optimizedPlan.collectFirst { case u: Union => u }.get
         assert(union.output.size == 2)
         assert(optimizedPlan.resolved)
+      }
+    }
+  }
+
+  test("SPARK-36124: Correlated subqueries with set ops") {
+    withTempView("t0", "t1", "t2") {
+      Seq((1, 1), (2, 0)).toDF("t0a", "t0b").createOrReplaceTempView("t0")
+      Seq((1, 1, 3)).toDF("t1a", "t1b", "t1c").createOrReplaceTempView("t1")
+      Seq((1, 1, 5), (2, 2, 7)).toDF("t2a", "t2b", "t2c").createOrReplaceTempView("t2")
+
+      // Union with different outer refs
+      for (setopType <- Seq("INTERSECT", "EXCEPT")) {
+        for (distinctness <- Seq("ALL", "DISTINCT")) {
+          val query =
+            s"""
+              | SELECT t0a, (SELECT sum(t1c) FROM
+              |   (SELECT t1c
+              |   FROM   t1
+              |   WHERE  t1a = t0a
+              |   ${setopType} ${distinctness}
+              |   SELECT t2c
+              |   FROM   t2
+              |   WHERE  t2b = t0b)
+              | )
+              | FROM t0""".stripMargin
+
+          val df = sql(query)
+          val optimizedPlan = df.queryExecution.optimizedPlan
+          val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
+          assert(aggregate.groupingExpressions.size == 2)
+          if (distinctness == "DISTINCT") {
+            if (setopType == "INTERSECT") {
+              val join = optimizedPlan.collectFirst {
+                case j @ Join(_, _, LeftSemi, _, _) => j
+              }.get
+              assert(splitConjunctivePredicates(join.condition.get).size == 3)
+            } else {
+              val join = optimizedPlan.collectFirst {
+                case j @ Join(_, _, LeftAnti, _, _) => j
+              }.get
+              assert(splitConjunctivePredicates(join.condition.get).size == 3)
+            }
+          }
+          assert(optimizedPlan.resolved)
+
+          withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+            val error = intercept[AnalysisException] { sql(query) }
+            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+          }
+          withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
+            val error = intercept[AnalysisException] { sql(query) }
+            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+          }
+        }
       }
     }
   }

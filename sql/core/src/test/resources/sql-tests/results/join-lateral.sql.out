@@ -1207,9 +1207,9 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-(SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1))
+SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1)
 UNION ALL
-(SELECT * FROM t1 JOIN t4)
+SELECT * FROM t1 JOIN t4
 -- !query schema
 struct<c1:int,c2:int,c1:int,c2:int>
 -- !query output
@@ -1226,23 +1226,23 @@ struct<c1:int,c2:int,c1:int,c2:int>
 
 
 -- !query
-(SELECT * FROM t1 JOIN LATERAL
+SELECT * FROM t1 JOIN LATERAL
   (SELECT t2.c2
   FROM   t2
   WHERE  t2.c1 = t1.c1
   UNION ALL
   SELECT t4.c2
   FROM   t4
-  WHERE  t4.c1 = t1.c1))
+  WHERE  t4.c1 = t1.c1)
 UNION ALL
-(SELECT * FROM t2 JOIN LATERAL
+SELECT * FROM t2 JOIN LATERAL
   (SELECT t1.c2
   FROM   t1
   WHERE  t2.c1 <= t1.c1
   UNION ALL
   SELECT t4.c2
   FROM   t4
-  WHERE  t4.c1 < t2.c1))
+  WHERE  t4.c1 < t2.c1)
 -- !query schema
 struct<c1:int,c2:int,c2:int>
 -- !query output

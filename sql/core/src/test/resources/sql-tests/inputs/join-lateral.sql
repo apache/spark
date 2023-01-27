@@ -350,28 +350,28 @@ SELECT * FROM t1 JOIN LATERAL
   FROM   t4);
 
 -- lateral join under union
-(SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1))
+SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1)
 UNION ALL
-(SELECT * FROM t1 JOIN t4);
+SELECT * FROM t1 JOIN t4;
 
 -- union above and below lateral join
-(SELECT * FROM t1 JOIN LATERAL
+SELECT * FROM t1 JOIN LATERAL
   (SELECT t2.c2
   FROM   t2
   WHERE  t2.c1 = t1.c1
   UNION ALL
   SELECT t4.c2
   FROM   t4
-  WHERE  t4.c1 = t1.c1))
+  WHERE  t4.c1 = t1.c1)
 UNION ALL
-(SELECT * FROM t2 JOIN LATERAL
+SELECT * FROM t2 JOIN LATERAL
   (SELECT t1.c2
   FROM   t1
   WHERE  t2.c1 <= t1.c1
   UNION ALL
   SELECT t4.c2
   FROM   t4
-  WHERE  t4.c1 < t2.c1));
+  WHERE  t4.c1 < t2.c1);
 
 -- SPARK-41961: lateral join with table-valued functions
 SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2));

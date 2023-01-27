@@ -44,10 +44,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       innerPlan: LogicalPlan,
       outerPlan: LogicalPlan,
       correctAnswer: LogicalPlan,
-      conditions: Seq[Expression]): Unit = {
+      conditions: Seq[Expression],
+      checkAnalysis: Boolean = true): Unit = {
     val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
     assert(!hasOuterReferences(outputPlan))
-    comparePlans(outputPlan, correctAnswer)
+    comparePlans(outputPlan, correctAnswer, checkAnalysis)
     assert(joinCond.length == conditions.length)
     joinCond.zip(conditions).foreach(e => compareExpressions(e._1, e._2))
   }
@@ -331,6 +332,114 @@ class DecorrelateInnerQuerySuite extends PlanTest {
               testRelation)))
       ))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y, z <=> z))
+  }
+
+  test("INTERSECT ALL in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Intersect(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b, c === 6),
+          testRelation),
+        isAll = true)
+    val correctAnswer =
+      Intersect(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a, b, c, x, y),
+          Filter(And(y === b, c === 6),
+            DomainJoin(Seq(x.newInstance(), y.newInstance()),
+              testRelation))),
+        isAll = true
+      )
+    // Disable checkAnalysis because otherwise duplicate attributes hit
+    // "Failure when resolving conflicting references"
+    // (they are only duplicate because of the unit test)
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y), checkAnalysis = false)
+  }
+
+  test("INTERSECT DISTINCT in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Intersect(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b, c === 6),
+          testRelation),
+        isAll = false)
+    val correctAnswer =
+      Intersect(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a, b, c, x, y),
+          Filter(And(y === b, c === 6),
+            DomainJoin(Seq(x.newInstance(), y.newInstance()),
+              testRelation))),
+        isAll = false
+      )
+    // Disable checkAnalysis because otherwise duplicate attributes hit
+    // "Failure when resolving conflicting references"
+    // (they are only duplicate because of the unit test)
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y), checkAnalysis = false)
+  }
+
+  test("EXCEPT ALL in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Except(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b, c === 6),
+          testRelation),
+        isAll = true)
+    val correctAnswer =
+      Except(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a, b, c, x, y),
+          Filter(And(y === b, c === 6),
+            DomainJoin(Seq(x.newInstance(), y.newInstance()),
+              testRelation))),
+        isAll = true
+      )
+    // Disable checkAnalysis because otherwise duplicate attributes hit
+    // "Failure when resolving conflicting references"
+    // (they are only duplicate because of the unit test)
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y), checkAnalysis = false)
+  }
+
+  test("EXCEPT DISTINCT in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Except(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b, c === 6),
+          testRelation),
+        isAll = false)
+    val correctAnswer =
+      Except(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a, b, c, x, y),
+          Filter(And(y === b, c === 6),
+            DomainJoin(Seq(x.newInstance(), y.newInstance()),
+              testRelation))),
+        isAll = false
+      )
+    // Disable checkAnalysis because otherwise duplicate attributes hit
+    // "Failure when resolving conflicting references"
+    // (they are only duplicate because of the unit test)
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y), checkAnalysis = false)
   }
 
   test("SPARK-38155: distinct with non-equality correlated predicates") {

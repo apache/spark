@@ -270,8 +270,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
       // for the different names in each union child. We should not remap the attribute names used
       // in the outer query.
       //
-      // Note: the reason this logic is necessary is that constructing the DomainJoins happens much
-      // earlier than rewriting the DomainJoins into actual joins, with many optimization steps in
+      // Note: the reason we can't just use the original joinCond from when the DomainJoin was
+      // constructed is that constructing the DomainJoins happens much earlier than rewriting the
+      // DomainJoins into actual joins, with many optimization steps in
       // between, which could change the attributes involved (e.g. CollapseProject).
       case EqualNullSafe(left: Attribute, right: Expression) =>
         EqualNullSafe(map.getOrElse(left, left), right)
