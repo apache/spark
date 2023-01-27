@@ -21,26 +21,51 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.TASK_MAX_FAILURES
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
+  import SparkMasterRegex._
 
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
+  private def isLocal(conf: SparkConf): Boolean =
+    conf.get(KUBERNETES_DRIVER_MASTER_URL).startsWith("local")
+
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    new TaskSchedulerImpl(sc)
+    val maxTaskFailures = masterURL match {
+      case "local" | LOCAL_N_REGEX(_) => 1
+      case LOCAL_N_FAILURES_REGEX(_, maxFailures) => maxFailures.toInt
+      case _ => sc.conf.get(TASK_MAX_FAILURES)
+    }
+    new TaskSchedulerImpl(sc, maxTaskFailures, isLocal(sc.conf))
   }
 
   override def createSchedulerBackend(
       sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
+    if (isLocal(sc.conf)) {
+      def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
+      val threadCount = masterURL match {
+        case LOCAL_N_REGEX(threads) =>
+          if (threads == "*") localCpuCount else 1
+        case LOCAL_N_FAILURES_REGEX(threads, _) =>
+          if (threads == "*") localCpuCount else 1
+        case _ => 1
+      }
+      val schedulerImpl = scheduler.asInstanceOf[TaskSchedulerImpl]
+      val backend = new LocalSchedulerBackend(sc.conf, schedulerImpl, threadCount)
+      schedulerImpl.initialize(backend)
+      return backend
+    }
     val wasSparkSubmittedInClusterMode = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
     val (authConfPrefix,
       apiServerUri,
