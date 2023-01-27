@@ -2022,7 +2022,7 @@ package object config {
 
   private[spark] val AUTO_STOP_ACTIVE_SPARK_CONTEXTS =
     ConfigBuilder("spark.kubernetes.submit.autoStopActiveSparkContexts")
-      .version("3.4.0")
+      .version("3.5.0")
       .doc("When set to true, on Kubernetes Spark will stop all the active Spark contexts after " +
         "the finish of non-shell applications' main method.")
       .booleanConf
