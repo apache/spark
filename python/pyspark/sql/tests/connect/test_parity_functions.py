@@ -39,11 +39,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
 
-    # TODO(SPARK-41849): Implement DataFrameReader.text
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_input_file_name_udf(self):
-        super().test_input_file_name_udf()
-
     # TODO(SPARK-41901): Parity in String representation of Column
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_inverse_trig_functions(self):
