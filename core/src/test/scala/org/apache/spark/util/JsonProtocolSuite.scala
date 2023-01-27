@@ -43,7 +43,7 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
-  import JsonProtocol.toJsonString
+  import JsonProtocol._
   import JsonProtocolSuite._
 
   test("SparkListenerEvent") {
@@ -366,6 +366,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(newMetrics.executorDeserializeCpuTime == 0)
     assert(newMetrics.executorCpuTime == 0)
     assert(newMetrics.peakExecutionMemory == 0)
+  }
+
+  test("Task Executor Metrics backward compatibility") {
+    // The "Task Executor Metrics" field was introduced in Spark 3.0.0 in SPARK-23429
+    val oldJson = taskEndJsonString.removeField("Task Executor Metrics")
+    val oldTaskEnd = JsonProtocol.taskEndFromJson(oldJson)
+    val newTaskEnd = JsonProtocol.taskEndFromJson(taskEndJsonString)
+    assert(oldTaskEnd.taskExecutorMetrics != newTaskEnd.taskExecutorMetrics)
+    assert(oldTaskEnd.taskExecutorMetrics.isSet())
+    ExecutorMetricType.metricToOffset.keys.foreach { metric =>
+      assert(oldTaskEnd.taskExecutorMetrics.getMetricValue(metric) == 0)
+    }
   }
 
   test("StorageLevel backward compatibility") {
