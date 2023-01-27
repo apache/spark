@@ -2020,6 +2020,14 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val AUTO_STOP_ACTIVE_SPARK_CONTEXTS =
+    ConfigBuilder("spark.kubernetes.submit.autoStopActiveSparkContexts")
+      .version("3.4.0")
+      .doc("When set to true, on Kubernetes Spark will stop all the active Spark contexts after " +
+        "the finish of non-shell applications' main method.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")
       .version("0.8.1")
