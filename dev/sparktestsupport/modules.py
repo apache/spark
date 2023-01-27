@@ -278,8 +278,8 @@ connect = Module(
         "connector/connect",
     ],
     sbt_test_goals=[
-        "connect/test",
         "connect-client-jvm/test",
+        "connect/test",
     ],
 )
 
