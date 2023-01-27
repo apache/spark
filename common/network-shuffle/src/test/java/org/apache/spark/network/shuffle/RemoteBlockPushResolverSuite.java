@@ -278,7 +278,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
-    verifyMetrics(4, 0, 0, 0, 0, 0, 0);
+    verifyMetrics(4, 0, 0, 0, 0, 0, 4);
   }
 
   @Test
@@ -291,7 +291,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     assertEquals("num-chunks", 0, blockMeta.getNumChunks());
-    verifyMetrics(4, 0, 0, 0, 0, 0, 0);
+    verifyMetrics(4, 0, 0, 0, 0, 0, 4);
   }
 
   @Test
@@ -306,7 +306,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     assertEquals("num-chunks", 0, blockMeta.getNumChunks());
-    verifyMetrics(9, 0, 0, 0, 0, 0, 0);
+    verifyMetrics(9, 0, 0, 0, 0, 0, 9);
   }
 
   @Test
@@ -322,7 +322,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
-    verifyMetrics(9, 0, 0, 0, 0, 0, 0);
+    verifyMetrics(9, 0, 0, 0, 0, 0, 9);
   }
 
   @Test
@@ -385,7 +385,7 @@ public class RemoteBlockPushResolverSuite {
     FileSegmentManagedBuffer mb =
       (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(TEST_APP, 0, 0, 0, 0);
     assertArrayEquals(expectedBytes, mb.nioByteBuffer().array());
-    verifyMetrics(14, 0, 0, 0, 0, 0, 0);
+    verifyMetrics(14, 0, 0, 0, 0, 0, 10);
   }
 
   @Test
@@ -1066,6 +1066,8 @@ public class RemoteBlockPushResolverSuite {
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
+    // Trigger onFailure so that the stale bytes would be added into ignoredBytes
+    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
     assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
@@ -1076,7 +1078,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 2));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
-    verifyMetrics(6, 0, 0, 0, 0, 2, 0);
+    verifyMetrics(6, 0, 0, 0, 0, 2, 4);
   }
 
   @Test
@@ -1094,6 +1096,8 @@ public class RemoteBlockPushResolverSuite {
     // stream 1 push should be rejected as it is from an older shuffleMergeId
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
+    // Trigger onFailure so that the stale bytes would be added into ignoredBytes
+    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
     assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
@@ -1111,7 +1115,7 @@ public class RemoteBlockPushResolverSuite {
 
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
-    verifyMetrics(6, 0, 0, 0, 0, 2, 0);
+    verifyMetrics(6, 0, 0, 0, 0, 2, 4);
   }
 
   @Test
