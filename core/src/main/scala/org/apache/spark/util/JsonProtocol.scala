@@ -432,7 +432,7 @@ private[spark] object JsonProtocol {
     g.writeEndObject()
   }
 
-  private lazy val accumulableExcludeList = Set("internal.metrics.updatedBlockStatuses")
+  private lazy val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
 
   def accumulablesToJson(accumulables: Iterable[AccumulableInfo], g: JsonGenerator): Unit = {
     g.writeStartArray()
