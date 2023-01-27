@@ -793,7 +793,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("SPARK-42206: skip logging of all-zero Task Executor Metrics") {
-    val allZeroTaskExecutorMetrics = new ExecutorMetrics(Map.empty[String, Long])
+    val allZeroTaskExecutorMetrics = new ExecutorMetrics(Array.emptyLongArray)
     val taskEnd = taskEndFromJson(taskEndJsonString)
       .copy(taskExecutorMetrics = allZeroTaskExecutorMetrics)
 
