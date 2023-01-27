@@ -790,6 +790,15 @@ class JsonProtocolSuite extends SparkFunSuite {
         |}""".stripMargin
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
   }
+
+  test("SPARK-42206: skip logging of all-zero Task Executor Metrics") {
+    val allZeroTaskExecutorMetrics = new ExecutorMetrics(Map.empty[String, Long])
+    val taskEnd = taskEndFromJson(taskEndJsonString)
+      .copy(taskExecutorMetrics = allZeroTaskExecutorMetrics)
+    val json = sparkEventToJsonString(taskEnd)
+    assertEquals(taskEnd, taskEndFromJson(json))
+    assert(!json.has("Task Executor Metrics"))
+  }
 }
 
 

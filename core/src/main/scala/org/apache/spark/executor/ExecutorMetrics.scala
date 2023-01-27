@@ -85,6 +85,18 @@ class ExecutorMetrics private[spark] extends Serializable {
     }
     updated
   }
+
+  private[spark] def allMetricsAreZero(): Boolean = {
+    var foundNonZero = false
+    var i = 0
+    while (i < metrics.length && !foundNonZero) {
+      if (metrics(i) != 0) {
+        foundNonZero = true
+      }
+      i += 1
+    }
+    !foundNonZero
+  }
 }
 
 private[spark] object ExecutorMetrics {
