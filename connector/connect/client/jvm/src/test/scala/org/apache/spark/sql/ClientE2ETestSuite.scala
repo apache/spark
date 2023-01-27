@@ -18,7 +18,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.tags.ExtendedConnectTest
 
+@ExtendedConnectTest
 class ClientE2ETestSuite extends RemoteSparkSession {
 
   // Spark Result
