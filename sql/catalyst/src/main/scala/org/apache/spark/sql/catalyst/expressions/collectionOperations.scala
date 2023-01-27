@@ -4674,8 +4674,9 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements() - 1)
 
     if (newPosExtendsArrayLeft) {
-      // special case- if the new position is negative but larger than the current array size, place the item at
-      // start of new array, potentially followed by a number of null elements, followed by current array contents
+      // special case- if the new position is negative but larger than the current array size
+      // place the new item at start of array, place the current array contents at the end
+      // and fill the newly created array elements inbetween with a null
 
       val newArrayLength = -posInt + 1
 
@@ -4686,9 +4687,8 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val newArray = new Array[Any](newArrayLength)
 
       baseArr.foreach(arrayElementType, (i, v) => {
-        // the position of an existing element will be
-        // current relative array position + 1 (space for the new item) + number of new null elements introduced
-        elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
+        // current position, offset by new item + new null array elements
+        val elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
         newArray(elementPosition) = v
       })
 
@@ -4709,12 +4709,14 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val newArray = new Array[Any](newArrayLength)
 
       baseArr.foreach(arrayElementType, (i, v) => {
-        if (i >= itemInsertionIndex) {
+        if (i >= posInt) {
           newArray(i + 1) = v
         } else {
           newArray(i) = v
         }
       })
+
+      newArray(posInt) = item
 
       return new GenericArrayData(newArray)
     }
