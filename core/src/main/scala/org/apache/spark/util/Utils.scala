@@ -1110,6 +1110,24 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Normalize IPv6 IPs and no-op on all other hosts.
+   */
+  private[spark] def normalizeIpIfNeeded(host: String): String = {
+    // Is this a v6 address. We ask users to add [] around v6 addresses as strs but
+    // there not always there. If it's just 0-9 and : and [] we treat it as a v6 address.
+    // This means some invalid addresses are treated as v6 addresses, but since they are
+    // not valid hostnames it doesn't matter.
+    // See https://www.rfc-editor.org/rfc/rfc1123#page-13 for context around valid hostnames.
+    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]*)\]{0,1}$""".r
+    host match {
+      case addressRe(unbracketed) =>
+        addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))
+      case _ =>
+        host
+    }
+  }
+
+  /**
    * Checks if the host contains only valid hostname/ip without port
    * NOTE: Incase of IPV6 ip it should be enclosed inside []
    */

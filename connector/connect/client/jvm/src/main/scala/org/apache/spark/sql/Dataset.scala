@@ -16,9 +16,59 @@
  */
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.SparkResult
 
 class Dataset(val session: SparkSession, private[sql] val plan: proto.Plan) {
+
+  /**
+   * Selects a set of column based expressions.
+   * {{{
+   *   ds.select($"colA", $"colB" + 1)
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def select(cols: Column*): Dataset = session.newDataset { builder =>
+    builder.getProjectBuilder
+      .setInput(plan.getRoot)
+      .addAllExpressions(cols.map(_.expr).asJava)
+  }
+
+  /**
+   * Filters rows using the given condition.
+   * {{{
+   *   // The following are equivalent:
+   *   peopleDs.filter($"age" > 15)
+   *   peopleDs.where($"age" > 15)
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def filter(condition: Column): Dataset = session.newDataset { builder =>
+    builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
+  }
+
+  /**
+   * Returns a new Dataset by taking the first `n` rows. The difference between this function and
+   * `head` is that `head` is an action and returns an array (by triggering query execution) while
+   * `limit` returns a new Dataset.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def limit(n: Int): Dataset = session.newDataset { builder =>
+    builder.getLimitBuilder
+      .setInput(plan.getRoot)
+      .setLimit(n)
+  }
+
+  private[sql] def analyze: proto.AnalyzePlanResponse = session.analyze(plan)
+
   def collectResult(): SparkResult = session.execute(plan)
 }

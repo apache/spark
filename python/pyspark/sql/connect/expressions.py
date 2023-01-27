@@ -480,6 +480,68 @@ class UnresolvedFunction(Expression):
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
 
 
+class PythonUDF:
+    """Represents a Python user-defined function."""
+
+    def __init__(
+        self,
+        output_type: str,
+        eval_type: int,
+        command: bytes,
+    ) -> None:
+        self._output_type = output_type
+        self._eval_type = eval_type
+        self._command = command
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
+        expr = proto.PythonUDF()
+        expr.output_type = self._output_type
+        expr.eval_type = self._eval_type
+        expr.command = self._command
+        return expr
+
+    def __repr__(self) -> str:
+        return (
+            f"{self._output_type}, {self._eval_type}, "
+            f"{self._command}"  # type: ignore[str-bytes-safe]
+        )
+
+
+class ScalarInlineUserDefinedFunction(Expression):
+    """Represents a scalar inline user-defined function of any programming languages."""
+
+    def __init__(
+        self,
+        function_name: str,
+        deterministic: bool,
+        arguments: Sequence[Expression],
+        function: PythonUDF,
+    ):
+        self._function_name = function_name
+        self._deterministic = deterministic
+        self._arguments = arguments
+        self._function = function
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        expr = proto.Expression()
+        expr.scalar_inline_user_defined_function.function_name = self._function_name
+        expr.scalar_inline_user_defined_function.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            expr.scalar_inline_user_defined_function.arguments.extend(
+                [arg.to_plan(session) for arg in self._arguments]
+            )
+        expr.scalar_inline_user_defined_function.python_udf.CopyFrom(
+            self._function.to_plan(session)
+        )
+        return expr
+
+    def __repr__(self) -> str:
+        return (
+            f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])}), "
+            f"{self._deterministic}, {self._function}"
+        )
+
+
 class WithField(Expression):
     def __init__(
         self,

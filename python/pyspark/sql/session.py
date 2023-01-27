@@ -436,7 +436,7 @@ class SparkSession(SparkConversionMixin):
 
                             if url.startswith("local"):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
-                                RemoteSparkSession._start_connect_server(url)
+                                RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
 
                             os.environ["SPARK_REMOTE"] = url

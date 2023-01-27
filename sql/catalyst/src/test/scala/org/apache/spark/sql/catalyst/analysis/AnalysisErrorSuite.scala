@@ -851,8 +851,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Union(LocalRelation(b),
-        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)))),
+      Exists(Intersect(LocalRelation(b),
+        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)), isAll = true)),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
 
@@ -934,8 +934,11 @@ class AnalysisErrorSuite extends AnalysisTest {
             t.as("t2")))
       ) :: Nil,
       sum($"c2").as("sum") :: Nil, t.as("t1"))
-    assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
-      "in the aggregate expressions" :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass =
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+      expectedMessageParameters = Map.empty)
   }
 
   test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {
