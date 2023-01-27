@@ -925,7 +925,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails.toMap, e2.environmentDetails.toMap)
       case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
-        assert(e1.executorId === e1.executorId)
+        assert(e1.executorId === e2.executorId)
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
         assert(e1.executorId === e2.executorId)
