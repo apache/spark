@@ -2287,6 +2287,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayInsert(a7, Literal(3), Literal(4.4)),
       Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
     )
+
     checkEvaluation(
       ArrayInsert(a6, Literal(3), Literal(4.4F)),
       Seq(1.1F, 2.2F, 3.3F, 4.4F, 2.2F)
