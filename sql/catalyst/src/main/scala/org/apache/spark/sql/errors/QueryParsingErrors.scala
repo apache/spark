@@ -298,7 +298,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       case "array" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
-          messageParameters = Map("elementType" -> "<elementType>"),
+          messageParameters = Map("elementType" -> "<INT>"),
           ctx)
       case "struct" =>
         new ParseException(

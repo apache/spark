@@ -553,21 +553,21 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       exception = parseException("SELECT CAST(array(1,2,3) AS ARRAY)"),
       errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
       sqlState = "42K01",
-      parameters = Map("elementType" -> "<elementType>"),
+      parameters = Map("elementType" -> "<INT>"),
       context = ExpectedContext(fragment = "ARRAY", start = 28, stop = 32))
     // Cast array of array without specifying element type for inner array
     checkError(
       exception = parseException("SELECT CAST(array(array(3)) AS ARRAY<ARRAY>)"),
       errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
       sqlState = "42K01",
-      parameters = Map("elementType" -> "<elementType>"),
+      parameters = Map("elementType" -> "<INT>"),
       context = ExpectedContext(fragment = "ARRAY", start = 37, stop = 41))
     // Create column of array type without specifying element type
     checkError(
       exception = parseException("CREATE TABLE tbl_120691 (col1 ARRAY)"),
       errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
       sqlState = "42K01",
-      parameters = Map("elementType" -> "<elementType>"),
+      parameters = Map("elementType" -> "<INT>"),
       context = ExpectedContext(fragment = "ARRAY", start = 30, stop = 34))
   }
 
