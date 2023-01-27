@@ -743,6 +743,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   summary = lcaRef.origin.context.summary)
             })
 
+          case w @ Window(pList, _, _, _)
+            if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) && w.resolved =>
+            pList.foreach(_.transformDownWithPruning(
+              _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+              case lcaRef: LateralColumnAliasReference =>
+                throw SparkException.internalError(
+                  s"Referencing lateral column alias ${toSQLId(lcaRef.nameParts)} is not " +
+                    s"supported in this Window query case yet. \nDebugging information: plan: $w",
+                  context = lcaRef.origin.getQueryContext,
+                  summary = lcaRef.origin.context.summary)
+            })
+
           case _ => // Analysis successful!
         }
     }

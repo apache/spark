@@ -137,7 +137,6 @@ class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
         Row(12000, 1200, 12000.0, 13200.0) ::
         Nil)
 
-    // TODO: how does it correctly resolve to the right dept in SORT?
     checkAnswer(
       sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) " +
         s"FROM $testTable GROUP BY dept ORDER BY dept"),
@@ -791,5 +790,281 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     checkAnswer(sql(s"select 1 as a, a + 1 from $testTable group by dept"),
       Row(1, 2) :: Row(1, 2) :: Row(1, 2) :: Nil)
+  }
+
+  test("Lateral alias basics - Window on Project") {
+    // non-window expressions as lca, used in non-window expressions
+    checkAnswer(
+      sql(
+        "select name, dept as d, d, rank() over " +
+          s"(partition by dept order by salary) as rank from $testTable where dept in (1, 6)"),
+      Row("amy", 1, 1, 2) :: Row("cathy", 1, 1, 1) :: Row("jen", 6, 6, 1) :: Nil)
+    checkAnswer(
+      sql(
+        "select name, dept as d, d * 1.0, sum(salary) over " +
+          s"(partition by dept order by salary) from $testTable where dept in (1, 6)"),
+      Row("amy", 1, 1.0, 19000) :: Row("cathy", 1, 1.0, 9000) :: Row("jen", 6, 6.0, 12000) :: Nil)
+    checkAnswer(
+      sql("select name, properties.joinYear as jy, jy - 2017, sum(salary) over " +
+        s"(partition by dept order by properties.joinYear) from $testTable where dept in (2, 6)"),
+      Row("alex", 2017, 0, 12000) :: Row("david", 2019, 2, 22000) ::
+        Row("jen", 2018, 1, 12000) :: Nil
+    )
+
+    // non-window expressions as lca, used in window expressions
+    checkAnswer(
+      sql(
+        "select name, dept as d, rank() over " +
+          s"(partition by d order by salary) as rank from $testTable where dept in (1, 6)"),
+      Row("amy", 1, 2) :: Row("cathy", 1, 1) :: Row("jen", 6, 1) :: Nil)
+    checkAnswer(
+      sql(
+        "select name, dept as d, d * 1.0, salary as s, sum(salary) over " +
+          s"(partition by d order by s) from $testTable where dept in (1, 6)"),
+      Row("amy", 1, 1.0, 10000, 19000) :: Row("cathy", 1, 1.0, 9000, 9000) ::
+        Row("jen", 6, 6.0, 12000, 12000) :: Nil)
+    checkAnswer(
+      sql(
+        "select name, dept as d, d * 1.0, salary as s, sum(s) over " +
+          s"(partition by d order by s) from $testTable where dept in (1, 6)"),
+      Row("amy", 1, 1.0, 10000, 19000) :: Row("cathy", 1, 1.0, 9000, 9000) ::
+        Row("jen", 6, 6.0, 12000, 12000) :: Nil)
+    checkAnswer(
+      sql("select name, properties.joinYear as jy, min(jy) over " +
+        s"(partition by dept order by salary) from $testTable where dept in (2, 6)"),
+      Row("alex", 2017, 2017) :: Row("david", 2019, 2019) :: Row("jen", 2018, 2018) :: Nil
+    )
+    checkAnswer(
+      sql("select name, properties.joinYear as jy, sum(salary) over " +
+        s"(partition by dept order by jy) from $testTable where dept in (2, 6)"),
+      Row("alex", 2017, 12000) :: Row("david", 2019, 22000) :: Row("jen", 2018, 12000) :: Nil
+    )
+    // this is initially not supported
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select name, dept, 1 as n, rank() over " +
+          "(partition by dept order by salary rows between n preceding and current row) as rank " +
+          s"from $testTable where dept in (1, 6)")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> "Frame bound value must be a literal."),
+      context = ExpectedContext(fragment = "n preceding", start = 87, stop = 97)
+    )
+
+    // window expressions as lca, used in non-window expressions
+    checkAnswer(
+      sql(
+        "select name, dept, rank() over (partition by dept order by salary) as rank, rank " +
+          s"from $testTable where dept in (2, 6)"),
+      Row("alex", 2, 2, 2) :: Row("david", 2, 1, 1) :: Row("jen", 6, 1, 1) :: Nil)
+    checkAnswer(
+      sql(
+        "select name, dept, rank() over (partition by dept order by salary) as rank, rank * 1.0 " +
+          s"from $testTable where dept in (2, 6)"),
+      Row("alex", 2, 2, 2.0) :: Row("david", 2, 1, 1.0) :: Row("jen", 6, 1, 1.0) :: Nil)
+
+    // window expressions as lca, used in window expressions
+    checkAnswer(
+      sql(
+        "select name, dept, rank() over (partition by dept order by salary) as rank, " +
+          "rank() over (partition by dept order by rank DESC) as new_rank " +
+          s"from $testTable"),
+      Row("amy", 1, 2, 1) :: Row("alex", 2, 2, 1) :: Row("cathy", 1, 1, 2) ::
+        Row("david", 2, 1, 2) :: Row("jen", 6, 1, 1) :: Nil)
+    checkAnswer(
+      sql(
+        "select name, dept, rank() over (partition by dept order by salary) as rank, " +
+          "rank() over (partition by rank order by salary) as new_rank " +
+          s"from $testTable"),
+      Row("amy", 1, 2, 1) :: Row("alex", 2, 2, 2) :: Row("cathy", 1, 1, 1) ::
+        Row("david", 2, 1, 2) :: Row("jen", 6, 1, 3) :: Nil)
+    checkAnswer(
+      sql(
+        "select name, dept, rank() over (partition by dept order by salary) as rank, " +
+          "sum(rank) over (partition by dept order by rank) as new_rank " +
+          s"from $testTable"),
+      Row("amy", 1, 2, 3) :: Row("alex", 2, 2, 3) :: Row("cathy", 1, 1, 1) ::
+        Row("david", 2, 1, 1) :: Row("jen", 6, 1, 1) :: Nil)
+
+    // all together
+    checkAnswer(
+      sql(
+        "select name as n, n, dept as d, d * 1.5 as new_d, properties.joinYear as jy, " +
+          "rank() over (partition by new_d order by salary) as rank, " +
+          "rank + 1.0, " +
+          "min(salary) over (partition by rank order by new_d) as min, " +
+          "sum(rank) over (partition by min order by n) as sum, " +
+          "min(jy - 2017) over (partition by rank order by dept) " +
+          s"from $testTable"),
+      Row("amy", "amy", 1, 1.5, 2019, 2, 3.0, 10000, 4, 2) ::
+        Row("alex", "alex", 2, 3, 2017, 2, 3.0, 10000, 2, 0) ::
+        Row("cathy", "cathy", 1, 1.5, 2020, 1, 2.0, 9000, 1, 3) ::
+        Row("david", "david", 2, 3, 2019, 1, 2.0, 9000, 2, 2) ::
+        Row("jen", "jen", 6, 9, 2018, 1, 2.0, 9000, 3, 1) :: Nil)
+  }
+
+  test("Lateral alias basics - Window on Aggregate") {
+    // TODO(anchovyu): When having is supported, re-enable the tests
+    Seq(""/* , "having dept < 10", "having sum(bonus) < 3000" */).foreach { havingSuffix =>
+      // non-window expressions as lca, used in non-window expressions
+      checkAnswer( // literal as lca
+        sql(
+          "select 1 as n, n as n1, n1 * 1.5, dept, " +
+            "sum(sum(salary)) over (partition by dept order by sum(salary)) as sum_sum " +
+            s"from $testTable group by dept $havingSuffix"
+        ),
+        Row(1, 1, 1.5, 1, 19000) :: Row(1, 1, 1.5, 2, 22000) :: Row(1, 1, 1.5, 6, 12000) :: Nil
+      )
+      checkAnswer( // group by expression as lca
+        sql(
+          "select dept as d, d, " +
+            "rank() over (partition by dept order by avg(salary)) as rank " +
+            s"from $testTable group by dept $havingSuffix"
+        ),
+        Row(1, 1, 1) :: Row(2, 2, 1) :: Row(6, 6, 1) :: Nil
+      )
+      checkAnswer( // aggregate expression as lca
+        sql(
+          "select dept, sum(bonus) as s, s + sum(salary),  " +
+            "rank() over (partition by dept order by avg(salary)) as rank " +
+            s"from $testTable group by dept $havingSuffix"
+        ),
+        Row(1, 2200, 21200, 1) :: Row(2, 2500, 24500, 1) :: Row(6, 1200, 13200, 1) :: Nil
+      )
+      checkAnswer( // struct field as lca
+        sql(
+          "select dept as d, d, d * 1.5, d as d1, d1, properties.joinYear as jy, jy - 2017, " +
+            "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg " +
+            s"from $testTable group by dept, properties.joinYear $havingSuffix"
+        ),
+        Row(1, 1, 1.5, 1, 1, 2019, 2, 1000) :: Row(1, 1, 1.5, 1, 1, 2020, 3, 1200) ::
+          Row(2, 2, 3, 2, 2, 2017, 0, 1200) :: Row(2, 2, 3, 2, 2, 2019, 2, 2300) ::
+          Row(6, 6, 9, 6, 6, 2018, 1, 1200) :: Nil
+      )
+
+      // non-window expressions as lca, used in window expression
+      checkAnswer(
+        sql(
+          "select dept as d, rank() over (partition by d order by avg(salary)) as rank " +
+            s"from $testTable group by dept $havingSuffix"
+        ),
+        Row(1, 1) :: Row(2, 1) :: Row(6, 1) :: Nil
+      )
+      checkAnswer(
+        sql(
+          "select dept as d, sum(salary) as s, avg(s) over (partition by d order by s) " +
+            s"from $testTable group by dept $havingSuffix"
+        ),
+        Row(1, 19000, 19000) :: Row(2, 22000, 22000) :: Row(6, 12000, 12000) :: Nil
+      )
+      checkAnswer(
+        sql(
+          "select dept as d, sum(salary) as s, avg(s) over (partition by s order by d) " +
+            s"from $testTable group by dept $havingSuffix"
+        ),
+        Row(1, 19000, 19000) :: Row(2, 22000, 22000) :: Row(6, 12000, 12000) :: Nil
+      )
+      checkAnswer(
+        sql(
+          "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
+            "sum(a) over (partition by jy order by d) " +
+            s"from $testTable group by dept, properties.joinYear $havingSuffix"
+        ),
+        Row(1, 2019, 1000, 1000) :: Row(1, 2020, 1200, 1200) :: Row(2, 2017, 1200, 1200) ::
+          Row(2, 2019, 1300, 2300) :: Row(6, 2018, 1200, 1200) :: Nil
+      )
+      checkAnswer(
+        sql(
+          "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
+            "sum(a) over (partition by a order by jy) " +
+            s"from $testTable group by dept, properties.joinYear $havingSuffix"
+        ),
+        Row(1, 2019, 1000, 1000) :: Row(1, 2020, 1200, 3600) :: Row(2, 2017, 1200, 1200) ::
+          Row(2, 2019, 1300, 1300) :: Row(6, 2018, 1200, 2400) :: Nil
+      )
+
+      // window expressions as lca, used in window expression
+      checkAnswer(
+        sql(
+          "select dept, properties.joinYear, " +
+            "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
+            "sum(sum_avg) over (partition by dept order by sum_avg) " +
+            s"from $testTable group by dept, properties.joinYear $havingSuffix"
+        ),
+        Row(1, 2019, 1000, 1000) :: Row(1, 2020, 1200, 2200) :: Row(2, 2017, 1200, 1200) ::
+          Row(2, 2019, 2300, 3500) :: Row(6, 2018, 1200, 1200) :: Nil
+      )
+      checkAnswer(
+        sql(
+          "select dept, properties.joinYear, " +
+            "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
+            "min(properties.joinYear) over (partition by sum_avg order by dept) " +
+            s"from $testTable group by dept, properties.joinYear $havingSuffix"
+        ),
+        Row(1, 2019, 1000, 2019) :: Row(1, 2020, 1200, 2020) :: Row(2, 2017, 1200, 2017) ::
+          Row(2, 2019, 2300, 2019) :: Row(6, 2018, 1200, 2017) :: Nil
+      )
+
+      // window expression as lca, used in non-window expression
+      checkAnswer(
+        sql(
+          "select dept, properties.joinYear, " +
+            "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
+            "sum_avg * 1.0 as sum_avg1, sum_avg1 + dept " +
+            s"from $testTable group by dept, properties.joinYear $havingSuffix"
+        ),
+        Row(1, 2019, 1000, 1000, 1001) :: Row(1, 2020, 1200, 1200, 1201) ::
+          Row(2, 2017, 1200, 1200, 1202) :: Row(2, 2019, 2300, 2300, 2302) ::
+          Row(6, 2018, 1200, 1200, 1206) :: Nil
+      )
+    }
+  }
+
+  test("Lateral alias basics - Window on Aggregate with Having") {
+    // TODO(anchovyu): Remove this tese case and re-enable the "Window on Aggregate" when having
+    //  is supported
+    Seq( "having dept < 10", "having sum(bonus) < 3000").foreach { havingSuffix =>
+      Seq(
+        "select 1 as n, n as n1, n1 * 1.5, dept, " +
+          "sum(sum(salary)) over (partition by dept order by sum(salary)) as sum_sum " +
+          s"from $testTable group by dept $havingSuffix",
+        "select dept as d, d, " +
+          "rank() over (partition by dept order by avg(salary)) as rank " +
+          s"from $testTable group by dept $havingSuffix",
+        "select dept, sum(bonus) as s, s + sum(salary),  " +
+          "rank() over (partition by dept order by avg(salary)) as rank " +
+          s"from $testTable group by dept $havingSuffix",
+        "select dept as d, d, d * 1.5, d as d1, d1, properties.joinYear as jy, jy - 2017, " +
+          "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg " +
+          s"from $testTable group by dept, properties.joinYear $havingSuffix",
+        "select dept as d, rank() over (partition by d order by avg(salary)) as rank " +
+          s"from $testTable group by dept $havingSuffix",
+        "select dept as d, sum(salary) as s, avg(s) over (partition by d order by s) " +
+          s"from $testTable group by dept $havingSuffix",
+        "select dept as d, sum(salary) as s, avg(s) over (partition by s order by d) " +
+          s"from $testTable group by dept $havingSuffix",
+        "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
+          "sum(a) over (partition by jy order by d) " +
+          s"from $testTable group by dept, properties.joinYear $havingSuffix",
+        "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
+          "sum(a) over (partition by a order by jy) " +
+          s"from $testTable group by dept, properties.joinYear $havingSuffix",
+        "select dept, properties.joinYear, " +
+          "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
+          "sum(sum_avg) over (partition by dept order by sum_avg) " +
+          s"from $testTable group by dept, properties.joinYear $havingSuffix",
+        "select dept, properties.joinYear, " +
+          "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
+          "min(properties.joinYear) over (partition by sum_avg order by dept) " +
+          s"from $testTable group by dept, properties.joinYear $havingSuffix",
+        "select dept, properties.joinYear, " +
+          "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
+          "sum_avg * 1.0 as sum_avg1, sum_avg1 + dept " +
+          s"from $testTable group by dept, properties.joinYear $havingSuffix"
+      ).foreach { query =>
+        assert(intercept[AnalysisException](sql(query)).getErrorClass ==
+          "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING")
+      }
+    }
   }
 }

@@ -3258,6 +3258,10 @@ class Analyzer(override val catalogManager: CatalogManager)
    * [[WindowExpression]]. If a query has SELECT DISTINCT, the DISTINCT part should be
    * evaluated after all [[WindowExpression]]s.
    *
+   * Note: [[ResolveLateralColumnAliasReference]] rule is applied before this rule. To guarantee
+   * this order, we make sure this rule applies only when the [[Project]] or [[Aggregate]] doesn't
+   * contain any [[LATERAL_COLUMN_ALIAS_REFERENCE]].
+   *
    * For every case, the transformation works as follows:
    * 1. For a list of [[Expression]]s (a projectList or an aggregateExpressions), partitions
    *    it two lists of [[Expression]]s, one for all [[WindowExpression]]s and another for
@@ -3467,6 +3471,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         if child.resolved &&
           hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) =>
+        aggregateExprs.foreach(_.transformDownWithPruning(
+          _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+          case lcaRef: LateralColumnAliasReference =>
+            throw QueryCompilationErrors.lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
+              lcaRef.nameParts)
+        })
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
@@ -3481,9 +3491,11 @@ class Analyzer(override val catalogManager: CatalogManager)
       case p: LogicalPlan if !p.childrenResolved => p
 
       // Aggregate without Having clause.
+      // Make sure the lateral column aliases are properly handled first.
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
-          a.expressions.forall(_.resolved) =>
+          a.expressions.forall(_.resolved) &&
+          !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
@@ -3495,9 +3507,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         Project(finalProjectList, withWindow)
 
       // We only extract Window Expressions after all expressions of the Project
-      // have been resolved.
+      // have been resolved, and lateral column aliases are properly handled first.
       case p @ Project(projectList, child)
-        if hasWindowFunction(projectList) && p.expressions.forall(_.resolved) =>
+        if hasWindowFunction(projectList) &&
+          p.expressions.forall(_.resolved) &&
+          !projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         val (windowExpressions, regularExpressions) = extract(projectList.toIndexedSeq)
         // We add a project to get all needed expressions for window expressions from the child
         // of the original Project operator.
