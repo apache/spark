@@ -160,7 +160,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
       val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN c string AFTER non_exist"))
-      assert(e1.getMessage().contains("Couldn't find the reference column"))
+      checkError(
+        exception = e1,
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`c`", "fields" -> "a, point, b")
+      )
 
       sql(s"ALTER TABLE $t ADD COLUMN point.y int FIRST")
       assert(getTableMetadata(tableName).schema == new StructType()
@@ -181,7 +185,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
       val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN point.x2 int AFTER non_exist"))
-      assert(e2.getMessage().contains("Couldn't find the reference column"))
+      checkError(
+        exception = e2,
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`x2`", "fields" -> "y, x, z")
+      )
     }
   }
 
@@ -218,7 +226,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       // The new column being referenced should come before being referenced.
       val e = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMNS (yy int AFTER xx, xx int)"))
-      assert(e.getMessage().contains("Couldn't find the reference column for AFTER xx at root"))
+      checkError(
+        exception = e,
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`yy`", "fields" -> "a, x, y, z, b, point")
+      )
     }
   }
 
