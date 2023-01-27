@@ -609,7 +609,7 @@
       },
       "STRUCT" : {
         "message" : [
-          "The definition of `STRUCT` type is incomplete. You must provide at least one field type. For example: `STRUCT<Field1: INT>`."
+          "The definition of \"STRUCT\" type is incomplete. You must provide at least one field type. For example: \"STRUCT<Field1: INT>\"."
         ]
       }
     },
