@@ -34,11 +34,11 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite.{TIMEOUT, INTERVAL}
 
   test("SPARK-42190: Run SparkPi with local[*]", k8sTestTag) {
-    sparkAppConf.set("spark.kubernetes.driver.master", "local[*]")
+    sparkAppConf.set("spark.kubernetes.driver.master", "local[10]")
     runSparkApplicationAndVerifyCompletion(
       containerLocalSparkDistroExamplesJar,
       SPARK_PI_MAIN_CLASS,
-      Seq("Pi is roughly 3"),
+      Seq("local[10]", "Pi is roughly 3"),
       Seq(),
       Array.empty[String],
       doBasicDriverPodCheck,

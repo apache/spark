@@ -295,10 +295,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def referenceColNotFoundForAlterTableChangesError(
-      after: TableChange.After, parentName: String): Throwable = {
+      fieldName: String, fields: Array[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1003",
-      messageParameters = Map("after" -> after.toString, "parentName" -> parentName))
+      errorClass = "FIELD_NOT_FOUND",
+      messageParameters = Map(
+        "fieldName" -> toSQLId(fieldName),
+        "fields" -> fields.mkString(", ")))
   }
 
   def windowSpecificationNotDefinedError(windowName: String): Throwable = {
