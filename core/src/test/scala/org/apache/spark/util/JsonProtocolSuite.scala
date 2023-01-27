@@ -43,16 +43,22 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
-  import JsonProtocol.toJsonString
+  import JsonProtocol._
   import JsonProtocolSuite._
 
   test("SparkListenerEvent") {
     val stageSubmitted =
-      SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
+      SparkListenerStageSubmitted(
+        makeStageInfo(100, 200, 300, 400L, 500L, includeAccumulables = false), properties)
     val stageSubmittedWithNullProperties =
-      SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties = null)
+      SparkListenerStageSubmitted(
+        makeStageInfo(100, 200, 300, 400L, 500L, includeAccumulables = false), properties = null)
     val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
-    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 333, 444L, false))
+    val taskStart =
+      SparkListenerTaskStart(
+        111,
+        0,
+        makeTaskInfo(222L, 333, 1, 333, 444L, speculative = false, includeAccumulables = false))
     val taskGettingResult =
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 2000, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
@@ -778,12 +784,36 @@ class JsonProtocolSuite extends SparkFunSuite {
         |}""".stripMargin
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
   }
+
+  test("SPARK-42205: don't log accumulables in start events") {
+    // Simulate case where a job / stage / task completes before the event logging
+    // listener logs the event. In this case, the TaskInfo / StageInfo will have
+    // accumulables from the finished task / stage, but we want to skip logging
+    // them because they are redundant with the accumulables in the end event and
+    // the history server only uses the value from the end event because start
+    // events normally will not contain accumulable values.
+    val stageInfo = makeStageInfo(1, 200, 300, 400, 500)
+    assert(stageInfo.accumulables.nonEmpty)
+    val taskInfo = makeTaskInfo(1, 200, 300, 400, 500, false)
+    assert(taskInfo.accumulables.nonEmpty)
+
+    val jobStart = SparkListenerJobStart(10, jobSubmissionTime, Seq(stageInfo), properties)
+    val stageSubmitted = SparkListenerStageSubmitted(stageInfo)
+    val taskStart = SparkListenerTaskStart(1, 0, taskInfo)
+
+    assert(
+      jobStartFromJson(sparkEventToJsonString(jobStart)).stageInfos.forall(_.accumulables.isEmpty))
+    assert(
+      stageSubmittedFromJson(sparkEventToJsonString(stageSubmitted)).stageInfo.accumulables.isEmpty)
+    assert(
+      taskStartFromJson(sparkEventToJsonString(taskStart)).taskInfo.accumulables.isEmpty)
+  }
 }
 
 
 private[spark] object JsonProtocolSuite extends Assertions {
   import InternalAccumulator._
-  import JsonProtocol.toJsonString
+  import JsonProtocol._
 
   private val mapper = new ObjectMapper()
 
@@ -857,7 +887,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def testTaskInfo(info: TaskInfo): Unit = {
     val newInfo = JsonProtocol.taskInfoFromJson(
-      toJsonString(JsonProtocol.taskInfoToJson(info, _)))
+      toJsonString(JsonProtocol.taskInfoToJson(info, _, includeAccumulables = true)))
     assertEquals(info, newInfo)
   }
 
@@ -1224,7 +1254,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       c: Int,
       d: Long,
       e: Long,
-      rpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = {
+      rpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+      includeAccumulables: Boolean = true) = {
     val rddInfos = (0 until a % 5).map { i =>
       if (i == (a % 5) - 1) {
         makeRddInfo(a + i, b + i, c + i, d + i, e + i, DeterministicLevel.INDETERMINATE)
@@ -1234,17 +1265,30 @@ private[spark] object JsonProtocolSuite extends Assertions {
     }
     val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details",
       resourceProfileId = rpId)
-    val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
-    stageInfo.accumulables(acc1.id) = acc1
-    stageInfo.accumulables(acc2.id) = acc2
+    if (includeAccumulables) {
+      val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
+      stageInfo.accumulables(acc1.id) = acc1
+      stageInfo.accumulables(acc2.id) = acc2
+    }
     stageInfo
   }
 
-  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Int, e: Long, speculative: Boolean) = {
+  private def makeTaskInfo(
+      a: Long,
+      b: Int,
+      c: Int,
+      d: Int,
+      e: Long,
+      speculative: Boolean,
+      includeAccumulables: Boolean = true) = {
     val taskInfo = new TaskInfo(a, b, c, d, e,
       "executor", "your kind sir", TaskLocality.NODE_LOCAL, speculative)
-    taskInfo.setAccumulables(
-      List(makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true)))
+    if (includeAccumulables) {
+      taskInfo.setAccumulables(List(
+        makeAccumulableInfo(1),
+        makeAccumulableInfo(2),
+        makeAccumulableInfo(3, internal = true)))
+    }
     taskInfo
   }
 
@@ -1357,24 +1401,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "RDD Info": [],
       |    "Parent IDs" : [100, 200, 300],
       |    "Details": "details",
-      |    "Accumulables": [
-      |      {
-      |        "ID": 1,
-      |        "Name": "Accumulable1",
-      |        "Update": "delta1",
-      |        "Value": "val1",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      }
-      |    ],
+      |    "Accumulables": [],
       |    "Resource Profile Id" : 0,
       |    "Shuffle Push Enabled" : false,
       |    "Shuffle Push Mergers Count" : 0
@@ -1400,24 +1427,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "RDD Info": [],
       |    "Parent IDs" : [100, 200, 300],
       |    "Details": "details",
-      |    "Accumulables": [
-      |      {
-      |        "ID": 1,
-      |        "Name": "Accumulable1",
-      |        "Update": "delta1",
-      |        "Value": "val1",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      }
-      |    ],
+      |    "Accumulables": [],
       |    "Resource Profile Id" : 0,
       |    "Shuffle Push Enabled" : false,
       |    "Shuffle Push Mergers Count" : 0
@@ -1502,32 +1512,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Finish Time": 0,
       |    "Failed": false,
       |    "Killed": false,
-      |    "Accumulables": [
-      |      {
-      |        "ID": 1,
-      |        "Name": "Accumulable1",
-      |        "Update": "delta1",
-      |        "Value": "val1",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
-      |        "ID": 3,
-      |        "Name": "Accumulable3",
-      |        "Update": "delta3",
-      |        "Value": "val3",
-      |        "Internal": true,
-      |        "Count Failed Values": false
-      |      }
-      |    ]
+      |    "Accumulables": []
       |  }
       |}
     """.stripMargin
@@ -2032,24 +2017,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [
-      |        {
-      |          "ID": 1,
-      |          "Name": "Accumulable1",
-      |          "Update": "delta1",
-      |          "Value": "val1",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        }
-      |      ],
+      |      "Accumulables": [],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
@@ -2101,24 +2069,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [
-      |        {
-      |          "ID": 1,
-      |          "Name": "Accumulable1",
-      |          "Update": "delta1",
-      |          "Value": "val1",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        }
-      |      ],
+      |      "Accumulables": [],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
@@ -2189,24 +2140,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [
-      |        {
-      |          "ID": 1,
-      |          "Name": "Accumulable1",
-      |          "Update": "delta1",
-      |          "Value": "val1",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        }
-      |      ],
+      |      "Accumulables": [],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
@@ -2296,24 +2230,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [
-      |        {
-      |          "ID": 1,
-      |          "Name": "Accumulable1",
-      |          "Update": "delta1",
-      |          "Value": "val1",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        }
-      |      ],
+      |      "Accumulables": [],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
