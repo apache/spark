@@ -2673,4 +2673,25 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val indexes3 = jdbcTable.listIndexes()
     assert(indexes3.isEmpty)
   }
+
+  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+    "jdbc function doesn't support identifiers consisting of more than 2 parts") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
+        },
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        parameters = Map(
+          "quoted" -> "db_name.schema_name.function_name",
+          "identifier" -> "FunctionIdentifier"
+        )
+      )
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
+  }
 }
