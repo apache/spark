@@ -627,24 +627,6 @@ class DatasetSuite extends QueryTest
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
   }
 
-  test("groupByKey function, mapValues, flatMapSorted") {
-    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
-      .toDF("key", "seq", "value")
-    // groupByKey Row => String adds key columns `value` to the dataframe
-    val grouped = ds.groupByKey(v => v.getString(0))
-    // $"value" here is expected to reference the mapped value, not the key, nor the initial value
-    val aggregated = grouped.mapValues(_.getInt(2)).flatMapSortedGroups($"seq", expr("length(key)"), $"value") {
-      (g, iter) => Iterator(g, iter.mkString(", "))
-    }
-
-    checkDatasetUnorderly(
-      aggregated,
-      "a", "10, 20",
-      "b", "2, 1",
-      "c", "1"
-    )
-  }
-
   test("groupBy function, flatMapSorted desc") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
@@ -905,19 +887,6 @@ class DatasetSuite extends QueryTest
         }
       }
     }
-  }
-
-  test("cogroup with groupByKey, mapValues and sorted") {
-    val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
-    val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
-    val groupedLeft = left.groupByKey(_._1).mapValues(_._2)
-    val groupedRight = right.groupByKey(_._1).mapValues(_._2)
-
-    val cogrouped = groupedLeft.cogroupSorted(groupedRight)($"value")($"value") {
-      (key, left, right) => Iterator(key -> left.mkString + "#" + right.mkString)
-    }
-
-    checkDatasetUnorderly(cogrouped, Seq.empty: _*)
   }
 
   test("SPARK-34806: observation on datasets") {
