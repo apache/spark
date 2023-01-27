@@ -277,7 +277,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo backward compatibility (details, accumulables)") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
-    val newJson = toJsonString(JsonProtocol.stageInfoToJson(info, _))
+    val newJson = toJsonString(JsonProtocol.stageInfoToJson(info, _, includeAccumulables = true))
 
     // Fields added after 1.0.0.
     assert(info.details.nonEmpty)
@@ -295,7 +295,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo resourceProfileId") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L, 5)
-    val json = toJsonString(JsonProtocol.stageInfoToJson(info, _))
+    val json = toJsonString(JsonProtocol.stageInfoToJson(info, _, includeAccumulables = true))
 
     // Fields added after 1.0.0.
     assert(info.details.nonEmpty)
@@ -519,8 +519,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     // Prior to Spark 1.4.0, StageInfo did not have the "Parent IDs" property
     val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details",
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    val oldStageInfo = toJsonString(JsonProtocol.stageInfoToJson(stageInfo, _))
-      .removeField("Parent IDs")
+    val oldStageInfo =
+      toJsonString(JsonProtocol.stageInfoToJson(stageInfo, _, includeAccumulables = true))
+        .removeField("Parent IDs")
     val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details",
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
@@ -863,7 +864,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def testStageInfo(info: StageInfo): Unit = {
     val newInfo = JsonProtocol.stageInfoFromJson(
-      toJsonString(JsonProtocol.stageInfoToJson(info, _)))
+      toJsonString(JsonProtocol.stageInfoToJson(info, _, includeAccumulables = true)))
     assertEquals(info, newInfo)
   }
 
