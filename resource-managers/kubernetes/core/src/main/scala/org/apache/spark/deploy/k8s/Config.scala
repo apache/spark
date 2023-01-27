@@ -316,6 +316,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val AUTO_STOP_ACTIVE_SPARK_CONTEXTS =
+    ConfigBuilder("spark.kubernetes.submit.autoStopActiveSparkContexts")
+      .version("3.5.0")
+      .doc("When set to true, on Kubernetes Spark will stop all the active Spark contexts after " +
+        "the finish of non-shell applications' main method.")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_SCHEDULER_NAME =
     ConfigBuilder("spark.kubernetes.scheduler.name")
       .doc("Specify the scheduler name for driver and executor pods. If " +
