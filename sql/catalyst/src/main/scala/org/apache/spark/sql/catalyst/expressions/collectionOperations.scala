@@ -4602,7 +4602,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1)",
+  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 0)",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 4, 5);
@@ -4668,41 +4668,58 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
     val baseArr = arr.asInstanceOf[ArrayData]
-    val posInt = pos.asInstanceOf[Int]
+    var posInt = pos.asInstanceOf[Int]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
-    val newPosExtendsArrayLeft = posInt < 0 && math.abs(posInt) > baseArr.numElements() - 1
+    val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements() - 1)
 
-    val itemInsertionIndex = if (newPosExtendsArrayLeft) {
-      0
-    } else if (posInt < 0) {
-      posInt + baseArr.numElements()
-    } else {
-      posInt
-    }
+    if (newPosExtendsArrayLeft) {
+      // special case- if the new position is negative but larger than the current array size
+      // place the new item at start of array, place the current array contents at the end
+      // and fill the newly created array elements inbetween with a null
 
-    val newArrayLength = if (newPosExtendsArrayLeft) {
-      math.abs(posInt) + 1
-    } else {
-      math.max(baseArr.numElements() + 1, itemInsertionIndex + 1)
-    }
+      val newArrayLength = -posInt + 1
 
-    val newArray = new Array[Any](newArrayLength)
-
-    baseArr.foreach(arrayElementType, (i, v) => {
-      var elementPosition = i
-      if (newPosExtendsArrayLeft) {
-        elementPosition = elementPosition + 1 + math.abs(posInt + baseArr.numElements())
+      if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
       }
-      if (i >= itemInsertionIndex && !newPosExtendsArrayLeft) {
-        elementPosition = elementPosition + 1
+
+      val newArray = new Array[Any](newArrayLength)
+
+      baseArr.foreach(arrayElementType, (i, v) => {
+        // current position, offset by new item + new null array elements
+        val elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
+        newArray(elementPosition) = v
+      })
+
+      newArray(0) = item
+
+      return new GenericArrayData(newArray)
+    } else {
+      if (posInt < 0) {
+        posInt = posInt + baseArr.numElements()
       }
-      newArray(elementPosition) = v
-    })
 
-    newArray(itemInsertionIndex) = item
+      val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
 
-    return new GenericArrayData(newArray)
+      if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+      }
+
+      val newArray = new Array[Any](newArrayLength)
+
+      baseArr.foreach(arrayElementType, (i, v) => {
+        if (i >= posInt) {
+          newArray(i + 1) = v
+        } else {
+          newArray(i) = v
+        }
+      })
+
+      newArray(posInt) = item
+
+      return new GenericArrayData(newArray)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
