@@ -380,32 +380,39 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
         left_df = df.withColumnRenamed("value", "left").repartition(parts).cache()
         # SPARK-42132: this bug requires us to alias all columns from df here
-        right_df = df.select(
-            col("id").alias("id"), col("day").alias("day"), col("value").alias("right")
-        ).repartition(parts).cache()
+        right_df = (
+            df.select(col("id").alias("id"), col("day").alias("day"), col("value").alias("right"))
+            .repartition(parts)
+            .cache()
+        )
 
         # note the column order is different to the groupBy("id", "day") column order below
         window = Window.partitionBy("day", "id")
 
         left_grouped_df = left_df.groupBy("id", "day")
-        right_grouped_df = right_df \
-            .withColumn("day_sum", sum(col("day")).over(window)) \
-            .groupBy("id", "day")
+        right_grouped_df = right_df.withColumn("day_sum", sum(col("day")).over(window)).groupBy(
+            "id", "day"
+        )
 
         def cogroup(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-            return pd.DataFrame([{
-                "id": left["id"][0] if not left.empty else (
-                    right["id"][0] if not right.empty else None
-                ),
-                "day": left["day"][0] if not left.empty else (
-                    right["day"][0] if not right.empty else None
-                ),
-                "lefts": len(left.index),
-                "rights": len(right.index)
-            }])
+            return pd.DataFrame(
+                [
+                    {
+                        "id": left["id"][0]
+                        if not left.empty
+                        else (right["id"][0] if not right.empty else None),
+                        "day": left["day"][0]
+                        if not left.empty
+                        else (right["day"][0] if not right.empty else None),
+                        "lefts": len(left.index),
+                        "rights": len(right.index),
+                    }
+                ]
+            )
 
-        df = left_grouped_df.cogroup(right_grouped_df) \
-            .applyInPandas(cogroup, schema="id long, day long, lefts integer, rights integer")
+        df = left_grouped_df.cogroup(right_grouped_df).applyInPandas(
+            cogroup, schema="id long, day long, lefts integer, rights integer"
+        )
 
         actual = df.orderBy("id", "day").take(days)
         self.assertEqual(actual, [Row(0, day, vals, vals) for day in range(days)])
