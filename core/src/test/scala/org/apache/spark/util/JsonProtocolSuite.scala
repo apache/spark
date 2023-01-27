@@ -43,7 +43,7 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
-  import JsonProtocol.toJsonString
+  import JsonProtocol._
   import JsonProtocolSuite._
 
   test("SparkListenerEvent") {
@@ -271,7 +271,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo backward compatibility (details, accumulables)") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
-    val newJson = toJsonString(JsonProtocol.stageInfoToJson(info, _))
+    val newJson = toJsonString(JsonProtocol.stageInfoToJson(info, _, defaultOptions))
 
     // Fields added after 1.0.0.
     assert(info.details.nonEmpty)
@@ -289,7 +289,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo resourceProfileId") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L, 5)
-    val json = toJsonString(JsonProtocol.stageInfoToJson(info, _))
+    val json = toJsonString(JsonProtocol.stageInfoToJson(info, _, defaultOptions))
 
     // Fields added after 1.0.0.
     assert(info.details.nonEmpty)
@@ -466,7 +466,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown",
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
-    val oldEvent = toJsonString(JsonProtocol.jobStartToJson(jobStart, _)).removeField("Stage Infos")
+    val oldEvent = sparkEventToJsonString(jobStart).removeField("Stage Infos")
     val expectedJobStart =
       SparkListenerJobStart(10, jobSubmissionTime, dummyStageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
@@ -478,8 +478,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageIds = Seq[Int](1, 2, 3, 4)
     val stageInfos = stageIds.map(x => makeStageInfo(x * 10, x * 20, x * 30, x * 40L, x * 50L))
     val jobStart = SparkListenerJobStart(11, jobSubmissionTime, stageInfos, properties)
-    val oldStartEvent = toJsonString(JsonProtocol.jobStartToJson(jobStart, _))
-      .removeField("Submission Time")
+    val oldStartEvent = sparkEventToJsonString(jobStart).removeField("Submission Time")
     val expectedJobStart = SparkListenerJobStart(11, -1, stageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldStartEvent))
 
@@ -513,7 +512,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     // Prior to Spark 1.4.0, StageInfo did not have the "Parent IDs" property
     val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details",
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    val oldStageInfo = toJsonString(JsonProtocol.stageInfoToJson(stageInfo, _))
+    val oldStageInfo = toJsonString(JsonProtocol.stageInfoToJson(stageInfo, _, defaultOptions))
       .removeField("Parent IDs")
     val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details",
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
@@ -783,7 +782,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
 private[spark] object JsonProtocolSuite extends Assertions {
   import InternalAccumulator._
-  import JsonProtocol.toJsonString
+  import JsonProtocol._
 
   private val mapper = new ObjectMapper()
 
@@ -833,7 +832,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def testStageInfo(info: StageInfo): Unit = {
     val newInfo = JsonProtocol.stageInfoFromJson(
-      toJsonString(JsonProtocol.stageInfoToJson(info, _)))
+      toJsonString(JsonProtocol.stageInfoToJson(info, _, defaultOptions)))
     assertEquals(info, newInfo)
   }
 
@@ -857,7 +856,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def testTaskInfo(info: TaskInfo): Unit = {
     val newInfo = JsonProtocol.taskInfoFromJson(
-      toJsonString(JsonProtocol.taskInfoToJson(info, _)))
+      toJsonString(JsonProtocol.taskInfoToJson(info, _, defaultOptions)))
     assertEquals(info, newInfo)
   }
 

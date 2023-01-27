@@ -40,6 +40,15 @@ import org.apache.spark.storage._
 import org.apache.spark.util.Utils.weakIntern
 
 /**
+ * Helper class for passing configuration options to JsonProtocol.
+ * We use this instead of passing SparkConf directly because it lets us avoid
+ * repeated re-parsing of configuration values on each read.
+ */
+private[spark] class JsonProtocolOptions(conf: SparkConf) {
+  val includeTaskMetricsAccumulables: Boolean = true
+}
+
+/**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
  * and forwards-compatibility guarantees: any version of Spark should be able to read JSON output
  * written by any other version, including newer versions.
@@ -60,13 +69,19 @@ private[spark] object JsonProtocol {
   private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
+  val defaultOptions: JsonProtocolOptions = new JsonProtocolOptions(new SparkConf(false))
+
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
    * -------------------------------------------------- */
 
   def sparkEventToJsonString(event: SparkListenerEvent): String = {
+    sparkEventToJsonString(event, defaultOptions)
+  }
+
+  def sparkEventToJsonString(event: SparkListenerEvent, options: JsonProtocolOptions): String = {
     toJsonString { generator =>
-      writeSparkEventToJson(event, generator)
+      writeSparkEventToJson(event, generator, options)
     }
   }
 
@@ -79,20 +94,23 @@ private[spark] object JsonProtocol {
     new String(baos.toByteArray, StandardCharsets.UTF_8)
   }
 
-  def writeSparkEventToJson(event: SparkListenerEvent, g: JsonGenerator): Unit = {
+  def writeSparkEventToJson(
+      event: SparkListenerEvent,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        stageSubmittedToJson(stageSubmitted, g)
+        stageSubmittedToJson(stageSubmitted, g, options)
       case stageCompleted: SparkListenerStageCompleted =>
-        stageCompletedToJson(stageCompleted, g)
+        stageCompletedToJson(stageCompleted, g, options)
       case taskStart: SparkListenerTaskStart =>
-        taskStartToJson(taskStart, g)
+        taskStartToJson(taskStart, g, options)
       case taskGettingResult: SparkListenerTaskGettingResult =>
-        taskGettingResultToJson(taskGettingResult, g)
+        taskGettingResultToJson(taskGettingResult, g, options)
       case taskEnd: SparkListenerTaskEnd =>
-        taskEndToJson(taskEnd, g)
+        taskEndToJson(taskEnd, g, options)
       case jobStart: SparkListenerJobStart =>
-        jobStartToJson(jobStart, g)
+        jobStartToJson(jobStart, g, options)
       case jobEnd: SparkListenerJobEnd =>
         jobEndToJson(jobEnd, g)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
@@ -126,11 +144,14 @@ private[spark] object JsonProtocol {
     }
   }
 
-  def stageSubmittedToJson(stageSubmitted: SparkListenerStageSubmitted, g: JsonGenerator): Unit = {
+  def stageSubmittedToJson(
+      stageSubmitted: SparkListenerStageSubmitted,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted)
     g.writeFieldName("Stage Info")
-    stageInfoToJson(stageSubmitted.stageInfo, g)
+    stageInfoToJson(stageSubmitted.stageInfo, g, options)
     Option(stageSubmitted.properties).foreach { properties =>
       g.writeFieldName("Properties")
       propertiesToJson(properties, g)
@@ -138,36 +159,46 @@ private[spark] object JsonProtocol {
     g.writeEndObject()
   }
 
-  def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted, g: JsonGenerator): Unit = {
+  def stageCompletedToJson(
+      stageCompleted: SparkListenerStageCompleted,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted)
     g.writeFieldName("Stage Info")
-    stageInfoToJson(stageCompleted.stageInfo, g)
+    stageInfoToJson(stageCompleted.stageInfo, g, options)
     g.writeEndObject()
   }
 
-  def taskStartToJson(taskStart: SparkListenerTaskStart, g: JsonGenerator): Unit = {
+  def taskStartToJson(
+      taskStart: SparkListenerTaskStart,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskStart)
     g.writeNumberField("Stage ID", taskStart.stageId)
     g.writeNumberField("Stage Attempt ID", taskStart.stageAttemptId)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskStart.taskInfo, g)
+    taskInfoToJson(taskStart.taskInfo, g, options)
     g.writeEndObject()
   }
 
   def taskGettingResultToJson(
       taskGettingResult: SparkListenerTaskGettingResult,
-      g: JsonGenerator): Unit = {
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     val taskInfo = taskGettingResult.taskInfo
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskInfo, g)
+    taskInfoToJson(taskInfo, g, options)
     g.writeEndObject()
   }
 
-  def taskEndToJson(taskEnd: SparkListenerTaskEnd, g: JsonGenerator): Unit = {
+  def taskEndToJson(
+      taskEnd: SparkListenerTaskEnd,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd)
     g.writeNumberField("Stage ID", taskEnd.stageId)
@@ -176,7 +207,7 @@ private[spark] object JsonProtocol {
     g.writeFieldName("Task End Reason")
     taskEndReasonToJson(taskEnd.reason, g)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskEnd.taskInfo, g)
+    taskInfoToJson(taskEnd.taskInfo, g, options)
     g.writeFieldName("Task Executor Metrics")
     executorMetricsToJson(taskEnd.taskExecutorMetrics, g)
     Option(taskEnd.taskMetrics).foreach { m =>
@@ -186,13 +217,16 @@ private[spark] object JsonProtocol {
     g.writeEndObject()
   }
 
-  def jobStartToJson(jobStart: SparkListenerJobStart, g: JsonGenerator): Unit = {
+  def jobStartToJson(
+      jobStart: SparkListenerJobStart,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobStart)
     g.writeNumberField("Job ID", jobStart.jobId)
     g.writeNumberField("Submission Time", jobStart.time)
     g.writeArrayFieldStart("Stage Infos")  // Added in Spark 1.2.0
-    jobStart.stageInfos.foreach(stageInfoToJson(_, g))
+    jobStart.stageInfos.foreach(stageInfoToJson(_, g, options))
     g.writeEndArray()
     g.writeArrayFieldStart("Stage IDs")
     jobStart.stageIds.foreach(g.writeNumber)
@@ -388,7 +422,10 @@ private[spark] object JsonProtocol {
    * JSON serialization methods for classes SparkListenerEvents depend on |
    * -------------------------------------------------------------------- */
 
-  def stageInfoToJson(stageInfo: StageInfo, g: JsonGenerator): Unit = {
+  def stageInfoToJson(
+      stageInfo: StageInfo,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeNumberField("Stage ID", stageInfo.stageId)
     g.writeNumberField("Stage Attempt ID", stageInfo.attemptNumber)
@@ -405,14 +442,20 @@ private[spark] object JsonProtocol {
     stageInfo.completionTime.foreach(g.writeNumberField("Completion Time", _))
     stageInfo.failureReason.foreach(g.writeStringField("Failure Reason", _))
     g.writeFieldName("Accumulables")
-    accumulablesToJson(stageInfo.accumulables.values, g)
+    accumulablesToJson(
+      stageInfo.accumulables.values,
+      g,
+      includeTaskMetricsAccumulables = options.includeTaskMetricsAccumulables)
     g.writeNumberField("Resource Profile Id", stageInfo.resourceProfileId)
     g.writeBooleanField("Shuffle Push Enabled", stageInfo.isShufflePushEnabled)
     g.writeNumberField("Shuffle Push Mergers Count", stageInfo.shuffleMergerCount)
     g.writeEndObject()
   }
 
-  def taskInfoToJson(taskInfo: TaskInfo, g: JsonGenerator): Unit = {
+  def taskInfoToJson(
+      taskInfo: TaskInfo,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeNumberField("Task ID", taskInfo.taskId)
     g.writeNumberField("Index", taskInfo.index)
@@ -428,17 +471,30 @@ private[spark] object JsonProtocol {
     g.writeBooleanField("Failed", taskInfo.failed)
     g.writeBooleanField("Killed", taskInfo.killed)
     g.writeFieldName("Accumulables")
-    accumulablesToJson(taskInfo.accumulables, g)
+    accumulablesToJson(
+      taskInfo.accumulables,
+      g,
+      includeTaskMetricsAccumulables = options.includeTaskMetricsAccumulables)
     g.writeEndObject()
   }
 
   private[this] val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
 
-  def accumulablesToJson(accumulables: Iterable[AccumulableInfo], g: JsonGenerator): Unit = {
+  private[this] val taskMetricAccumulableNames = TaskMetrics.empty.nameToAccums.keySet.toSet
+
+  def accumulablesToJson(
+      accumulables: Iterable[AccumulableInfo],
+      g: JsonGenerator,
+      includeTaskMetricsAccumulables: Boolean = true): Unit = {
     g.writeStartArray()
     accumulables
-        .filterNot(_.name.exists(accumulableExcludeList.contains))
-        .toList.sortBy(_.id).foreach(a => accumulableInfoToJson(a, g))
+        .filterNot { acc =>
+          acc.name.exists(accumulableExcludeList.contains) ||
+          (!includeTaskMetricsAccumulables && acc.name.exists(taskMetricAccumulableNames.contains))
+        }
+        .toList
+        .sortBy(_.id)
+        .foreach(a => accumulableInfoToJson(a, g))
     g.writeEndArray()
   }
 
