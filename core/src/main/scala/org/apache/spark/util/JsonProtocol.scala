@@ -194,8 +194,12 @@ private[spark] object JsonProtocol {
     g.writeNumberField("Job ID", jobStart.jobId)
     g.writeNumberField("Submission Time", jobStart.time)
     g.writeArrayFieldStart("Stage Infos")  // Added in Spark 1.2.0
-    // SPARK-42205: don't log accumulables in start events:
-    jobStart.stageInfos.foreach(stageInfoToJson(_, g, includeAccumulables = false))
+    // SPARK-42205: here, we purposely include accumulables so that we accurately log all
+    // available information about stages that may have already completed by the time
+    // the job was submitted: it is technically possible for a stage to belong to multiple
+    // concurrent jobs, so this situation can arise even without races occurring between
+    // event logging and stage completion.
+    jobStart.stageInfos.foreach(stageInfoToJson(_, g, includeAccumulables = true))
     g.writeEndArray()
     g.writeArrayFieldStart("Stage IDs")
     jobStart.stageIds.foreach(g.writeNumber)

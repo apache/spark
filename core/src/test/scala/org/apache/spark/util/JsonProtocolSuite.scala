@@ -798,16 +798,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     val taskInfo = makeTaskInfo(1, 200, 300, 400, 500, false)
     assert(taskInfo.accumulables.nonEmpty)
 
-    val jobStart = SparkListenerJobStart(10, jobSubmissionTime, Seq(stageInfo), properties)
     val stageSubmitted = SparkListenerStageSubmitted(stageInfo)
     val taskStart = SparkListenerTaskStart(1, 0, taskInfo)
+    val jobStart = SparkListenerJobStart(10, jobSubmissionTime, Seq(stageInfo), properties)
 
-    assert(
-      jobStartFromJson(sparkEventToJsonString(jobStart)).stageInfos.forall(_.accumulables.isEmpty))
     assert(
       stageSubmittedFromJson(sparkEventToJsonString(stageSubmitted)).stageInfo.accumulables.isEmpty)
     assert(
       taskStartFromJson(sparkEventToJsonString(taskStart)).taskInfo.accumulables.isEmpty)
+
+    // Deliberately not fixed for job starts because a job might legitimately reference
+    // stages that have completed even before the job start event is emitted.
+    testEvent(jobStart, sparkEventToJsonString(jobStart))
   }
 }
 
@@ -2018,7 +2020,24 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [],
+      |      "Accumulables": [
+      |        {
+      |          "ID": 1,
+      |          "Name": "Accumulable1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        }
+      |      ],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
@@ -2070,7 +2089,24 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [],
+      |      "Accumulables": [
+      |        {
+      |          "ID": 1,
+      |          "Name": "Accumulable1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        }
+      |      ],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
@@ -2141,7 +2177,24 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [],
+      |      "Accumulables": [
+      |        {
+      |          "ID": 1,
+      |          "Name": "Accumulable1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        }
+      |      ],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
@@ -2231,7 +2284,24 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ],
       |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
-      |      "Accumulables": [],
+      |      "Accumulables": [
+      |        {
+      |          "ID": 1,
+      |          "Name": "Accumulable1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        }
+      |      ],
       |      "Resource Profile Id" : 0,
       |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
