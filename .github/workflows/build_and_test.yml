@@ -147,7 +147,9 @@ jobs:
             network-common, network-shuffle, repl, launcher,
             examples, sketch, graphx
           - >-
-            catalyst, hive-thriftserver, connect-client-jvm
+            catalyst, hive-thriftserver
+          - >-
+            connect-client-jvm
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
             mllib-local, mllib,
