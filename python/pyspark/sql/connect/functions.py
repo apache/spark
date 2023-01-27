@@ -2453,9 +2453,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__
         del pyspark.sql.connect.functions.unix_timestamp.__doc__
 
-        # TODO(SPARK-41757): Fix String representation for Column class
-        del pyspark.sql.connect.functions.col.__doc__
-
         # TODO(SPARK-41812): Proper column names after join
         del pyspark.sql.connect.functions.count_distinct.__doc__
 
