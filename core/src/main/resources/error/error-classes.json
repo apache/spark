@@ -599,7 +599,7 @@
     "subClass" : {
       "ARRAY" : {
         "message" : [
-          "The definition of `ARRAY` type is incomplete. You must provide an element type. For example: `ARRAY<elementType>`."
+          "The definition of \"ARRAY\" type is incomplete. You must provide an element type. For example: \"ARRAY<elementType>\"."
         ]
       },
       "MAP" : {
