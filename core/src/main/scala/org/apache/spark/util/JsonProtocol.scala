@@ -31,6 +31,7 @@ import org.json4s.jackson.JsonMethods.compact
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
@@ -38,6 +39,16 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils.weakIntern
+
+/**
+ * Helper class for passing configuration options to JsonProtocol.
+ * We use this instead of passing SparkConf directly because it lets us avoid
+ * repeated re-parsing of configuration values on each read.
+ */
+private[spark] class JsonProtocolOptions(conf: SparkConf) {
+  val includeAllZeroTaskExecutorMetrics: Boolean =
+    conf.get(EVENT_LOG_INCLUDE_ALL_ZERO_TASK_EXECUTOR_METRICS)
+}
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -60,13 +71,19 @@ private[spark] object JsonProtocol {
   private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
+  val defaultOptions: JsonProtocolOptions = new JsonProtocolOptions(new SparkConf(false))
+
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
    * -------------------------------------------------- */
 
-  def sparkEventToJsonString(event: SparkListenerEvent): String = {
+ def sparkEventToJsonString(event: SparkListenerEvent): String = {
+    sparkEventToJsonString(event, defaultOptions)
+  }
+
+  def sparkEventToJsonString(event: SparkListenerEvent, options: JsonProtocolOptions): String = {
     toJsonString { generator =>
-      writeSparkEventToJson(event, generator)
+      writeSparkEventToJson(event, generator, options)
     }
   }
 
@@ -79,7 +96,10 @@ private[spark] object JsonProtocol {
     new String(baos.toByteArray, StandardCharsets.UTF_8)
   }
 
-  def writeSparkEventToJson(event: SparkListenerEvent, g: JsonGenerator): Unit = {
+  def writeSparkEventToJson(
+      event: SparkListenerEvent,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         stageSubmittedToJson(stageSubmitted, g)
@@ -90,7 +110,7 @@ private[spark] object JsonProtocol {
       case taskGettingResult: SparkListenerTaskGettingResult =>
         taskGettingResultToJson(taskGettingResult, g)
       case taskEnd: SparkListenerTaskEnd =>
-        taskEndToJson(taskEnd, g)
+        taskEndToJson(taskEnd, g, options)
       case jobStart: SparkListenerJobStart =>
         jobStartToJson(jobStart, g)
       case jobEnd: SparkListenerJobEnd =>
@@ -167,7 +187,10 @@ private[spark] object JsonProtocol {
     g.writeEndObject()
   }
 
-  def taskEndToJson(taskEnd: SparkListenerTaskEnd, g: JsonGenerator): Unit = {
+  def taskEndToJson(
+      taskEnd: SparkListenerTaskEnd,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd)
     g.writeNumberField("Stage ID", taskEnd.stageId)
@@ -182,7 +205,9 @@ private[spark] object JsonProtocol {
     // between executor heartbeats) then omit the metrics field in order to save space
     // in the event log JSON. The Spark History Server already treats missing metrics
     // as all zero values, so this change has no impact on history server UI reconstruction.
-    if (!taskEnd.taskExecutorMetrics.allMetricsAreZero()) {
+    if (
+      options.includeAllZeroTaskExecutorMetrics ||
+        !taskEnd.taskExecutorMetrics.allMetricsAreZero()) {
       g.writeFieldName("Task Executor Metrics")
       executorMetricsToJson(taskEnd.taskExecutorMetrics, g)
     }

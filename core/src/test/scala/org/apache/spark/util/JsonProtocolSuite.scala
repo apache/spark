@@ -33,6 +33,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource._
@@ -795,9 +796,20 @@ class JsonProtocolSuite extends SparkFunSuite {
     val allZeroTaskExecutorMetrics = new ExecutorMetrics(Map.empty[String, Long])
     val taskEnd = taskEndFromJson(taskEndJsonString)
       .copy(taskExecutorMetrics = allZeroTaskExecutorMetrics)
-    val json = sparkEventToJsonString(taskEnd)
-    assertEquals(taskEnd, taskEndFromJson(json))
-    assert(!json.has("Task Executor Metrics"))
+
+    // Test new default behavior:
+    val newOptions = new JsonProtocolOptions(
+      new SparkConf().set(EVENT_LOG_INCLUDE_ALL_ZERO_TASK_EXECUTOR_METRICS, false))
+    val newJson = sparkEventToJsonString(taskEnd, newOptions)
+    assertEquals(taskEnd, taskEndFromJson(newJson))
+    assert(!newJson.has("Task Executor Metrics"))
+
+    // Test backwards compatibility flag:
+    val oldOptions = new JsonProtocolOptions(
+      new SparkConf().set(EVENT_LOG_INCLUDE_ALL_ZERO_TASK_EXECUTOR_METRICS, true))
+    val oldJson = sparkEventToJsonString(taskEnd, oldOptions)
+    assertEquals(taskEnd, taskEndFromJson(oldJson))
+    assert(oldJson.has("Task Executor Metrics"))
   }
 }
 

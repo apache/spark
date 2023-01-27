@@ -212,6 +212,19 @@ package object config {
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
 
+  private[spark] val EVENT_LOG_INCLUDE_ALL_ZERO_TASK_EXECUTOR_METRICS =
+    ConfigBuilder("spark.eventLog.includeAllZeroTaskExecutorMetrics")
+      .doc("Controls whether task end events will include the 'Task Executor Metrics' field " +
+        "even if all metric values are zero. In Spark 3.4.x and earlier these metrics would be " +
+        "logged even if all values were zero, but Spark 3.5.0 omits the metrics from the event " +
+        "to save space in logs. this flag does not impact Spark History Server behavior: it " +
+        "exists only as a backwards-compatibility escape hatch for user applications that " +
+        "might be directly parsing event logs and that relied on the old behavior. " +
+        "See SPARK-42206 for more details.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
