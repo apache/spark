@@ -604,7 +604,7 @@
       },
       "MAP" : {
         "message" : [
-          "The definition of `MAP` type is incomplete. You must provide a key type and a value type. For example: `MAP<TIMESTAMP, INT>`."
+          "The definition of \"MAP\" type is incomplete. You must provide a key type and a value type. For example: \"MAP<TIMESTAMP, INT>\"."
         ]
       },
       "STRUCT" : {
