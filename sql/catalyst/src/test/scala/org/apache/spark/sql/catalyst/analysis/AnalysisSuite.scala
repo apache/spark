@@ -18,11 +18,14 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.logging.log4j.Level
 import org.scalatest.matchers.must.Matchers
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
