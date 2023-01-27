@@ -111,13 +111,13 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['graphx', 'examples']
     >>> [x.name for x in determine_modules_to_test([modules.sql])]
     ... # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'avro', 'connect', 'connect-client-jvm', 'docker-integration-tests', 'hive', 'mllib', 'protobuf',
+    ['sql', 'avro', 'connect', 'docker-integration-tests', 'hive', 'mllib', 'protobuf',
      'sql-kafka-0-10', 'examples', 'hive-thriftserver', 'pyspark-sql', 'repl', 'sparkr',
      'pyspark-connect', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-ml']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'connect',  'connect-client-jvm', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
+    ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
      'pyspark-pandas-slow', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
