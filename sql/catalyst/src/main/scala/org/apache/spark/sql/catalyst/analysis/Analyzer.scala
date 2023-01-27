@@ -1597,12 +1597,35 @@ class Analyzer(override val catalogManager: CatalogManager)
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
-      // Left and right sort expression have to be resolved against the respective child plan
+      case mg: MapGroups if mg.dataOrder.exists(!_.resolved) =>
+        // Resolve against `AppendColumns`'s children, instead of `AppendColumns`,
+        // because `AppendColumns`'s serializer might produce conflict attribute
+        // names leading to ambiguous references exception.
+        val planForResolve = mg.child match {
+          case appendColumns: AppendColumns => appendColumns.child
+          case plan => plan
+        }
+        val resolvedOrder = mg.dataOrder
+            .map(resolveExpressionByPlanOutput(_, planForResolve).asInstanceOf[SortOrder])
+        mg.copy(dataOrder = resolvedOrder)
+
+      // Left and right sort expression have to be resolved against the respective child plan only
       case cg: CoGroup if cg.leftOrder.exists(!_.resolved) || cg.rightOrder.exists(!_.resolved) =>
+        // Resolve against `AppendColumns`'s children, instead of `AppendColumns`,
+        // because `AppendColumns`'s serializer might produce conflict attribute
+        // names leading to ambiguous references exception.
+        val (leftPlanForResolve, rightPlanForResolve) = Seq(cg.left, cg.right).map {
+          case appendColumns: AppendColumns => appendColumns.child
+          case plan => plan
+        } match {
+          case Seq(left, right) => (left, right)
+        }
+
         val resolvedLeftOrder = cg.leftOrder
-          .map(resolveExpressionByPlanOutput(_, cg.left).asInstanceOf[SortOrder])
+          .map(resolveExpressionByPlanOutput(_, leftPlanForResolve).asInstanceOf[SortOrder])
         val resolvedRightOrder = cg.rightOrder
-          .map(resolveExpressionByPlanOutput(_, cg.right).asInstanceOf[SortOrder])
+          .map(resolveExpressionByPlanOutput(_, rightPlanForResolve).asInstanceOf[SortOrder])
+
         cg.copy(leftOrder = resolvedLeftOrder, rightOrder = resolvedRightOrder)
 
       // Skips plan which contains deserializer expressions, as they should be resolved by another

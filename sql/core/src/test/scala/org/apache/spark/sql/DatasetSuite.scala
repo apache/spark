@@ -854,8 +854,10 @@ class DatasetSuite extends QueryTest
   test("cogroup with groupByKey and sorted") {
     val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
     val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
-    val groupedLeft = left.groupByKey(_._1)
-    val groupedRight = right.groupByKey(_._1)
+    // this groupByKey produces conflicting _1 and _2 columns
+    // that should be ignored when resolving sort expressions
+    val groupedLeft = left.groupByKey(row => (row._1, row._1))
+    val groupedRight = right.groupByKey(row => (row._1, row._1))
 
     val neitherSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#wa", 5 -> "hello#xzy")
     val leftSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#wa", 5 -> "hello#xzy")
@@ -877,14 +879,11 @@ class DatasetSuite extends QueryTest
       ("both desc", descOrder, descOrder, bothDescSortedExpected)
     ).foreach { case (label, leftOrder, rightOrder, expected) =>
       withClue(s"$label sorted") {
-        withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "WARN") {
-          val cogrouped = groupedLeft.cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*) {
-            (key, left, right) =>
-              Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
-          }
-
-          checkDatasetUnorderly(cogrouped, expected.toList: _*)
+        val cogrouped = groupedLeft.cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*) {
+          (key, left, right) =>
+            Iterator(key._1 -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
         }
+        checkDatasetUnorderly(cogrouped, expected.toList: _*)
       }
     }
   }
