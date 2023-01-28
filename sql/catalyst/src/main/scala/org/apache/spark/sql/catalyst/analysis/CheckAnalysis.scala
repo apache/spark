@@ -358,8 +358,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
               messageParameters = Map(
                 "sqlExpr" -> f.expressions.map(toSQLExpr).mkString(","),
-                "filter" -> f.condition.sql,
-                "type" -> f.condition.dataType.catalogString))
+                "filter" -> toSQLExpr(f.condition),
+                "type" -> toSQLType(f.condition.dataType)))
 
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             j.failAnalysis(

@@ -1339,7 +1339,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |WHERE 'true'""".stripMargin),
       expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
       expectedMessageParameters = Map(
-        "sqlExpr" -> "\"true\"", "filter" -> "'true'", "type" -> "string"),
+        "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
+      ,
       queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
   }
 }

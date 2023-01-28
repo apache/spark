@@ -267,7 +267,7 @@
       },
       "FILTER_NOT_BOOLEAN" : {
         "message" : [
-          "Filter expression '<filter>' of type <type> is not a boolean."
+          "Filter expression <filter> of type <type> is not a boolean."
         ]
       },
       "HASH_MAP_TYPE" : {
