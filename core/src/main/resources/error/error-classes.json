@@ -592,6 +592,29 @@
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
   },
+  "INCOMPLETE_TYPE_DEFINITION" : {
+    "message" : [
+      "Incomplete complex type:"
+    ],
+    "subClass" : {
+      "ARRAY" : {
+        "message" : [
+          "The definition of \"ARRAY\" type is incomplete. You must provide an element type. For example: \"ARRAY<elementType>\"."
+        ]
+      },
+      "MAP" : {
+        "message" : [
+          "The definition of \"MAP\" type is incomplete. You must provide a key type and a value type. For example: \"MAP<TIMESTAMP, INT>\"."
+        ]
+      },
+      "STRUCT" : {
+        "message" : [
+          "The definition of \"STRUCT\" type is incomplete. You must provide at least one field type. For example: \"STRUCT<Field1: INT>\"."
+        ]
+      }
+    },
+    "sqlState" : "42K01"
+  },
   "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
     "message" : [
       "You may get a different result due to the upgrading to"
@@ -2029,11 +2052,6 @@
     "message" : [
       "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
       "Try moving this class out of its parent class."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1003" : {
-    "message" : [
-      "Couldn't find the reference column for <after> at <parentName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1004" : {

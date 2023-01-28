@@ -22,11 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41897): Parity in Error types between pyspark and connect functions
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_assert_true(self):
-        super().test_assert_true()
-
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_basic_functions(self):
         super().test_basic_functions()
@@ -38,11 +33,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
-
-    # TODO(SPARK-41849): Implement DataFrameReader.text
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_input_file_name_udf(self):
-        super().test_input_file_name_udf()
 
     # TODO(SPARK-41901): Parity in String representation of Column
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -58,11 +48,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_lit_np_scalar(self):
         super().test_lit_np_scalar()
-
-    # TODO(SPARK-41897): Parity in Error types between pyspark and connect functions
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_raise_error(self):
-        super().test_raise_error()
 
     # Comparing column type of connect and pyspark
     @unittest.skip("Fails in Spark Connect, should enable.")

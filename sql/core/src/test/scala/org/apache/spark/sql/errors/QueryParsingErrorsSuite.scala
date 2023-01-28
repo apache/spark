@@ -546,4 +546,76 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         start = 0,
         stop = 124))
   }
+
+  test("INCOMPLETE_TYPE_DEFINITION: array type definition is incomplete") {
+    // Cast simple array without specifying element type
+    checkError(
+      exception = parseException("SELECT CAST(array(1,2,3) AS ARRAY)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+      sqlState = "42K01",
+      parameters = Map("elementType" -> "<INT>"),
+      context = ExpectedContext(fragment = "ARRAY", start = 28, stop = 32))
+    // Cast array of array without specifying element type for inner array
+    checkError(
+      exception = parseException("SELECT CAST(array(array(3)) AS ARRAY<ARRAY>)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+      sqlState = "42K01",
+      parameters = Map("elementType" -> "<INT>"),
+      context = ExpectedContext(fragment = "ARRAY", start = 37, stop = 41))
+    // Create column of array type without specifying element type
+    checkError(
+      exception = parseException("CREATE TABLE tbl_120691 (col1 ARRAY)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+      sqlState = "42K01",
+      parameters = Map("elementType" -> "<INT>"),
+      context = ExpectedContext(fragment = "ARRAY", start = 30, stop = 34))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: struct type definition is incomplete") {
+    // Cast simple struct without specifying field type
+    checkError(
+      exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 29, stop = 34))
+    // Cast array of struct without specifying field type in struct
+    checkError(
+      exception = parseException("SELECT CAST(array(struct(1,2)) AS ARRAY<STRUCT>)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 40, stop = 45))
+    // Create column of struct type without specifying field type
+    checkError(
+      exception = parseException("CREATE TABLE tbl_120691 (col1 STRUCT)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 30, stop = 35))
+    // Invalid syntax `STRUCT<INT>` without field name
+    checkError(
+      exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT<INT>)"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'>'", "hint" -> ""))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: map type definition is incomplete") {
+    // Cast simple map without specifying element type
+    checkError(
+      exception = parseException("SELECT CAST(map(1,'2') AS MAP)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "MAP", start = 26, stop = 28))
+    // Create column of map type without specifying key/value types
+    checkError(
+      exception = parseException("CREATE TABLE tbl_120691 (col1 MAP)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "MAP", start = 30, stop = 32))
+    // Invalid syntax `MAP<String>` with only key type
+    checkError(
+      exception = parseException("SELECT CAST(map('1',2) AS MAP<STRING>)"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'>'", "hint" -> ""))
+  }
 }

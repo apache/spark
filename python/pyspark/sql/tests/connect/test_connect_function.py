@@ -14,45 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
-import tempfile
 
 from pyspark.errors import PySparkTypeError
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.utils import ReusedPySparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.errors import SparkConnectAnalysisException, SparkConnectException
 
-if should_test_connect:
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
-
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectFuncTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
-    """Parent test fixture class for all Spark Connect related
-    test cases."""
+class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
+    """These test cases exercise the interface to the proto plan
+    generation but do not call Spark."""
 
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        cls.hive_available = True
-        # Create the new Spark Session
-        cls.spark = SparkSession(cls.sc)
-        # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
+        super(SparkConnectFunctionTests, cls).setUpClass()
+        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
+        # PySpark libraries.
+        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark sesion.
+        cls.spark = PySparkSession._instantiatedSession
+        assert cls.spark is not None
 
     @classmethod
     def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-
-
-class SparkConnectFunctionTests(SparkConnectFuncTestCase):
-    """These test cases exercise the interface to the proto plan
-    generation but do not call Spark."""
+        cls.spark = cls.connect  # Stopping Spark Connect closes the session in JVM at the server.
+        super(SparkConnectFunctionTests, cls).setUpClass()
+        del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.dataframe import DataFrame as SDF
@@ -2306,6 +2298,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.withColumn("A", CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
             sdf.withColumn("A", SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
+        )
+        self.assert_eq(  # returnType as DDL strings
+            cdf.withColumn("C", CF.udf(lambda x: len(x), "int")(cdf.c)).toPandas(),
+            sdf.withColumn("C", SF.udf(lambda x: len(x), "int")(sdf.c)).toPandas(),
+        )
+        self.assert_eq(  # returnType as DataType
+            cdf.withColumn("C", CF.udf(lambda x: len(x), IntegerType())(cdf.c)).toPandas(),
+            sdf.withColumn("C", SF.udf(lambda x: len(x), IntegerType())(sdf.c)).toPandas(),
         )
 
         # as a decorator
