@@ -29,7 +29,7 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -1142,15 +1142,21 @@ class DataFrameSuite extends QueryTest
     val onlyPercentiles = person2.summary("0.1%", "99.9%")
     assert(onlyPercentiles.count() === 2)
 
-    val fooE = intercept[IllegalArgumentException] {
-      person2.summary("foo")
-    }
-    assert(fooE.getMessage === "foo is not a recognised statistic")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2114",
+      parameters = Map("stats" -> "foo")
+    )
 
-    val parseE = intercept[IllegalArgumentException] {
-      person2.summary("foo%")
-    }
-    assert(parseE.getMessage === "Unable to parse foo% as a percentile")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo%")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2113",
+      parameters = Map("stats" -> "foo%")
+    )
   }
 
   test("apply on query results (SPARK-5462)") {

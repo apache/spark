@@ -97,7 +97,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
       keyGroupedPartitioning match {
         case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
           groupedPartitions.map { partitionValues =>
-            KeyGroupedPartitioning(exprs, partitionValues.size, Some(partitionValues.map(_._1)))
+            KeyGroupedPartitioning(exprs, partitionValues.size, partitionValues.map(_._1))
           }.getOrElse(super.outputPartitioning)
         case _ =>
           super.outputPartitioning

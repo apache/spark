@@ -60,7 +60,8 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred, to_str
+from pyspark.errors.exceptions import install_exception_handler
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -435,7 +436,7 @@ class SparkSession(SparkConversionMixin):
 
                             if url.startswith("local"):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
-                                RemoteSparkSession._start_connect_server(url)
+                                RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
 
                             os.environ["SPARK_REMOTE"] = url

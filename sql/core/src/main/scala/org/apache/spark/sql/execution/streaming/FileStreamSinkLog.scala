@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.net.URI
-
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.FileStatus
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 
@@ -30,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
  * The status of a file outputted by [[FileStreamSink]]. A file is visible only if it appears in
  * the sink log and its action is not "delete".
  *
- * @param path the file path.
+ * @param path the file path as a uri-encoded string.
  * @param size the file size.
  * @param isDir whether this file is a directory.
  * @param modificationTime the file last modification time.
@@ -46,17 +45,23 @@ case class SinkFileStatus(
     blockReplication: Int,
     blockSize: Long,
     action: String) {
+  def sparkPath: SparkPath = SparkPath.fromPathString(path)
 
   def toFileStatus: FileStatus = {
     new FileStatus(
-      size, isDir, blockReplication, blockSize, modificationTime, new Path(new URI(path)))
+      size,
+      isDir,
+      blockReplication,
+      blockSize,
+      modificationTime,
+      SparkPath.fromUrlString(path).toPath)
   }
 }
 
 object SinkFileStatus {
   def apply(f: FileStatus): SinkFileStatus = {
     SinkFileStatus(
-      path = f.getPath.toUri.toString,
+      path = SparkPath.fromPath(f.getPath).urlEncoded,
       size = f.getLen,
       isDir = f.isDirectory,
       modificationTime = f.getModificationTime,

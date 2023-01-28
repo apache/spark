@@ -114,6 +114,22 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       checkPartitions(t, expected: _*)
     }
   }
+
+  test("ALTER TABLE .. RECOVER PARTITIONS is not allowed for non-partitioned table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
+      val exception = intercept[AnalysisException] {
+        sql("ALTER TABLE tbl RECOVER PARTITIONS")
+      }
+      checkError(
+        exception = exception,
+        errorClass = "NOT_A_PARTITIONED_TABLE",
+        parameters = Map(
+          "operation" -> "ALTER TABLE RECOVER PARTITIONS",
+          "tableIdentWithDB" -> "`spark_catalog`.`default`.`tbl`")
+      )
+    }
+  }
 }
 
 /**

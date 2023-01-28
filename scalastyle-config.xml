@@ -437,4 +437,12 @@ This file is divided into 3 sections:
       Use org.apache.spark.util.Utils.createTempDir instead.
     </customMessage>
   </check>
+
+  <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">new Path\(new URI\(</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that this string is uri encoded? Please be careful when converting hadoop Paths
+      and URIs to and from String. If possible, please use SparkPath.
+    ]]></customMessage>
+  </check>
 </scalastyle>

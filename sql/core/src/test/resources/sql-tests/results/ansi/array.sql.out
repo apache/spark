@@ -130,6 +130,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
@@ -155,6 +156,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
     "inputType" : "\"BOOLEAN\"",
@@ -199,6 +201,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -222,6 +225,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -245,6 +249,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "sqlState" : "22003",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -263,6 +268,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
@@ -286,6 +292,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
@@ -309,6 +316,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
@@ -364,6 +372,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -387,6 +396,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -442,6 +452,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
     "inputType" : "\"MAP<STRING, INT>\"",
@@ -547,6 +558,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"id\"",
     "inputType" : "\"INT\"",

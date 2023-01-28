@@ -22,13 +22,12 @@ import collection.JavaConverters._
 import org.apache.spark.sql.execution.ui.{SparkPlanGraphClusterWrapper, SparkPlanGraphEdge, SparkPlanGraphNode, SparkPlanGraphNodeWrapper, SparkPlanGraphWrapper}
 import org.apache.spark.status.protobuf.ProtobufSerDe
 import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
-class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
+class SparkPlanGraphWrapperSerializer extends ProtobufSerDe[SparkPlanGraphWrapper] {
 
-  override val supportClass: Class[_] = classOf[SparkPlanGraphWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val plan = input.asInstanceOf[SparkPlanGraphWrapper]
+  override def serialize(plan: SparkPlanGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.SparkPlanGraphWrapper.newBuilder()
     builder.setExecutionId(plan.executionId)
     plan.nodes.foreach { node =>
@@ -95,8 +94,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     StoreTypes.SparkPlanGraphNode = {
     val builder = StoreTypes.SparkPlanGraphNode.newBuilder()
     builder.setId(node.id)
-    builder.setName(node.name)
-    builder.setDesc(node.desc)
+    setStringField(node.name, builder.setName)
+    setStringField(node.desc, builder.setDesc)
     node.metrics.foreach { metric =>
       builder.addMetrics(SQLPlanMetricSerializer.serialize(metric))
     }
@@ -108,8 +107,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
     new SparkPlanGraphNode(
       id = node.getId,
-      name = node.getName,
-      desc = node.getDesc,
+      name = getStringField(node.hasName, () => weakIntern(node.getName)),
+      desc = getStringField(node.hasDesc, () => node.getDesc),
       metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
     )
   }
@@ -118,8 +117,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     StoreTypes.SparkPlanGraphClusterWrapper = {
     val builder = StoreTypes.SparkPlanGraphClusterWrapper.newBuilder()
     builder.setId(cluster.id)
-    builder.setName(cluster.name)
-    builder.setDesc(cluster.desc)
+    setStringField(cluster.name, builder.setName)
+    setStringField(cluster.desc, builder.setDesc)
     cluster.nodes.foreach { node =>
       builder.addNodes(serializeSparkPlanGraphNodeWrapper(node))
     }
@@ -134,8 +133,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
     new SparkPlanGraphClusterWrapper(
       id = cluster.getId,
-      name = cluster.getName,
-      desc = cluster.getDesc,
+      name = getStringField(cluster.hasName, () => weakIntern(cluster.getName)),
+      desc = getStringField(cluster.hasDesc, () => cluster.getDesc),
       nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper),
       metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
     )

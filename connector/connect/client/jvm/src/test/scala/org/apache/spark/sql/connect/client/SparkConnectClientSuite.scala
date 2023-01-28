@@ -24,6 +24,7 @@ import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
@@ -78,7 +79,7 @@ class SparkConnectClientSuite
   }
 
   test("Test connection") {
-    val testPort = 16000
+    val testPort = 16001
     client = SparkConnectClient.builder().port(testPort).build()
     testClientConnection(client, testPort)
   }
@@ -98,9 +99,9 @@ class SparkConnectClientSuite
     TestPackURI("sc://host", isCorrect = true),
     TestPackURI("sc://localhost/", isCorrect = true, client => testClientConnection(client)),
     TestPackURI(
-      "sc://localhost:123/",
+      "sc://localhost:1234/",
       isCorrect = true,
-      client => testClientConnection(client, 123)),
+      client => testClientConnection(client, 1234)),
     TestPackURI("sc://localhost/;", isCorrect = true, client => testClientConnection(client)),
     TestPackURI("sc://host:123", isCorrect = true),
     TestPackURI(
@@ -151,11 +152,20 @@ class SparkConnectClientSuite
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
 
+  private var inputPlan: proto.Plan = _
+
+  private[sql] def getAndClearLatestInputPlan(): proto.Plan = {
+    val plan = inputPlan
+    inputPlan = null
+    plan
+  }
+
   override def analyzePlan(
       request: AnalyzePlanRequest,
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestClientId = request.getClientId
+    inputPlan = request.getPlan
     val response = AnalyzePlanResponse
       .newBuilder()
       .setClientId(requestClientId)

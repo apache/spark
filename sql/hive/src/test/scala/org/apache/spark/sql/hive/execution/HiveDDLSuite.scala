@@ -1052,9 +1052,17 @@ class HiveDDLSuite
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
-      assertAnalysisError(
-        "DROP VIEW tab1",
-        "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+      assertAnalysisErrorClass(
+        sqlText = "DROP VIEW tab1",
+        errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+        parameters = Map(
+          "alternative" -> "DROP TABLE",
+          "operation" -> "DROP VIEW",
+          "foundType" -> "MANAGED",
+          "requiredType" -> "VIEW",
+          "objectName" -> "spark_catalog.default.tab1"
+        )
+      )
     }
   }
 
@@ -1063,9 +1071,17 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        assertAnalysisError(
-          "DROP TABLE view1",
-          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+        assertAnalysisErrorClass(
+          sqlText = "DROP TABLE view1",
+          errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+          parameters = Map(
+            "alternative" -> "DROP VIEW",
+            "operation" -> "DROP TABLE",
+            "foundType" -> "VIEW",
+            "requiredType" -> "EXTERNAL or MANAGED",
+            "objectName" -> "spark_catalog.default.view1"
+          )
+        )
       }
     }
   }

@@ -47,7 +47,7 @@ private[spark] class WorkerWatcher(
   private[deploy] var isShutDown = false
 
   // Lets filter events only from the worker's rpc system
-  private val expectedAddress = RpcAddress.fromURIString(workerUrl)
+  private val expectedAddress = RpcAddress.fromUrlString(workerUrl)
   private def isWorker(address: RpcAddress) = expectedAddress == address
 
   private def exitNonZero() =

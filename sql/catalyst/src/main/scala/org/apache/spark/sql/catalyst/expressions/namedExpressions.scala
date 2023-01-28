@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -190,10 +190,7 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      val a = AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
-      // Alias has its own qualifier. It doesn't make sense to still restrict the hidden columns
-      // of natural/using join to be accessed by qualified name only.
-      if (a.qualifiedAccessOnly) a.markAsAllowAnyAccess() else a
+      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
     } else {
       UnresolvedAttribute.quoted(name)
     }

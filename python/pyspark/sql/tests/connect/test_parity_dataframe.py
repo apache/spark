@@ -27,25 +27,15 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_cache(self):
         super().test_cache()
 
-    # TODO(SPARK-41866): createDataframe support array type
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_array_of_long(self):
-        super().test_create_dataframe_from_array_of_long()
-
     # TODO(SPARK-41868): Support data type Duration(NANOSECOND)
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         super().test_create_dataframe_from_pandas_with_day_time_interval()
 
-    # TODO(SPARK-41842): Support data type Timestamp(NANOSECOND, null)
+    # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
-
-    # TODO(SPARK-41842): Support data type Timestamp(NANOSECOND, null)
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_timestamp(self):
-        super().test_create_dataframe_from_pandas_with_timestamp()
 
     # TODO(SPARK-41855): createDataFrame doesn't handle None/NaN properly
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -56,14 +46,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
         super().test_duplicated_column_names()
-
-    @unittest.skip("Spark Connect does not support JVM function _jdf but the tests depend on them")
-    def test_extended_hint_types(self):
-        super().test_extended_hint_types()
-
-    @unittest.skip("Spark Connect does not support JVM function _jdf but the tests depend on them")
-    def test_generic_hints(self):
-        super().test_generic_hints()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
@@ -118,11 +100,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_sample(self):
         super().test_sample()
 
-    # TODO(SPARK-41875): throw proper errors in Dataset.to()
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to(self):
-        super().test_to()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
@@ -147,10 +124,9 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas(self):
         super().test_to_pandas()
 
-    # TODO(SPARK-41884): DataFrame `toPandas` parity in return types
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_for_array_of_struct(self):
-        super().test_to_pandas_for_array_of_struct()
+        # Spark Connect's implementation is based on Arrow.
+        super().check_to_pandas_for_array_of_struct(True)
 
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")

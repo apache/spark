@@ -20,7 +20,6 @@ package org.apache.spark.util
 import java.util.Properties
 
 import scala.collection.JavaConverters._
-import scala.collection.Map
 import scala.language.implicitConversions
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
@@ -100,8 +99,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
-    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout")
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
     val resources = Map(ResourceUtils.GPU ->
       new ResourceInformation(ResourceUtils.GPU, Array("0", "1")))
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
@@ -110,9 +109,9 @@ class JsonProtocolSuite extends SparkFunSuite {
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources, 4))
     val executorAddedWithTime = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4,
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources, 4,
         Some(1), Some(0)))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
@@ -198,9 +197,9 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("Dependent Classes") {
-    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
-    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
-    val rinfo = Map[String, ResourceInformation]().toMap
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout")
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
+    val rinfo = Map[String, ResourceInformation]()
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, DeterministicLevel.DETERMINATE))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 888, 777L, false))
@@ -632,13 +631,13 @@ class JsonProtocolSuite extends SparkFunSuite {
     // The "Resource Profile Id", "Registration Time", and "Request Time"
     // fields were added in Spark 3.4.0
     val resourcesInfo = Map(ResourceUtils.GPU ->
-      new ResourceInformation(ResourceUtils.GPU, Array("0", "1"))).toMap
-    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+      new ResourceInformation(ResourceUtils.GPU, Array("0", "1")))
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
     val executorInfo =
       new ExecutorInfo(
         "Hostee.awesome.com",
         11,
-        logUrlMap = Map.empty[String, String].toMap,
+        logUrlMap = Map.empty[String, String],
         attributes = attributes,
         resourcesInfo = resourcesInfo,
         resourceProfileId = 123,
@@ -924,12 +923,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(e1.jobId === e2.jobId)
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
-        assertEquals(e1.environmentDetails, e2.environmentDetails)
+        assertEquals(e1.environmentDetails.toMap, e2.environmentDetails.toMap)
       case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
-        assert(e1.executorId === e1.executorId)
+        assert(e1.executorId === e2.executorId)
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
-        assert(e1.executorId === e1.executorId)
+        assert(e1.executorId === e2.executorId)
       case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
         assert(e1.execId === e2.execId)
         assertSeqEquals[(Long, Int, Int, Seq[AccumulableInfo])](

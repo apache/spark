@@ -6,7 +6,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO"
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "sqlState" : "22003"
 }
 
 

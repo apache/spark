@@ -17,16 +17,22 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = Literal(1)
@@ -731,6 +737,42 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-41986: Introduce shuffle on SinglePartition") {
+    val filesMaxPartitionBytes = conf.filesMaxPartitionBytes
+    withSQLConf(SQLConf.MAX_SINGLE_PARTITION_BYTES.key -> filesMaxPartitionBytes.toString) {
+      Seq(filesMaxPartitionBytes, filesMaxPartitionBytes + 1).foreach { size =>
+        val logicalPlan = StatsTestPlan(Nil, 1L, AttributeMap.empty, Some(size))
+        val left = DummySparkPlan(outputPartitioning = SinglePartition)
+        left.setLogicalLink(logicalPlan)
+        val right = DummySparkPlan(outputPartitioning = SinglePartition)
+        right.setLogicalLink(logicalPlan)
+        val smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, left, right)
+
+        if (size <= filesMaxPartitionBytes) {
+          EnsureRequirements.apply(smjExec) match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+            SortExec(_, _, _: DummySparkPlan, _),
+            SortExec(_, _, _: DummySparkPlan, _), _) =>
+              assert(leftKeys === Seq(exprA))
+              assert(rightKeys === Seq(exprC))
+            case other => fail(other.toString)
+          }
+        } else {
+          EnsureRequirements.apply(smjExec) match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+            SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+              assert(leftKeys === Seq(exprA))
+              assert(rightKeys === Seq(exprC))
+              assert(left.numPartitions == 5)
+              assert(right.numPartitions == 5)
+            case other => fail(other.toString)
+          }
+        }
+      }
+    }
+  }
+
   test("Check with KeyGroupedPartitioning") {
     // simplest case: identity transforms
     var plan1 = DummySparkPlan(
@@ -987,11 +1029,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       var plan1 = DummySparkPlan(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
-          leftPartValues.length, Some(leftPartValues))
+          leftPartValues.length, leftPartValues)
       )
       var plan2 = DummySparkPlan(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-          rightPartValues.length, Some(rightPartValues))
+          rightPartValues.length, rightPartValues)
       )
 
       // simple case
@@ -1010,9 +1052,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       plan1 = DummySparkPlan(outputPartitioning =
         PartitioningCollection(
           Seq(KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
-            leftPartValues.length, Some(leftPartValues)),
+            leftPartValues.length, leftPartValues),
             KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
-              leftPartValues.length, Some(leftPartValues)))
+              leftPartValues.length, leftPartValues))
         )
       )
 
@@ -1037,15 +1079,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
             PartitioningCollection(
               Seq(
                 KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                  rightPartValues.length, Some(rightPartValues)),
+                  rightPartValues.length, rightPartValues),
                 KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                  rightPartValues.length, Some(rightPartValues)))),
+                  rightPartValues.length, rightPartValues))),
               PartitioningCollection(
                 Seq(
                   KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                    rightPartValues.length, Some(rightPartValues)),
+                    rightPartValues.length, rightPartValues),
                   KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
-                    rightPartValues.length, Some(rightPartValues))))
+                    rightPartValues.length, rightPartValues)))
           )
         )
       )
@@ -1064,6 +1106,57 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(right.partitionings.head.isInstanceOf[PartitioningCollection])
         case other => fail(other.toString)
       }
+    }
+  }
+
+  test("SPARK-42168: FlatMapCoGroupInPandas and Window function with differing key order") {
+    val lKey = AttributeReference("key", IntegerType)()
+    val lKey2 = AttributeReference("key2", IntegerType)()
+
+    val rKey = AttributeReference("key", IntegerType)()
+    val rKey2 = AttributeReference("key2", IntegerType)()
+    val rValue = AttributeReference("value", IntegerType)()
+
+    val left = DummySparkPlan()
+    val right = WindowExec(
+      Alias(
+        WindowExpression(
+          Sum(rValue).toAggregateExpression(),
+          WindowSpecDefinition(
+            Seq(rKey2, rKey),
+            Nil,
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+          )
+        ), "sum")() :: Nil,
+      Seq(rKey2, rKey),
+      Nil,
+      DummySparkPlan()
+    )
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+
+    val flapMapCoGroup = FlatMapCoGroupsInPandasExec(
+      Seq(lKey, lKey2),
+      Seq(rKey, rKey2),
+      pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil,
+      left,
+      right
+    )
+
+    val result = EnsureRequirements.apply(flapMapCoGroup)
+    result match {
+      case FlatMapCoGroupsInPandasExec(leftKeys, rightKeys, _, _,
+        SortExec(leftOrder, false, _, _), SortExec(rightOrder, false, _, _)) =>
+        assert(leftKeys === Seq(lKey, lKey2))
+        assert(rightKeys === Seq(rKey, rKey2))
+        assert(leftKeys.map(k => SortOrder(k, Ascending)) === leftOrder)
+        assert(rightKeys.map(k => SortOrder(k, Ascending)) === rightOrder)
+      case other => fail(other.toString)
     }
   }
 
