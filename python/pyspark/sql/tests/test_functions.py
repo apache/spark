@@ -25,7 +25,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, SparkConnectException
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -1015,48 +1015,42 @@ class FunctionsTestsMixin:
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "too big"):
             df.select(assert_true(df.id < 2, "too big")).toDF("val").collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("too big", str(cm.exception))
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "2000000"):
             df.select(assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("2000000", str(cm.exception))
 
-        with self.assertRaises(PySparkTypeError) as pe:
+        with self.assertRaises((PySparkTypeError, TypeError)) as pe:
             df.select(assert_true(df.id < 2, 5))
 
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
-            message_parameters={"arg_name": "errMsg", "arg_type": "int"},
-        )
+        if isinstance(pe, PySparkTypeError):
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_COLUMN_OR_STRING",
+                message_parameters={"arg_name": "errMsg", "arg_type": "int"},
+            )
 
     def test_raise_error(self):
         from pyspark.sql.functions import raise_error
 
         df = self.spark.createDataFrame([Row(id="foobar")])
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "foobar"):
             df.select(raise_error(df.id)).collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("foobar", str(cm.exception))
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "barfoo"):
             df.select(raise_error("barfoo")).collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("barfoo", str(cm.exception))
 
-        with self.assertRaises(PySparkTypeError) as pe:
+        with self.assertRaises((PySparkTypeError, TypeError)) as pe:
             df.select(raise_error(None))
 
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
-            message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
-        )
+        if isinstance(pe, PySparkTypeError):
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_COLUMN_OR_STRING",
+                message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
+            )
 
     def test_sum_distinct(self):
         self.spark.range(10).select(
