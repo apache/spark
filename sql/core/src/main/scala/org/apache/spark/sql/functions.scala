@@ -4042,7 +4042,7 @@ object functions {
    */
   def array_compact(column: Column): Column = withExpr {
     ArrayCompact(column.expr)
-
+  }
     /**
      * Returns an array containing value as well as all elements from array. The new element is
      * positioned at the beginning of the array.
@@ -4050,21 +4050,6 @@ object functions {
      * @group collection_funcs
      * @since 3.4.0
      */
-  def array_prepend(column: Column, element: Any): Column = withExpr {
-    ArrayPrepend(column.expr, lit(element).expr)
-
-    /**
-     * Remove all null elements from the given array.
-     *
-     * @group collection_funcs
-     * @since 3.4.0
-     */
-  def array_compact(column: Column): Column = withExpr {
-    ArrayCompact(column.expr)
-  /**
-   * Returns an array containing value as well as all elements from array.The
-   * new element is positioned at the beginning of the array.
-   */
   def array_prepend(column: Column, element: Any): Column = withExpr {
     ArrayPrepend(column.expr, lit(element).expr)
   }
