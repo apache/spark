@@ -723,7 +723,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
             val invalidExprSqls =
-              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(_.sql)
+              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
             other.failAnalysis(
               errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
