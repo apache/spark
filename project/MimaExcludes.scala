@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.5.x
+  lazy val v35excludes = v34excludes ++ Seq(
+  )
+
   // Exclude rules for 3.4.x from 3.3.0
   lazy val v34excludes = defaultExcludes ++ Seq(
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
@@ -202,6 +206,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.5") => v35excludes
     case v if v.startsWith("3.4") => v34excludes
     case _ => Seq()
   }

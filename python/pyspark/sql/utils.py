@@ -151,7 +151,7 @@ def try_remote_functions(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
-        if is_remote():
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
@@ -167,7 +167,7 @@ def try_remote_window(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
-        if is_remote():
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import Window
 
             return getattr(Window, f.__name__)(*args, **kwargs)
@@ -183,7 +183,7 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
-        if is_remote():
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import WindowSpec
 
             return getattr(WindowSpec, f.__name__)(*args, **kwargs)
@@ -199,7 +199,7 @@ def try_remote_observation(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         # TODO(SPARK-41527): Add the support of Observation.
-        if is_remote():
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             raise NotImplementedError()
         return f(*args, **kwargs)
 

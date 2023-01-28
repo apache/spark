@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.4.0-SNAPSHOT</version>
+    <version>3.5.0-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
@@ -64,6 +64,23 @@
       <artifactId>guava</artifactId>
       <version>${guava.version}</version>
       <scope>compile</scope>
+    </dependency>
+    <!--
+      SPARK-42213: Add `repl` as test dependency to solve the issue that
+      `ClientE2ETestSuite` cannot find `repl.Main` when maven test.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-repl_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+      <!-- Exclude sql module to resolve compilation conflicts -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-sql_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
