@@ -2651,6 +2651,58 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("SPARK-41233: array prepend") {
+    val df = Seq(
+      (Array[Int](2, 3, 4), Array("b", "c", "d"), Array("", ""), 2),
+      (Array.empty[Int], Array.empty[String], Array.empty[String], 2),
+      (null, null, null, 2)).toDF("a", "b", "c", "d")
+    checkAnswer(
+      df.select(array_prepend($"a", 1), array_prepend($"b", "a"), array_prepend($"c", "")),
+      Seq(
+        Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "", "")),
+        Row(Seq(1), Seq("a"), Seq("")),
+        Row(null, null, null)))
+    checkAnswer(
+      df.select(array_prepend($"a", $"d")),
+      Seq(Row(Seq(2, 2, 3, 4)), Row(Seq(2)), Row(null)))
+    checkAnswer(
+      df.selectExpr("array_prepend(a, d)"),
+      Seq(Row(Seq(2, 2, 3, 4)), Row(Seq(2)), Row(null)))
+    checkAnswer(
+      OneRowRelation().selectExpr("array_prepend(array(1, 2), 1.23D)"),
+      Seq(Row(Seq(1.23, 1.0, 2.0))))
+    checkAnswer(
+      df.selectExpr("array_prepend(a, 1)", "array_prepend(b, \"a\")", "array_prepend(c, \"\")"),
+      Seq(
+        Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "", "")),
+        Row(Seq(1), Seq("a"), Seq("")),
+        Row(null, null, null)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("a string element", "a")).toDF().selectExpr("array_prepend(_1, _2)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "paramIndex" -> "1",
+        "sqlExpr" -> "\"array_prepend(_1, _2)\"",
+        "inputSql" -> "\"_1\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"ARRAY\""),
+      queryContext = Array(ExpectedContext("", "", 0, 20, "array_prepend(_1, _2)")))
+    checkError(
+      exception = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("array_prepend(array(1, 2), '1')")
+      },
+      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_prepend(array(1, 2), 1)\"",
+        "functionName" -> "`array_prepend`",
+        "dataType" -> "\"ARRAY\"",
+        "leftType" -> "\"ARRAY<INT>\"",
+        "rightType" -> "\"STRING\""),
+      queryContext = Array(ExpectedContext("", "", 0, 30, "array_prepend(array(1, 2), '1')")))
+  }
+
   test("array remove") {
     val df = Seq(
       (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", ""), 2),

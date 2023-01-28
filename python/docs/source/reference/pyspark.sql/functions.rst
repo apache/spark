@@ -158,6 +158,7 @@ Collection Functions
     array_append
     array_sort
     array_remove
+    array_prepend
     array_distinct
     array_intersect
     array_union
