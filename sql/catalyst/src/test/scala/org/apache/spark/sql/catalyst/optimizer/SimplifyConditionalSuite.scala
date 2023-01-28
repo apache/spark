@@ -293,4 +293,21 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
         Some(Literal.create(null, IntegerType))),
       CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil))
   }
+
+  test("SPARK-42223: Remove duplicate branch in CASE_WHEN and COALESCE function") {
+    assertEquivalent(
+      CaseWhen(
+        (GreaterThan($"a", 1), FalseLiteral) ::
+          (GreaterThan($"a", 2), TrueLiteral) ::
+          (GreaterThan($"a", 1), TrueLiteral) :: Nil,
+        Some(FalseLiteral)),
+      CaseWhen(
+        (GreaterThan($"a", 1), FalseLiteral) ::
+          (GreaterThan($"a", 2), TrueLiteral) :: Nil,
+        Some(FalseLiteral)))
+
+    assertEquivalent(
+      Coalesce(Seq($"a" + 1, $"a" + 2, Literal(1) + $"a", Literal(2) + $"a")),
+      Coalesce(Seq($"a" + 1, $"a" + 2)))
+  }
 }

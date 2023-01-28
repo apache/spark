@@ -540,7 +540,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
+    _.containsAnyPattern(IF, CASE_WHEN, COALESCE), ruleId) {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
@@ -609,6 +609,22 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
       case e @ CaseWhen(_, elseOpt)
           if elseOpt.exists(_.semanticEquals(Literal(null, e.dataType))) =>
         e.copy(elseValue = None)
+
+      case e @ CaseWhen(branches, _) =>
+        var conditions = ExpressionSet()
+        e.copy(branches = branches.collect {
+          case branch if !branch._1.deterministic || !conditions.contains(branch._1) =>
+            conditions += branch._1
+            branch
+        })
+
+      case e @ Coalesce(children) =>
+        var childrenExpressions = ExpressionSet()
+        e.copy(children = children.collect {
+          case child if !child.deterministic || !childrenExpressions.contains(child) =>
+            childrenExpressions += child
+            child
+        })
     }
   }
 }
