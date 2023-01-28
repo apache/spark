@@ -21,11 +21,10 @@ import os
 import functools
 import unittest
 
-from pyspark import Row
+from pyspark import Row, SparkConf
 from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
     have_pandas,
-    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
     SQLTestUtils,
@@ -55,44 +54,20 @@ except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
 
-connect_not_compiled_message = None
-if (
-    have_pandas
-    and have_pyarrow
-    and have_grpc
-    and have_grpc_status
-    and have_googleapis_common_protos
-):
-    from pyspark.sql.connect import DataFrame
-    from pyspark.sql.connect.plan import Read, Range, SQL
-    from pyspark.testing.utils import search_jar
-    from pyspark.sql.connect.session import SparkSession
-
-    connect_jar = search_jar("connector/connect/server", "spark-connect-assembly-", "spark-connect")
-    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
-    connect_url = "--remote sc://localhost"
-    jars_args = "--jars %s" % connect_jar
-    plugin_args = "--conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin"
-    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join(
-        [connect_url, jars_args, plugin_args, existing_args]
-    )
-else:
-    connect_not_compiled_message = (
-        "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
-        "not compiled into a JAR. To run these tests, you need to build Spark with "
-        "'build/sbt package' or 'build/mvn package' before running this test."
-    )
-
 
 connect_requirement_message = (
     pandas_requirement_message
     or pyarrow_requirement_message
     or grpc_requirement_message
-    or connect_not_compiled_message
     or googleapis_common_protos_requirement_message
     or grpc_status_requirement_message
 )
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
+
+if should_test_connect:
+    from pyspark.sql.connect import DataFrame
+    from pyspark.sql.connect.plan import Read, Range, SQL
+    from pyspark.sql.connect.session import SparkSession
 
 
 class MockRemoteSession:
@@ -169,8 +144,20 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
     """
 
     @classmethod
+    def conf(cls):
+        """
+        Override this in subclasses to supply a more specific conf
+        """
+        return SparkConf(loadDefaults=False)
+
+    @classmethod
     def setUpClass(cls):
-        cls.spark = PySparkSession.builder.appName(cls.__name__).remote("local[4]").getOrCreate()
+        cls.spark = (
+            PySparkSession.builder.config(conf=cls.conf())
+            .appName(cls.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]

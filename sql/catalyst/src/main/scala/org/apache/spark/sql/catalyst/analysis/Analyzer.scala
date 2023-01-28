@@ -4053,9 +4053,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                   case Some(colName) =>
                     ResolvedFieldPosition(ColumnPosition.after(colName))
                   case None =>
-                    val name = if (resolvedParentName.isEmpty) "root" else resolvedParentName.quoted
                     throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(
-                      after, name)
+                      col.colName, allFields)
                 }
               case _ => ResolvedFieldPosition(u.position)
             }
