@@ -1125,16 +1125,12 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map(
-        "quoted" -> "a.b.c",
-        "identifier" -> "TableIdentifier")
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map(
-        "quoted" -> "a.b.c",
-        "identifier" -> "FunctionIdentifier")
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }
 
@@ -1143,16 +1139,12 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map(
-        "quoted" -> "a.b.c",
-        "identifier" -> "TableIdentifier")
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map(
-        "quoted" -> "a.b.c",
-        "identifier" -> "FunctionIdentifier")
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }
 }

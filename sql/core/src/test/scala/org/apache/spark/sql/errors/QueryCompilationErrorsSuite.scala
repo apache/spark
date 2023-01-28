@@ -688,10 +688,8 @@ class QueryCompilationErrorsSuite
         sql("CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column")
       },
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map(
-        "quoted" -> "db_name.schema_name.view_name",
-        "identifier" -> "TableIdentifier"
-      )
+      sqlState = "42601",
+      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`")
     )
   }
 
@@ -708,13 +706,11 @@ class QueryCompilationErrorsSuite
 
       checkError(
         exception = intercept[AnalysisException] {
-          sql("ALTER TABLE t RENAME TO db_name.schema_name.new_table_name")
+          sql(s"ALTER TABLE $tableName RENAME TO db_name.schema_name.new_table_name")
         },
         errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-        parameters = Map(
-          "quoted" -> "db_name.schema_name.new_table_name",
-          "identifier" -> "TableIdentifier"
-        )
+        sqlState = "42601",
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
       )
     }
   }

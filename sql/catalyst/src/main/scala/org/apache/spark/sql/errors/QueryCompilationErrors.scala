@@ -1864,13 +1864,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "ability" -> ability))
   }
 
-  def identifierHavingMoreThanTwoNamePartsError(
-      quoted: String, identifier: String): Throwable = {
+  def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map(
-        "quoted" -> quoted,
-        "identifier" -> identifier))
+      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {

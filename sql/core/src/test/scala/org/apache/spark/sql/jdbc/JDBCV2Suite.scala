@@ -2684,10 +2684,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
         },
         errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-        parameters = Map(
-          "quoted" -> "db_name.schema_name.function_name",
-          "identifier" -> "FunctionIdentifier"
-        )
+        sqlState = "42601",
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
       )
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
