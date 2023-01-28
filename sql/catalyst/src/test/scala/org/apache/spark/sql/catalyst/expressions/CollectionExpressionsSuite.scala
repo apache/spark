@@ -20,10 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.TimeZone
-
 import scala.language.implicitConversions
 import scala.util.Random
-
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1864,21 +1862,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayPrepend(a0, Literal(0)), Seq(0, 1, 2, 3, 4))
     checkEvaluation(ArrayPrepend(a1, Literal("a")), Seq("a", "a", "b", "c"))
     checkEvaluation(ArrayPrepend(a2, Literal(1)), Seq(1))
-    checkEvaluation(ArrayPrepend(a2, Literal(null, IntegerType)), null)
+    checkEvaluation(ArrayPrepend(a2, Literal(null, IntegerType)), Seq(null))
     checkEvaluation(ArrayPrepend(a3, Literal("a")), null)
     checkEvaluation(ArrayPrepend(a3, Literal(null, StringType)), null)
 
     // complex data types
+    val data = Seq[Array[Byte]](
+      Array[Byte](5, 6),
+      Array[Byte](1, 2),
+      Array[Byte](1, 2),
+      Array[Byte](5, 6))
     val b0 = Literal.create(
-      Seq[Array[Byte]](
-        Array[Byte](5, 6),
-        Array[Byte](1, 2),
-        Array[Byte](1, 2),
-        Array[Byte](5, 6)),
+      data,
       ArrayType(BinaryType))
     val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null), ArrayType(BinaryType))
     val nullBinary = Literal.create(null, BinaryType)
-    checkEvaluation(ArrayPrepend(b0, nullBinary), null)
+    // Calling ArrayPrepend with a null element should result in NULL being prepended to the array
+    val dataWithNullPrepended = null +: data
+    checkEvaluation(ArrayPrepend(b0, nullBinary), dataWithNullPrepended)
     val dataToPrepend1 = Literal.create(Array[Byte](5, 6), BinaryType)
     checkEvaluation(
       ArrayPrepend(b1, dataToPrepend1),
