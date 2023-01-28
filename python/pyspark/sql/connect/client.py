@@ -629,7 +629,7 @@ class SparkConnectClient(object):
                         ) from None
                     elif reason == "java.lang.IllegalArgumentException":
                         raise SparkConnectIllegalArgumentException(
-                            info.metadata["message"], plan=info.metadata["plan"]
+                            info.metadata["message"]
                         ) from None
                     else:
                         raise SparkConnectGrpcException(
