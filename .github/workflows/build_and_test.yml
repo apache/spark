@@ -58,8 +58,8 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: >-
         ${{
-          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
-          || 'dongjoon/apache-spark-github-action-image:20220207'
+          ((inputs.branch == 'branch-3.2' || inputs.branch == 'branch-3.3') && 'dongjoon/apache-spark-github-action-image:20220207')
+          || steps.infra-image-outputs.outputs.image_url
         }}
     steps:
     - name: Checkout Spark repository
@@ -268,12 +268,12 @@ jobs:
   infra-image:
     name: "Base image build"
     needs: precondition
-    # Currently, only enable docker build from cache for `master` branch jobs
+    # Currently, enable docker build from cache for `master` and branch (since 3.4) jobs
     if: >-
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
-      inputs.branch == 'master'
+      (inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3')
     runs-on: ubuntu-latest
     permissions:
       packages: write
