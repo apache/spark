@@ -91,17 +91,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(pd.DataFrame(pser), ps.DataFrame(psser))
 
         # check ps.DataFrame(ps.Series) with `columns`
+        self.assert_eq(pd.DataFrame(pser, columns=["x"]), ps.DataFrame(psser, columns=["x"]))
+        self.assert_eq(pd.DataFrame(pser, columns=("x",)), ps.DataFrame(psser, columns=("x",)))
         self.assert_eq(
-            pd.DataFrame(pser, columns=["x"]),
-            ps.DataFrame(psser, columns=["x"])
-        )
-        self.assert_eq(
-            pd.DataFrame(pser, columns=("x",)),
-            ps.DataFrame(psser, columns=("x",))
-        )
-        self.assert_eq(
-            pd.DataFrame(pser, columns={"x": None}),
-            ps.DataFrame(psser, columns={"x": None})
+            pd.DataFrame(pser, columns={"x": None}), ps.DataFrame(psser, columns={"x": None})
         )
 
         # check psdf[pd.Index]
