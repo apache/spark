@@ -697,6 +697,7 @@ object FunctionRegistry {
     expression[Sequence]("sequence"),
     expression[ArrayRepeat]("array_repeat"),
     expression[ArrayRemove]("array_remove"),
+    expression[ArrayPrepend]("array_prepend"),
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
     expression[MapFilter]("map_filter"),
@@ -970,6 +971,7 @@ object TableFunctionRegistry {
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
     val newBuilder = (expressions: Seq[Expression]) => {
+<<<<<<< HEAD
       val generator = builder(expressions)
       assert(generator.isInstanceOf[Generator])
       Generate(
@@ -979,6 +981,16 @@ object TableFunctionRegistry {
         qualifier = None,
         generatorOutput = Nil,
         child = OneRowRelation())
+=======
+      try {
+        builder(expressions)
+      } catch {
+        case e: AnalysisException =>
+          val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
+          throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
+            name, argTypes, info.getUsage, e.getMessage)
+      }
+>>>>>>> Revert "SPARK-41231: Adds an array_prepend function to catalyst"
     }
     (name, (info, newBuilder))
   }

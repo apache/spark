@@ -1399,6 +1399,119 @@ case class ArrayContains(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage =
+    "_FUNC_(array, value) - Returns an array containing value as well as all elements from array. The new element is positioned at the beginning of the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 4);
+       [4, 1, 2, 3]
+  """,
+  group = "array_funcs",
+  since = "3.4.0")
+case class ArrayPrepend(left: Expression, right: Expression)
+  extends BinaryExpression
+    with ImplicitCastInputTypes
+    with NullIntolerant
+    with QueryErrorsBase {
+
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    val numberOfElements = arr.asInstanceOf[ArrayData].numElements()
+    if (numberOfElements + 1 > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
+    }
+    val newArray = new Array[Any](numberOfElements + 1)
+    newArray(0) = value
+    var pos = 1
+    arr
+      .asInstanceOf[ArrayData]
+      .foreach(
+        right.dataType,
+        (i, v) => {
+          newArray(pos) = v
+          pos += 1
+        })
+    new GenericArrayData(newArray)
+  }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (arr, value) => {
+        val newArraySize = ctx.freshName("newArraySize")
+        val newArray = ctx.freshName("newArray")
+        val i = ctx.freshName("i")
+        val pos = ctx.freshName("pos")
+        val allocation = CodeGenerator.createArrayData(
+          newArray,
+          right.dataType,
+          newArraySize,
+          s" $prettyName failed.")
+        val assignment =
+          CodeGenerator.createArrayAssignment(newArray, right.dataType, arr, pos, i, false)
+        val newElemAssignment =
+          CodeGenerator.setArrayElement(newArray, right.dataType, pos, value)
+        s"""
+           |int $pos = 0;
+           |int $newArraySize = $arr.numElements() + 1;
+           |$allocation
+           |$newElemAssignment
+           |$pos = $pos + 1;
+           |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+           |  $assignment
+           |  $pos = $pos + 1;
+           |}
+           |${ev.value} = $newArray;
+           |""".stripMargin
+      })
+  }
+
+  override def prettyName: String = "array_prepend"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayPrepend =
+    copy(left = newLeft, right = newRight)
+  override def dataType: DataType = left.dataType
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) | (NullType, _) =>
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          messageParameters = Map("functionName" -> toSQLId(prettyName)))
+      case (l, _) if !ArrayType.acceptsType(l) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType)))
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)))
+    }
+  }
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findWiderTypeWithoutStringPromotionForTwo(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
+    }
+  }
+}
+
 /**
  * Checks if the two arrays contain at least one common element.
  */
