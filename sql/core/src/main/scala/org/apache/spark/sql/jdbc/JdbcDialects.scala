@@ -557,52 +557,23 @@ abstract class JdbcDialect extends Serializable with Logging {
    *
    * @param options - JDBC options that contains url, table and other information.
    * @param columnList - The names of the columns or aggregate columns to SELECT.
-   * @param sample - The pushed down tableSample.
-   * @param predicates - The predicates to include in all WHERE clauses.
-   * @param part - The JDBCPartition specifying partition id and WHERE clause.
+   * @param tableSampleClause - The table sample clause for the SELECT statement.
+   * @param whereClause - The WHERE clause for the SELECT statement.
    * @param groupByClause - The group by clause for the SELECT statement.
    * @param orderByClause - The order by clause for the SELECT statement.
-   * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
-   *                is not pushed down.
-   * @param offset - The pushed down offset. If the value is 0, it means no offset or offset
-   *                 is not pushed down.
+   * @param limitClause - The LIMIT clause for the SELECT statement.
+   * @param offsetClause - The OFFSET clause for the SELECT statement.
    * @return
    */
   def getSQLText(
       options: JDBCOptions,
       columnList: String,
-      sample: Option[TableSampleInfo],
-      predicates: Array[Predicate],
-      part: JDBCPartition,
+      tableSampleClause: String,
+      whereClause: String,
       groupByClause: String,
       orderByClause: String,
-      limit: Int,
-      offset: Int): String = {
-
-    val tableSampleClause: String = if (sample.nonEmpty) {
-      getTableSample(sample.get)
-    } else {
-      ""
-    }
-
-    // `filters`, but as a WHERE clause suitable for injection into a SQL query.
-    val filterWhereClause: String = {
-      predicates.flatMap(compileExpression(_)).map(p => s"($p)").mkString(" AND ")
-    }
-
-    // A WHERE clause representing both `filters`, if any, and the current partition.
-    val whereClause = if (part.whereClause != null && filterWhereClause.length > 0) {
-      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
-    } else if (part.whereClause != null) {
-      "WHERE " + part.whereClause
-    } else if (filterWhereClause.length > 0) {
-      "WHERE " + filterWhereClause
-    } else {
-      ""
-    }
-
-    val limitClause: String = getLimitClause(limit)
-    val offsetClause: String = getOffsetClause(offset)
+      limitClause: String,
+      offsetClause: String): String = {
 
     options.prepareQuery +
       s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
