@@ -1434,7 +1434,7 @@
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
-      "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
+      "A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
       "Invalid expressions: [<invalidExprSqls>]"
     ]
   },
