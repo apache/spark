@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -124,28 +124,24 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
       inputPartitions: Seq[InputPartition]): Option[Seq[(InternalRow, Seq[InputPartition])]] = {
     if (!SQLConf.get.v2BucketingEnabled) return None
     keyGroupedPartitioning.flatMap { expressions =>
-      val results = inputPartitions.takeWhile {
-        case _: HasPartitionKey => true
-        case _ => false
-      }.map(p => (p.asInstanceOf[HasPartitionKey].partitionKey(), p))
-
-      if (results.length != inputPartitions.length || inputPartitions.isEmpty) {
+      if (inputPartitions.isEmpty || inputPartitions.count(!_.isInstanceOf[HasPartitionKey]) > 0) {
         // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
-        None
-      } else {
-        val partKeyType = expressions.map(_.dataType)
-
-        val groupedPartitions = results.groupBy(_._1).toSeq.map { case (key, s) =>
-          (key, s.map(_._2))
-        }
-
-        // also sort the input partitions according to their partition key order. This ensures
-        // a canonical order from both sides of a bucketed join, for example.
-        val keyOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
-          RowOrdering.createNaturalAscendingOrdering(partKeyType).on(_._1)
-        }
-        Some(groupedPartitions.sorted(keyOrdering))
+        return None
       }
+      val groupedPartitions = inputPartitions
+        .map(p => (InternalRowComparableWrapper(p, expressions), p))
+        .groupBy(_._1).toSeq
+        .map {
+          case (key, s) => (key.row, s.map(_._2))
+        }
+
+      // also sort the input partitions according to their partition key order. This ensures
+      // a canonical order from both sides of a bucketed join, for example.
+      val partitionDataTypes = expressions.map(_.dataType)
+      val keyOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
+        RowOrdering.createNaturalAscendingOrdering(partitionDataTypes).on(_._1)
+      }
+      Some(groupedPartitions.sorted(keyOrdering))
     }
   }
 
