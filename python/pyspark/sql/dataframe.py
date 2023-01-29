@@ -3937,7 +3937,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
+                error_class="NOT_LIST_OR_STRING_OR_TUPLE",
                 message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 

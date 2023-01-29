@@ -224,7 +224,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_TUPLE",
+            error_class="NOT_LIST_OR_STRING_OR_TUPLE",
             message_parameters={"arg_name": "subset", "arg_type": "int"},
         )
 
