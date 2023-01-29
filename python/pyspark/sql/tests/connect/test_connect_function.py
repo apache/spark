@@ -164,6 +164,15 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             SF.broadcast(sdf1).join(SF.broadcast(sdf2), on="a").toPandas(),
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.broadcast(cdf.a)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_DATAFRAME",
+            message_parameters={"arg_name": "df", "arg_type": "Column"},
+        )
+
     def test_normal_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
@@ -1168,6 +1177,24 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(SF.slice(sdf.a, 1, 2), SF.slice("c", 2, 3)).toPandas(),
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.slice(cdf.a, 1.0, 2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "start", "arg_type": "float"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.slice(cdf.a, 1, 2.0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "length", "arg_type": "float"},
+        )
+
         # test sort_array
         self.assert_eq(
             cdf.select(CF.sort_array(cdf.a, True), CF.sort_array("c", False)).toPandas(),
@@ -1759,6 +1786,15 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(SF.from_json("a", s_schema, {"mode": "FAILFAST"})),
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.from_json("a", [c_schema])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_DATATYPE_OR_STRING",
+            message_parameters={"arg_name": "schema", "arg_type": "list"},
+        )
+
         # test get_json_object
         self.assert_eq(
             cdf.select(
@@ -2153,6 +2189,24 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             cdf.select(CF.window(cdf.date, "1 minute", "10 seconds", "5 seconds")),
             sdf.select(SF.window(sdf.date, "1 minute", "10 seconds", "5 seconds")),
             truncate=100,
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.window("date", "15 seconds", 10, "5 seconds")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "slideDuration", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.window("date", "15 seconds", "10 seconds", 5)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "startTime", "arg_type": "int"},
         )
 
         # test session_window
