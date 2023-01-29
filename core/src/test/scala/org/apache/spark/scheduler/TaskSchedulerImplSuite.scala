@@ -193,6 +193,21 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!failedTaskSet)
   }
 
+  test("SPARK-43086: Scheduler should schedule task on fewest executors" +
+    " when bin pack enabled") {
+    val taskScheduler = setupScheduler((config.BIN_PACK_ENABLED.key -> "true"))
+    val numFreeCores = 4
+    val workerOffers = IndexedSeq(WorkerOffer("executor0", "host0", numFreeCores),
+      WorkerOffer("executor1", "host1", numFreeCores - 1))
+    val numTasks = 3
+    val taskSet = FakeTask.createTaskSet(3)
+    taskScheduler.submitTasks(taskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(numTasks === taskDescriptions.length)
+    assert(taskDescriptions.forall(t => t.executorId == "executor1"))
+    assert(!failedTaskSet)
+  }
+
   test("Scheduler correctly accounts for multiple CPUs per task") {
     val taskCpus = 2
     val taskScheduler = setupSchedulerWithMaster(

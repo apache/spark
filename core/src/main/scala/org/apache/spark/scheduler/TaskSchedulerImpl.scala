@@ -118,6 +118,8 @@ private[spark] class TaskSchedulerImpl(
   // CPUs to request per task
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
+  val useBinPack = conf.get(BIN_PACK_ENABLED)
+
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
@@ -401,17 +403,24 @@ private[spark] class TaskSchedulerImpl(
       val host = shuffledOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
 
+      var continueScheduling = true
       // check whether the task can be scheduled to the executor base on resource profile.
-      if (sc.resourceProfileManager
-        .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
+      while (sc.resourceProfileManager
+        .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId) && continueScheduling) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
+        // if no task meet requirement, stop scheduling
+        continueScheduling &= taskResAssignmentsOpt.nonEmpty
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
               taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
+            // if no task meet resource offer, stop scheduling
+            continueScheduling &= taskDescOption.nonEmpty
+            // if bin pack disabled, stop scheduling
+            continueScheduling &= useBinPack
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
               val (locality, resources) = if (task != null) {
@@ -801,7 +810,11 @@ private[spark] class TaskSchedulerImpl(
    * overriding in tests, so it can be deterministic.
    */
   protected def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
-    Random.shuffle(offers)
+    if (useBinPack) {
+      offers.sortBy(_.cores)
+    } else {
+      Random.shuffle(offers)
+    }
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer): Unit = {

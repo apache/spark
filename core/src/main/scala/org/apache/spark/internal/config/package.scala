@@ -2051,6 +2051,14 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val BIN_PACK_ENABLED =
+    ConfigBuilder("spark.scheduler.binPack.enabled")
+      .doc(s"Whether to enable bin packing task scheduling on executors. This could help save" +
+        s" resource when ${DYN_ALLOCATION_ENABLED.key} is enabled.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SPECULATION_ENABLED =
     ConfigBuilder("spark.speculation")
       .version("0.6.0")
