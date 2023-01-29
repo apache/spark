@@ -162,6 +162,15 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
     case _ => condition // Don't reorder.
   }
 
+  private def normalizeAliases(plan: LogicalPlan): LogicalPlan = {
+    plan transformWithSubqueries {
+      case p: LogicalPlan =>
+        p.transformAllExpressions {
+          case a: UnresolvedAlias => a.copy(child = a.child, aliasFunc = None)
+        }
+    }
+  }
+
   /** Fails the test if the two plans do not match */
   protected def comparePlans(
       plan1: LogicalPlan,
@@ -173,8 +182,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
       SimpleAnalyzer.checkAnalysis(plan2)
     }
 
-    val normalized1 = normalizePlan(normalizeExprIds(plan1))
-    val normalized2 = normalizePlan(normalizeExprIds(plan2))
+    val normalized1 = normalizePlan(normalizeExprIds(normalizeAliases(plan1)))
+    val normalized2 = normalizePlan(normalizeExprIds(normalizeAliases(plan2)))
     if (normalized1 != normalized2) {
       fail(
         s"""
