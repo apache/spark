@@ -744,7 +744,6 @@ private[spark] class ExternalSorter[K, V, C](
       shuffleId: Int,
       mapId: Long,
       mapOutputWriter: ShuffleMapOutputWriter): Unit = {
-    var nextPartitionId = 0
     if (spills.isEmpty) {
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
@@ -771,7 +770,6 @@ private[spark] class ExternalSorter[K, V, C](
             partitionPairsWriter.close()
           }
         }
-        nextPartitionId = partitionId + 1
       }
     } else {
       // We must perform merge-sort; get an iterator by partition and write everything directly.
@@ -798,7 +796,6 @@ private[spark] class ExternalSorter[K, V, C](
             partitionPairsWriter.close()
           }
         }
-        nextPartitionId = id + 1
       }
     }
 
