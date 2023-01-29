@@ -55,13 +55,14 @@ object BuildCommons {
   val connectCommon = ProjectRef(buildLocation, "connect-common")
   val connect = ProjectRef(buildLocation, "connect")
   val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
+  val connectClientTests = ProjectRef(buildLocation, "connect-client-integration-tests")
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient, connectClientTests)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -403,7 +404,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
+      connectClientTests, protobuf
     ).contains(x)
   }
 
@@ -447,6 +449,7 @@ object SparkBuild extends PomBuild {
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
+  enable(SparkConnectClientTests.settings)(connectClientTests)
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
@@ -870,6 +873,7 @@ object SparkConnectClient {
     },
 
     (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
       ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
       ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
@@ -889,6 +893,30 @@ object SparkConnectClient {
       )
     )
   }
+}
+
+object SparkConnectClientTests {
+  lazy val settings = Seq(
+    excludeDependencies ++= {
+      val scalaBinaryVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("scala.binary.version").asInstanceOf[String]
+      Seq(
+        ExclusionRule("org.apache.spark", s"spark-sql_${scalaBinaryVersion}")
+      )
+    },
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      Seq("com.google.guava" % "guava" % guavaVersion)
+    },
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion
+      )
+    }
+  )
 }
 
 object SparkProtobuf {
