@@ -222,4 +222,18 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiAdd])
     SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, default.toString)
   }
+
+  test("SPARK-42162: Add expression canonicalization should not use MultiAdd memory" +
+    " optimization when threshold is not met") {
+    val default = SQLConf.get.getConf(MULTI_ADD_OPT_THRESHOLD)
+    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, "100")
+    val d = Decimal(1.2)
+    val literal1 = Literal.create(d, DecimalType(2, 1))
+    val literal2 = Literal.create(d, DecimalType(2, 1))
+    val literal3 = Literal.create(d, DecimalType(3, 2))
+    assert(Add(literal1, Add(literal2, literal3))
+      .semanticEquals(Add(Add(literal2, literal1), literal3)))
+    assert(!Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiAdd])
+    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, default.toString)
+  }
 }
