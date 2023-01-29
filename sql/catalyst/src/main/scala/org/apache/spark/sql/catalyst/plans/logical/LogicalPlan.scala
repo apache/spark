@@ -225,7 +225,7 @@ object LogicalPlanIntegrity {
   /**
    * Since some logical plans (e.g., `Union`) can build `AttributeReference`s in their `output`,
    * this method checks if the same `ExprId` refers to attributes having the same data type
-   * in plan output.
+   * in plan output. Returns the error message if the check does not pass.
    */
   def hasUniqueExprIdsForOutput(plan: LogicalPlan): Option[String] = {
     val exprIds = plan.collect { case p if canGetOutputAttrs(p) =>
@@ -259,15 +259,15 @@ object LogicalPlanIntegrity {
   /**
    * This method checks if reference `ExprId`s are not reused when assigning a new `ExprId`.
    * For example, it returns false if plan transformers create an alias having the same `ExprId`
-   * with one of reference attributes, e.g., `a#1 + 1 AS a#1`.
+   * with one of reference attributes, e.g., `a#1 + 1 AS a#1`. Returns the error message if the
+   * check does not pass.
    */
   def checkIfSameExprIdNotReused(plan: LogicalPlan): Option[String] = {
     plan.collectFirst { case p if p.resolved =>
       p.expressions.collectFirst {
         // Even if a plan is resolved, `a.references` can return unresolved references,
         // e.g., in `Grouping`/`GroupingID`, so we need to filter out them and
-        // check if the same `exprId` in `Alias` does not exist
-        // among reference `exprId`s.
+        // check if the same `exprId` in `Alias` does not exist among reference `exprId`s.
         case a: Alias if a.references.filter(_.resolved).map(_.exprId).exists(_ == a.exprId) =>
           "An alias reuses the same expression ID as previously present in an attribute, " +
             s"which is invalid: ${a.sql}. The plan tree:\n" + plan.treeString
@@ -278,7 +278,7 @@ object LogicalPlanIntegrity {
   /**
    * This method checks if the same `ExprId` refers to an unique attribute in a plan tree.
    * Some plan transformers (e.g., `RemoveNoopOperators`) rewrite logical
-   * plans based on this assumption.
+   * plans based on this assumption. Returns the error message if the check does not pass.
    */
   def validateExprIdUniqueness(plan: LogicalPlan): Option[String] = {
     LogicalPlanIntegrity.checkIfSameExprIdNotReused(plan).orElse(
@@ -291,7 +291,7 @@ object LogicalPlanIntegrity {
    * - is still resolved
    * - only host special expressions in supported operators
    * - has globally-unique attribute IDs
-   * - optimized plan have same schema with previous plan.
+   * - has the same result schema as the previous plan
    * - has no dangling attribute references
    */
   def validateOptimizedPlan(
