@@ -1021,15 +1021,14 @@ class FunctionsTestsMixin:
         with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "2000000"):
             df.select(assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
 
-        with self.assertRaises((PySparkTypeError, TypeError)) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(assert_true(df.id < 2, 5))
 
-        if isinstance(pe, PySparkTypeError):
-            self.check_error(
-                exception=pe.exception,
-                error_class="NOT_COLUMN_OR_STRING",
-                message_parameters={"arg_name": "errMsg", "arg_type": "int"},
-            )
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": "int"},
+        )
 
     def test_raise_error(self):
         from pyspark.sql.functions import raise_error
@@ -1042,15 +1041,14 @@ class FunctionsTestsMixin:
         with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "barfoo"):
             df.select(raise_error("barfoo")).collect()
 
-        with self.assertRaises((PySparkTypeError, TypeError)) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(raise_error(None))
 
-        if isinstance(pe, PySparkTypeError):
-            self.check_error(
-                exception=pe.exception,
-                error_class="NOT_COLUMN_OR_STRING",
-                message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
-            )
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
+        )
 
     def test_sum_distinct(self):
         self.spark.range(10).select(

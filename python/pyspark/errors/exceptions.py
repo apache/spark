@@ -371,3 +371,9 @@ class PySparkTypeError(PySparkException, TypeError):
     """
     Wrapper class for TypeError to support error classes.
     """
+
+
+class SparkConnectIllegalArgumentException(SparkConnectGrpcException):
+    """
+    Passed an illegal or inappropriate argument from Spark Connect server.
+    """
