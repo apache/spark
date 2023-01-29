@@ -265,6 +265,11 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
+      "FILTER_NOT_BOOLEAN" : {
+        "message" : [
+          "Filter expression <filter> of type <type> is not a boolean."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -5150,11 +5155,6 @@
   "_LEGACY_ERROR_TEMP_2414" : {
     "message" : [
       "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2415" : {
-    "message" : [
-      "filter expression '<filter>' of type <type> is not a boolean."
     ]
   },
   "_LEGACY_ERROR_TEMP_2416" : {

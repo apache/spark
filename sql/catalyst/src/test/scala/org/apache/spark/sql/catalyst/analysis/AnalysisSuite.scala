@@ -1373,4 +1373,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(!cg.rightOrder.flatMap(_.references).exists(cg.left.output.contains))
     }
   }
+
+  test("SPARK-41489: type of filter expression should be a bool") {
+    assertAnalysisErrorClass(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id)
+         |SELECT *
+         |FROM t1
+         |WHERE 'true'""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
+      ,
+      queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
+  }
 }
