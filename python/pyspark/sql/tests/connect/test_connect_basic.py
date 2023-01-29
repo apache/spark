@@ -22,6 +22,7 @@ import unittest
 import shutil
 import tempfile
 
+from pyspark.errors import PySparkTypeError
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
@@ -1751,8 +1752,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
-        with self.assertRaisesRegex(TypeError, "key must be float, int, or string"):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.stat.sampleBy(cdf.key, fractions={0: 0.1, None: 0.2}, seed=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+            message_parameters={
+                "arg_name": "fractions",
+                "arg_type": "dict",
+                "allowed_types": "float, int, str",
+                "return_type": "NoneType",
+            },
+        )
 
         with self.assertRaises(SparkConnectException):
             cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 1.2}, seed=0).show()
