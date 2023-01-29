@@ -373,7 +373,7 @@ class PySparkTypeError(PySparkException, TypeError):
     """
 
 
-class SparkConnectIllegalArgumentException(SparkConnectGrpcException, IllegalArgumentException):
+class SparkConnectIllegalArgumentException(SparkConnectGrpcException):
     """
     Passed an illegal or inappropriate argument from Spark Connect server.
     """
