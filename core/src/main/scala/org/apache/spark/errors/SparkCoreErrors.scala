@@ -65,7 +65,7 @@ private[spark] object SparkCoreErrors {
   def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_3003",
-      messageParameters = Map("blockId" -> s"$blockId", id -> s"$id"),
+      messageParameters = Map("blockId" -> s"$blockId", "id" -> s"$id"),
       cause = null
     )
   }
