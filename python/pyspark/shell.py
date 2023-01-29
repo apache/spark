@@ -26,32 +26,52 @@ import os
 import platform
 import warnings
 
+import pyspark
 from pyspark.context import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
+from pyspark.sql.utils import is_remote
+from urllib.parse import urlparse
 
-if os.environ.get("SPARK_EXECUTOR_URI"):
-    SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-SparkContext._ensure_initialized()
+if is_remote():
+    try:
+        # Creates pyspark.sql.connect.SparkSession.
+        spark = SparkSession.builder.getOrCreate()
+    except Exception:
+        import sys
+        import traceback
 
-try:
-    spark = SparkSession._create_shell_session()
-except Exception:
-    import sys
-    import traceback
+        warnings.warn("Failed to initialize Spark session.")
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
+    version = pyspark.__version__
+    sc = None
+else:
+    if os.environ.get("SPARK_EXECUTOR_URI"):
+        SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-    warnings.warn("Failed to initialize Spark session.")
-    traceback.print_exc(file=sys.stderr)
-    sys.exit(1)
+    SparkContext._ensure_initialized()
 
-sc = spark.sparkContext
+    try:
+        spark = SparkSession._create_shell_session()
+    except Exception:
+        import sys
+        import traceback
+
+        warnings.warn("Failed to initialize Spark session.")
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
+
+    sc = spark.sparkContext
+    atexit.register((lambda sc: lambda: sc.stop())(sc))
+
+    # for compatibility
+    sqlContext = SQLContext._get_or_create(sc)
+    sqlCtx = sqlContext
+    version = sc.version
+
 sql = spark.sql
-atexit.register((lambda sc: lambda: sc.stop())(sc))
-
-# for compatibility
-sqlContext = SQLContext._get_or_create(sc)
-sqlCtx = sqlContext
 
 print(
     r"""Welcome to
@@ -61,14 +81,24 @@ print(
    /__ / .__/\_,_/_/ /_/\_\   version %s
       /_/
 """
-    % sc.version
+    % version
 )
 print(
     "Using Python version %s (%s, %s)"
     % (platform.python_version(), platform.python_build()[0], platform.python_build()[1])
 )
-print("Spark context Web UI available at %s" % (sc.uiWebUrl))
-print("Spark context available as 'sc' (master = %s, app id = %s)." % (sc.master, sc.applicationId))
+if is_remote():
+    print(
+        "Client connected to the Spark Connect server at %s"
+        % urlparse(os.environ["SPARK_REMOTE"]).netloc
+    )
+else:
+    print("Spark context Web UI available at %s" % (sc.uiWebUrl))  # type: ignore[union-attr]
+    print(
+        "Spark context available as 'sc' (master = %s, app id = %s)."
+        % (sc.master, sc.applicationId)  # type: ignore[union-attr]
+    )
+
 print("SparkSession available as 'spark'.")
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,

@@ -19,13 +19,17 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExprId, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, ExprId, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
-import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable}
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
@@ -42,9 +46,10 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   protected def buildRelationWithAttrs(
       relation: DataSourceV2Relation,
       table: RowLevelOperationTable,
-      metadataAttrs: Seq[AttributeReference]): DataSourceV2Relation = {
+      metadataAttrs: Seq[AttributeReference],
+      rowIdAttrs: Seq[AttributeReference] = Nil): DataSourceV2Relation = {
 
-    val attrs = dedupAttrs(relation.output ++ metadataAttrs)
+    val attrs = dedupAttrs(relation.output ++ rowIdAttrs ++ metadataAttrs)
     relation.copy(table = table, output = attrs)
   }
 
@@ -67,5 +72,53 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     V2ExpressionUtils.resolveRefs[AttributeReference](
       operation.requiredMetadataAttributes,
       relation)
+  }
+
+  protected def resolveRowIdAttrs(
+      relation: DataSourceV2Relation,
+      operation: SupportsDelta): Seq[AttributeReference] = {
+
+    val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
+      operation.rowId,
+      relation)
+
+    val nullableRowIdAttrs = rowIdAttrs.filter(_.nullable)
+    if (nullableRowIdAttrs.nonEmpty) {
+      throw QueryCompilationErrors.nullableRowIdError(nullableRowIdAttrs)
+    }
+
+    rowIdAttrs
+  }
+
+  protected def buildWriteDeltaProjections(
+      plan: LogicalPlan,
+      rowAttrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute],
+      metadataAttrs: Seq[Attribute]): WriteDeltaProjections = {
+
+    val rowProjection = if (rowAttrs.nonEmpty) {
+      Some(newLazyProjection(plan, rowAttrs))
+    } else {
+      None
+    }
+
+    val rowIdProjection = newLazyProjection(plan, rowIdAttrs)
+
+    val metadataProjection = if (metadataAttrs.nonEmpty) {
+      Some(newLazyProjection(plan, metadataAttrs))
+    } else {
+      None
+    }
+
+    WriteDeltaProjections(rowProjection, rowIdProjection, metadataProjection)
+  }
+
+  private def newLazyProjection(
+      plan: LogicalPlan,
+      attrs: Seq[Attribute]): ProjectingInternalRow = {
+
+    val colOrdinals = attrs.map(attr => plan.output.indexWhere(_.exprId == attr.exprId))
+    val schema = StructType.fromAttributes(attrs)
+    ProjectingInternalRow(schema, colOrdinals)
   }
 }

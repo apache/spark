@@ -108,7 +108,7 @@ class SerializationTestCase(unittest.TestCase):
     def test_pickling_file_handles(self):
         # to be corrected with SPARK-11160
         try:
-            import xmlrunner  # type: ignore[import]  # noqa: F401
+            import xmlrunner  # noqa: F401
         except ImportError:
             ser = CloudPickleSerializer()
             out1 = sys.stderr

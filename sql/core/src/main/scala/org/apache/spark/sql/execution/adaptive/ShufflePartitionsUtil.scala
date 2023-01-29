@@ -305,9 +305,9 @@ object ShufflePartitionsUtil extends Logging {
           val dataSize = spec.startReducerIndex.until(spec.endReducerIndex)
             .map(mapStats.bytesByPartitionId).sum
           spec.copy(dataSize = Some(dataSize))
-        }.toSeq
-      case None => partitionSpecs.map(_.copy(dataSize = Some(0))).toSeq
-    }.toSeq
+        }
+      case None => partitionSpecs.map(_.copy(dataSize = Some(0)))
+    }
   }
 
   /**

@@ -113,7 +113,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
 
         Seq("mkdir", targetDir).!
-        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
+        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1",
+          "--no-same-owner").!
         Seq("rm", downloaded).!
 
         // For a corrupted file, `tar` returns non-zero values. However, we also need to check

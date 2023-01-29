@@ -297,6 +297,7 @@ class ParquetToSparkSchemaConverter(
           case _: DecimalLogicalTypeAnnotation =>
             makeDecimalType(Decimal.maxPrecisionForBytes(parquetType.getTypeLength))
           case _: IntervalLogicalTypeAnnotation => typeNotImplemented()
+          case null => BinaryType
           case _ => illegalType()
         }
 

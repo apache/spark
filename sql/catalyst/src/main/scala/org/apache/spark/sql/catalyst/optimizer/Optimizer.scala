@@ -320,6 +320,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
       _.containsPattern(PLAN_EXPRESSION), ruleId) {
+      // Do not optimize DPP subquery, as it was created from optimized plan and we should not
+      // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
+      case d: DynamicPruningSubquery => d
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -584,7 +587,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
-        val mapping = AttributeMap(currentNextAttrPairs.toSeq)
+        val mapping = AttributeMap(currentNextAttrPairs)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
         // aliases, use identity otherwise.
@@ -1036,7 +1039,9 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     // We can only collapse expressions if all input expressions meet the following criteria:
     // - The input is deterministic.
     // - The input is only consumed once OR the underlying input expression is cheap.
-    consumers.flatMap(collectReferences)
+    consumers
+      .filter(_.references.exists(producerMap.contains))
+      .flatMap(collectReferences)
       .groupBy(identity)
       .mapValues(_.size)
       .forall {
@@ -1080,6 +1085,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private object ExtractOnlyRef {
+    @scala.annotation.tailrec
     def unapply(expr: Expression): Option[Attribute] = expr match {
       case a: Alias => unapply(a.child)
       case e: ExtractValue => unapply(e.children.head)

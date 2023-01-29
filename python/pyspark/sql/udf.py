@@ -17,9 +17,12 @@
 """
 User-defined function related classes and functions
 """
+from inspect import getfullargspec
+
 import functools
 import inspect
 import sys
+import warnings
 from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 
 from py4j.java_gateway import JavaObject
@@ -29,12 +32,16 @@ from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import (
-    StringType,
+    ArrayType,
+    BinaryType,
     DataType,
+    MapType,
+    StringType,
     StructType,
     _parse_datatype_string,
 )
 from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
@@ -72,6 +79,105 @@ def _create_udf(
         f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
     )
     return udf_obj._wrapped()
+
+
+def _create_py_udf(
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString",
+    evalType: int,
+    useArrow: Optional[bool] = None,
+) -> "UserDefinedFunctionLike":
+    # The following table shows the results when the type coercion in Arrow is needed, that is,
+    # when the user-specified return type(SQL Type) of the UDF and the actual instance(Python
+    # Value(Type)) that the UDF returns are different.
+    # Arrow and Pickle have different type coercion rules, so a UDF might have a different result
+    # with/without Arrow optimization. That's the main reason the Arrow optimization for Python
+    # UDFs is disabled by default.
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+  # noqa
+    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|         a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|bytearray(b'ABC')(bytearray)|  1(Decimal)|{'a': 1}(dict)|  # noqa
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+  # noqa
+    # |                      boolean|          None|      True|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                      tinyint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                     smallint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                          int|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       bigint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       string|          None|    'true'|   '1'|            'a'|'java.util.Gregor...|         'java.util.Gregor...|     '1.0'|         '[I@120d813a'|    '[1]'|'[Ljava.lang.Obje...|               '[B@48571878'|         '1'|       '{a=1}'|  # noqa
+    # |                         date|          None|         X|     X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                           X|           X|             X|  # noqa
+    # |                    timestamp|          None|         X|     X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                           X|           X|             X|  # noqa
+    # |                        float|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       double|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       binary|          None|      None|  None|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|           bytearray(b'ABC')|        None|          None|  # noqa
+    # |                decimal(10,0)|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|Decimal('1')|          None|  # noqa
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+  # noqa
+    # Note: Python 3.9.15, Pandas 1.5.2 and PyArrow 10.0.1 are used.
+    # Note: The values of 'SQL Type' are DDL formatted strings, which can be used as `returnType`s.
+    # Note: The values inside the table are generated by `repr`. X' means it throws an exception
+    # during the conversion.
+
+    from pyspark.sql import SparkSession
+
+    session = SparkSession._instantiatedSession
+    if session is None:
+        is_arrow_enabled = False
+    else:
+        is_arrow_enabled = (
+            session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
+            if useArrow is None
+            else useArrow
+        )
+
+    regular_udf = _create_udf(f, returnType, evalType)
+    return_type = regular_udf.returnType
+    try:
+        is_func_with_args = len(getfullargspec(f).args) > 0
+    except TypeError:
+        is_func_with_args = False
+    is_output_atomic_type = (
+        not isinstance(return_type, StructType)
+        and not isinstance(return_type, MapType)
+        and not isinstance(return_type, ArrayType)
+    )
+    if is_arrow_enabled and is_output_atomic_type and is_func_with_args:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+
+        import pandas as pd
+        from pyspark.sql.pandas.functions import _create_pandas_udf  # type: ignore[attr-defined]
+
+        # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
+        # optimization.
+        # Otherwise, an Arrow-optimized Python UDF raises "pyarrow.lib.ArrowTypeError: Expected a
+        # string or bytes dtype, got ..." whereas a non-Arrow-optimized Python UDF returns
+        # successfully.
+        result_func = lambda pdf: pdf  # noqa: E731
+        if type(return_type) == StringType:
+            result_func = lambda r: str(r) if r is not None else r  # noqa: E731
+        elif type(return_type) == BinaryType:
+            result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
+
+        def vectorized_udf(*args: pd.Series) -> pd.Series:
+            if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
+                raise NotImplementedError(
+                    "Struct input type are not supported with Arrow optimization "
+                    "enabled in Python UDFs. Disable "
+                    "'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
+                )
+            return pd.Series(result_func(f(*a)) for a in zip(*args))
+
+        # Regular UDFs can take callable instances too.
+        vectorized_udf.__name__ = f.__name__ if hasattr(f, "__name__") else f.__class__.__name__
+        vectorized_udf.__module__ = (
+            f.__module__ if hasattr(f, "__module__") else f.__class__.__module__
+        )
+        vectorized_udf.__doc__ = f.__doc__
+        pudf = _create_pandas_udf(vectorized_udf, returnType, None)
+        # Keep the attributes as if this is a regular Python UDF.
+        pudf.func = f
+        pudf.returnType = return_type
+        pudf.evalType = regular_udf.evalType
+        return pudf
+    else:
+        return regular_udf
 
 
 class UserDefinedFunction:
@@ -236,25 +342,66 @@ class UserDefinedFunction:
         sc = SparkContext._active_spark_context
         assert sc is not None
         profiler: Optional[Profiler] = None
+        memory_profiler: Optional[Profiler] = None
         if sc.profiler_collector:
-            f = self.func
-            profiler = sc.profiler_collector.new_udf_profiler(sc)
+            profiler_enabled = sc._conf.get("spark.python.profile", "false") == "true"
+            memory_profiler_enabled = sc._conf.get("spark.python.profile.memory", "false") == "true"
 
-            @functools.wraps(f)
-            def func(*args: Any, **kwargs: Any) -> Any:
-                assert profiler is not None
-                return profiler.profile(f, *args, **kwargs)
+            # Disable profiling Pandas UDFs with iterators as input/output.
+            if profiler_enabled or memory_profiler_enabled:
+                if self.evalType in [
+                    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                    PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                    PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+                ]:
+                    profiler_enabled = memory_profiler_enabled = False
+                    warnings.warn(
+                        "Profiling UDFs with iterators input/output is not supported.",
+                        UserWarning,
+                    )
 
-            func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+            # Disallow enabling two profilers at the same time.
+            if profiler_enabled and memory_profiler_enabled:
+                # When both profilers are enabled, they interfere with each other,
+                # that makes the result profile misleading.
+                raise RuntimeError(
+                    "'spark.python.profile' and 'spark.python.profile.memory' configuration"
+                    " cannot be enabled together."
+                )
+            elif profiler_enabled:
+                f = self.func
+                profiler = sc.profiler_collector.new_udf_profiler(sc)
 
-            judf = self._create_judf(func)
+                @functools.wraps(f)
+                def func(*args: Any, **kwargs: Any) -> Any:
+                    assert profiler is not None
+                    return profiler.profile(f, *args, **kwargs)
+
+                func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+                judf = self._create_judf(func)
+                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
+                id = jPythonUDF.expr().resultId().id()
+                sc.profiler_collector.add_profiler(id, profiler)
+            else:  # memory_profiler_enabled
+                f = self.func
+                memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
+                (sub_lines, start_line) = inspect.getsourcelines(f.__code__)
+
+                @functools.wraps(f)
+                def func(*args: Any, **kwargs: Any) -> Any:
+                    assert memory_profiler is not None
+                    return memory_profiler.profile(
+                        sub_lines, start_line, f, *args, **kwargs  # type: ignore[arg-type]
+                    )
+
+                func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+                judf = self._create_judf(func)
+                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
+                id = jPythonUDF.expr().resultId().id()
+                sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
-
-        jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-        if profiler is not None:
-            id = jPythonUDF.expr().resultId().id()
-            sc.profiler_collector.add_profiler(id, profiler)
+            jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jPythonUDF)
 
     # This function is for improving the online help system in the interactive interpreter.

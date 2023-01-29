@@ -14,8 +14,53 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Union
-from datetime import date, time, datetime
 
-PrimitiveType = Union[str, int, bool, float]
-LiteralType = Union[PrimitiveType, Union[date, time, datetime]]
+import sys
+
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:
+    from typing_extensions import Protocol
+
+from typing import Any, Callable, Union, Optional
+import datetime
+import decimal
+
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.types import DataType
+
+
+ColumnOrName = Union[Column, str]
+
+PrimitiveType = Union[bool, float, int, str]
+
+OptionalPrimitiveType = Optional[PrimitiveType]
+
+LiteralType = PrimitiveType
+
+DecimalLiteral = decimal.Decimal
+
+DateTimeLiteral = Union[datetime.datetime, datetime.date]
+
+DataTypeOrString = Union[DataType, str]
+
+
+class UserDefinedFunctionLike(Protocol):
+    func: Callable[..., Any]
+    evalType: int
+    deterministic: bool
+
+    @property
+    def returnType(self) -> DataType:
+        ...
+
+    def __call__(self, *args: ColumnOrName) -> Column:
+        ...
+
+    def asNondeterministic(self) -> "UserDefinedFunctionLike":
+        ...
+
+
+class UserDefinedFunctionCallable(Protocol):
+    def __call__(self, *_: ColumnOrName) -> Column:
+        ...

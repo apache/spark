@@ -169,7 +169,7 @@ def range(
     from ``start`` to ``end`` (exclusive) with step value ``step``. If only the first parameter
     (i.e. start) is specified, we treat it as the end value with the start value being 0.
 
-    This is similar to the range function in SparkSession and is used primarily for testing.
+    This is like the range function in SparkSession and is used primarily for testing.
 
     Parameters
     ----------
@@ -239,7 +239,7 @@ def read_csv(
     sep : str, default ‘,’
         Delimiter to use. Non empty string.
     header : int, default ‘infer’
-        Whether to to use as the column names, and the start of the data.
+        Whether to use the column names, and the start of the data.
         Default behavior is to infer the column names: if no names are passed
         the behavior is identical to `header=0` and column names are inferred from
         the first line of the file, if column names are passed explicitly then
@@ -474,7 +474,7 @@ def read_json(
     path : string
         File path
     lines : bool, default True
-        Read the file as a json object per line. It should be always True for now.
+        Read the file as a JSON object per line. It should be always True for now.
     index_col : str or list of str, optional, default: None
         Index column of table in Spark.
     options : dict
@@ -1250,7 +1250,7 @@ def read_html(
     ----------
     io : str or file-like
         A URL, a file-like object, or a raw string containing HTML. Note that
-        lxml only accepts the http, ftp and file url protocols. If you have a
+        lxml only accepts the http, FTP and file URL protocols. If you have a
         URL that starts with ``'https'`` you might try removing the ``'s'``.
 
     match : str or compiled regular expression, optional
@@ -1382,7 +1382,7 @@ def read_sql_table(
     table_name : str
         Name of SQL table in database.
     con : str
-        A JDBC URI could be provided as as str.
+        A JDBC URI could be provided as str.
 
         .. note:: The URI must be JDBC URI instead of Python's database URI.
 
@@ -1451,7 +1451,7 @@ def read_sql_query(
     sql : string SQL query
         SQL query to be executed.
     con : str
-        A JDBC URI could be provided as as str.
+        A JDBC URI could be provided as str.
 
         .. note:: The URI must be JDBC URI instead of Python's database URI.
 
@@ -1514,7 +1514,7 @@ def read_sql(
     sql : string
         SQL query to be executed or a table name.
     con : str
-        A JDBC URI could be provided as as str.
+        A JDBC URI could be provided as str.
 
         .. note:: The URI must be JDBC URI instead of Python's database URI.
 
@@ -1760,7 +1760,7 @@ def date_range(
     tz : str or tzinfo, optional
         Time zone name for returning localized DatetimeIndex, for example
         'Asia/Hong_Kong'. By default, the resulting DatetimeIndex is
-        timezone-naive.
+        time zone naive.
     normalize : bool, default False
         Normalize start/end dates to midnight before generating date range.
     name : str, default None
@@ -2633,7 +2633,7 @@ def concat(
             for psdf in new_objs:
                 columns_to_add = list(set(merged_columns) - set(psdf._internal.column_labels))
 
-                # TODO: NaN and None difference for missing values. pandas seems filling NaN.
+                # TODO: NaN and None difference for missing values. pandas seems to be filling NaN.
                 sdf = psdf._internal.resolved_copy.spark_frame
                 for label in columns_to_add:
                     sdf = sdf.withColumn(name_like_string(label), F.lit(None))
@@ -2900,13 +2900,13 @@ def merge(
     how: Type of merge to be performed.
         {'left', 'right', 'outer', 'inner'}, default 'inner'
 
-        left: use only keys from left frame, similar to a SQL left outer join; preserve key
+        left: use only keys from left frame, like a SQL left outer join; preserve key
             order.
-        right: use only keys from right frame, similar to a SQL right outer join; preserve key
+        right: use only keys from right frame, like a SQL right outer join; preserve key
             order.
-        outer: use union of keys from both frames, similar to a SQL full outer join; sort keys
+        outer: use union of keys from both frames, like a SQL full outer join; sort keys
             lexicographically.
-        inner: use intersection of keys from both frames, similar to a SQL inner join;
+        inner: use intersection of keys from both frames, like a SQL inner join;
             preserve the order of the left keys.
     on: Column or index level names to join on. These must be found in both DataFrames. If on
         is None and not merging on indexes then this defaults to the intersection of the
@@ -3024,7 +3024,7 @@ def merge_asof(
     """
     Perform an asof merge.
 
-    This is similar to a left-join except that we match on nearest
+    This is like a left-join except that we match on nearest
     key rather than equal keys.
 
     For each row in the left DataFrame:
@@ -3035,7 +3035,7 @@ def merge_asof(
       - A "forward" search selects the first row in the right DataFrame whose
         'on' key is greater than or equal to the left's key.
 
-      - A "nearest" search selects the row in the right DataFrame whose 'on'
+      - A "nearest" search selects the row in the right DataFrame who's 'on'
         key is closest in absolute distance to the left's key.
 
     Optionally match on equivalent keys with 'by' before searching with 'on'.
@@ -3048,7 +3048,7 @@ def merge_asof(
     right : DataFrame or named Series
     on : label
         Field name to join on. Must be found in both DataFrames.
-        The data MUST be ordered. Furthermore this must be a numeric column,
+        The data MUST be ordered. This must be a numeric column,
         such as datetimelike, integer, or float. On or left_on/right_on
         must be given.
     left_on : label

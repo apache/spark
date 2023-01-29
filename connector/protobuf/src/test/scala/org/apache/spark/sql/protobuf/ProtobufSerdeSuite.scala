@@ -31,12 +31,12 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * Tests for [[ProtobufSerializer]] and [[ProtobufDeserializer]] with a more specific focus on
  * those classes.
  */
-class ProtobufSerdeSuite extends SharedSparkSession {
+class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
   import ProtoSerdeSuite._
   import ProtoSerdeSuite.MatchType._
 
-  val testFileDesc = testFile("serde_suite.desc").replace("file:/", "/")
+  val testFileDesc = testFile("serde_suite.desc", "protobuf/serde_suite.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
   test("Test basic conversion") {
@@ -175,6 +175,29 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       in SQL Schema or not */
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
+  }
+
+  test("raise cannot parse and construct protobuf descriptor error") {
+    // passing serde_suite.proto instead serde_suite.desc
+    var testFileDesc = testFile("serde_suite.proto", "protobuf/serde_suite.proto")
+    val e1 = intercept[AnalysisException] {
+      ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
+    }
+
+    checkError(
+      exception = e1,
+      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDesc))
+
+    testFileDesc = testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+    val e2 = intercept[AnalysisException] {
+      ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
+    }
+
+    checkError(
+      exception = e2,
+      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDesc))
   }
 
   /**

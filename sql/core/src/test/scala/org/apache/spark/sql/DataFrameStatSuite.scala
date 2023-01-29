@@ -138,18 +138,46 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(dfx.stat.freqItems(Array("table1.num", "table2.num")).collect()(0).length == 2)
 
     // this should throw "Reference 'num' is ambiguous"
-    intercept[AnalysisException] {
-      dfx.stat.freqItems(Array("num"))
-    }
-    intercept[AnalysisException] {
-      dfx.stat.approxQuantile("num", Array(0.1), 0.0)
-    }
-    intercept[AnalysisException] {
-      dfx.stat.cov("num", "num")
-    }
-    intercept[AnalysisException] {
-      dfx.stat.corr("num", "num")
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.freqItems(Array("num"))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.approxQuantile("num", Array(0.1), 0.0)
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.cov("num", "num")
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.corr("num", "num")
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
   }
 
   test("SPARK-40933 test cov & corr with null values and empty dataset") {

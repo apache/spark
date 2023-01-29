@@ -411,7 +411,7 @@ class BoxPlotBase:
         # Filters only the outliers, should "showfliers" be True
         fliers_df = outliers.filter("`__{}_outlier`".format(colname))
 
-        # If shows fliers, takes the top 1k with highest absolute values
+        # If it shows fliers, take the top 1k with highest absolute values
         # Here we normalize the values by subtracting the minimum value from
         # each, and use absolute values.
         order_col = F.abs(F.col("`{}`".format(colname)) - min_val.item())
@@ -911,9 +911,9 @@ class PandasOnSparkPlotAccessor(PandasObject):
         ----------
         bins : integer or sequence, default 10
             Number of histogram bins to be used. If an integer is given, bins + 1
-            bin edges are calculated and returned. If bins is a sequence, gives
+            bin edges are calculated and returned. If bins is a sequence, it gives
             bin edges, including left edge of first bin and right edge of last
-            bin. In this case, bins is returned unmodified.
+            bin. In this case, bins are returned unmodified.
         **kwds
             All other plotting keyword arguments to be passed to
             plotting backend.
@@ -1035,11 +1035,11 @@ class PandasOnSparkPlotAccessor(PandasObject):
         Parameters
         ----------
         x : label or position, optional
-            Coordinates for the X axis. By default uses the index.
+            Coordinates for the X axis. By default it uses the index.
         y : label or position, optional
-            Column to plot. By default uses all columns.
+            Column to plot. By default it uses all columns.
         stacked : bool, default True
-            Area plots are stacked by default. Set to False to create a
+            Area plots are stacked by default. Set to False to create an
             unstacked plot (matplotlib-only).
         **kwds : optional
             Additional keyword arguments are documented in

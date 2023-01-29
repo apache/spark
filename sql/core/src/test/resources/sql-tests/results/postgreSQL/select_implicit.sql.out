@@ -121,7 +121,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(1)`"
@@ -216,7 +216,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
@@ -239,7 +239,21 @@ SELECT count(*) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 10
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 94,
+    "stopIndex" : 94,
+    "fragment" : "b"
+  } ]
+}
 
 
 -- !query
@@ -354,7 +368,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(a)`"
@@ -429,7 +443,21 @@ SELECT count(x.a) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 10
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 96,
+    "stopIndex" : 96,
+    "fragment" : "b"
+  } ]
+}
 
 
 -- !query
@@ -453,7 +481,21 @@ SELECT count(b) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'b' is ambiguous, could be: x.b, y.b.; line 1 pos 13
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 14,
+    "fragment" : "b"
+  } ]
+}
 
 
 -- !query

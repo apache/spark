@@ -936,7 +936,7 @@ private[hive] trait HiveInspectors {
       StructType(s.getAllStructFieldRefs.asScala.map(f =>
         types.StructField(
           f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
-      ).toSeq)
+      ).toArray)
     case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
     case m: MapObjectInspector =>
       MapType(

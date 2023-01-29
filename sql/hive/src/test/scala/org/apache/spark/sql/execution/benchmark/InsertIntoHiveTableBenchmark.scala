@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -40,7 +40,7 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
 
   val tempView = "temp"
   val numRows = 1024 * 10
-  val sql = spark.sql _
+  val sql: String => DataFrame = spark.sql _
 
   // scalastyle:off hadoopconfiguration
   private val hadoopConf = spark.sparkContext.hadoopConfiguration

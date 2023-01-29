@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
  * The tests that are not applicable to all file-based data sources should be placed to
  * [[org.apache.spark.sql.FileBasedDataSourceSuite]].
  */
-trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
+trait CommonFileDataSourceSuite extends SQLHelper {
+    self: AnyFunSuite => // scalastyle:ignore funsuite
 
   protected def spark: SparkSession
   protected def dataSourceFormat: String

@@ -17,7 +17,7 @@
 
 import os
 import string
-from typing import Any, Optional, Union, List, Sequence, Mapping, Tuple
+from typing import Any, Dict, Optional, Union, List, Sequence, Mapping, Tuple
 import uuid
 import warnings
 
@@ -43,6 +43,7 @@ _CAPTURE_SCOPES = 3
 def sql(
     query: str,
     index_col: Optional[Union[str, List[str]]] = None,
+    args: Dict[str, str] = {},
     **kwargs: Any,
 ) -> DataFrame:
     """
@@ -57,6 +58,8 @@ def sql(
         * pandas Series
         * string
 
+    Also the method can bind named parameters to SQL literals from `args`.
+
     Parameters
     ----------
     query : str
@@ -66,7 +69,7 @@ def sql(
         in pandas-on-Spark is ignored. By default, the index is always lost.
 
         .. note:: If you want to preserve the index, explicitly use :func:`DataFrame.reset_index`,
-            and pass it to the sql statement with `index_col` parameter.
+            and pass it to the SQL statement with `index_col` parameter.
 
             For example,
 
@@ -99,6 +102,12 @@ def sql(
             e      f       3  6
 
             Also note that the index name(s) should be matched to the existing name.
+    args : dict
+        A dictionary of named parameters that begin from the `:` marker and
+        their SQL literals for substituting.
+
+        .. versionadded:: 3.4.0
+
     kwargs
         other variables that the user want to set that can be referenced in the query
 
@@ -152,6 +161,13 @@ def sql(
     0  1
     1  2
     2  3
+
+    And substitude named parameters with the `:` prefix by SQL literals.
+
+    >>> ps.sql("SELECT * FROM range(10) WHERE id > :bound1", args={"bound1":"7"})
+       id
+    0   8
+    1   9
     """
     if os.environ.get("PYSPARK_PANDAS_SQL_LEGACY") == "1":
         from pyspark.pandas import sql_processor
@@ -166,7 +182,7 @@ def sql(
     session = default_session()
     formatter = PandasSQLStringFormatter(session)
     try:
-        sdf = session.sql(formatter.format(query, **kwargs))
+        sdf = session.sql(formatter.format(query, **kwargs), args)
     finally:
         formatter.clear()
 
@@ -182,7 +198,7 @@ def sql(
 class PandasSQLStringFormatter(string.Formatter):
     """
     A standard ``string.Formatter`` in Python that can understand pandas-on-Spark instances
-    with basic Python objects. This object has to be clear after the use for single SQL
+    with basic Python objects. This object must be clear after the use for single SQL
     query; cannot be reused across multiple SQL queries without cleaning.
     """
 

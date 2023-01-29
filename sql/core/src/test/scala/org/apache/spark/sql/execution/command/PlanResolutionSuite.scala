@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, EvalMode, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
@@ -1000,7 +1001,7 @@ class PlanResolutionSuite extends AnalysisTest {
           query match {
             case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
-                _, _, _, _) =>
+                _, _, _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
               assert(outputColumnNames.size == 1 && outputColumnNames.head == "name")
             case o => fail("Unexpected subquery: \n" + o.treeString)
@@ -1090,7 +1091,7 @@ class PlanResolutionSuite extends AnalysisTest {
           query match {
             case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
-                _, _, _, _) =>
+                _, _, _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
               assert(outputColumnNames.size == 1 && outputColumnNames.head == "name")
             case o => fail("Unexpected subquery: \n" + o.treeString)
@@ -1234,6 +1235,33 @@ class PlanResolutionSuite extends AnalysisTest {
         _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+    }
+  }
+
+  test("InsertIntoStatement byName") {
+    val tblName = "testcat.tab1"
+    val insertSql = s"INSERT INTO $tblName(i, s) VALUES (3, 'a')"
+    val insertParsed = parseAndResolve(insertSql)
+    val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
+    val overwriteParsed = parseAndResolve(overwriteSql)
+    insertParsed match {
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+        assert(isByName)
+      case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
+    }
+    overwriteParsed match {
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _) =>
+        assert(isByName)
+      case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
+    }
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
+      dynamicOverwriteParsed match {
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _) =>
+          assert(isByName)
+        case _ =>
+          fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
+      }
     }
   }
 
@@ -1425,7 +1453,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
           assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _, _) =>
@@ -1929,10 +1957,14 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // no aliases
     Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach { pair =>
+      def referenceNames(target: String, column: String): String = target match {
+        case "v2Table" => s"[`spark_catalog`.`default`.`v2Table1`.`$column`, " +
+          s"`spark_catalog`.`default`.`v2Table`.`$column`]"
+        case "testcat.tab" => s"[`testcat`.`tab1`.`$column`, `testcat`.`tab`.`$column`]"
+      }
 
       val target = pair._1
       val source = pair._2
-
       val sql1 =
         s"""
            |MERGE INTO $target
@@ -1986,8 +2018,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `i` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql2)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`i`", "referenceNames" -> referenceNames(target, "i")),
         context = ExpectedContext(
           fragment = "i",
           start = 22 + target.length + source.length,
@@ -2002,8 +2034,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql3)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
           start = 46 + target.length + source.length,
@@ -2018,8 +2050,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql4)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
           start = 46 + target.length + source.length,
@@ -2034,8 +2066,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql5)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
           start = 61 + target.length + source.length,

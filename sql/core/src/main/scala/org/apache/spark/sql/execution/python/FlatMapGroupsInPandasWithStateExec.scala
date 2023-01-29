@@ -97,6 +97,15 @@ case class FlatMapGroupsInPandasWithStateExec(
   private lazy val unsafeProj = UnsafeProjection.create(dedupAttributesWithNull,
     childOutputWithNull)
 
+  // See processTimedOutState: we create a row which contains the actual values for grouping key,
+  // but all nulls for value side by intention. The schema for this row is different from
+  // child.output, hence we should create another projection to deal with such schema.
+  private lazy val valueAttributesWithNull = childOutputWithNull.filterNot { attr =>
+    groupingAttributes.exists(_.withNullability(newNullability = true) == attr)
+  }
+  private lazy val unsafeProjForTimedOut = UnsafeProjection.create(dedupAttributesWithNull,
+    groupingAttributes ++ valueAttributesWithNull)
+
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
       groupingAttributes, getStateInfo, conf) :: Nil
@@ -142,12 +151,10 @@ case class FlatMapGroupsInPandasWithStateExec(
           state.timeoutTimestamp != NO_TIMESTAMP && state.timeoutTimestamp < timeoutThreshold
         }
 
+        val emptyValueRow = new GenericInternalRow(
+          Array.fill(valueAttributesWithNull.length)(null: Any))
         val processIter = timingOutPairs.map { stateData =>
-          val joinedKeyRow = unsafeProj(
-            new JoinedRow(
-              stateData.keyRow,
-              new GenericInternalRow(Array.fill(dedupAttributesWithNull.length)(null: Any))))
-
+          val joinedKeyRow = unsafeProjForTimedOut(new JoinedRow(stateData.keyRow, emptyValueRow))
           (stateData.keyRow, stateData, Iterator.single(joinedKeyRow))
         }
 

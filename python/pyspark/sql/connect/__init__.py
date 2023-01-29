@@ -18,5 +18,13 @@
 """Currently Spark Connect is very experimental and the APIs to interact with
 Spark through this API are can be changed at any time without warning."""
 
-
 from pyspark.sql.connect.dataframe import DataFrame  # noqa: F401
+from pyspark.sql.pandas.utils import (
+    require_minimum_pandas_version,
+    require_minimum_pyarrow_version,
+    require_minimum_grpc_version,
+)
+
+require_minimum_pandas_version()
+require_minimum_pyarrow_version()
+require_minimum_grpc_version()

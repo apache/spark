@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.Assertions._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -257,11 +258,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
       "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
 
-  errorTest(
-    "nested aggregate functions",
+  errorClassTest(
+    name = "nested aggregate functions",
     testRelation.groupBy($"a")(
       Max(Count(Literal(1)).toAggregateExpression()).toAggregateExpression()),
-    "not allowed to use an aggregate function in the argument of another aggregate function." :: Nil
+    errorClass = "NESTED_AGGREGATE_FUNCTION",
+    messageParameters = Map.empty
   )
 
   errorTest(
@@ -347,20 +349,24 @@ class AnalysisErrorSuite extends AnalysisTest {
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`b`", "proposal" -> "`a`, `c`, `a3`"))
 
-  errorTest(
+  errorClassTest(
     "non-boolean filters",
     testRelation.where(Literal(1)),
-    "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+    errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+    messageParameters = Map("sqlExpr" -> "\"1\"", "filter" -> "\"1\"", "type" -> "\"INT\""))
 
   errorTest(
     "non-boolean join conditions",
     testRelation.join(testRelation, condition = Some(Literal(1))),
     "condition" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
 
-  errorTest(
+  errorClassTest(
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
-    "\"b\"" :: "COLUMN_NOT_IN_GROUP_BY_CLAUSE" :: Nil
+    "MISSING_AGGREGATION",
+    messageParameters = Map(
+      "expression" -> "\"b\"",
+      "expressionAnyValue" -> "\"any_value(b)\"")
   )
 
   errorTest(
@@ -382,10 +388,13 @@ class AnalysisErrorSuite extends AnalysisTest {
     Map("fieldName" -> "`c`", "fields" -> "`aField`, `bField`, `cField`"),
     caseSensitive = false)
 
-  errorTest(
-    "catch all unresolved plan",
-    UnresolvedTestPlan(),
-    "unresolved" :: Nil)
+  checkError(
+    exception = intercept[SparkException] {
+      val analyzer = getAnalyzer
+      analyzer.checkAnalysis(analyzer.execute(UnresolvedTestPlan()))
+    },
+    errorClass = "INTERNAL_ERROR",
+    parameters = Map("message" -> "Found the unresolved operator: 'UnresolvedTestPlan"))
 
   errorTest(
     "union with unequal number of columns",
@@ -770,10 +779,11 @@ class AnalysisErrorSuite extends AnalysisTest {
           AttributeReference("a", IntegerType)(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-    assertAnalysisError(
-      plan,
-      "It is not allowed to use an aggregate function in the argument of " +
-        "another aggregate function." :: Nil)
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "NESTED_AGGREGATE_FUNCTION",
+      expectedMessageParameters = Map.empty
+    )
   }
 
   test("Join can work on binary types but can't work on map types") {
@@ -842,8 +852,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Union(LocalRelation(b),
-        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)))),
+      Exists(Intersect(LocalRelation(b),
+        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)), isAll = true)),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
 
@@ -869,8 +879,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val plan = Filter($"a" === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
-    assertAnalysisError(plan,
-      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+    assertAnalysisErrorClass(plan,
+      expectedErrorClass = "INVALID_WHERE_CONDITION",
+      expectedMessageParameters = Map(
+        "condition" -> "\"(a = max(DISTINCT b))\"",
+        "expressionList" -> "max(DISTINCT b)"))
   }
 
   test("SPARK-30811: CTE should not cause stack overflow when " +
@@ -922,8 +935,11 @@ class AnalysisErrorSuite extends AnalysisTest {
             t.as("t2")))
       ) :: Nil,
       sum($"c2").as("sum") :: Nil, t.as("t1"))
-    assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
-      "in the aggregate expressions" :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass =
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+      expectedMessageParameters = Map.empty)
   }
 
   test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {

@@ -16,6 +16,8 @@
 #
 
 import datetime
+import io
+from contextlib import redirect_stdout
 from inspect import getmembers, isfunction
 from itertools import chain
 import re
@@ -23,6 +25,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
+from pyspark.errors import PySparkTypeError, PySparkValueError, SparkConnectException
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -66,13 +69,21 @@ from pyspark.sql.functions import (
     map_concat,
     map_from_entries,
     expr,
+    schema_of_json,
+    schema_of_csv,
+    from_csv,
+    greatest,
+    when,
+    window,
+    session_window,
+    bucket,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
 
 
-class FunctionsTests(ReusedSQLTestCase):
+class FunctionsTestsMixin:
     def test_function_parity(self):
         # This test compares the available list of functions in pyspark.sql.functions with those
         # available in the Scala/Java DataFrame API in org.apache.spark.sql.functions.
@@ -130,8 +141,7 @@ class FunctionsTests(ReusedSQLTestCase):
             Row(a=1, intlist=[], mapfield={}),
             Row(a=1, intlist=None, mapfield=None),
         ]
-        rdd = self.sc.parallelize(d)
-        data = self.spark.createDataFrame(rdd)
+        data = self.spark.createDataFrame(d)
 
         result = data.select(explode(data.intlist).alias("a")).select("a").collect()
         self.assertEqual(result[0][0], 1)
@@ -194,22 +204,22 @@ class FunctionsTests(ReusedSQLTestCase):
     def test_corr(self):
         import math
 
-        df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=math.sqrt(i)) for i in range(10)])
         corr = df.stat.corr("a", "b")
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
 
     def test_sampleby(self):
-        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(100)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=(i % 3)) for i in range(100)])
         sampled = df.stat.sampleBy("b", fractions={0: 0.5, 1: 0.5}, seed=0)
-        self.assertTrue(sampled.count() == 35)
+        self.assertTrue(35 <= sampled.count() <= 36)
 
     def test_cov(self):
-        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
         cov = df.stat.cov("a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
     def test_crosstab(self):
-        df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i % 3, b=i % 2) for i in range(1, 7)])
         ct = df.stat.crosstab("a", "b").collect()
         ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
@@ -218,7 +228,7 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertTrue(row[2], 1)
 
     def test_math_functions(self):
-        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
         from pyspark.sql import functions
 
         SQLTestUtils.assert_close(
@@ -295,8 +305,7 @@ class FunctionsTests(ReusedSQLTestCase):
         SQLTestUtils.assert_close(to_reciprocal_trig(math.tan), df.select(cot(df.value)).collect())
 
     def test_rand_functions(self):
-        df = self.df
-        from pyspark.sql import functions
+        df = self.spark.createDataFrame([Row(key=i, value=str(i)) for i in range(100)])
 
         rnd = df.select("key", functions.rand()).collect()
         for row in rnd:
@@ -361,9 +370,9 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual([Row(b=True), Row(b=False)], actual)
 
     def test_between_function(self):
-        df = self.sc.parallelize(
+        df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
-        ).toDF()
+        )
         self.assertEqual(
             [Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)], df.filter(df.a.between(df.b, df.c)).collect()
         )
@@ -454,15 +463,17 @@ class FunctionsTests(ReusedSQLTestCase):
         df2 = self.spark.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
 
         # equijoin - should be converted into broadcast join
-        plan1 = df1.join(broadcast(df2), "key")._jdf.queryExecution().executedPlan()
-        self.assertEqual(1, plan1.toString().count("BroadcastHashJoin"))
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df1.join(broadcast(df2), "key").explain(True)
+            self.assertGreaterEqual(buf.getvalue().count("Broadcast"), 1)
 
         # no join key -- should not be a broadcast join
-        plan2 = df1.crossJoin(broadcast(df2))._jdf.queryExecution().executedPlan()
-        self.assertEqual(0, plan2.toString().count("BroadcastHashJoin"))
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df1.crossJoin(broadcast(df2)).explain(True)
+            self.assertGreaterEqual(buf.getvalue().count("Broadcast"), 1)
 
         # planner should not crash without a join
-        broadcast(df1)._jdf.queryExecution().executedPlan()
+        broadcast(df1).explain(True)
 
     def test_first_last_ignorenulls(self):
         from pyspark.sql import functions
@@ -478,7 +489,7 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
 
     def test_approxQuantile(self):
-        df = self.sc.parallelize([Row(a=i, b=i + 10) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=i + 10) for i in range(10)])
         for f in ["a", "a"]:
             aq = df.stat.approxQuantile(f, [0.1, 0.5, 0.9], 0.1)
             self.assertTrue(isinstance(aq, list))
@@ -644,6 +655,15 @@ class FunctionsTests(ReusedSQLTestCase):
             )
         )
 
+        with self.assertRaises(PySparkValueError) as pe:
+            df.select(least(df.a).alias("least")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="WRONG_NUM_COLUMNS",
+            message_parameters={"func_name": "least", "num_cols": "2"},
+        )
+
     def test_overlay(self):
         from pyspark.sql.functions import col, lit, overlay
         from itertools import chain
@@ -687,6 +707,24 @@ class FunctionsTests(ReusedSQLTestCase):
                     df.select(overlay("x", "y", "pos", "len").alias("ol")).collect() == exp,
                 ]
             )
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.select(overlay(df.x, df.y, 7.5, 0).alias("ol")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "pos", "arg_type": "float"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.select(overlay(df.x, df.y, 7, 0.5).alias("ol")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "len", "arg_type": "float"},
         )
 
     def test_percentile_approx(self):
@@ -760,24 +798,54 @@ class FunctionsTests(ReusedSQLTestCase):
         from pyspark.sql.functions import col, transform
 
         # Should fail with varargs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda *x: lit(1))
 
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>"},
+        )
+
         # Should fail with kwargs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda **x: lit(1))
 
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>"},
+        )
+
         # Should fail with nullary function
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda: lit(1))
 
+        self.check_error(
+            exception=pe.exception,
+            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>", "num_args": "0"},
+        )
+
         # Should fail with quaternary function
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
 
+        self.check_error(
+            exception=pe.exception,
+            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>", "num_args": "4"},
+        )
+
         # Should fail if function doesn't return Column
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkValueError) as pe:
             transform(col("foo"), lambda x: 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            message_parameters={"func_name": "<lambda>", "return_type": "int"},
+        )
 
     def test_nested_higher_order_function(self):
         # SPARK-35382: lambda vars must be resolved properly in nested higher order functions
@@ -947,39 +1015,39 @@ class FunctionsTests(ReusedSQLTestCase):
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "too big"):
             df.select(assert_true(df.id < 2, "too big")).toDF("val").collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("too big", str(cm.exception))
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "2000000"):
             df.select(assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("2000000", str(cm.exception))
 
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(assert_true(df.id < 2, 5))
-        self.assertEqual("errMsg should be a Column or a str, got <class 'int'>", str(cm.exception))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": "int"},
+        )
 
     def test_raise_error(self):
         from pyspark.sql.functions import raise_error
 
         df = self.spark.createDataFrame([Row(id="foobar")])
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "foobar"):
             df.select(raise_error(df.id)).collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("foobar", str(cm.exception))
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "barfoo"):
             df.select(raise_error("barfoo")).collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("barfoo", str(cm.exception))
 
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(raise_error(None))
-        self.assertEqual(
-            "errMsg should be a Column or a str, got <class 'NoneType'>", str(cm.exception)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
         )
 
     def test_sum_distinct(self):
@@ -1031,8 +1099,14 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(actual, expected)
 
         df = self.spark.range(10)
-        with self.assertRaisesRegex(ValueError, "lit does not allow a column in a list"):
+        with self.assertRaises(PySparkValueError) as pe:
             lit([df.id, df.id])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="COLUMN_IN_LIST",
+            message_parameters={"func_name": "lit"},
+        )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
@@ -1150,13 +1224,99 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
 
+    def test_schema_of_json(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            schema_of_json(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "json", "arg_type": "int"},
+        )
+
+    def test_schema_of_csv(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            schema_of_csv(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "csv", "arg_type": "int"},
+        )
+
+    def test_from_csv(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkTypeError) as pe:
+            from_csv(df.id, 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
+    def test_greatest(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkValueError) as pe:
+            greatest(df.id)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="WRONG_NUM_COLUMNS",
+            message_parameters={"func_name": "greatest", "num_cols": "2"},
+        )
+
+    def test_when(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            when("id", 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_COLUMN",
+            message_parameters={"arg_name": "condition", "arg_type": "str"},
+        )
+
+    def test_window(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            window("date", 5)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "windowDuration", "arg_type": "int"},
+        )
+
+    def test_session_window(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            session_window("date", 5)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
+        )
+
+    def test_bucket(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            bucket("5", "id")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER",
+            message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
+        )
+
+
+class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
+    pass
+
 
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_functions import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

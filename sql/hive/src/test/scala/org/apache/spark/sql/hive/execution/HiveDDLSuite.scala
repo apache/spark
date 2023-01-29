@@ -549,10 +549,10 @@ class HiveDDLSuite
   }
 
   test("create table: partition column names exist in table definition") {
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       "CREATE TABLE tbl(a int) PARTITIONED BY (a string)",
-      "Found duplicate column(s) in the table definition of " +
-        s"`$SESSION_CATALOG_NAME`.`default`.`tbl`: `a`")
+      "COLUMN_ALREADY_EXISTS",
+      Map("columnName" -> "`a`"))
   }
 
   test("create partitioned table without specifying data type for the partition columns") {
@@ -1052,9 +1052,17 @@ class HiveDDLSuite
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
-      assertAnalysisError(
-        "DROP VIEW tab1",
-        "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+      assertAnalysisErrorClass(
+        sqlText = "DROP VIEW tab1",
+        errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+        parameters = Map(
+          "alternative" -> "DROP TABLE",
+          "operation" -> "DROP VIEW",
+          "foundType" -> "MANAGED",
+          "requiredType" -> "VIEW",
+          "objectName" -> "spark_catalog.default.tab1"
+        )
+      )
     }
   }
 
@@ -1063,9 +1071,17 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        assertAnalysisError(
-          "DROP TABLE view1",
-          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+        assertAnalysisErrorClass(
+          sqlText = "DROP TABLE view1",
+          errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+          parameters = Map(
+            "alternative" -> "DROP VIEW",
+            "operation" -> "DROP TABLE",
+            "foundType" -> "VIEW",
+            "requiredType" -> "EXTERNAL or MANAGED",
+            "objectName" -> "spark_catalog.default.view1"
+          )
+        )
       }
     }
   }
@@ -2356,14 +2372,16 @@ class HiveDDLSuite
           sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
           if (!caseSensitive) {
             // duplicating partitioning column name
-            assertAnalysisError(
+            assertAnalysisErrorClass(
               "ALTER TABLE tab ADD COLUMNS (C2 string)",
-              "Found duplicate column(s)")
+              "COLUMN_ALREADY_EXISTS",
+              Map("columnName" -> "`c2`"))
 
             // duplicating data column name
-            assertAnalysisError(
+            assertAnalysisErrorClass(
               "ALTER TABLE tab ADD COLUMNS (C1 string)",
-              "Found duplicate column(s)")
+              "COLUMN_ALREADY_EXISTS",
+              Map("columnName" -> "`c1`"))
           } else {
             // hive catalog will still complains that c1 is duplicate column name because hive
             // identifiers are case insensitive.

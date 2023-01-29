@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
@@ -61,4 +62,7 @@ case class AnyValue(child: Expression, ignoreNulls: Boolean)
   override protected def withNewChildInternal(newChild: Expression): AnyValue =
     copy(child = newChild)
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("any_value")
 }

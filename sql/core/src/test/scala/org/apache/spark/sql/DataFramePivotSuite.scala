@@ -302,14 +302,16 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-24722: aggregate as the pivot column") {
-    val exception = intercept[AnalysisException] {
-      trainingSales
-        .groupBy($"sales.year")
-        .pivot(min($"training"), Seq("Experts"))
-        .agg(sum($"sales.earnings"))
-    }
-
-    assert(exception.getMessage.contains("aggregate functions are not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        trainingSales
+          .groupBy($"sales.year")
+          .pivot(min($"training"), Seq("Experts"))
+          .agg(sum($"sales.earnings"))
+      },
+      errorClass = "GROUP_BY_AGGREGATE",
+      parameters = Map("sqlExpr" -> "min(training)")
+    )
   }
 
   test("pivoting column list with values") {

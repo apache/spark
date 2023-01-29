@@ -250,7 +250,12 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     withTable("temptable") {
       val df = sql("create table temptable using parquet as select * from range(2)")
       withNormalizedExplain(df, SimpleMode) { normalizedOutput =>
-        assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
+        // scalastyle:off
+        // == Physical Plan ==
+        // Execute CreateDataSourceTableAsSelectCommand
+        //   +- CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`temptable`, ErrorIfExists, Project [id#5L], [id]
+        // scalastyle:on
+        assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 2)
       }
     }
   }
@@ -462,17 +467,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     withTempDir { dir =>
       Seq("parquet", "orc", "csv", "json").foreach { fmt =>
         val basePath = dir.getCanonicalPath + "/" + fmt
-        val pushFilterMaps = Map (
-          "parquet" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
-          "orc" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
-          "csv" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
-          "json" ->
-            "|remove_marker"
-        )
-        val expected_plan_fragment1 =
+
+        val expectedPlanFragment =
           s"""
              |\\(1\\) BatchScan $fmt file:$basePath
              |Output \\[2\\]: \\[value#x, id#x\\]
@@ -480,9 +476,9 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
              |Format: $fmt
              |Location: InMemoryFileIndex\\([0-9]+ paths\\)\\[.*\\]
              |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-             ${pushFilterMaps.get(fmt).get}
+             |PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
              |ReadSchema: struct\\<value:int\\>
-             |""".stripMargin.replaceAll("\nremove_marker", "").trim
+             |""".stripMargin.trim
 
         spark.range(10)
           .select(col("id"), col("id").as("value"))
@@ -500,7 +496,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             .format(fmt)
             .load(basePath).where($"id" > 1 && $"value" > 2)
           val normalizedOutput = getNormalizedExplain(df, FormattedMode)
-          assert(expected_plan_fragment1.r.findAllMatchIn(normalizedOutput).length == 1)
+          assert(expectedPlanFragment.r.findAllMatchIn(normalizedOutput).length == 1)
         }
       }
     }

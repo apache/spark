@@ -28,10 +28,7 @@ Normal Functions
 
     col
     column
-    create_map
     lit
-    array
-    map_from_arrays
     broadcast
     coalesce
     input_file_name
@@ -42,7 +39,6 @@ Normal Functions
     rand
     randn
     spark_partition_id
-    struct
     when
     bitwise_not
     bitwiseNOT
@@ -150,19 +146,23 @@ Collection Functions
 .. autosummary::
     :toctree: api/
 
+    array
     array_contains
     arrays_overlap
-    slice
     array_join
+    create_map
+    slice
     concat
     array_position
     element_at
+    array_append
     array_sort
     array_remove
     array_distinct
     array_intersect
     array_union
     array_except
+    array_compact
     transform
     exists
     forall
@@ -172,6 +172,7 @@ Collection Functions
     transform_keys
     transform_values
     map_filter
+    map_from_arrays
     map_zip_with
     explode
     explode_outer
@@ -186,6 +187,7 @@ Collection Functions
     schema_of_json
     to_json
     size
+    struct
     sort_array
     array_max
     array_min

@@ -102,9 +102,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "array<int>",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "IntersectAll",
+    "operator" : "INTERSECT ALL",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 64,
+    "fragment" : "SELECT k, udf(v) FROM tab1\nINTERSECT ALL\nSELECT array(1), udf(2)"
+  } ]
 }
 
 
@@ -117,13 +124,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2429",
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
-    "firstColNum" : "1",
-    "nColNum" : "2",
-    "nTab" : "second",
-    "operator" : "IntersectAll"
-  }
+    "firstNumColumns" : "1",
+    "invalidNumColumns" : "2",
+    "invalidOrdinalNum" : "second",
+    "operator" : "INTERSECT ALL"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 69,
+    "fragment" : "SELECT udf(k) FROM tab1\nINTERSECT ALL\nSELECT udf(k), udf(v) FROM tab2"
+  } ]
 }
 
 

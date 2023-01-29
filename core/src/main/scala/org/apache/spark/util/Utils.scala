@@ -111,6 +111,12 @@ private[spark] object Utils extends Logging {
 
   private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
 
+  private val COPY_BUFFER_LEN = 1024
+
+  private val copyBuffer = ThreadLocal.withInitial[Array[Byte]](() => {
+    new Array[Byte](COPY_BUFFER_LEN)
+  })
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -237,34 +243,39 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  private def writeByteBufferImpl(bb: ByteBuffer, writer: (Array[Byte], Int, Int) => Unit): Unit = {
+    if (bb.hasArray) {
+      // Avoid extra copy if the bytebuffer is backed by bytes array
+      writer(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      // Fallback to copy approach
+      val buffer = {
+        // reuse the copy buffer from thread local
+        copyBuffer.get()
+      }
+      val originalPosition = bb.position()
+      var bytesToCopy = Math.min(bb.remaining(), COPY_BUFFER_LEN)
+      while (bytesToCopy > 0) {
+        bb.get(buffer, 0, bytesToCopy)
+        writer(buffer, 0, bytesToCopy)
+        bytesToCopy = Math.min(bb.remaining(), COPY_BUFFER_LEN)
+      }
+      bb.position(originalPosition)
+    }
+  }
+
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
   def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {
-    if (bb.hasArray) {
-      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
-    } else {
-      val originalPosition = bb.position()
-      val bbval = new Array[Byte](bb.remaining())
-      bb.get(bbval)
-      out.write(bbval)
-      bb.position(originalPosition)
-    }
+    writeByteBufferImpl(bb, out.write)
   }
 
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.OutputStream]]
    */
   def writeByteBuffer(bb: ByteBuffer, out: OutputStream): Unit = {
-    if (bb.hasArray) {
-      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
-    } else {
-      val originalPosition = bb.position()
-      val bbval = new Array[Byte](bb.remaining())
-      bb.get(bbval)
-      out.write(bbval)
-      bb.position(originalPosition)
-    }
+    writeByteBufferImpl(bb, out.write)
   }
 
   /**
@@ -1095,6 +1106,24 @@ private[spark] object Utils extends Logging {
       "[" + addr + "]"
     } else {
       addr
+    }
+  }
+
+  /**
+   * Normalize IPv6 IPs and no-op on all other hosts.
+   */
+  private[spark] def normalizeIpIfNeeded(host: String): String = {
+    // Is this a v6 address. We ask users to add [] around v6 addresses as strs but
+    // there not always there. If it's just 0-9 and : and [] we treat it as a v6 address.
+    // This means some invalid addresses are treated as v6 addresses, but since they are
+    // not valid hostnames it doesn't matter.
+    // See https://www.rfc-editor.org/rfc/rfc1123#page-13 for context around valid hostnames.
+    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]*)\]{0,1}$""".r
+    host match {
+      case addressRe(unbracketed) =>
+        addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))
+      case _ =>
+        host
     }
   }
 
@@ -2797,7 +2826,8 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  def redact(conf: SparkConf,
+      kvs: scala.collection.Seq[(String, String)]): scala.collection.Seq[(String, String)] = {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
     redact(redactionPattern, kvs)
   }
@@ -2806,7 +2836,8 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact[K, V](regex: Option[Regex], kvs: Seq[(K, V)]): Seq[(K, V)] = {
+  def redact[K, V](regex: Option[Regex],
+      kvs: scala.collection.Seq[(K, V)]): scala.collection.Seq[(K, V)] = {
     regex match {
       case None => kvs
       case Some(r) => redact(r, kvs)
@@ -2828,7 +2859,8 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private def redact[K, V](redactionPattern: Regex, kvs: Seq[(K, V)]): Seq[(K, V)] = {
+  private def redact[K, V](redactionPattern: Regex,
+      kvs: scala.collection.Seq[(K, V)]): scala.collection.Seq[(K, V)] = {
     // If the sensitive information regex matches with either the key or the value, redact the value
     // While the original intent was to only redact the value if the key matched with the regex,
     // we've found that especially in verbose mode, the value of the property may contain sensitive
@@ -2854,7 +2886,7 @@ private[spark] object Utils extends Logging {
           .getOrElse((key, value))
       case (key, value) =>
         (key, value)
-    }.asInstanceOf[Seq[(K, V)]]
+    }.asInstanceOf[scala.collection.Seq[(K, V)]]
   }
 
   /**
@@ -2863,7 +2895,7 @@ private[spark] object Utils extends Logging {
    * redacted. So theoretically, the property itself could be configured to redact its own value
    * when printing.
    */
-  def redact(kvs: Map[String, String]): Seq[(String, String)] = {
+  def redact(kvs: Map[String, String]): scala.collection.Seq[(String, String)] = {
     val redactionPattern = kvs.getOrElse(
       SECRET_REDACTION_PATTERN.key,
       SECRET_REDACTION_PATTERN.defaultValueString

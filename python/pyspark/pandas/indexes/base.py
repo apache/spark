@@ -451,7 +451,7 @@ class Index(IndexOpsMixin):
                 with option_context("compute.default_index_type", "distributed-sequence"):
                     # Directly using Series from both self and other seems causing
                     # some exceptions when 'compute.ops_on_diff_frames' is enabled.
-                    # Working around for now via using frame.
+                    # Working around for now via using frames.
                     return (
                         cast(Series, self.to_series("self").reset_index(drop=True))
                         == cast(Series, other.to_series("other").reset_index(drop=True))
@@ -524,7 +524,7 @@ class Index(IndexOpsMixin):
 
     def _to_pandas(self) -> pd.Index:
         """
-        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        Same as `to_pandas()`, without issuing the advice log for internal usage.
         """
         return self._to_internal_pandas().copy()
 
@@ -540,9 +540,9 @@ class Index(IndexOpsMixin):
         dtype : str or numpy.dtype, optional
             The dtype to pass to :meth:`numpy.asarray`
         copy : bool, default False
-            Whether to ensure that the returned value is a not a view on
+            Whether to ensure that the returned value is not a view on
             another array. Note that ``copy=False`` does not *ensure* that
-            ``to_numpy()`` is no-copy. Rather, ``copy=True`` ensure that
+            ``to_numpy()`` is no-copy. Rather, ``copy=True`` ensures that
             a copy is made, even if not strictly necessary.
 
         Returns
@@ -777,7 +777,7 @@ class Index(IndexOpsMixin):
     def rename(self, name: Union[Name, List[Name]], inplace: bool = False) -> Optional["Index"]:
         """
         Alter Index or MultiIndex name.
-        Able to set new names without level. Defaults to returning new index.
+        Able to set new names without level. Defaults to returning a new index.
 
         Parameters
         ----------
@@ -1082,7 +1082,7 @@ class Index(IndexOpsMixin):
 
     def is_integer(self) -> bool:
         """
-        Return if the current index type is a integer type.
+        Return if the current index type is an integer type.
 
         Examples
         --------
@@ -1115,7 +1115,7 @@ class Index(IndexOpsMixin):
 
     def is_object(self) -> bool:
         """
-        Return if the current index type is a object type.
+        Return if the current index type is an object type.
 
         Examples
         --------

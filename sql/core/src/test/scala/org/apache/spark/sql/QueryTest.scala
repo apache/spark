@@ -360,7 +360,7 @@ object QueryTest extends Assertions {
     None
   }
 
-  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
+  def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
     case (null, null) => true
     case (null, _) => false
     case (_, null) => false

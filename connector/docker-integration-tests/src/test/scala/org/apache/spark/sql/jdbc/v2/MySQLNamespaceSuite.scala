@@ -28,16 +28,16 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:5.7.36):
+ * To run this test suite for a specific version (e.g., mysql:8.0.31):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.0.31
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLNamespaceSuite"
  * }}}
  */
 @DockerTest
 class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )

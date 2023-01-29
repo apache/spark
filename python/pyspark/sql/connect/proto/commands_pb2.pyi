@@ -35,6 +35,7 @@ limitations under the License.
 """
 import builtins
 import collections.abc
+import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
@@ -60,23 +61,38 @@ class Command(google.protobuf.message.Message):
 
     CREATE_FUNCTION_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
+    CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def create_function(self) -> global___CreateScalarFunction: ...
     @property
     def write_operation(self) -> global___WriteOperation: ...
+    @property
+    def create_dataframe_view(self) -> global___CreateDataFrameViewCommand: ...
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """This field is used to mark extensions to the protocol. When plugins generate arbitrary
+        Commands they can add them here. During the planning the correct resolution is done.
+        """
     def __init__(
         self,
         *,
         create_function: global___CreateScalarFunction | None = ...,
         write_operation: global___WriteOperation | None = ...,
+        create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "command_type",
             b"command_type",
+            "create_dataframe_view",
+            b"create_dataframe_view",
             "create_function",
             b"create_function",
+            "extension",
+            b"extension",
             "write_operation",
             b"write_operation",
         ],
@@ -86,15 +102,21 @@ class Command(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "command_type",
             b"command_type",
+            "create_dataframe_view",
+            b"create_dataframe_view",
             "create_function",
             b"create_function",
+            "extension",
+            b"extension",
             "write_operation",
             b"write_operation",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> typing_extensions.Literal["create_function", "write_operation"] | None: ...
+    ) -> typing_extensions.Literal[
+        "create_function", "write_operation", "create_dataframe_view", "extension"
+    ] | None: ...
 
 global___Command = Command
 
@@ -143,17 +165,21 @@ class CreateScalarFunction(google.protobuf.message.Message):
     def parts(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """Fully qualified name of the function including the catalog / schema names."""
+        """(Required) Fully qualified name of the function including the catalog / schema names."""
     language: global___CreateScalarFunction.FunctionLanguage.ValueType
+    """(Required) the function language."""
     temporary: builtins.bool
+    """(Required) if this is a temporary function."""
     @property
     def argument_types(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.types_pb2.DataType
-    ]: ...
+    ]:
+        """(Optional) A list of argument types. Can be empty when the function does not take an argument."""
     @property
-    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Required) the return type of the function."""
     serialized_function: builtins.bytes
     """As a raw string serialized:"""
     literal_string: builtins.str
@@ -209,6 +235,48 @@ class CreateScalarFunction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["serialized_function", "literal_string"] | None: ...
 
 global___CreateScalarFunction = CreateScalarFunction
+
+class CreateDataFrameViewCommand(google.protobuf.message.Message):
+    """A command that can create DataFrame global temp view or local temp view."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    IS_GLOBAL_FIELD_NUMBER: builtins.int
+    REPLACE_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Required) The relation that this view will be built on."""
+    name: builtins.str
+    """(Required) View name."""
+    is_global: builtins.bool
+    """(Required) Whether this is global temp view or local temp view."""
+    replace: builtins.bool
+    """(Required)
+
+    If true, and if the view already exists, updates it; if false, and if the view
+    already exists, throws exception.
+    """
+    def __init__(
+        self,
+        *,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        name: builtins.str = ...,
+        is_global: builtins.bool = ...,
+        replace: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "is_global", b"is_global", "name", b"name", "replace", b"replace"
+        ],
+    ) -> None: ...
+
+global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
 
 class WriteOperation(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
@@ -290,30 +358,31 @@ class WriteOperation(google.protobuf.message.Message):
     OPTIONS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
-        """The output of the `input` relation will be persisted according to the options."""
+        """(Required) The output of the `input` relation will be persisted according to the options."""
     source: builtins.str
-    """Format value according to the Spark documentation. Examples are: text, parquet, delta."""
+    """(Required) Format value according to the Spark documentation. Examples are: text, parquet, delta."""
     path: builtins.str
     table_name: builtins.str
     mode: global___WriteOperation.SaveMode.ValueType
+    """(Required) the save mode."""
     @property
     def sort_column_names(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """List of columns to sort the output by."""
+        """(Optional) List of columns to sort the output by."""
     @property
     def partitioning_columns(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """List of columns for partitioning."""
+        """(Optional) List of columns for partitioning."""
     @property
     def bucket_by(self) -> global___WriteOperation.BucketBy:
-        """Optional bucketing specification. Bucketing must set the number of buckets and the columns
+        """(Optional) Bucketing specification. Bucketing must set the number of buckets and the columns
         to bucket by.
         """
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """Optional list of configuration options."""
+        """(Optional) A list of configuration options."""
     def __init__(
         self,
         *,

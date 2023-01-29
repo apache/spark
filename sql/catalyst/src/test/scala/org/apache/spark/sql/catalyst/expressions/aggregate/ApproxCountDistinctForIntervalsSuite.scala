@@ -24,6 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, CreateArray, Literal, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types._
 
@@ -36,13 +37,34 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       val wrongColumn = ApproxCountDistinctForIntervals(
         AttributeReference("a", dataType)(),
         endpointsExpression = CreateArray(Seq(1, 10).map(Literal(_))))
-      assert(wrongColumn.checkInputDataTypes().isFailure)
+      assert(wrongColumn.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> ("(\"NUMERIC\" or \"TIMESTAMP\" or \"DATE\" or \"TIMESTAMP_NTZ\"" +
+              " or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
 
     var wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = Literal(0.5d))
-    assert(wrongEndpoints.checkInputDataTypes().isFailure)
+    assert(wrongEndpoints.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"ARRAY\"",
+          "inputSql" -> "\"0.5\"",
+          "inputType" -> "\"DOUBLE\""
+        )
+      )
+    )
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),

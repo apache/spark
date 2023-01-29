@@ -3885,6 +3885,18 @@ object functions {
   }
 
   /**
+   * Returns an ARRAY containing all elements from the source ARRAY as well as the new element.
+   * The new element/column is located at end of the ARRAY.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_append(column: Column, element: Any): Column = withExpr {
+    ArrayAppend(column.expr, lit(element).expr)
+  }
+
+
+  /**
    * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
    * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
    * `false` otherwise.
@@ -4020,6 +4032,16 @@ object functions {
    */
   def array_remove(column: Column, element: Any): Column = withExpr {
     ArrayRemove(column.expr, lit(element).expr)
+  }
+
+  /**
+   * Remove all null elements from the given array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_compact(column: Column): Column = withExpr {
+    ArrayCompact(column.expr)
   }
 
   /**
@@ -4563,7 +4585,6 @@ object functions {
     val dataType = parseTypeWithFallback(
       schema,
       DataType.fromJson,
-      "Cannot parse the schema in JSON format: ",
       fallbackParser = DataType.fromDDL)
     from_json(e, dataType, options)
   }

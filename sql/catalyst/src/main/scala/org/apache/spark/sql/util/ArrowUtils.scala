@@ -128,7 +128,7 @@ private[sql] object ArrowUtils {
           val dt = fromArrowField(child)
           StructField(child.getName, dt, child.isNullable)
         }
-        StructType(fields.toSeq)
+        StructType(fields.toArray)
       case arrowType => fromArrowType(arrowType)
     }
   }
@@ -144,7 +144,7 @@ private[sql] object ArrowUtils {
     StructType(schema.getFields.asScala.map { field =>
       val dt = fromArrowField(field)
       StructField(field.getName, dt, field.isNullable)
-    }.toSeq)
+    }.toArray)
   }
 
   /** Return Map with conf settings to be used in ArrowPythonRunner */

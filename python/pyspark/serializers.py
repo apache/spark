@@ -54,6 +54,7 @@ which contains two batches of two objects:
 """
 
 import sys
+import os
 from itertools import chain, product
 import marshal
 import struct
@@ -357,14 +358,14 @@ class NoOpSerializer(FramedSerializer):
         return obj
 
 
-if sys.version_info < (3, 8):
+if sys.version_info < (3, 8) or os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     # Hack namedtuple, make it picklable.
     # For Python 3.8+, we use CPickle-based cloudpickle.
     # For Python 3.7 and below, we use legacy build-in CPickle which
     # requires namedtuple hack.
     # The whole hack here should be removed once we drop Python 3.7.
 
-    __cls = {}
+    __cls = {}  # type: ignore[var-annotated]
 
     def _restore(name, fields, value):
         """Restore an object of namedtuple"""
@@ -471,10 +472,10 @@ class CloudPickleSerializer(FramedSerializer):
         return cloudpickle.loads(obj, encoding=encoding)
 
 
-if sys.version_info < (3, 8):
+if sys.version_info < (3, 8) or os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     CPickleSerializer = PickleSerializer
 else:
-    CPickleSerializer = CloudPickleSerializer
+    CPickleSerializer = CloudPickleSerializer  # type: ignore[misc, assignment]
 
 
 class MarshalSerializer(FramedSerializer):

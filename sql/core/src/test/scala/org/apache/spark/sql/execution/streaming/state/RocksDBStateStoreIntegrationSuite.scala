@@ -173,7 +173,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
         (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
         (SQLConf.SHUFFLE_PARTITIONS.key, "1"),
-        (s"${RocksDBConf.ROCKSDB_CONF_NAME_PREFIX}.trackTotalNumberOfRows" -> "false")) {
+        (s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.trackTotalNumberOfRows" -> "false")) {
         val inputData = MemoryStream[Int]
 
         val query = inputData.toDS().toDF("value")

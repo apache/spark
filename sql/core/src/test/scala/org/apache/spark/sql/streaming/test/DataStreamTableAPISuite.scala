@@ -484,6 +484,19 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-41040: self-union using readStream.table should not fail") {
+    withTable("self_union_table") {
+      spark.range(10).write.format("parquet").saveAsTable("self_union_table")
+      val df = spark.readStream.format("parquet").table("self_union_table")
+      val q = df.union(df).writeStream.format("noop").start()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
   private def checkForStreamTable(dir: Option[File], tableName: String): Unit = {
     val memory = MemoryStream[Int]
     val dsw = memory.toDS().writeStream.format("parquet")

@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.io
 
-import java.io.{File, FileInputStream, InputStream}
+import java.io.{Externalizable, File, FileInputStream, InputStream, ObjectInput, ObjectOutput}
 import java.nio.ByteBuffer
 import java.nio.channels.WritableByteChannel
 
@@ -42,8 +42,9 @@ import org.apache.spark.util.Utils
  *               buffers may also be used elsewhere then the caller is responsible for copying
  *               them as needed.
  */
-private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
+private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Externalizable {
   require(chunks != null, "chunks must not be null")
+  require(!chunks.contains(null), "chunks must not contain null")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
   // Chunk size in bytes
@@ -54,9 +55,16 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   private[this] var disposed: Boolean = false
 
   /**
-   * This size of this buffer, in bytes.
+   * This size of this buffer, in bytes. Using var here for serialization purpose (need to set a
+   * object after default construction)
    */
-  val size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
+  private var _size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
+
+  def size: Long = _size
+
+  def this() = {
+    this(Array.empty[ByteBuffer])
+  }
 
   def this(byteBuffer: ByteBuffer) = {
     this(Array(byteBuffer))
@@ -82,6 +90,38 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
         bytes.limit(originalLimit)
       }
     }
+  }
+
+  /**
+   * Writes to the provided ObjectOutput with zero copy if possible.
+   */
+  override def writeExternal(out: ObjectOutput): Unit = {
+    // We want to keep the chunks layout
+    out.writeInt(chunks.length)
+    val chunksCopy = getChunks()
+    chunksCopy.foreach(buffer => out.writeInt(buffer.limit()))
+    chunksCopy.foreach(Utils.writeByteBuffer(_, out))
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    val chunksNum = in.readInt()
+    val indices = 0 until chunksNum
+    val chunksSize = indices.map(_ => in.readInt())
+    val chunks = new Array[ByteBuffer](chunksNum)
+
+    // We deserialize all chunks into on-heap buffer by default. If we have use case in the future
+    // where we want to preserve the on-heap/off-heap nature of chunks, then we need to record the
+    // `isDirect` property of each chunk during serialization
+    indices.foreach { i =>
+      val chunkSize = chunksSize(i)
+      chunks(i) = {
+        val arr = new Array[Byte](chunkSize)
+        in.readFully(arr, 0, chunkSize)
+        ByteBuffer.wrap(arr)
+      }
+    }
+    this.chunks = chunks
+    this._size = chunks.map(_.limit().toLong).sum
   }
 
   /**
@@ -171,6 +211,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 }
 
 private[spark] object ChunkedByteBuffer {
+  private val CHUNK_BUFFER_SIZE: Int = 1024 * 1024
+  private val MINIMUM_CHUNK_BUFFER_SIZE: Int = 1024
 
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
@@ -206,6 +248,18 @@ private[spark] object ChunkedByteBuffer {
       out.close()
     }
     out.toChunkedByteBuffer
+  }
+
+  /**
+   * Try to estimate appropriate chunk size so that it's not too large (waste memory) or too
+   * small (too many segments)
+   */
+  def estimateBufferChunkSize(estimatedSize: Long = -1): Int = {
+    if (estimatedSize < 0) {
+      CHUNK_BUFFER_SIZE
+    } else {
+      Math.max(Math.min(estimatedSize, CHUNK_BUFFER_SIZE).toInt, MINIMUM_CHUNK_BUFFER_SIZE)
+    }
   }
 }
 

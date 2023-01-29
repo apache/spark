@@ -73,7 +73,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
         chainedFunc,
         pythonEvalType,
         argOffsets,
-        StructType(StructField("struct", outputTypes) :: Nil),
+        StructType(Array(StructField("struct", outputTypes))),
         sessionLocalTimeZone,
         pythonRunnerConf,
         pythonMetrics).compute(batchIter, context.partitionId(), context)

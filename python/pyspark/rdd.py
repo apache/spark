@@ -756,7 +756,7 @@ class RDD(Generic[T_co]):
         Parameters
         ----------
         f : function
-            a function to trun a T into a sequence of U
+            a function to turn a T into a sequence of U
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
@@ -1756,7 +1756,7 @@ class RDD(Generic[T_co]):
         Parameters
         ----------
         f : function
-            a function applyed to each partition
+            a function applied to each partition
 
         See Also
         --------
@@ -4179,7 +4179,7 @@ class RDD(Generic[T_co]):
         Parameters
         ----------
         f : function
-           a function to trun a V into a sequence of U
+           a function to turn a V into a sequence of U
 
         Returns
         -------
@@ -4215,7 +4215,7 @@ class RDD(Generic[T_co]):
         Parameters
         ----------
         f : function
-           a function to trun a V into a U
+           a function to turn a V into a U
 
         Returns
         -------
@@ -4289,7 +4289,7 @@ class RDD(Generic[T_co]):
         Returns
         -------
         :class:`RDD`
-            a :class:`RDD` containing the keys and cogouped values
+            a :class:`RDD` containing the keys and cogrouped values
 
         See Also
         --------
@@ -4330,7 +4330,7 @@ class RDD(Generic[T_co]):
         Returns
         -------
         :class:`RDD`
-            a :class:`RDD` containing the keys and cogouped values
+            a :class:`RDD` containing the keys and cogrouped values
 
         See Also
         --------
@@ -5430,7 +5430,10 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
 
-        if self.ctx.profiler_collector:
+        if (
+            self.ctx.profiler_collector
+            and self.ctx._conf.get("spark.python.profile", "false") == "true"
+        ):
             profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
         else:
             profiler = None

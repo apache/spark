@@ -115,8 +115,8 @@ private[v1] class SqlResource extends BaseAppResource {
       edges)
   }
 
-  private def printableMetrics(allNodes: Seq[SparkPlanGraphNode],
-    metricValues: Map[Long, String]): Seq[Node] = {
+  private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],
+    metricValues: Map[Long, String]): collection.Seq[Node] = {
 
     def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
       metricName: String): Option[Metric] = {
@@ -138,7 +138,8 @@ private[v1] class SqlResource extends BaseAppResource {
     nodes.sortBy(_.nodeId).reverse
   }
 
-  private def getNodeIdAndWSCGIdMap(allNodes: Seq[SparkPlanGraphNode]): Map[Long, Option[Long]] = {
+  private def getNodeIdAndWSCGIdMap(
+      allNodes: collection.Seq[SparkPlanGraphNode]): Map[Long, Option[Long]] = {
     val wscgNodes = allNodes.filter(_.name.trim.startsWith(WHOLE_STAGE_CODEGEN))
     val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap {
       _ match {

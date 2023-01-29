@@ -51,7 +51,7 @@ class Option:
         default is str. It defines the expected types for this option. It is
         used with `isinstance` to validate the given value to this option.
     check_func: Tuple[Callable[[Any], bool], str], keyword-only argument
-        default is a function that always returns `True` with a empty string.
+        default is a function that always returns `True` with an empty string.
         It defines:
           - a function to check the given value to this option
           - the error message to show when this check is failed
@@ -152,7 +152,7 @@ _options: List[Option] = [
         key="compute.shortcut_limit",
         doc=(
             "'compute.shortcut_limit' sets the limit for a shortcut. "
-            "It computes specified number of rows and use its schema. When the dataframe "
+            "It computes the specified number of rows and uses its schema. When the dataframe "
             "length is larger than this limit, pandas-on-Spark uses PySpark to compute."
         ),
         default=1000,
@@ -394,7 +394,7 @@ def reset_option(key: str) -> None:
     """
     Reset one option to their default value.
 
-    Pass "all" as argument to reset all options.
+    Pass "all" as an argument to reset all options.
 
     Parameters
     ----------
@@ -414,7 +414,7 @@ def option_context(*args: Any) -> Iterator[None]:
     """
     Context manager to temporarily set options in the `with` statement context.
 
-    You need to invoke as ``option_context(pat, val, [(pat, val), ...])``.
+    You need to invoke ``option_context(pat, val, [(pat, val), ...])``.
 
     Examples
     --------

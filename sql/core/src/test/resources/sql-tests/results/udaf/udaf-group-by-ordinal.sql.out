@@ -93,10 +93,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -108,10 +109,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -327,7 +329,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
@@ -349,10 +351,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"b\""
+    "expression" : "\"b\"",
+    "expressionAnyValue" : "\"any_value(b)\""
   }
 }
 
@@ -365,7 +368,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
@@ -387,11 +390,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "()",
-    "sqlExpr" : "data.a"
-  }
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 50,
+    "fragment" : "group by cube(1, 3)"
+  } ]
 }
 
 

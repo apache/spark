@@ -238,7 +238,7 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         df = self.spark.range(10).selectExpr("id", "id as v")
 
         def plus_one(v: Union[pd.Series, pd.DataFrame]) -> pd.Series:
-            return v + 1  # type: ignore[return-value]
+            return v + 1
 
         plus_one = pandas_udf("long")(plus_one)
         actual = df.select(plus_one(df.v).alias("plus_one"))
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: #401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

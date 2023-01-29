@@ -145,9 +145,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "array<int>",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "ExceptAll",
+    "operator" : "EXCEPT ALL",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "SELECT udf(c1) FROM tab1\nEXCEPT ALL\nSELECT array(1)"
+  } ]
 }
 
 
@@ -221,13 +228,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2429",
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
-    "firstColNum" : "1",
-    "nColNum" : "2",
-    "nTab" : "second",
-    "operator" : "ExceptAll"
-  }
+    "firstNumColumns" : "1",
+    "invalidNumColumns" : "2",
+    "invalidOrdinalNum" : "second",
+    "operator" : "EXCEPT ALL"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "SELECT k FROM tab3\nEXCEPT ALL\nSELECT k, v FROM tab4"
+  } ]
 }
 
 

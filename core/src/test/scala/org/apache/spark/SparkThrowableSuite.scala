@@ -110,7 +110,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val sqlTableRows = sqlTable.split("\n").filter(_.startsWith("|")).drop(2)
     val validSqlStates = sqlTableRows.map(_.slice(1, 6)).toSet
     // Sanity check
-    assert(Set("07000", "42000", "HZ000").subsetOf(validSqlStates))
+    assert(Set("22012", "22003", "42601").subsetOf(validSqlStates))
     assert(validSqlStates.forall(_.length == 5), validSqlStates)
     checkCondition(sqlStates, s => validSqlStates.contains(s))
   }
@@ -145,6 +145,18 @@ class SparkThrowableSuite extends SparkFunSuite {
     val rereadErrorClassToInfoMap = mapper.readValue(
       tmpFile, new TypeReference[Map[String, ErrorInfo]]() {})
     assert(rereadErrorClassToInfoMap == errorReader.errorInfoMap)
+  }
+
+  test("Error class names should contain only capital letters, numbers and underscores") {
+    val allowedChars = "[A-Z0-9_]*"
+    errorReader.errorInfoMap.foreach { e =>
+      assert(e._1.matches(allowedChars), s"Error class: ${e._1} is invalid")
+      e._2.subClass.map { s =>
+        s.keys.foreach { k =>
+          assert(k.matches(allowedChars), s"Error sub-class: $k is invalid")
+        }
+      }
+    }
   }
 
   test("Check if error class is missing") {
@@ -182,7 +194,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
     )
 
     assert(
@@ -194,7 +206,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         ""
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
     )
   }
 
@@ -220,7 +232,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
-        assert(e.getSqlState == "42000")
+        assert(e.getSqlState == "22018")
       case _: Throwable =>
         // Should not end up here
         assert(false)
@@ -237,7 +249,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.isInternalError)
-        assert(e.getSqlState == null)
+        assert(e.getSqlState.startsWith("XX"))
       case _: Throwable =>
         // Should not end up here
         assert(false)

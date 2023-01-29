@@ -218,7 +218,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`outermost`"
   },
@@ -360,9 +360,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "dataType" : "baz"
+    "typeName" : "\"BAZ\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -381,9 +382,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "dataType" : "ordinality"
+    "typeName" : "\"ORDINALITY\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -411,7 +413,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`test`"
   },

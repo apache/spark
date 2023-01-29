@@ -16,11 +16,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "(CAST(udf(cast(count(b) as string)) AS BIGINT) AS `udf(count(b))`)",
-    "sqlExpr" : "testdata.a"
-  }
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 42,
+    "fragment" : "SELECT udf(a), udf(COUNT(b)) FROM testData"
+  } ]
 }
 
 
@@ -50,10 +54,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -120,10 +125,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -183,10 +189,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2424",
+  "errorClass" : "GROUP_BY_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
     "sqlExpr" : "CAST(udf(cast(count(b) as string)) AS BIGINT)"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "udf(COUNT(b))"
+  } ]
 }
 
 
@@ -206,10 +220,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"k\""
+    "expression" : "\"k\"",
+    "expressionAnyValue" : "\"any_value(k)\""
   }
 }
 
@@ -230,7 +245,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
@@ -315,11 +330,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "()",
-    "sqlExpr" : "id"
-  }
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "SELECT udf(id) FROM range(10) HAVING id > 0"
+  } ]
 }
 
 
@@ -428,6 +447,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"INT\"",
@@ -453,6 +473,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"SMALLINT\"",
@@ -478,6 +499,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"BIGINT\"",
@@ -503,6 +525,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
@@ -604,11 +627,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "condition" : "(count(1) > 1L)",
-    "invalidExprSqls" : "count(1)"
-  }
+    "condition" : "\"(count(1) > 1)\"",
+    "expressionList" : "count(1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 54,
+    "fragment" : "SELECT udf(count(*)) FROM test_agg WHERE count(*) > 1L"
+  } ]
 }
 
 
@@ -619,11 +650,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "condition" : "((count(1) + 1L) > 1L)",
-    "invalidExprSqls" : "count(1)"
-  }
+    "condition" : "\"((count(1) + 1) > 1)\"",
+    "expressionList" : "count(1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 59,
+    "fragment" : "SELECT udf(count(*)) FROM test_agg WHERE count(*) + 1L > 1L"
+  } ]
 }
 
 
@@ -634,9 +673,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "condition" : "(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))",
-    "invalidExprSqls" : "count(1), max(test_agg.k)"
-  }
+    "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",
+    "expressionList" : "count(1), max(test_agg.k)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "SELECT udf(count(*)) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(k) > 1"
+  } ]
 }

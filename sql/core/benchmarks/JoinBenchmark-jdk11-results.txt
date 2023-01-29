@@ -2,81 +2,81 @@
 Join Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Join w long:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w long wholestage off                         4474           4487          18          4.7         213.3       1.0X
-Join w long wholestage on                          1686           1692           4         12.4          80.4       2.7X
+Join w long wholestage off                         5148           5221         103          4.1         245.5       1.0X
+Join w long wholestage on                          1695           1720          19         12.4          80.8       3.0X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Join w long duplicated:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w long duplicated wholestage off              4066           4071           8          5.2         193.9       1.0X
-Join w long duplicated wholestage on               1822           1839          20         11.5          86.9       2.2X
+Join w long duplicated wholestage off              3706           3822         165          5.7         176.7       1.0X
+Join w long duplicated wholestage on               1808           1875          62         11.6          86.2       2.0X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Join w 2 ints:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 ints wholestage off                     320974         321015          57          0.1       15305.3       1.0X
-Join w 2 ints wholestage on                      237636         238622         567          0.1       11331.4       1.4X
+Join w 2 ints wholestage off                     206309         209960        2865          0.1        9837.6       1.0X
+Join w 2 ints wholestage on                      260860         265467        1202          0.1       12438.8       0.8X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Join w 2 longs:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 longs wholestage off                      6829           6867          53          3.1         325.6       1.0X
-Join w 2 longs wholestage on                       3320           3399          49          6.3         158.3       2.1X
+Join w 2 longs wholestage off                      6494           6517          31          3.2         309.7       1.0X
+Join w 2 longs wholestage on                       3290           3400         155          6.4         156.9       2.0X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Join w 2 longs duplicated:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 longs duplicated wholestage off          16071          16083          16          1.3         766.3       1.0X
-Join w 2 longs duplicated wholestage on           10943          11009          62          1.9         521.8       1.5X
+Join w 2 longs duplicated wholestage off          13559          14122         796          1.5         646.5       1.0X
+Join w 2 longs duplicated wholestage on            9843          10285         362          2.1         469.4       1.4X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 outer join w long:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-outer join w long wholestage off                   2880           2898          26          7.3         137.3       1.0X
-outer join w long wholestage on                    1778           1791           9         11.8          84.8       1.6X
+outer join w long wholestage off                   3689           3717          40          5.7         175.9       1.0X
+outer join w long wholestage on                    1734           1752          15         12.1          82.7       2.1X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 semi join w long:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-semi join w long wholestage off                    2029           2073          62         10.3          96.8       1.0X
-semi join w long wholestage on                     1193           1203          12         17.6          56.9       1.7X
+semi join w long wholestage off                    2039           2049          15         10.3          97.2       1.0X
+semi join w long wholestage on                     1073           1104          37         19.5          51.2       1.9X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 sort merge join:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sort merge join wholestage off                     1772           1777           7          1.2         844.9       1.0X
-sort merge join wholestage on                      1664           1685          18          1.3         793.3       1.1X
+sort merge join wholestage off                     1990           2036          65          1.1         948.7       1.0X
+sort merge join wholestage on                      1700           1838          98          1.2         810.8       1.2X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 sort merge join with duplicates:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-sort merge join with duplicates wholestage off           2244           2277          46          0.9        1069.9       1.0X
-sort merge join with duplicates wholestage on            2202           2259          67          1.0        1050.1       1.0X
+sort merge join with duplicates wholestage off           2393           2399           9          0.9        1140.9       1.0X
+sort merge join with duplicates wholestage on            2240           2286          47          0.9        1068.0       1.1X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 shuffle hash join:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-shuffle hash join wholestage off                   1091           1226         190          3.8         260.2       1.0X
-shuffle hash join wholestage on                     681            735          64          6.2         162.3       1.6X
+shuffle hash join wholestage off                   1125           1144          27          3.7         268.3       1.0X
+shuffle hash join wholestage on                     662            718          55          6.3         157.9       1.7X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 broadcast nested loop join:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-broadcast nested loop join wholestage off          52811          52820          13          0.4        2518.2       1.0X
-broadcast nested loop join wholestage on           30866          31938        1011          0.7        1471.8       1.7X
+broadcast nested loop join wholestage off          75115          76727        2281          0.3        3581.7       1.0X
+broadcast nested loop join wholestage on           34368          35527        1151          0.6        1638.8       2.2X
 
 

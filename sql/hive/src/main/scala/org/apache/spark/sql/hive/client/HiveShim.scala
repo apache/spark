@@ -620,7 +620,12 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       tableName: String,
       throwException: Boolean): Table = {
     recordHiveCall()
-    hive.getTable(dbName, tableName, throwException)
+    val table = hive.getTable(dbName, tableName, throwException)
+    if (table != null) {
+      table.getTTable.setTableName(tableName)
+      table.getTTable.setDbName(dbName)
+    }
+    table
   }
 
   override def getTablesByPattern(hive: Hive, dbName: String, pattern: String): Seq[String] = {

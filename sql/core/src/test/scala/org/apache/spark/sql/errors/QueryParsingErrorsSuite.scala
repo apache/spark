@@ -60,8 +60,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       "LEFT ANTI" -> (17, 72)).foreach { case (joinType, (start, stop)) =>
       checkError(
         exception = parseException(s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"),
-        errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_OF_TYPE",
-        sqlState = "0A000",
+        errorClass = "INVALID_LATERAL_JOIN_TYPE",
         parameters = Map("joinType" -> joinType),
         context = ExpectedContext(
           fragment = s"$joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
@@ -76,14 +75,14 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       " JOIN LATERAL t2" -> ("JOIN LATERAL t2", 17, 31),
       ", LATERAL (t2 JOIN t3)" -> ("FROM t1, LATERAL (t2 JOIN t3)", 9, 37),
       ", LATERAL (LATERAL t2)" -> ("FROM t1, LATERAL (LATERAL t2)", 9, 37),
-      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38),
-      ", LATERAL RANGE(0, 1)" -> ("FROM t1, LATERAL RANGE(0, 1)", 9, 36)
+      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38)
     ).foreach { case (sqlText, (fragment, start, stop)) =>
       checkError(
         exception = parseException(s"SELECT * FROM t1$sqlText"),
         errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
-        parameters = Map("inputString" -> "LATERAL can only be used with subquery."),
+        parameters = Map("inputString" ->
+          "LATERAL can only be used with subquery and table-valued functions."),
         context = ExpectedContext(fragment, start, stop))
     }
   }
@@ -323,7 +322,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'"),
       errorClass = "DUPLICATE_KEY",
-      sqlState = "23000",
+      sqlState = "23505",
       parameters = Map("keyColumn" -> "`p1`"),
       context = ExpectedContext(
         fragment = "PARTITION(p1='1', p1='1')",
@@ -335,7 +334,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')"),
       errorClass = "DUPLICATE_KEY",
-      sqlState = "23000",
+      sqlState = "23505",
       parameters = Map("keyColumn" -> "`key1`"),
       context = ExpectedContext(
         fragment = "('key1' = '1', 'key1' = '2')",
@@ -347,24 +346,24 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException(""),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = Some("42000"))
+      sqlState = Some("42617"))
 
     checkError(
       exception = parseException("   "),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = Some("42000"))
+      sqlState = Some("42617"))
 
     checkError(
       exception = parseException(" \n"),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = Some("42000"))
+      sqlState = Some("42617"))
   }
 
   test("PARSE_SYNTAX_ERROR: no viable input") {
     checkError(
       exception = parseException("select ((r + 1) "),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
@@ -372,13 +371,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select 1 1"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'1'", "hint" -> ": extra input '1'"))
 
     checkError(
       exception = parseException("select *\nfrom r as q t"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'t'", "hint" -> ": extra input 't'"))
   }
 
@@ -386,13 +385,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select * from r order by q from t"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'from'", "hint" -> ""))
 
     checkError(
       exception = parseException("select *\nfrom r\norder by q\nfrom t"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'from'", "hint" -> ""))
   }
 
@@ -401,13 +400,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select count(*"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "end of input", "hint" -> ""))
 
     checkError(
       exception = parseException("select 1 as a from"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
@@ -416,19 +415,19 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select * from a left join_ b on a.id = b.id"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'join_'", "hint" -> ": missing 'JOIN'"))
 
     checkError(
       exception = parseException("select * from test where test.t is like 'test'"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'is'", "hint" -> ""))
 
     checkError(
       exception = parseException("SELECT * FROM test WHERE x NOT NULL"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map("error" -> "'NOT'", "hint" -> ""))
   }
 
@@ -546,5 +545,77 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         fragment = sqlText,
         start = 0,
         stop = 124))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: array type definition is incomplete") {
+    // Cast simple array without specifying element type
+    checkError(
+      exception = parseException("SELECT CAST(array(1,2,3) AS ARRAY)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+      sqlState = "42K01",
+      parameters = Map("elementType" -> "<INT>"),
+      context = ExpectedContext(fragment = "ARRAY", start = 28, stop = 32))
+    // Cast array of array without specifying element type for inner array
+    checkError(
+      exception = parseException("SELECT CAST(array(array(3)) AS ARRAY<ARRAY>)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+      sqlState = "42K01",
+      parameters = Map("elementType" -> "<INT>"),
+      context = ExpectedContext(fragment = "ARRAY", start = 37, stop = 41))
+    // Create column of array type without specifying element type
+    checkError(
+      exception = parseException("CREATE TABLE tbl_120691 (col1 ARRAY)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+      sqlState = "42K01",
+      parameters = Map("elementType" -> "<INT>"),
+      context = ExpectedContext(fragment = "ARRAY", start = 30, stop = 34))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: struct type definition is incomplete") {
+    // Cast simple struct without specifying field type
+    checkError(
+      exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 29, stop = 34))
+    // Cast array of struct without specifying field type in struct
+    checkError(
+      exception = parseException("SELECT CAST(array(struct(1,2)) AS ARRAY<STRUCT>)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 40, stop = 45))
+    // Create column of struct type without specifying field type
+    checkError(
+      exception = parseException("CREATE TABLE tbl_120691 (col1 STRUCT)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 30, stop = 35))
+    // Invalid syntax `STRUCT<INT>` without field name
+    checkError(
+      exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT<INT>)"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'>'", "hint" -> ""))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: map type definition is incomplete") {
+    // Cast simple map without specifying element type
+    checkError(
+      exception = parseException("SELECT CAST(map(1,'2') AS MAP)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "MAP", start = 26, stop = 28))
+    // Create column of map type without specifying key/value types
+    checkError(
+      exception = parseException("CREATE TABLE tbl_120691 (col1 MAP)"),
+      errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "MAP", start = 30, stop = 32))
+    // Invalid syntax `MAP<String>` with only key type
+    checkError(
+      exception = parseException("SELECT CAST(map('1',2) AS MAP<STRING>)"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'>'", "hint" -> ""))
   }
 }

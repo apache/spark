@@ -31,11 +31,13 @@ import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Valid
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BinaryType, Decimal, IntegerType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, Decimal, IntegerType, NullType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 
@@ -1424,6 +1426,73 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
 
     assert(count == inputRows.length)
+  }
+
+  test("roundtrip arrow batches with complex schema") {
+    val rows = (0 until 9).map { i =>
+      InternalRow(i, UTF8String.fromString(s"str-$i"), InternalRow(i))
+    }
+
+    val schema = StructType(Seq(
+      StructField("int", IntegerType),
+      StructField("str", StringType),
+      StructField("struct", StructType(Seq(StructField("inner", IntegerType))))
+    ))
+    val inputRows = rows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    val ctx = TaskContext.empty()
+    val batchIter =
+      ArrowConverters.toBatchWithSchemaIterator(inputRows.iterator, schema, 5, 1024 * 1024, null)
+    val (outputRowIter, outputType) = ArrowConverters.fromBatchWithSchemaIterator(batchIter, ctx)
+
+    var count = 0
+    outputRowIter.zipWithIndex.foreach { case (row, i) =>
+      assert(row.getInt(0) == i)
+      assert(row.getString(1) == s"str-$i")
+      assert(row.getStruct(2, 1).getInt(0) == i)
+      count += 1
+    }
+
+    assert(count == inputRows.length)
+    assert(schema == outputType)
+  }
+
+  test("roundtrip empty arrow batches") {
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+    val batchIter =
+      ArrowConverters.toBatchWithSchemaIterator(Iterator.empty, schema, 5, 1024 * 1024, null)
+    val (outputRowIter, outputType) = ArrowConverters.fromBatchWithSchemaIterator(batchIter, ctx)
+
+    assert(0 == outputRowIter.length)
+    assert(outputType == null)
+  }
+
+  test("two batches with different schema") {
+    val schema1 = StructType(Seq(StructField("field1", IntegerType, nullable = true)))
+    val inputRows1 = Array(InternalRow(1)).map { row =>
+      val proj = UnsafeProjection.create(schema1)
+      proj(row).copy()
+    }
+    val batchIter1 = ArrowConverters.toBatchWithSchemaIterator(
+      inputRows1.iterator, schema1, 5, 1024 * 1024, null)
+
+    val schema2 = StructType(Seq(StructField("field2", IntegerType, nullable = true)))
+    val inputRows2 = Array(InternalRow(1)).map { row =>
+      val proj = UnsafeProjection.create(schema2)
+      proj(row).copy()
+    }
+    val batchIter2 = ArrowConverters.toBatchWithSchemaIterator(
+      inputRows2.iterator, schema2, 5, 1024 * 1024, null)
+
+    val iter = batchIter1.toArray ++ batchIter2
+
+    val ctx = TaskContext.empty()
+    intercept[IllegalArgumentException] {
+      ArrowConverters.fromBatchWithSchemaIterator(iter.iterator, ctx)._1.toArray
+    }
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */

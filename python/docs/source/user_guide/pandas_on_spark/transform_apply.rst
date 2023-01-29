@@ -52,14 +52,14 @@ to return the same length of the input and the latter does not require this. See
    ...
    >>> psdf.apply(pandas_plus)
 
-In this case, each function takes a pandas Series, and pandas API on Spark computes the functions in a distributed manner as below.
+In this case, each function takes a pandas Series, and the pandas API on Spark computes the functions in a distributed manner as below.
 
 .. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply1.png
   :alt: transform and apply
   :align: center
   :width: 550
 
-In case of 'column' axis, the function takes each row as a pandas Series.
+In the case of 'column' axis, the function takes each row as a pandas Series.
 
 .. code-block:: python
 
@@ -77,7 +77,7 @@ The example above calculates the summation of each row as a pandas Series. See b
   :width: 600
 
 In the examples above, the type hints were not used for simplicity but it is encouraged to use them to avoid performance penalty.
-Please refer the API documentations.
+Please refer to the API documentations.
 
 
 ``pandas_on_spark.transform_batch`` and ``pandas_on_spark.apply_batch``
@@ -136,4 +136,4 @@ Under the hood, each batch of pandas-on-Spark Series is split to multiple pandas
   :width: 350
   :align: center
 
-There are more details such as the type inference and preventing its performance penalty. Please refer the API documentations.
+There are more details such as the type inference and preventing its performance penalty. Please refer to the API documentations.

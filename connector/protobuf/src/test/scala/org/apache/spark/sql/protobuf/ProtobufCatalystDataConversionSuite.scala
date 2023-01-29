@@ -34,9 +34,10 @@ import org.apache.spark.unsafe.types.UTF8String
 class ProtobufCatalystDataConversionSuite
     extends SparkFunSuite
     with SharedSparkSession
-    with ExpressionEvalHelper {
+    with ExpressionEvalHelper
+    with ProtobufTestBase {
 
-  private val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
+  private val testFileDesc = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes$"
 
   private def checkResultWithEval(
@@ -116,23 +117,28 @@ class ProtobufCatalystDataConversionSuite
     StructType(StructField("string_type", StringType, nullable = true) :: Nil))
 
   private val catalystTypesToProtoMessages: Map[DataType, (String, Any)] = Map(
-    IntegerType -> ("IntegerMsg", 0),
-    DoubleType -> ("DoubleMsg", 0.0d),
-    FloatType -> ("FloatMsg", 0.0f),
-    BinaryType -> ("BytesMsg", ByteString.empty().toByteArray),
-    StringType -> ("StringMsg", ""))
+    (IntegerType, ("IntegerMsg", 0)), // Don't use '->', it causes a scala warning.
+    (DoubleType, ("DoubleMsg", 0.0d)),
+    (FloatType, ("FloatMsg", 0.0f)),
+    (BinaryType, ("BytesMsg", ByteString.empty().toByteArray)),
+    (StringType, ("StringMsg", "")))
 
   testingTypes.foreach { dt =>
-    val seed = 1 + scala.util.Random.nextInt((1024 - 1) + 1)
+    val seed = scala.util.Random.nextInt(RandomDataGenerator.MAX_STR_LEN)
     test(s"single $dt with seed $seed") {
 
       val (messageName, defaultValue) = catalystTypesToProtoMessages(dt.fields(0).dataType)
 
       val rand = new scala.util.Random(seed)
       val generator = RandomDataGenerator.forType(dt, rand = rand).get
-      var data = generator()
-      while (data.asInstanceOf[Row].get(0) == defaultValue) // Do not use default values, since
-        data = generator()                                  // from_protobuf() returns null in v3.
+      var data = generator().asInstanceOf[Row]
+      // Do not use default values, since from_protobuf() returns null in v3.
+      while (
+        data != null &&
+        (data.get(0) == defaultValue ||
+          (dt == BinaryType &&
+            data.get(0).asInstanceOf[Array[Byte]].isEmpty)))
+        data = generator().asInstanceOf[Row]
 
       val converter = CatalystTypeConverters.createToCatalystConverter(dt)
       val input = Literal.create(converter(data), dt)

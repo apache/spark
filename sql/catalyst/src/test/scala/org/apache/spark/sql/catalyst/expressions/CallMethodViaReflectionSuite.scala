@@ -97,10 +97,34 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
   }
 
   test("input type checking") {
-    assert(CallMethodViaReflection(Seq.empty).checkInputDataTypes().isFailure)
-    assert(CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes().isFailure)
+    assert(CallMethodViaReflection(Seq.empty).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`reflect`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "0")
+      )
+    )
+    assert(CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`reflect`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "1")
+      )
+    )
     assert(CallMethodViaReflection(
-      Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes().isFailure)
+      Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "method",
+          "inputType" -> "\"STRING\"",
+          "inputExpr" -> "\"1\"")
+      )
+    )
     assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
   }
 

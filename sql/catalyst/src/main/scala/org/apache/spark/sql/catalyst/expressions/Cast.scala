@@ -21,7 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -46,9 +46,9 @@ object Cast extends QueryErrorsBase {
    * As per section 6.13 "cast specification" in "Information technology — Database languages " +
    * "- SQL — Part 2: Foundation (SQL/Foundation)":
    * If the <cast operand> is a <value expression>, then the valid combinations of TD and SD
-   * in a <cast specification> are given by the following table. “Y” indicates that the
-   * combination is syntactically valid without restriction; “M” indicates that the combination
-   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and “N” indicates
+   * in a <cast specification> are given by the following table. "Y" indicates that the
+   * combination is syntactically valid without restriction; "M" indicates that the combination
+   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and "N" indicates
    * that the combination is not valid:
    * SD                   TD
    *     EN AN C D T TS YM DT BO UDT B RT CT RW
@@ -294,6 +294,9 @@ object Cast extends QueryErrorsBase {
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
+    case (DateType, TimestampNTZType) => true
+    case (TimestampNTZType, TimestampType) => true
+    case (TimestampType, TimestampNTZType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
     case (NullType, _) => true
@@ -419,7 +422,7 @@ object Cast extends QueryErrorsBase {
       fallbackConf: Option[(String, String)]): DataTypeMismatch = {
     def withFunSuggest(names: String*): DataTypeMismatch = {
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(from),
           "targetType" -> toSQLType(to),
@@ -507,7 +510,7 @@ case class Cast(
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   def ansiEnabled: Boolean = {
-    evalMode == EvalMode.ANSI || evalMode == EvalMode.TRY
+    evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
   }
 
   // Whether this expression is used for `try_cast()`.
@@ -771,7 +774,7 @@ case class Cast(
         }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => if (b) 1L else 0)
+      buildCast[Boolean](_, b => if (b) 1L else 0L)
     case LongType =>
       buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
@@ -1267,7 +1270,7 @@ case class Cast(
   }
 
   private def cast(from: DataType, to: DataType): Any => Any = {
-    if (!isTryCast) {
+    if (!isTryCast || canUseLegacyCastForTryCast) {
       castInternal(from, to)
     } else {
       (input: Any) =>
@@ -1277,6 +1280,20 @@ case class Cast(
           case _: Exception =>
             null
         }
+    }
+  }
+
+  // Whether Spark SQL can evaluation the try_cast as the legacy cast, so that no `try...catch`
+  // is needed and the performance can be faster.
+  private lazy val canUseLegacyCastForTryCast: Boolean = {
+    if (!child.resolved) {
+      false
+    } else {
+      (child.dataType, dataType) match {
+        case (StringType, _: FractionalType) => true
+        case (StringType, _: DatetimeType) => true
+        case _ => false
+      }
     }
   }
 
@@ -1345,7 +1362,7 @@ case class Cast(
   protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
-    val castCodeWithTryCatchIfNeeded = if (!isTryCast) {
+    val castCodeWithTryCatchIfNeeded = if (!isTryCast || canUseLegacyCastForTryCast) {
       s"${cast(input, result, resultIsNull)}"
     } else {
       s"""
@@ -2492,21 +2509,42 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
  * Casting a numeric value as another numeric type in store assignment. It can capture the
  * arithmetic errors and show proper error messages to users.
  */
-case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends UnaryExpression {
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild.asInstanceOf[Cast])
+case class CheckOverflowInTableInsert(child: Expression, columnName: String)
+    extends UnaryExpression {
+  checkChild(child)
+
+  private def checkChild(child: Expression): Unit = child match {
+    case _: Cast =>
+    case ExpressionProxy(c, _, _) if c.isInstanceOf[Cast] =>
+    case _ =>
+      throw SparkException.internalError("Child is not Cast or ExpressionProxy of Cast")
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    checkChild(newChild)
+    copy(child = newChild)
+  }
+
+  private def getCast: Cast = child match {
+    case c: Cast =>
+      c
+    case ExpressionProxy(c, _, _) =>
+      c.asInstanceOf[Cast]
+  }
 
   override def eval(input: InternalRow): Any = try {
     child.eval(input)
   } catch {
     case e: SparkArithmeticException =>
+      val cast = getCast
       throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
-        child.child.dataType,
-        child.dataType,
+        cast.child.dataType,
+        cast.dataType,
         columnName)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val child = getCast
     val childGen = child.genCode(ctx)
     val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
     val fromDt =

@@ -69,7 +69,17 @@ select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "sqlState" : "42K06",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 80,
+    "fragment" : "to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))"
+  } ]
+}
 
 
 -- !query
@@ -78,7 +88,20 @@ select to_json(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "sqlState" : "42K06",
+  "messageParameters" : {
+    "mapType" : "\"MAP<STRING, INT>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "to_json(named_struct('a', 1, 'b', 2), map('mode', 1))"
+  } ]
+}
 
 
 -- !query
@@ -88,11 +111,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 1 and 2",
-    "name" : "to_json"
+    "actualNum" : "0",
+    "expectedNum" : "[1, 2]",
+    "functionName" : "`to_json`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -126,7 +150,20 @@ select from_json('{"a":1}', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The expression '1' is not a valid schema string.; line 1 pos 7
+{
+  "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
+  "sqlState" : "42K07",
+  "messageParameters" : {
+    "inputSchema" : "\"1\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "from_json('{\"a\":1}', 1)"
+  } ]
+}
 
 
 -- !query
@@ -135,20 +172,21 @@ select from_json('{"a":1}', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot parse the data type: 
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 2)
-
-== SQL ==
-a InvalidType
---^^^
-
-Failed fallback parsing: 
-DataType invalidtype is not supported.(line 1, pos 2)
-
-== SQL ==
-a InvalidType
---^^^
-; line 1 pos 7
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'InvalidType'",
+    "hint" : ": extra input 'InvalidType'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "from_json('{\"a\":1}', 'a InvalidType')"
+  } ]
+}
 
 
 -- !query
@@ -157,7 +195,17 @@ select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "sqlState" : "42K06",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 72,
+    "fragment" : "from_json('{\"a\":1}', 'a INT', named_struct('mode', 'PERMISSIVE'))"
+  } ]
+}
 
 
 -- !query
@@ -166,7 +214,20 @@ select from_json('{"a":1}', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "sqlState" : "42K06",
+  "messageParameters" : {
+    "mapType" : "\"MAP<STRING, INT>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "from_json('{\"a\":1}', 'a INT', map('mode', 1))"
+  } ]
+}
 
 
 -- !query
@@ -176,11 +237,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 2 and 3",
-    "name" : "from_json"
+    "actualNum" : "0",
+    "expectedNum" : "[2, 3]",
+    "functionName" : "`from_json`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -366,6 +428,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "datetime" : "'02-29'"
@@ -384,6 +447,7 @@ struct<>
 org.apache.spark.SparkUpgradeException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "datetime" : "'02-29'"
@@ -431,6 +495,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "json",
     "sqlExpr" : "\"schema_of_json(NULL)\""
@@ -461,6 +526,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"jsonField\"",
     "inputName" : "json",
@@ -493,6 +559,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"2\"",
     "inputType" : "\"INT\"",
@@ -517,11 +584,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "1",
-    "name" : "json_array_length"
+    "actualNum" : "0",
+    "expectedNum" : "1",
+    "functionName" : "`json_array_length`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -604,11 +672,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "1",
-    "name" : "json_object_keys"
+    "actualNum" : "0",
+    "expectedNum" : "1",
+    "functionName" : "`json_object_keys`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -636,6 +705,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"200\"",
     "inputType" : "\"INT\"",

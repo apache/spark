@@ -27,7 +27,7 @@ To run tests with Hadoop 2.x instead of Hadoop 3.x, use `--hadoop-profile`.
 
     ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2
 
-The minimum tested version of Minikube is 1.18.0. The kube-dns addon must be enabled. Minikube should
+The minimum tested version of Minikube is 1.28.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
@@ -46,7 +46,7 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 1.18.0 or greater be installed and that it be allocated
+Uses the local `minikube` cluster, this requires that `minikube` 1.28.0 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
@@ -283,6 +283,14 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     </td>
     <td></td>
   </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.volcanoMaxConcurrencyJobNum</code></td>
+    <td>
+      Set maximum number for concurrency jobs, It helps developers setting suitable resources according to test env in
+      volcano test.
+    </td>
+    <td></td>
+  </tr>
 </table>
 
 # Running the Kubernetes Integration Tests with SBT
@@ -331,11 +339,7 @@ Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage 
 
 ## Installation
 
-    # x86_64
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
-
-    # arm64:
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
 
 ## Run tests
 
@@ -356,13 +360,5 @@ You can also specify `volcano` tag to only run Volcano test:
 
 ## Cleanup Volcano
 
-    # x86_64
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
-
-    # arm64:
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
-    
-    # Cleanup Volcano webhook 
-    kubectl delete validatingwebhookconfigurations volcano-admission-service-jobs-validate volcano-admission-service-pods-validate volcano-admission-service-queues-validate
-    kubectl delete mutatingwebhookconfigurations volcano-admission-service-jobs-mutate volcano-admission-service-podgroups-mutate volcano-admission-service-pods-mutate volcano-admission-service-queues-mutate
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
 

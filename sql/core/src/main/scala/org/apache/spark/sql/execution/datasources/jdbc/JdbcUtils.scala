@@ -823,8 +823,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
 
     // checks duplicate columns in the user specified column types.
-    SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "in the createTableColumnTypes option value", conf.resolver)
+    SchemaUtils.checkColumnNameDuplication(userSchema.map(_.name), conf.resolver)
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
@@ -849,10 +848,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     if (null != customSchema && customSchema.nonEmpty) {
       val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-      SchemaUtils.checkSchemaColumnNameDuplication(
-        userSchema,
-        "in the customSchema option value",
-        nameEquality)
+      SchemaUtils.checkSchemaColumnNameDuplication(userSchema, nameEquality)
 
       // This is resolved by names, use the custom filed dataType to replace the default dataType.
       val newSchema = tableSchema.map { col =>

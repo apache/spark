@@ -17,6 +17,7 @@
 // cd connector/protobuf/src/test/resources/protobuf
 // protoc --java_out=./ basicmessage.proto
 // protoc --include_imports --descriptor_set_out=basicmessage.desc --java_out=org/apache/spark/sql/protobuf/ basicmessage.proto
+// protoc --descriptor_set_out=basicmessage_noimports.desc --java_out=org/apache/spark/sql/protobuf/ basicmessage.proto
 
 syntax = "proto3";
 

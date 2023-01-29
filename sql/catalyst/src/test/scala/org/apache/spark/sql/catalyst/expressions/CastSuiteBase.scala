@@ -24,11 +24,12 @@ import java.util.{Calendar, Locale, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -542,18 +543,74 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
-    assert(cast(1.toByte, to).checkInputDataTypes().isFailure)
-    assert(cast(1.toShort, to).checkInputDataTypes().isFailure)
-    assert(cast(1, to).checkInputDataTypes().isFailure)
-    assert(cast(1L, to).checkInputDataTypes().isFailure)
-    assert(cast(1.0.toFloat, to).checkInputDataTypes().isFailure)
-    assert(cast(1.0, to).checkInputDataTypes().isFailure)
+    cast(1.toByte, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.toByte).dataType),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+        )
+      )
+    cast(1.toShort, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.toShort).dataType),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+        )
+      )
+    cast(1, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1).dataType),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+        )
+      )
+    cast(1L, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1L).dataType),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+        )
+      )
+    cast(1.0.toFloat, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+        )
+      )
+    cast(1.0, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.0).dataType),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+        )
+      )
   }
 
   test("SPARK-16729 type checking for casting to date type") {
     assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
     assert(cast(new Timestamp(1), DateType).checkInputDataTypes().isSuccess)
-    assert(cast(false, DateType).checkInputDataTypes().isFailure)
+    assert(cast(false, DateType).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> "\"BOOLEAN\"",
+          "targetType" -> "\"DATE\""
+        )
+      )
+    )
     checkInvalidCastFromNumericType(DateType)
   }
 
@@ -662,6 +719,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       yearMonthIntervalTypes.foreach { to =>
         assert(Cast.canUpCast(from, to))
       }
+    }
+
+    {
+      assert(Cast.canUpCast(DateType, TimestampType))
+      assert(Cast.canUpCast(DateType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampNTZType, TimestampType))
+      assert(!Cast.canUpCast(TimestampType, DateType))
+      assert(!Cast.canUpCast(TimestampNTZType, DateType))
     }
   }
 
@@ -1324,5 +1390,31 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val expr = CheckOverflowInTableInsert(cast, "column_1")
     assert(expr.sql == cast.sql)
     assert(expr.toString == cast.toString)
+  }
+
+  test("SPARK-41991: CheckOverflowInTableInsert child must be Cast or ExpressionProxy of Cast") {
+    val runtime = new SubExprEvaluationRuntime(1)
+    val cast = Cast(Literal(1.0), IntegerType)
+    val expr = CheckOverflowInTableInsert(cast, "column_1")
+    val proxy = ExpressionProxy(Literal(1.0), 0, runtime)
+    checkError(
+      exception = intercept[SparkException] {
+        expr.withNewChildrenInternal(IndexedSeq(proxy))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "Child is not Cast or ExpressionProxy of Cast"
+      )
+    )
+
+    checkError(
+      exception = intercept[SparkException] {
+        expr.withNewChildrenInternal(IndexedSeq(Literal(1)))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "Child is not Cast or ExpressionProxy of Cast"
+      )
+    )
   }
 }

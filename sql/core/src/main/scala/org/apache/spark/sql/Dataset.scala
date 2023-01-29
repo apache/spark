@@ -34,9 +34,9 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
@@ -2756,7 +2756,6 @@ class Dataset[T] private[sql](
         s"the size of columns: ${cols.size}")
     SchemaUtils.checkColumnNameDuplication(
       colNames,
-      "in given column names",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val resolver = sparkSession.sessionState.analyzer.resolver
@@ -2856,7 +2855,6 @@ class Dataset[T] private[sql](
     }
     SchemaUtils.checkColumnNameDuplication(
       projectList.map(_.name),
-      "in given column names for withColumnsRenamed",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
     withPlan(Project(projectList, logicalPlan))
   }
@@ -3799,13 +3797,21 @@ class Dataset[T] private[sql](
       global: Boolean): CreateViewCommand = {
     val viewType = if (global) GlobalTempView else LocalTempView
 
-    val tableIdentifier = try {
-      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
+    val identifier = try {
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(viewName)
     } catch {
       case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
+
+    if (!SQLConf.get.allowsTempViewCreationWithMultipleNameparts && identifier.size > 1) {
+      // Temporary view names should NOT contain database prefix like "database.table"
+      throw new AnalysisException(
+        errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("actualName" -> viewName))
+    }
+
     CreateViewCommand(
-      name = tableIdentifier,
+      name = TableIdentifier(identifier.last),
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,
@@ -3870,7 +3876,7 @@ class Dataset[T] private[sql](
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2310",
+        errorClass = "WRITE_STREAM_NOT_ALLOWED",
         messageParameters = Map.empty)
     }
     new DataStreamWriter[T](this)
@@ -3919,18 +3925,18 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def inputFiles: Array[String] = {
-    val files: Seq[String] = queryExecution.optimizedPlan.collect {
+    val files: Seq[SparkPath] = queryExecution.optimizedPlan.collect {
       case LogicalRelation(fsBasedRelation: FileRelation, _, _, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles
       case r: HiveTableRelation =>
-        r.tableMeta.storage.locationUri.map(_.toString).toArray
+        r.tableMeta.storage.locationUri.map(SparkPath.fromUri).toArray
       case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
           _, _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
-    files.toSet.toArray
+    files.iterator.map(_.urlEncoded).toSet.toArray
   }
 
   /**

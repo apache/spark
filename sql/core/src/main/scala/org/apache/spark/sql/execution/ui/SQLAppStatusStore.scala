@@ -83,13 +83,15 @@ class SQLAppStatusStore(
 
 class SQLExecutionUIData(
     @KVIndexParam val executionId: Long,
+    val rootExecutionId: Long,
     val description: String,
     val details: String,
     val physicalPlanDescription: String,
     val modifiedConfigs: Map[String, String],
-    val metrics: Seq[SQLPlanMetric],
+    val metrics: collection.Seq[SQLPlanMetric],
     val submissionTime: Long,
     val completionTime: Option[Date],
+    val errorMessage: Option[String],
     @JsonDeserialize(keyAs = classOf[Integer])
     val jobs: Map[Int, JobExecutionStatus],
     @JsonDeserialize(contentAs = classOf[Integer])
@@ -100,8 +102,7 @@ class SQLExecutionUIData(
      * from the SQL listener instance.
      */
     @JsonDeserialize(keyAs = classOf[JLong])
-    val metricValues: Map[Long, String],
-    val errorMessage: Option[String]) {
+    val metricValues: Map[Long, String]) {
 
   @JsonIgnore @KVIndex("completionTime")
   private def completionTimeIndex: Long = completionTime.map(_.getTime).getOrElse(-1L)
@@ -109,8 +110,8 @@ class SQLExecutionUIData(
 
 class SparkPlanGraphWrapper(
     @KVIndexParam val executionId: Long,
-    val nodes: Seq[SparkPlanGraphNodeWrapper],
-    val edges: Seq[SparkPlanGraphEdge]) {
+    val nodes: collection.Seq[SparkPlanGraphNodeWrapper],
+    val edges: collection.Seq[SparkPlanGraphEdge]) {
 
   def toSparkPlanGraph(): SparkPlanGraph = {
     SparkPlanGraph(nodes.map(_.toSparkPlanGraphNode()), edges)
@@ -122,8 +123,8 @@ class SparkPlanGraphClusterWrapper(
     val id: Long,
     val name: String,
     val desc: String,
-    val nodes: Seq[SparkPlanGraphNodeWrapper],
-    val metrics: Seq[SQLPlanMetric]) {
+    val nodes: collection.Seq[SparkPlanGraphNodeWrapper],
+    val metrics: collection.Seq[SQLPlanMetric]) {
 
   def toSparkPlanGraphCluster(): SparkPlanGraphCluster = {
     new SparkPlanGraphCluster(id, name, desc,

@@ -3,23 +3,23 @@ Benchmark for performance of subexpression elimination
 ================================================================================================
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 from_json as subExpr in Project:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-subExprElimination false, codegen: true            8634           8933         263          0.0    86344523.0       1.0X
-subExprElimination false, codegen: false           8571           8846         366          0.0    85710729.7       1.0X
-subExprElimination true, codegen: true             1319           1383          75          0.0    13187016.1       6.5X
-subExprElimination true, codegen: false            1217           1253          57          0.0    12165094.1       7.1X
+subExprElimination false, codegen: true            6984           7135         222          0.0    69839783.5       1.0X
+subExprElimination false, codegen: false           6797           6877          70          0.0    67967038.2       1.0X
+subExprElimination true, codegen: true             1099           1227         123          0.0    10985344.1       6.4X
+subExprElimination true, codegen: false            1014           1042          37          0.0    10135038.9       6.9X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 from_json as subExpr in Filter:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-subExprElimination false, codegen: true           11953          12509         675          0.0   119534365.1       1.0X
-subExprElimination false, codegen: false          11837          12072         215          0.0   118374804.2       1.0X
-subExprElimination true, codegen: true             6198           6360         157          0.0    61976990.1       1.9X
-subExprElimination true, codegen: false            6563           6670         101          0.0    65632128.3       1.8X
+subExprElimination false, codegen: true            8936           9056         106          0.0    89362538.0       1.0X
+subExprElimination false, codegen: false           8884           8960          65          0.0    88843546.6       1.0X
+subExprElimination true, codegen: true             3774           3898         110          0.0    37744691.5       2.4X
+subExprElimination true, codegen: false            3843           3959         157          0.0    38434392.4       2.3X
 
 

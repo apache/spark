@@ -136,7 +136,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "limitExpr" : "CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END",
     "name" : "limit"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 76,
+    "fragment" : "case when random() < 0.5 then bigint(null) end"
+  } ]
 }
 
 
@@ -151,7 +158,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "limitExpr" : "CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END",
     "name" : "offset"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 77,
+    "fragment" : "case when random() < 0.5 then bigint(null) end"
+  } ]
 }
 
 

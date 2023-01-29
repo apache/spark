@@ -120,6 +120,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       caseSensitive = false)
   }
 
+  test("SPARK-42108: transform count(*) to count(1)") {
+    val a = testRelation.output(0)
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: Nil, testRelation))
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() ::
+          Alias(UnresolvedFunction("count" :: Nil,
+            UnresolvedAttribute("a") :: Nil, isDistinct = false), "y")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: count(a).as("y") :: Nil, testRelation))
+  }
+
   test("resolve sort references - filter/limit") {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)
@@ -517,8 +535,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-20311 range(N) as alias") {
     def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
-        .select(star())
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("range",
+          UnresolvedTableValuedFunction("range", args.map(Literal(_))), outputNames)
+        .select(star()))
     }
     assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
@@ -681,7 +701,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
     val cond = $"a" > 1
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       MergeIntoTable(
         testRelation,
         testRelation,
@@ -690,7 +710,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Nil,
         Nil
       ),
-      "Reference 'a' is ambiguous" :: Nil)
+      "AMBIGUOUS_REFERENCE",
+      Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))
   }
 
   test("SPARK-24488 Generator with multiple aliases") {
@@ -1293,5 +1314,33 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     assertAnalysisSuccess(finalPlan)
+  }
+
+  test("SPARK-41271: bind named parameters to literals") {
+    comparePlans(
+      Parameter.bind(
+        plan = parsePlan("SELECT * FROM a LIMIT :limitA"),
+        args = Map("limitA" -> Literal(10))),
+      parsePlan("SELECT * FROM a LIMIT 10"))
+    // Ignore unused arguments
+    comparePlans(
+      Parameter.bind(
+        plan = parsePlan("SELECT c FROM a WHERE c < :param2"),
+        args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
+      parsePlan("SELECT c FROM a WHERE c < 20"))
+  }
+
+  test("SPARK-41489: type of filter expression should be a bool") {
+    assertAnalysisErrorClass(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id)
+         |SELECT *
+         |FROM t1
+         |WHERE 'true'""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
+      ,
+      queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
   }
 }

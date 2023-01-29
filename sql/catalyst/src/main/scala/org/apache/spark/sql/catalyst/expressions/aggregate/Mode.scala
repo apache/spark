@@ -142,7 +142,7 @@ case class PandasMode(
 
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
     if (buffer.isEmpty) {
-      return new GenericArrayData(Seq.empty)
+      return new GenericArrayData(Array.empty)
     }
 
     val modes = collection.mutable.ArrayBuffer.empty[AnyRef]
@@ -158,7 +158,7 @@ case class PandasMode(
         modes.append(key)
       }
     }
-    new GenericArrayData(modes.toSeq)
+    new GenericArrayData(modes)
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PandasMode =

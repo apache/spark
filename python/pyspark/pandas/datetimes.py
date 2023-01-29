@@ -534,7 +534,7 @@ class DatetimeMethods:
 
         The time component of the date-time is converted to midnight i.e.
         00:00:00. This is useful in cases, when the time does not matter.
-        Length is unaltered. The timezones are unaffected.
+        Length is unaltered. The time zones are unaffected.
 
         This method is available on Series with datetime values under
         the ``.dt`` accessor, and directly on Datetime Array.
@@ -572,7 +572,7 @@ class DatetimeMethods:
 
         Return an series of formatted strings specified by date_format, which
         supports the same string format as the python standard library. Details
-        of the string format can be found in python string format
+        of the string format can be found in the python string format
         doc.
 
         Parameters

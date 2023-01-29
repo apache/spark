@@ -21,7 +21,7 @@ from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
-from pyspark.sql.utils import ParseException, PythonException
+from pyspark.errors import ParseException, PythonException
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -296,7 +296,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_udf import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

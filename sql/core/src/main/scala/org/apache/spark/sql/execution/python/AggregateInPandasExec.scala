@@ -120,7 +120,7 @@ case class AggregateInPandasExec(
     // Schema of input rows to the python runner
     val aggInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
       StructField(s"_$i", dt)
-    }.toSeq)
+    }.toArray)
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {

@@ -918,7 +918,7 @@ Idle eviction thread periodically removes producers which are not used longer th
 
 Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.` prefix, e.g,
 `stream.option("kafka.bootstrap.servers", "host:port")`. For possible kafka parameters, see
-[Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs) for
+[Kafka consumer config docs](http://kafka.apache.org/documentation.html#consumerconfigs) for
 parameters related to reading data, and [Kafka producer config docs](http://kafka.apache.org/documentation/#producerconfigs)
 for parameters related to writing data.
 

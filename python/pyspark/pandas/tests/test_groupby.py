@@ -2334,7 +2334,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     def test_apply_negative(self):
         def func(_) -> ps.Series[int]:
-            return pd.Series([1])  # type: ignore[return-value]
+            return pd.Series([1])
 
         with self.assertRaisesRegex(TypeError, "Series as a return type hint at frame groupby"):
             ps.range(10).groupby("id").apply(func)
@@ -3242,7 +3242,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_groupby import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

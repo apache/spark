@@ -83,6 +83,8 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      Specifies a source of input for the query. It can be one of the following:
      * Table relation
      * [Join relation](sql-ref-syntax-qry-select-join.html)
+     * [Pivot relation](sql-ref-syntax-qry-select-pivot.md)
+     * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.md)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )

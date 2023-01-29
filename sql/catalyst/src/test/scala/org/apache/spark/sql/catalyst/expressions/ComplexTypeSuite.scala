@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -278,9 +277,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       create_map(intSeq, strWithNull.map(_.value)))
 
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))), "Duplicate map key")
@@ -382,9 +381,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MapFromArrays(nullArray, nullArray), null)
 
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       MapFromArrays(intWithNullArray, strArray),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       MapFromArrays(
@@ -527,7 +526,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val s6 = Literal("a=1&b=2&c=3")
     val m6 = Map("a" -> "1", "b" -> "2", "c" -> "3")
-    checkEvaluation(new StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
+    checkEvaluation(StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
 
     checkExceptionInExpression[RuntimeException](
       new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
@@ -540,11 +539,51 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)
-    assert(new StringToMap(Literal(null)).checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes().isFailure)
-    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null), Literal(null))
-      .checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes().isFailure)
+    assert(new StringToMap(Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null),
+      Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
   }
 
   test("SPARK-22693: CreateNamedStruct should not use global variables") {

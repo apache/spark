@@ -119,6 +119,11 @@ private[spark] class KubernetesDriverConf(
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
   }
 
+  def serviceLabels: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf,
+      KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX)
+  }
+
   def serviceAnnotations: Map[String, String] = {
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf,
       KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX)

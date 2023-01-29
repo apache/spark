@@ -38,7 +38,8 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1270,8 +1271,11 @@ class CodegenContext extends Logging {
   def generateExpressions(
       expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
-    if (doSubexpressionElimination) subexpressionElimination(expressions)
-    expressions.map(e => e.genCode(this))
+    // We need to make sure that we do not reuse stateful expressions. This is needed for codegen
+    // as well because some expressions may implement `CodegenFallback`.
+    val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
+    if (doSubexpressionElimination) subexpressionElimination(cleanedExpressions)
+    cleanedExpressions.map(e => e.genCode(this))
   }
 
   /**
@@ -1622,17 +1626,19 @@ object CodeGenerator extends Logging {
   def getValue(input: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$input.getUTF8String($ordinal)"
-      case BinaryType => s"$input.getBinary($ordinal)"
-      case CalendarIntervalType => s"$input.getInterval($ordinal)"
-      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$input.getArray($ordinal)"
-      case _: MapType => s"$input.getMap($ordinal)"
-      case NullType => "null"
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
-      case _ => s"($jt)$input.get($ordinal, null)"
+      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
+      case _ => dataType.physicalDataType match {
+        case _: PhysicalArrayType => s"$input.getArray($ordinal)"
+        case PhysicalBinaryType => s"$input.getBinary($ordinal)"
+        case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
+        case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+        case _: PhysicalMapType => s"$input.getMap($ordinal)"
+        case PhysicalNullType => "null"
+        case PhysicalStringType => s"$input.getUTF8String($ordinal)"
+        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.size})"
+        case _ => s"($jt)$input.get($ordinal, null)"
+      }
     }
   }
 
@@ -1723,8 +1729,7 @@ object CodeGenerator extends Logging {
     if (nullable) {
       // Can't call setNullAt on DecimalType/CalendarIntervalType, because we need to keep the
       // offset
-      if (!isVectorized && (dataType.isInstanceOf[DecimalType] ||
-        dataType.isInstanceOf[CalendarIntervalType])) {
+      if (!isVectorized && UnsafeRowUtils.avoidSetNullAt(dataType)) {
         s"""
            |if (!${ev.isNull}) {
            |  ${setColumn(row, dataType, ordinal, ev.value)};
@@ -1901,24 +1906,26 @@ object CodeGenerator extends Logging {
    * Returns the Java type for a DataType.
    */
   def javaType(dt: DataType): String = dt match {
-    case BooleanType => JAVA_BOOLEAN
-    case ByteType => JAVA_BYTE
-    case ShortType => JAVA_SHORT
-    case IntegerType | DateType | _: YearMonthIntervalType => JAVA_INT
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => JAVA_LONG
-    case FloatType => JAVA_FLOAT
-    case DoubleType => JAVA_DOUBLE
-    case _: DecimalType => "Decimal"
-    case BinaryType => "byte[]"
-    case StringType => "UTF8String"
-    case CalendarIntervalType => "CalendarInterval"
-    case _: StructType => "InternalRow"
-    case _: ArrayType => "ArrayData"
-    case _: MapType => "MapData"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
-    case _ => "Object"
+    case _ => dt.physicalDataType match {
+      case _: PhysicalArrayType => "ArrayData"
+      case PhysicalBinaryType => "byte[]"
+      case PhysicalBooleanType => JAVA_BOOLEAN
+      case PhysicalByteType => JAVA_BYTE
+      case PhysicalCalendarIntervalType => "CalendarInterval"
+      case PhysicalIntegerType => JAVA_INT
+      case _: PhysicalDecimalType => "Decimal"
+      case PhysicalDoubleType => JAVA_DOUBLE
+      case PhysicalFloatType => JAVA_FLOAT
+      case PhysicalLongType => JAVA_LONG
+      case _: PhysicalMapType => "MapData"
+      case PhysicalShortType => JAVA_SHORT
+      case PhysicalStringType => "UTF8String"
+      case _: PhysicalStructType => "InternalRow"
+      case _ => "Object"
+    }
   }
 
   @tailrec

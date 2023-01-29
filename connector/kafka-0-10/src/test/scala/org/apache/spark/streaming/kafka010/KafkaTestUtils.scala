@@ -263,6 +263,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
     props.put("key.serializer", classOf[StringSerializer].getName)
     // wait for all in-sync replicas to ack sends
     props.put("acks", "all")
+    props.put("partitioner.class",
+      classOf[org.apache.kafka.clients.producer.internals.DefaultPartitioner].getName)
     props
   }
 

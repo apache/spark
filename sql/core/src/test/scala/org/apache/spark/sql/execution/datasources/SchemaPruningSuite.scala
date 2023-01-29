@@ -398,6 +398,26 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("SPARK-41961: nested schema pruning on table-valued generator functions") {
+    val query1 = sql("select friend.first from contacts, lateral explode(friends) t(friend)")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Currently we don't prune multiple field case.
+    val query2 = sql(
+      "select friend.first, friend.middle from contacts, lateral explode(friends) t(friend)")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    val query3 = sql(
+      """
+        |select friend.first, friend.middle, friend
+        |from contacts, lateral explode(friends) t(friend)
+        |""".stripMargin)
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
   testSchemaPruning("select one deep nested complex field after repartition") {
     val query = sql("select * from contacts")
       .repartition(100)
@@ -1103,5 +1123,12 @@ abstract class SchemaPruningSuite
     checkScan(query2, "struct<id:int,relatives:map<string,struct<first:string,middle:string>>>")
     checkAnswer(query2.orderBy("id"),
       Row("John", "Y."))
+  }
+
+  testSchemaPruning("SPARK-41017: column pruning through 2 filters") {
+    import testImplicits._
+    val query = spark.table("contacts").filter(rand() > 0.5).filter(rand() < 0.8)
+      .select($"id", $"name.first")
+    checkScan(query, "struct<id:int, name:struct<first:string>>")
   }
 }

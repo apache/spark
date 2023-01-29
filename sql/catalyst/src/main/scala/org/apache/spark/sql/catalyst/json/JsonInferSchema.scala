@@ -57,7 +57,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
     parseMode match {
       case PermissiveMode =>
-        Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
+        Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
       case DropMalformedMode =>
         None
       case FailFastMode =>

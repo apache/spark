@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -44,65 +44,46 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     intercept[AnalysisException](assertSuccess(expr))
   }
 
-  def assertError(expr: Expression, errorMessage: String): Unit = {
-    val e = intercept[AnalysisException] {
-      assertSuccess(expr)
-    }
-    assert(e.getMessage.contains(
-      s"cannot resolve '${expr.sql}' due to data type mismatch:"))
-    assert(e.getMessage.contains(errorMessage))
-  }
-
-  def assertSuccess(expr: Expression): Unit = {
+  private def assertSuccess(expr: Expression): Unit = {
     val analyzed = testRelation.select(expr.as("c")).analyze
     SimpleAnalyzer.checkAnalysis(analyzed)
   }
 
-  def assertErrorForBinaryDifferingTypes(
+  private def assertErrorForBinaryDifferingTypes(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = messageParameters)
   }
 
-  def assertErrorForOrderingTypes(
+  private def assertErrorForOrderingTypes(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = messageParameters)
   }
 
-  def assertErrorForDataDifferingTypes(
+  private def assertErrorForDataDifferingTypes(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = messageParameters)
   }
 
-  def assertErrorForWrongNumParameters(
+  private def assertErrorForWrongNumParameters(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       parameters = messageParameters)
   }
 
-  def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
+  private def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
       parameters = messageParameters)
   }
@@ -763,6 +744,60 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         errorSubClass = "HASH_MAP_TYPE",
         messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
       )
+    )
+  }
+
+  test("check types for Lag") {
+    val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
+    assert(lag.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "offset",
+          "inputType" -> "\"INT\"",
+          "inputExpr" -> "\"(- nonfoldableliteral())\""
+        )
+      ))
+  }
+
+  test("check types for SpecifiedWindowFrame") {
+    val swf1 = SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))
+    assert(swf1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+        messageParameters = Map(
+          "lower" -> "\"10.0\"",
+          "upper" -> "\"2147483648\"",
+          "lowerType" -> "\"DOUBLE\"",
+          "upperType" -> "\"BIGINT\""
+        )
+      )
+    )
+
+    val swf2 = SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(10.0), Literal(2147483648L))
+    assert(swf2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> "lower",
+          "expression" -> "\"nonfoldableliteral()\""
+        )
+      )
+    )
+  }
+
+  test("check types for WindowSpecDefinition") {
+    val wsd = WindowSpecDefinition(
+      UnresolvedAttribute("a") :: Nil,
+      SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+      UnspecifiedFrame)
+    checkError(
+      exception = intercept[SparkException] {
+        wsd.checkInputDataTypes()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> ("Cannot use an UnspecifiedFrame. " +
+        "This should have been converted during analysis."))
     )
   }
 }

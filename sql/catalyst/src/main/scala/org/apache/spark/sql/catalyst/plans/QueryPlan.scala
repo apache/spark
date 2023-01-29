@@ -301,7 +301,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
             "Found duplicate rewrite attributes")
 
-          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan.toSeq)
+          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
           // Using attrMapping from the children plans to rewrite their parent node.
           // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
           newPlan = newPlan.rewriteAttrs(attributeRewrites)

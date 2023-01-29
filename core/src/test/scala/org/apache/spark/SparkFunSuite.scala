@@ -32,7 +32,7 @@ import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
@@ -64,7 +64,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
  * }
  */
 abstract class SparkFunSuite
-  extends AnyFunSuite
+  extends AnyFunSuite // scalastyle:ignore funsuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit

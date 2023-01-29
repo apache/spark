@@ -162,6 +162,9 @@ case class BroadcastHashJoinExec(
               // Anti Join: Drop the row on the streamed side if it is a match on the build
               hashed.get(lookupKey) == null
             }
+          }).map(row => {
+            numOutputRows += 1
+            row
           })
         }
       }

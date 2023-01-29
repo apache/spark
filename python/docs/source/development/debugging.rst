@@ -172,7 +172,10 @@ Profiling Memory Usage (Memory Profiler)
 ----------------------------------------
 
 `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ is one of the profilers that allow you to
-check the memory usage line by line. This method documented here *only works for the driver side*.
+check the memory usage line by line.
+
+Driver Side
+~~~~~~~~~~~
 
 Unless you are running your driver program in another machine (e.g., YARN cluster mode), this useful tool can be used
 to debug the memory usage on driver side easily. Suppose your PySpark script name is ``profile_memory.py``.
@@ -207,6 +210,63 @@ You can profile it as below.
          7     51.5 MiB      0.6 MiB       session = SparkSession.builder.getOrCreate()
          8     51.5 MiB      0.0 MiB       df = session.range(10000)
          9     54.4 MiB      2.8 MiB       return df.collect()
+
+Python/Pandas UDF
+~~~~~~~~~~~~~~~~~
+
+PySpark provides remote `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ for
+Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile.memory`` configuration to ``true``. That
+can be used on editors with line numbers such as Jupyter notebooks. An example on a Jupyter notebook is as shown below.
+
+.. code-block:: bash
+
+    pyspark --conf spark.python.profile.memory=true
+
+
+.. code-block:: python
+
+    from pyspark.sql.functions import pandas_udf
+    df = spark.range(10)
+
+    @pandas_udf("long")
+    def add1(x):
+      return x + 1
+
+    added = df.select(add1("id"))
+    added.show()
+    sc.show_profiles()
+
+
+The result profile is as shown below.
+
+.. code-block:: text
+
+    ============================================================
+    Profile of UDF<id=2>
+    ============================================================
+    Filename: ...
+
+    Line #    Mem usage    Increment  Occurrences   Line Contents
+    =============================================================
+         4    974.0 MiB    974.0 MiB          10   @pandas_udf("long")
+         5                                         def add1(x):
+         6    974.4 MiB      0.4 MiB          10     return x + 1
+
+The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``ArrowEvalPython`` as shown below.
+
+.. code-block:: python
+
+    added.explain()
+
+
+.. code-block:: text
+
+    == Physical Plan ==
+    *(2) Project [pythonUDF0#11L AS add1(id)#3L]
+    +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
+       +- *(1) Range (0, 10, step=1, splits=16)
+
+This feature is not supported with registered UDFs or UDFs with iterators as inputs/outputs.
 
 
 Identifying Hot Loops (Python Profilers)

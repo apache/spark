@@ -284,8 +284,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[ParseException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0030",
-        parameters = Map("dataType" -> "bad_type"),
+        errorClass = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> "\"BAD_TYPE\""),
         context = ExpectedContext("bad_type", 51, 58))
     }
     // Update column type in not existing table and namespace

@@ -257,6 +257,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
   },
@@ -336,7 +337,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "invalidExprSqls" : "row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
     "operator" : "Join"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 84,
+    "fragment" : "INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10"
+  } ]
 }
 
 
@@ -351,7 +359,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "invalidExprSqls" : "RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
     "operator" : "Aggregate"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 58,
+    "stopIndex" : 67,
+    "fragment" : "GROUP BY 1"
+  } ]
 }
 
 
@@ -363,7 +378,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
     "hint" : ""
@@ -407,7 +422,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
     "hint" : ": extra input 'BY'"
@@ -422,10 +437,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.range",
-    "rawName" : "range"
+    "routineName" : "`range`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -445,6 +461,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0",
     "exprName" : "buckets",
@@ -469,6 +486,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0L",
     "exprName" : "offset",

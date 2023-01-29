@@ -34,7 +34,7 @@ class ErrorParserSuite extends AnalysisTest {
   test("semantic errors") {
     checkError(
       exception = parseException("select *\nfrom r\norder by q\ncluster by q"),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(fragment = "order by q\ncluster by q", start = 16, stop = 38))
   }
@@ -265,23 +265,23 @@ class ErrorParserSuite extends AnalysisTest {
     // general bad types
     checkError(
       exception = parseException("SELECT cast(1 as badtype)"),
-      errorClass = "_LEGACY_ERROR_TEMP_0030",
-      parameters = Map("dataType" -> "badtype"),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"BADTYPE\""),
       context = ExpectedContext(fragment = "badtype", start = 17, stop = 23))
     // special handling on char and varchar
     checkError(
       exception = parseException("SELECT cast('a' as CHAR)"),
-      errorClass = "PARSE_CHAR_MISSING_LENGTH",
+      errorClass = "DATATYPE_MISSING_SIZE",
       parameters = Map("type" -> "\"CHAR\""),
       context = ExpectedContext(fragment = "CHAR", start = 19, stop = 22))
     checkError(
       exception = parseException("SELECT cast('a' as Varchar)"),
-      errorClass = "PARSE_CHAR_MISSING_LENGTH",
+      errorClass = "DATATYPE_MISSING_SIZE",
       parameters = Map("type" -> "\"VARCHAR\""),
       context = ExpectedContext(fragment = "Varchar", start = 19, stop = 25))
     checkError(
       exception = parseException("SELECT cast('a' as Character)"),
-      errorClass = "PARSE_CHAR_MISSING_LENGTH",
+      errorClass = "DATATYPE_MISSING_SIZE",
       parameters = Map("type" -> "\"CHARACTER\""),
       context = ExpectedContext(fragment = "Character", start = 19, stop = 27))
   }
