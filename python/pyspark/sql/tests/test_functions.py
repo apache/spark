@@ -1021,7 +1021,7 @@ class FunctionsTestsMixin:
         with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "2000000"):
             df.select(assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
 
-        with self.assertRaises(TypeError) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             df.select(assert_true(df.id < 2, 5))
 
         self.check_error(
