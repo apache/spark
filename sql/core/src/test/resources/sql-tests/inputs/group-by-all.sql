@@ -71,9 +71,6 @@ select id + count(*) from data group by all;
 -- an even more complex case that we choose not to infer; fail with a useful error message
 select (id + id) / 2 + count(*) * 2 from data group by all;
 
--- GROUP BY alias has higher priority than GROUP BY all, this query fails as `id` is not in GROUP BY
-select country as all, id from data group by all;
-
 -- uncorrelated subquery should work
 select country, (select count(*) from data) as cnt, count(id) as cnt_id from data group by all;
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GetStructField, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -26,24 +27,23 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REF
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[Aggregate]]. It's only used by the real
  * rule `ResolveReferences`. The column resolution order for [[Aggregate]] is:
- * 1. Resolves the column to [[AttributeReference]] with the output of the child plan. This
+ * 1. Resolves the columns to [[AttributeReference]] with the output of the child plan. This
  *    includes metadata columns as well.
- * 2. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
+ * 2. Resolves the columns to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.
- * 3. If `Aggregate.aggregateExpressions` are all resolved, resolve GROUP BY alias and GROUP BY ALL
- *    for `Aggregate.groupingExpressions`:
+ * 3. If aggregate expressions are all resolved, resolve GROUP BY alias and GROUP BY ALL.
  * 3.1. If the grouping expressions contain an unresolved column whose name matches an alias in the
  *      SELECT list, resolves that unresolved column to the alias. This is to support SQL pattern
  *      like `SELECT a + b AS c, max(col) FROM t GROUP BY c`.
  * 3.2. If the grouping expressions only have one single unresolved column named 'ALL', expanded it
  *      to include all non-aggregate columns in the SELECT list. This is to support SQL pattern like
  *      `SELECT col1, col2, agg_expr(...) FROM t GROUP BY ALL`.
- * 4. Resolves the column in `Aggregate.aggregateExpressions` to [[LateralColumnAliasReference]] if
+ * 4. Resolves the columns in aggregate expressions to [[LateralColumnAliasReference]] if
  *    it references the alias defined previously in the SELECT list. The rule
  *    `ResolveLateralColumnAliasReference` will further resolve [[LateralColumnAliasReference]] and
  *    rewrite the plan. This is to support SQL pattern like
  *    `SELECT col1 + 1 AS x, x + 1 AS y, y + 1 AS z FROM t`.
- * 5. Resolves the column to outer references with the outer plan if we are resolving subquery
+ * 5. Resolves the columns to outer references with the outer plan if we are resolving subquery
  *    expressions.
  */
 object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionHelper {
@@ -74,23 +74,29 @@ object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionH
     // resolve it after `aggregateExpressions` are all resolved. Note: the basic resolution is
     // needed as `aggregateExpressions` may rely on `groupingExpressions` as well, for the session
     // window feature. See the rule `SessionWindowing` for more details.
-    if (resolvedAggExprsWithOuter.forall(_.resolved)) {
+    val resolvedGroupExprs = if (resolvedAggExprsWithOuter.forall(_.resolved)) {
+      val resolved = resolveGroupByAll(
+        resolvedAggExprsWithOuter,
+        resolveGroupByAlias(resolvedAggExprsWithOuter, resolvedGroupExprsNoOuter)
+      ).map(resolveOuterRef)
       // TODO: currently we don't support LCA in `groupingExpressions` yet.
-      if (resolvedAggExprsWithOuter.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
-        a.copy(resolvedGroupExprsNoOuter.map(resolveOuterRef), resolvedAggExprsWithOuter, a.child)
-      } else {
-        val finalGroupExprs = resolveGroupByAll(
-          resolvedAggExprsWithOuter,
-          resolveGroupByAlias(
-            resolvedAggExprsWithOuter, resolvedGroupExprsNoOuter)
-        ).map(resolveOuterRef)
-        a.copy(finalGroupExprs, resolvedAggExprsWithOuter, a.child)
+      if (resolved.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+          messageParameters = Map.empty)
       }
+      resolved
     } else {
-      a.copy(
-        groupingExpressions = resolvedGroupExprsNoOuter,
-        aggregateExpressions = resolvedAggExprsWithOuter)
+      // Do not resolve columns in grouping expressions to outer references here, as the aggregate
+      // expressions are not fully resolved yet and we still have chances to resolve GROUP BY
+      // alias/ALL in the next iteration. If aggregate expressions end up as unresolved, we don't
+      // need to resolve grouping expressions at all, as `CheckAnalysis` will report error for
+      // aggregate expressions first.
+      resolvedGroupExprsNoOuter
     }
+    a.copy(
+      groupingExpressions = resolvedGroupExprs,
+      aggregateExpressions = resolvedAggExprsWithOuter)
   }
 
   private def resolveGroupByAlias(

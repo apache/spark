@@ -41,6 +41,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
  *    nulls first/last.
  * 6. Resolves the column to outer references with the outer plan if we are resolving subquery
  *    expressions.
+ *
+ * Note, 3 and 4 are actually orthogonal. If the child plan is Aggregate, 4 can only resolve columns
+ * as the grouping columns, which is completely covered by 3.
  */
 object ResolveReferencesInSort extends SQLConfHelper with ColumnResolutionHelper {
 

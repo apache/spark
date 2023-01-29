@@ -1493,17 +1493,23 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    *
    * The general workflow to resolve references:
    * 1. Expands the star in Project/Aggregate/Generate.
-   * 2. Resolves the column to [[AttributeReference]] with the output of the children plans. This
+   * 2. Resolves the columns to [[AttributeReference]] with the output of the children plans. This
    *    includes metadata columns as well.
-   * 3. Resolves the column to a literal function which is allowed to be invoked without braces,
+   * 3. Resolves the columns to literal function which is allowed to be invoked without braces,
    *    e.g. `SELECT col, current_date FROM t`.
-   * 4. Resolves the column to outer references with the outer plan if we are resolving subquery
+   * 4. Resolves the columns to outer references with the outer plan if we are resolving subquery
    *    expressions.
    *
    * Some plan nodes have special column reference resolution logic, please read these sub-rules for
    * details:
    *  - [[ResolveReferencesInAggregate]]
    *  - [[ResolveReferencesInSort]]
+   *
+   * Note: even if we use a single rule to resolve columns, it's still non-trivial to have a
+   *       reliable column resolution order, as the rule will be executed multiple times, with other
+   *       rules in the same batch. We should resolve columns with the next option only if all the
+   *       previous options are permanently not applicable. If the current option can be applicable
+   *       in the next iteration (other rules update the plan), we should not try the next option.
    */
   object ResolveReferences extends Rule[LogicalPlan] with ColumnResolutionHelper {
 
