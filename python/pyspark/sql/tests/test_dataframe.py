@@ -46,6 +46,7 @@ from pyspark.sql.types import (
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
+    SparkConnectException,
     SparkConnectAnalysisException,
     PySparkTypeError,
 )
@@ -946,7 +947,10 @@ class DataFrameTestsMixin:
 
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample(seed="abc"))
 
-        self.assertRaises(IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0))
+        self.assertRaises(
+            (IllegalArgumentException, SparkConnectException),
+            lambda: self.spark.range(1).sample(-1.0).count(),
+        )
 
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]

@@ -26,7 +26,7 @@ ERROR_CLASSES_JSON = """
   },
   "COLUMN_IN_LIST": {
     "message": [
-      "<func_name> does not allow a column in a list."
+      "<func_name> does not allow a Column in a list."
     ]
   },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
@@ -51,7 +51,12 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_A_COLUMN" : {
     "message" : [
-      "Argument `<arg_name>` should be a column, got <arg_type>."
+      "Argument `<arg_name>` should be a Column, got <arg_type>."
+    ]
+  },
+  "NOT_A_DATAFRAME" : {
+    "message" : [
+      "Argument `<arg_name>` must be a DataFrame, got <arg_type>."
     ]
   },
   "NOT_A_DATAFRAME" : {
@@ -66,7 +71,7 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_A_STRING" : {
     "message" : [
-      "Argument `<arg_name>` should be a string, got <arg_type>."
+      "Argument `<arg_name>` should be a str, got <arg_type>."
     ]
   },
   "NOT_BOOL_OR_DICT_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE" : {
@@ -89,6 +94,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a boolean or list, got <arg_type>."
     ]
   },
+  "NOT_COLUMN_OR_DATATYPE_OR_STRING" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Column or str or DataType, but got <arg_type>."
+    ]
+  },
   "NOT_COLUMN_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING" : {
     "message" : [
       "Argument `<arg_name>` should be a column, float, integer, list or string, got <arg_type>."
@@ -96,17 +106,17 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_COLUMN_OR_INTEGER" : {
     "message" : [
-      "Argument `<arg_name>` should be a column or integer, got <arg_type>."
+      "Argument `<arg_name>` should be a Column or int, got <arg_type>."
     ]
   },
   "NOT_COLUMN_OR_INTEGER_OR_STRING" : {
     "message" : [
-      "Argument `<arg_name>` should be a column, integer or string, got <arg_type>."
+      "Argument `<arg_name>` should be a Column, int or str, got <arg_type>."
     ]
   },
   "NOT_COLUMN_OR_STRING" : {
     "message" : [
-      "Argument `<arg_name>` should be a column or string, got <arg_type>."
+      "Argument `<arg_name>` should be a Column or str, got <arg_type>."
     ]
   },
   "NOT_FLOAT_OR_INTEGER" : {
@@ -127,6 +137,11 @@ ERROR_CLASSES_JSON = """
   "NOT_LIST_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
+    ]
+  },
+  "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
+    "message" : [
+      "The type of array scalar '<dtype>' is not supported."
     ]
   },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {

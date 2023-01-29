@@ -834,11 +834,7 @@ class DataFrame:
     intersectAll.__doc__ = PySparkDataFrame.intersectAll.__doc__
 
     def where(self, condition: Union[Column, str]) -> "DataFrame":
-        if isinstance(condition, str):
-            jdf = self.filter(condition)
-        elif isinstance(condition, Column):
-            jdf = self.filter(condition._jc)
-        else:
+        if not isinstance(condition, str) or isinstance(condition, Column):
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_STRING",
                 message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},

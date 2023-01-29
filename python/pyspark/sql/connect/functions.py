@@ -223,7 +223,10 @@ def lit(col: Any) -> Column:
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
-            raise TypeError("The type of array scalar '%s' is not supported" % (col.dtype))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                message_parameters={"dtype": col.dtype.name},
+            )
 
         # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
         # Actually this is not a problem for Connect, but here still convert it
@@ -258,7 +261,10 @@ def broadcast(df: "DataFrame") -> "DataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
-        raise TypeError(f"'df' must be a DataFrame, but got {type(df).__name__} {df}")
+        raise PySparkTypeError(
+            error_class="NOT_A_DATAFRAME",
+            message_parameters={"arg_name": "df", "arg_type": type(df).__name__},
+        )
     return df.hint("broadcast")
 
 
@@ -1376,8 +1382,9 @@ def from_json(
     elif isinstance(schema, str):
         _schema = lit(schema)
     else:
-        raise TypeError(
-            f"schema should be a Column or str or DataType, but got {type(schema).__name__}"
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_DATATYPE_OR_STRING",
+            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1592,14 +1599,20 @@ def slice(
     elif isinstance(start, int):
         _start = lit(start)
     else:
-        raise TypeError(f"start should be a Column, str or int, but got {type(start).__name__}")
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "start", "arg_type": type(start).__name__},
+        )
 
     if isinstance(length, (Column, str)):
         _length = length
     elif isinstance(length, int):
         _length = lit(length)
     else:
-        raise TypeError(f"start should be a Column, str or int, but got {type(length).__name__}")
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
+        )
 
     return _invoke_function_over_columns("slice", col, _start, _length)
 
@@ -2218,13 +2231,17 @@ def window(
             },
         )
     if slideDuration is not None and not isinstance(slideDuration, str):
-        raise TypeError(
-            f"slideDuration should be as a string, "
-            f"but got {type(slideDuration).__name__} {slideDuration}"
+        raise PySparkTypeError(
+            error_class="NOT_A_STRING",
+            message_parameters={
+                "arg_name": "slideDuration",
+                "arg_type": type(slideDuration).__name__,
+            },
         )
     if startTime is not None and not isinstance(startTime, str):
-        raise TypeError(
-            f"startTime should be as a string, " f"but got {type(startTime).__name__} {startTime}"
+        raise PySparkTypeError(
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
         )
 
     time_col = _to_col(timeColumn)
@@ -2330,7 +2347,10 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
-        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+        )
     _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
     return _invoke_function("assert_true", _to_col(col), _err_msg)
 
@@ -2340,7 +2360,10 @@ assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
 
 def raise_error(errMsg: Union[Column, str]) -> Column:
     if not isinstance(errMsg, (str, Column)):
-        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+        )
     _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
     return _invoke_function("raise_error", _err_msg)
 
