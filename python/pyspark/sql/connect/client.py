@@ -42,6 +42,7 @@ from pyspark.errors import (
     SparkConnectAnalysisException,
     SparkConnectParseException,
     SparkConnectTempTableAlreadyExistsException,
+    SparkConnectIllegalArgumentException,
 )
 from pyspark.sql.types import (
     DataType,
@@ -626,6 +627,10 @@ class SparkConnectClient(object):
                         raise SparkConnectTempTableAlreadyExistsException(
                             info.metadata["message"], plan=info.metadata["plan"]
                         ) from None
+                    elif reason == "java.lang.IllegalArgumentException":
+                        message = info.metadata["message"]
+                        message = message if message != "" else status.message
+                        raise SparkConnectIllegalArgumentException(message) from None
                     else:
                         raise SparkConnectGrpcException(
                             status.message, reason=info.reason
