@@ -1298,7 +1298,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(pser.radd(10, fill_value=value), psser.radd(10, fill_value=value))
 
         self.assertRaises(NotImplementedError, lambda: psser.add([1, 2, None, None], fill_value=10))
-        self.assertRaises(NotImplementedError, lambda: psser.radd([1, 2, None, None], fill_value=10))
+        self.assertRaises(
+            NotImplementedError, lambda: psser.radd([1, 2, None, None], fill_value=10)
+        )
 
     def test_add_prefix(self):
         pser = pd.Series([1, 2, 3, 4], name="0")
