@@ -121,7 +121,7 @@ object SparkConnectServerUtils {
     val jars = recursiveListFiles(parentDir).filter { f =>
       // SBT jar
       (f.getParentFile.getName.startsWith("scala-") &&
-        f.getName.startsWith("spark-connect-assembly") && f.getName.endsWith(".jar")) ||
+        f.getName.startsWith("spark-connect") && f.getName.endsWith(".jar")) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
         f.getName.startsWith("spark-connect") && f.getName.endsWith(".jar"))
