@@ -508,7 +508,8 @@ class PythonUDF:
 
 
 class CommonInlineUserDefinedFunction(Expression):
-    """Represents common inline user-defined function of any programming languages."""
+    """Represents a user-defined function with an inlined defined function body of any programming
+    languages."""
 
     def __init__(
         self,
