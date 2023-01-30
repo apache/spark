@@ -448,9 +448,7 @@ object SparkBuild extends PomBuild {
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
-  if (profiles.contains("connect-client-tests")) {
-    enable(SparkConnectClientE2ETests.settings)(connectClientTests)
-  }
+  enable(SparkConnectClientE2ETests.settings)(connectClientTests)
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
