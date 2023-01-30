@@ -265,6 +265,11 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
+      "FILTER_NOT_BOOLEAN" : {
+        "message" : [
+          "Filter expression <filter> of type <type> is not a boolean."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -431,17 +436,6 @@
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
-        ]
-      },
-      "WRONG_NUM_ARGS" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
-        ]
-      },
-      "WRONG_NUM_ARGS_WITH_SUGGESTION" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
-          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
         ]
       },
       "WRONG_NUM_ENDPOINTS" : {
@@ -1146,6 +1140,16 @@
     ],
     "sqlState" : "42K09"
   },
+  "PLAN_VALIDATION_FAILED_RULE_EXECUTOR" : {
+    "message" : [
+      "The input plan of <ruleExecutor> is invalid: <reason>"
+    ]
+  },
+  "PLAN_VALIDATION_FAILED_RULE_IN_BATCH" : {
+    "message" : [
+      "Rule <rule> in batch <batch> generated an invalid plan: <reason>"
+    ]
+  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
@@ -1455,6 +1459,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
+    "message" : [
+      "A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"
@@ -1547,7 +1557,7 @@
       },
       "PIVOT_AFTER_GROUP_BY" : {
         "message" : [
-          "PIVOT clause following a GROUP BY clause."
+          "PIVOT clause following a GROUP BY clause. Consider pushing the GROUP BY into a subquery."
         ]
       },
       "PIVOT_TYPE" : {
@@ -1767,7 +1777,7 @@
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
-      "Invalid number of arguments for the function <functionName>."
+      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -1777,7 +1787,7 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "Consider to change the number of arguments because the function requires <expectedNum> parameters but the actual number is <actualNum>."
+          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
         ]
       }
     },
@@ -4375,16 +4385,6 @@
       "<plan>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2173" : {
-    "message" : [
-      "The structural integrity of the input plan is broken in <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2174" : {
-    "message" : [
-      "After applying rule <ruleName> in batch <batchName>, the structural integrity of the plan is broken."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2175" : {
     "message" : [
       "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
@@ -5175,11 +5175,6 @@
       "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2415" : {
-    "message" : [
-      "filter expression '<filter>' of type <type> is not a boolean."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2416" : {
     "message" : [
       "join condition '<join>' of type <type> is not a boolean."
@@ -5289,12 +5284,6 @@
       "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
       "<sqlExprs>",
       "in operator <operator>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2441" : {
-    "message" : [
-      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
-      "Invalid expressions: [<invalidExprSqls>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2443" : {

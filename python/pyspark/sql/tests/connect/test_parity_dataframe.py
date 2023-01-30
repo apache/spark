@@ -37,11 +37,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
 
-    # TODO(SPARK-41855): createDataFrame doesn't handle None/NaN properly
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_nan_decimal_dataframe(self):
-        super().test_create_nan_decimal_dataframe()
-
     # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
@@ -94,11 +89,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()
-
-    # TODO(SPARK-41830): Fix DataFrame.sample parameters
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_sample(self):
-        super().test_sample()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):

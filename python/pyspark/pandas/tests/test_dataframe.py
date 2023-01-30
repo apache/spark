@@ -90,6 +90,13 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pd.DataFrame(pser), ps.DataFrame(psser))
 
+        # check ps.DataFrame(ps.Series) with `columns`
+        self.assert_eq(pd.DataFrame(pser, columns=["x"]), ps.DataFrame(psser, columns=["x"]))
+        self.assert_eq(pd.DataFrame(pser, columns=("x",)), ps.DataFrame(psser, columns=("x",)))
+        self.assert_eq(
+            pd.DataFrame(pser, columns={"x": None}), ps.DataFrame(psser, columns={"x": None})
+        )
+
         # check psdf[pd.Index]
         pdf, psdf = self.df_pair
         column_mask = pdf.columns.isin(["a", "b"])
