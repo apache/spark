@@ -679,6 +679,15 @@ class QueryCompilationErrorsSuite
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }
+
+  test("DATATYPE_MISMATCH.INVALID_JSON_SCHEMA: invalid top type passed to from_json()") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

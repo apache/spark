@@ -1049,6 +1049,24 @@
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ]
   },
+  "NOT_NULL_CONSTRAINT_VIOLATION" : {
+    "message" : [
+      "Assigning a NULL is not allowed here."
+    ],
+    "subClass" : {
+      "ARRAY_ELEMENT" : {
+        "message" : [
+          "The array <columnPath> is defined to contain only elements that are NOT NULL."
+        ]
+      },
+      "MAP_VALUE" : {
+        "message" : [
+          "The map <columnPath> is defined to contain only values that are NOT NULL."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -1063,12 +1081,6 @@
     "message" : [
       "UDF class <className> doesn't implement any UDF interface."
     ]
-  },
-  "NULLABLE_ARRAY_OR_MAP_ELEMENT" : {
-    "message" : [
-      "Array or map at <columnPath> contains nullable element while it's required to be non-nullable."
-    ],
-    "sqlState" : "42000"
   },
   "NULLABLE_COLUMN_OR_FIELD" : {
     "message" : [
