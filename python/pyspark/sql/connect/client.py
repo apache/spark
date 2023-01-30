@@ -681,7 +681,7 @@ class SparkConnectClient(object):
 class RetryState:
     """
     Simple state helper that captures the state between retries of the exceptions. It
-    keeps track of the last exception thrown and how many in total. when the task
+    keeps track of the last exception thrown and how many in total. When the task
     finishes successfully done() returns True.
     """
 
