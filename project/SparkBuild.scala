@@ -897,13 +897,6 @@ object SparkConnectClient {
 
 object SparkConnectClientTests {
   lazy val settings = Seq(
-    excludeDependencies ++= {
-      val scalaBinaryVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("scala.binary.version").asInstanceOf[String]
-      Seq(
-        ExclusionRule("org.apache.spark", s"spark-sql_${scalaBinaryVersion}")
-      )
-    },
     libraryDependencies ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]

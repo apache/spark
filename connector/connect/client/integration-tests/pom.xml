@@ -89,6 +89,7 @@
             <scope>test</scope>
             <version>${project.version}</version>
         </dependency>
+        <!--
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-connect_${scala.binary.version}</artifactId>
@@ -100,6 +101,7 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        -->
     </dependencies>
     <build>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
