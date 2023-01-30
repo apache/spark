@@ -1437,6 +1437,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
+    "message" : [
+      "A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"
@@ -5266,12 +5272,6 @@
       "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
       "<sqlExprs>",
       "in operator <operator>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2441" : {
-    "message" : [
-      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
-      "Invalid expressions: [<invalidExprSqls>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2443" : {
