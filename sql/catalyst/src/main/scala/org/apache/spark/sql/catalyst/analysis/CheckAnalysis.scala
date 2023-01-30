@@ -308,6 +308,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             se.child.foreachUp {
               case a: Attribute if !a.resolved =>
                 failUnresolvedAttribute(a, se.scope.attrs, "UNRESOLVED_COLUMN")
+              case _ =>
             }
           case _ =>
         })
