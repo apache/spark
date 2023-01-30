@@ -1523,7 +1523,7 @@
       },
       "PIVOT_AFTER_GROUP_BY" : {
         "message" : [
-          "PIVOT clause following a GROUP BY clause."
+          "PIVOT clause following a GROUP BY clause. Consider pushing the GROUP BY into a subquery."
         ]
       },
       "PIVOT_TYPE" : {
