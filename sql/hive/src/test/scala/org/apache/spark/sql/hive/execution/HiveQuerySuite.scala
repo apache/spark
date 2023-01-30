@@ -391,22 +391,24 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     """.stripMargin)
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
-    withTable("test_partition", "ptest") {
-      sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
-      sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withTable("test_partition", "ptest") {
+        sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+        sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
-      val analyzedPlan = sql(
-        """
-        |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
-        |SELECT 'a', 'c' from ptest
-      """.stripMargin).queryExecution.analyzed
+        val analyzedPlan = sql(
+          """
+          |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
+          |SELECT 'a', 'c' from ptest
+        """.stripMargin).queryExecution.analyzed
 
-      assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
-      var hasCast = false
-        analyzedPlan.collect {
-          case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+        assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
+        var hasCast = false
+          analyzedPlan.collect {
+            case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+          }
+          hasCast
         }
-        hasCast
       }
     }
   }

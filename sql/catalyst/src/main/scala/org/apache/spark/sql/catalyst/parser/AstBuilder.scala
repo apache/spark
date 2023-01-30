@@ -670,17 +670,26 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     )
   }
 
-  override def visitNamedExpressionSeq(
-      ctx: NamedExpressionSeqContext): Seq[(Expression, String)] = {
-    Option(ctx).toSeq
-      .flatMap(_.namedExpression.asScala)
-      .map(ctx => (typedVisit[Expression](ctx), toExprAlias(ctx)))
+  private def getAliasFunc(alias: => String): Option[Expression => String] = {
+    if (conf.getConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED)) {
+      Some(_ => alias)
+    } else {
+      None
+    }
   }
 
-  override def visitExpressionSeq(ctx: ExpressionSeqContext): Seq[(Expression, String)] = {
+  override def visitNamedExpressionSeq(
+      ctx: NamedExpressionSeqContext): Seq[(Expression, Option[Expression => String])] = {
+    Option(ctx).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(toExprAlias(ctx))))
+  }
+
+  override def visitExpressionSeq(
+      ctx: ExpressionSeqContext): Seq[(Expression, Option[Expression => String])] = {
     Option(ctx).toSeq
       .flatMap(_.expression.asScala)
-      .map(ctx => (typedVisit[Expression](ctx), toExprAlias(ctx)))
+      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(toExprAlias(ctx))))
   }
 
   /**
@@ -794,7 +803,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   def visitCommonSelectQueryClausePlan(
       relation: LogicalPlan,
-      expressions: Seq[(Expression, String)],
+      expressions: Seq[(Expression, Option[Expression => String])],
       lateralView: java.util.List[LateralViewContext],
       whereClause: WhereClauseContext,
       aggregationClause: AggregationClauseContext,
@@ -810,7 +819,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
       case (e: NamedExpression, _) => e
-      case (e: Expression, alias) => UnresolvedAlias(e, aliasFunc = Some(_ => alias))
+      case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {

@@ -529,34 +529,40 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   }
 
   test("SPARK-35686: error out for creating view with auto gen alias") {
-    withView("v") {
-      val e = intercept[AnalysisException] {
-        sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+    withSQLConf(STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+        }
+        assert(e.getMessage.contains("without explicitly assigning an alias"))
+        sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
       }
-      assert(e.getMessage.contains("without explicitly assigning an alias"))
-      sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
-      checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
     }
   }
 
   test("SPARK-35686: error out for creating view with auto gen alias in subquery") {
-    withView("v") {
-      val e = intercept[AnalysisException] {
-        sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
+    withSQLConf(STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
+        }
+        assert(e.getMessage.contains("without explicitly assigning an alias"))
+        sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
       }
-      assert(e.getMessage.contains("without explicitly assigning an alias"))
-      sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
-      checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
     }
   }
 
   test("SPARK-35686: error out for alter view with auto gen alias") {
-    withView("v") {
-      sql("CREATE VIEW v AS SELECT 1 AS a")
-      val e = intercept[AnalysisException] {
-        sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+    withSQLConf(STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT 1 AS a")
+        val e = intercept[AnalysisException] {
+          sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+        }
+        assert(e.getMessage.contains("without explicitly assigning an alias"))
       }
-      assert(e.getMessage.contains("without explicitly assigning an alias"))
     }
   }
 
