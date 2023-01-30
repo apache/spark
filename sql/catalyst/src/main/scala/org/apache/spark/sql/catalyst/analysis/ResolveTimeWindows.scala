@@ -58,8 +58,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * Rationale of lastStartAdjusted:
    * For simplicity assume windowDuration = slideDuration.
    * | x x x x x x x x x x x x | x x x x x x x x x x x x | x x x x x x x x x x x x |
-   * |                         |----l1 ----|---- l2 -----|---- l2 -----|
-   *                        lastStart   timestamp                lastStartWrong
+   * |                         |----l1 ----|---- l2 -----|
+   *                        lastStart   timestamp   lastStartWrong
    * Here l1 = (timestamp - startTime) % slideDuration; lastStart = timeStamp - l1
    * However, when timestamp < startTime, the result of (timestamp - startTime) % slideDuration is
    * -l2 (note the negative sign), and lastStart is then at the position of lastStartWrong.
