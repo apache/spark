@@ -17,12 +17,15 @@
 
 package org.apache.spark
 
+import java.util.{Collections => JCollections, HashSet => JHashSet}
 import java.util.concurrent.atomic.LongAdder
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.LocalSparkContext._
@@ -30,10 +33,11 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MAX_SIZE}
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
+import org.apache.spark.storage.{BlockManagerId, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new SparkConf
@@ -913,9 +917,63 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     slaveRpcEnv.shutdown()
   }
 
+  private def fetchDeclaredField(value: AnyRef, fieldName: String): AnyRef = {
+    val field = value.getClass.getDeclaredField(fieldName)
+    field.setAccessible(true)
+    field.get(value)
+  }
+
+  private def lookupBlockManagerMasterEndpoint(sc: SparkContext): BlockManagerMasterEndpoint = {
+    val rpcEnv = sc.env.rpcEnv
+    val dispatcher = fetchDeclaredField(rpcEnv, "dispatcher")
+    fetchDeclaredField(dispatcher, "endpointRefs").
+      asInstanceOf[java.util.Map[RpcEndpoint, RpcEndpointRef]].asScala.
+      filter(_._1.isInstanceOf[BlockManagerMasterEndpoint]).
+      head._1.asInstanceOf[BlockManagerMasterEndpoint]
+  }
+
+  test("SPARK-40480: shuffle remove should cleanup merged files as well") {
+    val newConf = new SparkConf
+    newConf.set("spark.shuffle.push.enabled", "true")
+    newConf.set("spark.shuffle.service.enabled", "true")
+    newConf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    newConf.set(IS_TESTING, true)
+
+    val SHUFFLE_ID = 10
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+
+      val blockStoreClient = mock(classOf[ExternalBlockStoreClient])
+      val bmMaster = lookupBlockManagerMasterEndpoint(sc)
+      val field = bmMaster.getClass.getDeclaredField("externalBlockStoreClient")
+      field.setAccessible(true)
+      field.set(bmMaster, Some(blockStoreClient))
+
+      masterTracker.registerShuffle(SHUFFLE_ID, 10, 10)
+      val mergerLocs = (1 to 10).map(x => BlockManagerId(s"exec-$x", s"host-$x", x))
+      masterTracker.registerShufflePushMergerLocations(SHUFFLE_ID, mergerLocs)
+
+      assert(masterTracker.getShufflePushMergerLocations(SHUFFLE_ID).map(_.host).toSet ==
+        mergerLocs.map(_.host).toSet)
+
+      val foundHosts = JCollections.synchronizedSet(new JHashSet[String]())
+      when(blockStoreClient.removeShuffleMerge(any(), any(), any(), any())).thenAnswer(
+        (m: InvocationOnMock) => {
+          val host = m.getArgument(0).asInstanceOf[String]
+          val shuffleId = m.getArgument(2).asInstanceOf[Int]
+          assert(shuffleId == SHUFFLE_ID)
+          foundHosts.add(host)
+          true
+        })
+
+      sc.cleaner.get.doCleanupShuffle(SHUFFLE_ID, blocking = true)
+      assert(foundHosts.asScala == mergerLocs.map(_.host).toSet)
+    }
+  }
+
   test("SPARK-34826: Adaptive shuffle mergers") {
     val newConf = new SparkConf
-    newConf.set("spark.shuffle.push.based.enabled", "true")
+    newConf.set("spark.shuffle.push.enabled", "true")
     newConf.set("spark.shuffle.service.enabled", "true")
 
     // needs TorrentBroadcast so need a SparkContext

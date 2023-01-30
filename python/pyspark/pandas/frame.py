@@ -536,9 +536,14 @@ class DataFrame(Frame, Generic[T]):
             if index is None:
                 internal = data._internal
         elif isinstance(data, ps.Series):
-            assert columns is None
             assert dtype is None
             assert not copy
+            # For pandas compatibility when `columns` contains only one valid column.
+            if columns is not None:
+                assert isinstance(columns, (dict, list, tuple))
+                assert len(columns) == 1
+                columns = list(columns.keys()) if isinstance(columns, dict) else columns
+                assert columns[0] == data._internal.data_spark_column_names[0]
             if index is None:
                 internal = data.to_frame()._internal
         else:

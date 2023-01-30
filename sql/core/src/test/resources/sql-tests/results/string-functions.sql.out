@@ -6,20 +6,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "> 0",
-    "functionName" : "`concat_ws`",
-    "sqlExpr" : "\"concat_ws()\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 18,
-    "fragment" : "concat_ws()"
-  } ]
+    "functionName" : "`concat_ws`"
+  }
 }
 
 
@@ -30,20 +23,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "> 0",
-    "functionName" : "`format_string`",
-    "sqlExpr" : "\"format_string()\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "format_string()"
-  } ]
+    "functionName" : "`format_string`"
+  }
 }
 
 
@@ -230,7 +216,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO"
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "sqlState" : "22003"
 }
 
 
@@ -753,7 +740,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "2",
@@ -776,7 +764,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
     "expectedNum" : "2",
@@ -1224,6 +1213,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "' ab cdef= = '",
@@ -1251,6 +1241,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'a'",
@@ -1268,6 +1259,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'a?'",
@@ -1285,6 +1277,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'abcde'",
@@ -1302,6 +1295,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'abcd='",
@@ -1319,6 +1313,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'a==='",
@@ -1336,6 +1331,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'ab==f'",
@@ -1442,6 +1438,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
     "str" : "'GG'",
@@ -1459,6 +1456,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
     "str" : "'01 AF'",
@@ -1484,6 +1482,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "' ab cdef= = '",
@@ -1501,6 +1500,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
     "str" : "' ab cdef= = '",
@@ -1559,6 +1559,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
     "inputValue" : "'1'",
@@ -1584,6 +1585,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
     "inputValue" : "'invalidformat'",
@@ -1617,6 +1619,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"fmtField\"",
     "inputName" : "fmt",

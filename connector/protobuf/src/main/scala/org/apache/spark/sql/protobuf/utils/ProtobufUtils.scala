@@ -229,7 +229,7 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
     } catch {
       case ex: InvalidProtocolBufferException =>
-        throw QueryCompilationErrors.descrioptorParseError(descFilePath, ex)
+        throw QueryCompilationErrors.descriptorParseError(descFilePath, ex)
       case ex: IOException =>
         throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }

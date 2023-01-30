@@ -351,6 +351,35 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-41982: treat the partition field as string literal " +
+    "when keepPartitionSpecAsStringLiteral is enabled") {
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      withTable("t") {
+        sql("create table t(i string, j int) using orc partitioned by (dt string)")
+        sql("insert into t partition(dt=08) values('a', 10)")
+        Seq(
+          "select * from t where dt='08'",
+          "select * from t where dt=08"
+        ).foreach { query =>
+          checkAnswer(sql(query), Seq(Row("a", 10, "08")))
+        }
+        val e = intercept[AnalysisException](sql("alter table t drop partition(dt='8')"))
+        assert(e.getMessage.contains("PARTITIONS_NOT_FOUND"))
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "false") {
+      withTable("t") {
+        sql("create table t(i string, j int) using orc partitioned by (dt string)")
+        sql("insert into t partition(dt=08) values('a', 10)")
+        checkAnswer(sql("select * from t where dt='08'"), sql("select * from t where dt='07'"))
+        checkAnswer(sql("select * from t where dt=08"), Seq(Row("a", 10, "8")))
+        val e = intercept[AnalysisException](sql("alter table t drop partition(dt='08')"))
+        assert(e.getMessage.contains("PARTITIONS_NOT_FOUND"))
+      }
+    }
+  }
 }
 
 class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {

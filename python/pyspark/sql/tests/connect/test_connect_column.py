@@ -33,6 +33,7 @@ from pyspark.sql.connect.types import (
 )
 
 from pyspark.sql.types import (
+    Row,
     StructField,
     StructType,
     ArrayType,
@@ -54,11 +55,12 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.connect.client import SparkConnectException
+from pyspark.errors import SparkConnectException
 
 if should_test_connect:
     import pandas as pd
-    from pyspark.sql.connect.functions import lit
+    from pyspark.sql import functions as SF
+    from pyspark.sql.connect import functions as CF
 
 
 class SparkConnectColumnTests(SparkConnectSQLTestCase):
@@ -83,7 +85,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
     def test_column_operator(self):
         # SPARK-41351: Column needs to support !=
         df = self.connect.range(10)
-        self.assertEqual(9, len(df.filter(df.id != lit(1)).collect()))
+        self.assertEqual(9, len(df.filter(df.id != CF.lit(1)).collect()))
 
     def test_columns(self):
         # SPARK-41036: test `columns` API for python client.
@@ -133,8 +135,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_column_with_null(self):
         # SPARK-41751: test isNull, isNotNull, eqNullSafe
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
 
         query = """
             SELECT * FROM VALUES
@@ -313,9 +313,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
     def test_none(self):
         # SPARK-41783: test none
 
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (1, 1, NULL), (2, NULL, 1), (NULL, 3, 4)
@@ -348,8 +345,10 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_simple_binary_expressions(self):
         """Test complex expression"""
-        df = self.connect.read.table(self.tbl_name)
-        pdf = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
+        cdf = self.connect.read.table(self.tbl_name)
+        pdf = (
+            cdf.select(cdf.id).where(cdf.id % CF.lit(30) == CF.lit(0)).sort(cdf.id.asc()).toPandas()
+        )
         self.assertEqual(len(pdf.index), 4)
 
         res = pd.DataFrame(data={"id": [0, 30, 60, 90]})
@@ -963,6 +962,18 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
                 sdf.b.contains("a"), sdf["c"].contains("j"), sdf["b"].contains(sdf.e)
             ).toPandas(),
         )
+
+    def test_with_field_column_name(self):
+        data = [Row(a=Row(b=1, c=2))]
+
+        cdf = self.connect.createDataFrame(data)
+        cdf1 = cdf.withColumn("a", cdf["a"].withField("b", CF.lit(3))).select("a.b")
+
+        sdf = self.spark.createDataFrame(data)
+        sdf1 = sdf.withColumn("a", sdf["a"].withField("b", SF.lit(3))).select("a.b")
+
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assertEqual(cdf1.collect(), sdf1.collect())
 
 
 if __name__ == "__main__":

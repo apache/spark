@@ -136,7 +136,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Map(
-        "inputString" -> s"${toSQLStmt("LATERAL")} can only be used with subquery."),
+        "inputString" ->
+          s"${toSQLStmt("LATERAL")} can only be used with subquery and table-valued functions."),
       ctx)
   }
 
@@ -289,6 +290,27 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
       ctx)
+  }
+
+  def nestedTypeMissingElementTypeError(
+      dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+    dataType match {
+      case "array" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+          messageParameters = Map("elementType" -> "<INT>"),
+          ctx)
+      case "struct" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+          messageParameters = Map.empty,
+          ctx)
+      case "map" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+          messageParameters = Map.empty,
+          ctx)
+    }
   }
 
   def partitionTransformNotExpectedError(

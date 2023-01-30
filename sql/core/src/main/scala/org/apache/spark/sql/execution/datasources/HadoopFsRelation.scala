@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
@@ -70,5 +71,5 @@ case class HadoopFsRelation(
   }
 
 
-  override def inputFiles: Array[String] = location.inputFiles
+  override def inputFiles: Array[SparkPath] = location.inputFiles
 }

@@ -63,6 +63,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "sqlState" : "42823",
   "messageParameters" : {
     "number" : "2"
   },
@@ -90,6 +91,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "sqlState" : "42823",
   "messageParameters" : {
     "number" : "2"
   },
@@ -115,6 +117,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "leftColumns" : "\"t1a\"",
     "leftLength" : "1",
@@ -144,6 +147,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "leftColumns" : "\"t1a\", \"t1b\"",
     "leftLength" : "2",
@@ -174,6 +178,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "leftType" : "\"DOUBLE\", \"STRING\", \"STRING\"",
     "mismatchedColumns" : "(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)",

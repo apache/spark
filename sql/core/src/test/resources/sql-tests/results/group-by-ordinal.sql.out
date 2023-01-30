@@ -94,7 +94,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "2"
@@ -117,7 +117,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "0",
     "size" : "2"
@@ -140,7 +140,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
@@ -163,7 +163,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_AGGREGATE",
-  "sqlState" : "42000",
+  "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "sum(data.b) AS `sum(b)`",
     "index" : "3"
@@ -186,7 +186,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_AGGREGATE",
-  "sqlState" : "42000",
+  "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`",
     "index" : "3"
@@ -223,7 +223,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "STAR_GROUP_BY_POS"
+  "errorClass" : "STAR_GROUP_BY_POS",
+  "sqlState" : "0A000"
 }
 
 
@@ -423,7 +424,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
@@ -446,7 +447,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_AGGREGATE",
-  "sqlState" : "42000",
+  "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "count(1) AS `count(1)`",
     "index" : "3"
@@ -469,7 +470,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
@@ -492,7 +493,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_AGGREGATE",
-  "sqlState" : "42000",
+  "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "count(1) AS `count(1)`",
     "index" : "3"

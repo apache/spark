@@ -17,6 +17,8 @@
 """
 User-defined function related classes and functions
 """
+from inspect import getfullargspec
+
 import functools
 import inspect
 import sys
@@ -30,12 +32,16 @@ from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import (
-    StringType,
+    ArrayType,
+    BinaryType,
     DataType,
+    MapType,
+    StringType,
     StructType,
     _parse_datatype_string,
 )
 from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
@@ -73,6 +79,105 @@ def _create_udf(
         f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
     )
     return udf_obj._wrapped()
+
+
+def _create_py_udf(
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString",
+    evalType: int,
+    useArrow: Optional[bool] = None,
+) -> "UserDefinedFunctionLike":
+    # The following table shows the results when the type coercion in Arrow is needed, that is,
+    # when the user-specified return type(SQL Type) of the UDF and the actual instance(Python
+    # Value(Type)) that the UDF returns are different.
+    # Arrow and Pickle have different type coercion rules, so a UDF might have a different result
+    # with/without Arrow optimization. That's the main reason the Arrow optimization for Python
+    # UDFs is disabled by default.
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+  # noqa
+    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|         a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|bytearray(b'ABC')(bytearray)|  1(Decimal)|{'a': 1}(dict)|  # noqa
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+  # noqa
+    # |                      boolean|          None|      True|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                      tinyint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                     smallint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                          int|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       bigint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       string|          None|    'true'|   '1'|            'a'|'java.util.Gregor...|         'java.util.Gregor...|     '1.0'|         '[I@120d813a'|    '[1]'|'[Ljava.lang.Obje...|               '[B@48571878'|         '1'|       '{a=1}'|  # noqa
+    # |                         date|          None|         X|     X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                           X|           X|             X|  # noqa
+    # |                    timestamp|          None|         X|     X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                           X|           X|             X|  # noqa
+    # |                        float|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       double|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|  # noqa
+    # |                       binary|          None|      None|  None|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|           bytearray(b'ABC')|        None|          None|  # noqa
+    # |                decimal(10,0)|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|Decimal('1')|          None|  # noqa
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+  # noqa
+    # Note: Python 3.9.15, Pandas 1.5.2 and PyArrow 10.0.1 are used.
+    # Note: The values of 'SQL Type' are DDL formatted strings, which can be used as `returnType`s.
+    # Note: The values inside the table are generated by `repr`. X' means it throws an exception
+    # during the conversion.
+
+    from pyspark.sql import SparkSession
+
+    session = SparkSession._instantiatedSession
+    if session is None:
+        is_arrow_enabled = False
+    else:
+        is_arrow_enabled = (
+            session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
+            if useArrow is None
+            else useArrow
+        )
+
+    regular_udf = _create_udf(f, returnType, evalType)
+    return_type = regular_udf.returnType
+    try:
+        is_func_with_args = len(getfullargspec(f).args) > 0
+    except TypeError:
+        is_func_with_args = False
+    is_output_atomic_type = (
+        not isinstance(return_type, StructType)
+        and not isinstance(return_type, MapType)
+        and not isinstance(return_type, ArrayType)
+    )
+    if is_arrow_enabled and is_output_atomic_type and is_func_with_args:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+
+        import pandas as pd
+        from pyspark.sql.pandas.functions import _create_pandas_udf  # type: ignore[attr-defined]
+
+        # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
+        # optimization.
+        # Otherwise, an Arrow-optimized Python UDF raises "pyarrow.lib.ArrowTypeError: Expected a
+        # string or bytes dtype, got ..." whereas a non-Arrow-optimized Python UDF returns
+        # successfully.
+        result_func = lambda pdf: pdf  # noqa: E731
+        if type(return_type) == StringType:
+            result_func = lambda r: str(r) if r is not None else r  # noqa: E731
+        elif type(return_type) == BinaryType:
+            result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
+
+        def vectorized_udf(*args: pd.Series) -> pd.Series:
+            if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
+                raise NotImplementedError(
+                    "Struct input type are not supported with Arrow optimization "
+                    "enabled in Python UDFs. Disable "
+                    "'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
+                )
+            return pd.Series(result_func(f(*a)) for a in zip(*args))
+
+        # Regular UDFs can take callable instances too.
+        vectorized_udf.__name__ = f.__name__ if hasattr(f, "__name__") else f.__class__.__name__
+        vectorized_udf.__module__ = (
+            f.__module__ if hasattr(f, "__module__") else f.__class__.__module__
+        )
+        vectorized_udf.__doc__ = f.__doc__
+        pudf = _create_pandas_udf(vectorized_udf, returnType, None)
+        # Keep the attributes as if this is a regular Python UDF.
+        pudf.func = f
+        pudf.returnType = return_type
+        pudf.evalType = regular_udf.evalType
+        return pudf
+    else:
+        return regular_udf
 
 
 class UserDefinedFunction:
