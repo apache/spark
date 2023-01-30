@@ -72,6 +72,7 @@
             <scope>test</scope>
             <version>${project.version}</version>
         </dependency>
+        <!--
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-repl_${scala.binary.version}</artifactId>
@@ -84,6 +85,7 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
