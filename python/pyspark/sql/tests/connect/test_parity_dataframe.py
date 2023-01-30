@@ -37,11 +37,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
 
-    # TODO(SPARK-41855): createDataFrame doesn't handle None/NaN properly
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_nan_decimal_dataframe(self):
-        super().test_create_nan_decimal_dataframe()
-
     # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
