@@ -586,20 +586,18 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-42199: group by function, agg expr resolution") {
-    withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "WARN") {
-      val actual2 = spark.range(3)
-        .withColumnRenamed("id", "value").as[Long] // add column 'value' to dataset
-        .groupByKey(value => value * 2) // produces key column 'value'
-        .agg(sum("value").as[Long]) // 'value' does not resolve to key column
-        .collect()
-      assert(actual2.sorted === Seq((0, 0), (2, 1), (4, 2)))
-    }
+    val actual2 = spark.range(3)
+      .withColumnRenamed("id", "value").as[Long] // add column 'value' to dataset
+      .groupByKey(value => value * 2) // produces key column 'value'
+      .agg(sum("value").as[Long]) // 'value' does not resolve to key column
+      .collect()
+    assert(actual2.sorted === Seq((0, 0), (2, 1), (4, 2)))
 
     val actual3 = spark.range(3)
-      .withColumnRenamed("id", "value").as[Long]  // add column 'value' to dataset
-      .groupByKey(value => value * 2)  // produces key column 'value'
-      .mapValues(value => value * -1)  // replaces value column 'value'
-      .agg(sum("value").as[Long])  // 'value' does not resolve to key column
+      .withColumnRenamed("id", "value").as[Long] // add column 'value' to dataset
+      .groupByKey(value => value * 2) // produces key column 'value'
+      .mapValues(value => value * -1) // replaces value column 'value'
+      .agg(sum("value").as[Long]) // 'value' does not resolve to key column
       .collect()
     assert(actual3.sorted === Seq((0, 0), (2, -1), (4, -2)))
   }
