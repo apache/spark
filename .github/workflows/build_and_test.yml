@@ -738,7 +738,6 @@ jobs:
       - name: Build and Test with Maven
         run: |
           export SCALA_VERSION=2.12
-          export SCALA_PROFILE=scala2.13
           if [[ "SCALA_PROFILE" == "scala2.13" ]] ; then 
              export SCALA_VERSION=2.13; 
              ./dev/change-scala-version.sh 2.13
