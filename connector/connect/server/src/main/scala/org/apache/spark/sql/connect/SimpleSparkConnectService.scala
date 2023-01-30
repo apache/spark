@@ -34,8 +34,8 @@ import org.apache.spark.sql.connect.service.SparkConnectService
  * }}}
  * The service can be stopped by receiving a stop command or until the service get killed.
  */
-object SimpleSparkConnectService {
-  val stopCommand = "q"
+private[sql] object SimpleSparkConnectService {
+  private val stopCommand = "q"
 
   def main(args: Array[String]): Unit = {
     while (true) {

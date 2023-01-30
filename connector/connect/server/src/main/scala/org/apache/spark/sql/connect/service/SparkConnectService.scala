@@ -285,9 +285,11 @@ object SparkConnectService {
 
   def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = {
     if (server != null) {
-      server.shutdownNow()
       if (timeout.isDefined && unit.isDefined) {
+        server.shutdown()
         server.awaitTermination(timeout.get, unit.get)
+      } else {
+        server.shutdownNow()
       }
     }
   }
