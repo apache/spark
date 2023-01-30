@@ -33,37 +33,13 @@
     <properties>
         <sbt.project.name>connect-client-integration-tests</sbt.project.name>
         <guava.version>31.0.1-jre</guava.version>
-        <protobuf.version>3.21.12</protobuf.version>
     </properties>
 
     <dependencies>
-        <!--
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>${protobuf.version}</version>
-            <scope>test</scope>
-        </dependency>
-        -->
-        <!--
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${guava.version}</version>
-            <scope>test</scope>
-        </dependency>
-        -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
