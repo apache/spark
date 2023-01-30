@@ -659,29 +659,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       origin = context)
   }
 
-  def invalidFunctionArgumentsError(
-      name: String, expectedNum: String, actualNum: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
-      messageParameters = Map(
-        "functionName" -> toSQLId(name),
-        "expectedNum" -> expectedNum,
-        "actualNum" -> actualNum.toString))
-  }
-
-  def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
-    if (validParametersCount.isEmpty) {
+  def wrongNumArgsError(
+      name: String,
+      validParametersCount: Seq[Any],
+      actualNumber: Int,
+      legacyNum: String = "",
+      legacyConfKey: String = "",
+      legacyConfValue: String = ""): Throwable = {
+    val expectedNumberOfParameters = if (validParametersCount.isEmpty) {
+      "0"
+    } else if (validParametersCount.length == 1) {
+      validParametersCount.head.toString
+    } else {
+      validParametersCount.mkString("[", ", ", "]")
+    }
+    if (legacyNum.isEmpty) {
       new AnalysisException(
         errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-        messageParameters = Map("functionName" -> toSQLId(name)))
+        messageParameters = Map(
+          "functionName" -> toSQLId(name),
+          "expectedNum" -> expectedNumberOfParameters,
+          "actualNum" -> actualNumber.toString))
     } else {
-      val expectedNumberOfParameters = if (validParametersCount.length == 1) {
-        validParametersCount.head.toString
-      } else {
-        validParametersCount.mkString("[", ", ", "]")
-      }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
+      new AnalysisException(
+        errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+        messageParameters = Map(
+          "functionName" -> toSQLId(name),
+          "expectedNum" -> expectedNumberOfParameters,
+          "actualNum" -> actualNumber.toString,
+          "legacyNum" -> legacyNum,
+          "legacyConfKey" -> legacyConfKey,
+          "legacyConfValue" -> legacyConfValue)
+      )
     }
   }
 

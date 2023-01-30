@@ -4899,7 +4899,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("zip_with"),
         "expectedNum" -> "3",
@@ -4997,94 +4997,81 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(coalesce())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"coalesce()\"",
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"))
+        "actualNum" -> "0")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("coalesce()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"coalesce()\"",
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "coalesce()",
-        start = 0,
-        stop = 9))
+        "actualNum" -> "0")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(hash())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"hash()\"",
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"))
+        "actualNum" -> "0")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("hash()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"hash()\"",
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "hash()",
-        start = 0,
-        stop = 5))
+        "actualNum" -> "0")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(xxhash64())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"xxhash64()\"",
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"))
+        "actualNum" -> "0")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("xxhash64()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"xxhash64()\"",
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "xxhash64()",
-        start = 0,
-        stop = 9))
+        "actualNum" -> "0")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(greatest())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"greatest()\"",
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0")
@@ -5094,27 +5081,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("greatest()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"greatest()\"",
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "greatest()",
-        start = 0,
-        stop = 9)
+        "actualNum" -> "0")
     )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(least())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"least()\"",
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0")
@@ -5124,17 +5105,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("least()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"least()\"",
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "least()",
-        start = 0,
-        stop = 6)
+        "actualNum" -> "0")
     )
   }
 
