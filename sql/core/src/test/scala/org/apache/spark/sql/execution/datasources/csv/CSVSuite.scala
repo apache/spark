@@ -3084,7 +3084,7 @@ abstract class CSVSuite
     }
   }
 
-  test("change binary to unsupported dataType") {
+  test("SPARK-42237: change binary to unsupported dataType") {
     withTempPath { path =>
       val colName: String = "value"
       val exception = intercept[AnalysisException] {
