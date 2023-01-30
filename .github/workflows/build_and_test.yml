@@ -735,10 +735,10 @@ jobs:
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
           # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl repl -am
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl connector/connect/common
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl connector/connect/server
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl connector/connect/client/jvm
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl repl -am
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/common
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/server
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/client/jvm
           ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} clean test -pl connector/connect/client/jvm-e2e-tests -Pconnect-client-tests
           rm -rf ~/.m2/repository/org/apache/spark
 
