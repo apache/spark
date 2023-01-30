@@ -305,7 +305,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_DICT_FLOAT_OR_INTEGER_OR_STRING",
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
             message_parameters={"arg_name": "value", "arg_type": "list"},
         )
 

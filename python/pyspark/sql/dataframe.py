@@ -4036,7 +4036,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(value, (float, int, str, bool, dict)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_FLOAT_OR_INTEGER_OR_STRING",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
                 message_parameters={"arg_name": "value", "arg_type": type(value).__name__},
             )
 

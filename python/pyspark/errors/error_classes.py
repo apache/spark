@@ -79,7 +79,7 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a boolean, dict, float, integer, string or tuple, got <arg_type>."
     ]
   },
-  "NOT_BOOL_OR_DICT_FLOAT_OR_INTEGER_OR_STRING" : {
+  "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING" : {
     "message" : [
       "Argument `<arg_name>` should be a boolean, dict, float, integer or string, got <arg_type>."
     ]
