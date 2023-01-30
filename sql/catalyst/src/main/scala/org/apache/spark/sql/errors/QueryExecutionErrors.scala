@@ -1737,23 +1737,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "plan" -> sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")))
   }
 
-  def structuralIntegrityOfInputPlanIsBrokenInClassError(
-      className: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2173",
-      messageParameters = Map(
-        "className" -> className))
-  }
-
-  def structuralIntegrityIsBrokenAfterApplyingRuleError(
-      ruleName: String, batchName: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2174",
-      messageParameters = Map(
-        "ruleName" -> ruleName,
-        "batchName" -> batchName))
-  }
-
   def ruleIdNotFoundForRuleError(ruleName: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2175",
