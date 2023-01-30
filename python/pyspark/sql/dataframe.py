@@ -3868,7 +3868,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
-        if subset is not None and not isinstance(subset, (list, tuple)):
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
             raise PySparkTypeError(
                 error_class="NOT_LIST_OR_TUPLE",
                 message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
