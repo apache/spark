@@ -14,13 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.catalyst
 
-
-
 import java.beans.{Introspector, PropertyDescriptor}
-import java.lang.reflect.{ParameterizedType, Type}
+import java.lang.reflect.{ParameterizedType, Type, TypeVariable}
 import java.util.{ArrayDeque, List => JList, Map => JMap}
 import javax.annotation.Nonnull
 
@@ -44,6 +41,13 @@ object JavaTypeInference {
   def inferDataType(beanType: Type): (DataType, Boolean) = {
     val encoder = encoderFor(beanType)
     (encoder.dataType, encoder.nullable)
+  }
+
+  /**
+   * Infer an [[AgnosticEncoder]] for the [[Class]] `cls`.
+   */
+  def encoderFor[T](cls: Class[T]): AgnosticEncoder[T] = {
+    encoderFor(cls.asInstanceOf[Type])
   }
 
   /**
@@ -160,16 +164,36 @@ object JavaTypeInference {
     }
 
     private def findTypeArgumentsForInterface(t: Type): Array[Type] = {
-      val queue = new ArrayDeque[Type]()
-      queue.add(t)
+      val queue = new ArrayDeque[(Type, Map[Any, Type])]
+      queue.add(t -> Map.empty)
       while (!queue.isEmpty) {
         queue.poll() match {
-          case pt: ParameterizedType if pt.getRawType == interface =>
-            return pt.getActualTypeArguments
-          case pt: ParameterizedType =>
-            queue.add(pt.getRawType)
-          case c: Class[_] =>
-            c.getGenericInterfaces.foreach(queue.add)
+          case (pt: ParameterizedType, bindings) =>
+            // translate mappings...
+            val mappedTypeArguments = pt.getActualTypeArguments.map {
+              case v: TypeVariable[_] => bindings(v.getName)
+              case v => v
+            }
+            if (pt.getRawType == interface) {
+              return mappedTypeArguments
+            } else {
+              val mappedTypeArgumentMap = mappedTypeArguments
+                .zipWithIndex.map(_.swap)
+                .toMap[Any, Type]
+              queue.add(pt.getRawType -> mappedTypeArgumentMap)
+            }
+          case (c: Class[_], indexedBindings) =>
+            val namedBindings = c.getTypeParameters.zipWithIndex.map {
+              case (parameter, index) =>
+                parameter.getName -> indexedBindings(index)
+            }.toMap[Any, Type]
+            val superClass = c.getGenericSuperclass
+            if (superClass != null) {
+              queue.add(superClass -> namedBindings)
+            }
+            c.getGenericInterfaces.foreach { iface =>
+              queue.add(iface -> namedBindings)
+            }
         }
       }
       throw QueryExecutionErrors.unreachableError()

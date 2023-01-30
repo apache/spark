@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.util.{List => JList, Map => JMap}
+import java.util.{LinkedList, List => JList, Map => JMap}
 
 import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
@@ -35,6 +35,7 @@ class DummyBean {
 class GenericCollectionBean {
   @BeanProperty var listOfListOfStrings: JList[JList[String]] = _
   @BeanProperty var mapOfDummyBeans: JMap[String, DummyBean] = _
+  @BeanProperty var linkedListOfStrings: LinkedList[String] = _
 }
 
 class LeafBean {
@@ -138,6 +139,13 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
   test("resolve type parameters for map and list") {
     val encoder = JavaTypeInference.encoderFor(classOf[GenericCollectionBean])
     val expected = JavaBeanEncoder(ClassTag(classOf[GenericCollectionBean]), Seq(
+      encoderField(
+        "linkedListOfStrings",
+        IterableEncoder(
+          ClassTag(classOf[LinkedList[_]]),
+          StringEncoder,
+          containsNull = true,
+          lenientSerialization = false)),
       encoderField(
         "listOfListOfStrings",
         IterableEncoder(
