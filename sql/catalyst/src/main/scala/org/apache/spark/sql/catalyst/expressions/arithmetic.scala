@@ -865,7 +865,9 @@ case class IntegralDivide(
     // This follows division rule
     val intDig = p1 - s1 + s2
     // No precision loss can happen as the result scale is 0.
-    DecimalType.bounded(intDig, 0)
+    // If intDig is 0 that means the result data is 0, to be safe we use decimal(1, 0)
+    // to represent 0.
+    DecimalType.bounded(if (intDig == 0) 1 else intDig, 0)
   }
 
   override def sqlOperator: String = "div"
