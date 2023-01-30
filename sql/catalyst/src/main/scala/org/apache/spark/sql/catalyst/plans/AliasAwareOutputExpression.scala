@@ -64,7 +64,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
   /**
-   * Return a set of Expression which normalize the original expression to the aliased.
+   * Return a stream of expressions in which the original expression is projected with `aliasMap`.
    */
   protected def projectExpression(expr: Expression): Stream[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))

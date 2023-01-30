@@ -26,31 +26,18 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
  * A trait that handles aliases in the `outputExpressions` to produce `outputPartitioning` that
  * satisfies distribution requirements.
  */
-trait AliasAwareOutputPartitioning extends UnaryExecNode
+trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
     if (hasAlias) {
       flattenPartitioning(child.outputPartitioning).flatMap {
-        case p: PartitioningCollection =>
-          val (exprPartitionings, nonExprPartitionings) = p.partitionings.partition {
-            case _: Expression => true
-            case _ => false
-          }
+        case e: Expression =>
           // We need unique partitionings but if the input partitioning is
           // `HashPartitioning(Seq(id + id))` and we have `id -> a` and `id -> b` aliases then after
           // the projection we have 4 partitionings:
           // `HashPartitioning(Seq(a + a))`, `HashPartitioning(Seq(a + b))`,
           // `HashPartitioning(Seq(b + a))`, `HashPartitioning(Seq(b + b))`, but
           // `HashPartitioning(Seq(a + b))` is the same as `HashPartitioning(Seq(b + a))`.
-          val partitioningSet = mutable.Set.empty[Expression]
-          val projectedExprPartitionings =
-            exprPartitionings.asInstanceOf[Seq[Expression]].toStream
-              .flatMap(projectExpression)
-              .filter(e => partitioningSet.add(e.canonicalized))
-              .take(aliasCandidateLimit)
-              .asInstanceOf[Stream[Partitioning]]
-          nonExprPartitionings ++ projectedExprPartitionings
-        case e: Expression =>
           val partitioningSet = mutable.Set.empty[Expression]
           projectExpression(e)
             .filter(e => partitioningSet.add(e.canonicalized))

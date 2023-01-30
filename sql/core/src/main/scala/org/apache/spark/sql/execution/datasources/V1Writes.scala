@@ -215,7 +215,7 @@ object V1WritesUtils {
       requiredOrdering.zip(outputOrdering).forall {
         case (requiredOrder, outputOrder) =>
           // Follow `SortOrder.satisfies` that respects `SortOrder.sameOrderExpressions`
-          outputOrder.children.exists(_.semanticEquals(requiredOrder))
+          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }
     }
   }
