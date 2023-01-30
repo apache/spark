@@ -240,11 +240,11 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
-  val MULTI_ADD_OPT_THRESHOLD =
-    buildConf("spark.sql.analyzer.canonicalization.multiAddMemoryOptThreshold")
+  val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
+    buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
-      .doc("The minimum number of consecutive Add expressions to invoke the MultiAdd " +
-        "memory optimization during canonicalization.")
+      .doc("The minimum number of consecutive commutative expressions to" +
+        " invoke the MultiCommutativeOp memory optimization during canonicalization.")
       .version("3.3.0")
       .intConf
       .createWithDefault(10)

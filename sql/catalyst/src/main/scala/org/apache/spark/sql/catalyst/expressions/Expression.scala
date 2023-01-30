@@ -1335,3 +1335,70 @@ trait CommutativeExpression extends Expression {
       f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] =
     gatherCommutative(this, f).sortBy(_.hashCode())
 }
+
+/**
+ * A helper class used by the Commutative expressions during canonicalization. During
+ * canonicalization, when we have a long tree of commutative operations, we use the MultiCommutative
+ * expression to represent that tree instead of creating new commutative objects.
+ * This class is added as a memory optimization for processing large commutative operation trees
+ * without creating a large number of new intermediate objects.
+ * The MultiCommutativeOp memory optimization is applied to the following commutative
+ * expressions:
+ *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
+ * @param operands A sequence of operands that produces a commutative expression tree.
+ * @param evalMode The optional expression evaluation mode.
+ * @param originalRoot Root operator of the commutative expression tree before canonicalization.
+ *                     This object reference is used to deduce the return dataType of Add and
+ *                     Multiply operations when the input datatype is decimal.
+ */
+case class MultiCommutativeOp(
+  operands: Seq[Expression],
+  evalMode: Option[EvalMode.Value])(originalRoot: Expression) extends Unevaluable {
+  // Helper method to deduce the data type of a single operation.
+  private def singleOpDataType(lType: DataType, rType: DataType): DataType = {
+    originalRoot match {
+      case add: Add =>
+        (lType, rType) match {
+          case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+            add.resultDecimalType(p1, s1, p2, s2)
+          case _ => lType
+        }
+      case multiply: Multiply =>
+        (lType, rType) match {
+          case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+            multiply.resultDecimalType(p1, s1, p2, s2)
+          case _ => lType
+        }
+    }
+  }
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression.  It is
+   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  override def dataType: DataType = {
+    originalRoot match {
+      case Add(_, _, _) | Multiply(_, _, _) =>
+        operands.map(_.dataType).reduce((l, r) => singleOpDataType(l, r))
+      case other => other.dataType
+    }
+  }
+
+  /**
+   * Returns whether this node is nullable. This node is nullable if any of its children is
+   * nullable.
+   */
+  override def nullable: Boolean = operands.exists(_.nullable)
+
+  /**
+   * Returns a Seq of the children of this node.
+   * Children should not change. Immutability required for containsChild optimization
+   */
+  override def children: Seq[Expression] = operands
+
+  /**
+   * Replaces the children of this node by the given children.
+   */
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    this.copy(operands = newChildren)(originalRoot)
+}

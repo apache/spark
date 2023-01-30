@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.MULTI_ADD_OPT_THRESHOLD
-import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
+import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -209,31 +209,121 @@ class CanonicalizeSuite extends SparkFunSuite {
       Add(Add(literal1, literal5), literal4)))
   }
 
-  test("SPARK-42162: Add expression canonicalization should work with the MultiAdd memory" +
-    " optimization") {
-    val default = SQLConf.get.getConf(MULTI_ADD_OPT_THRESHOLD)
-    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, "3")
+  test("SPARK-42162: Commutative expression canonicalization should work" +
+    " with the MultiCommutativeOp memory optimization") {
+    val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+    SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, "3")
+
+    // Add
     val d = Decimal(1.2)
     val literal1 = Literal.create(d, DecimalType(2, 1))
     val literal2 = Literal.create(d, DecimalType(2, 1))
     val literal3 = Literal.create(d, DecimalType(3, 2))
     assert(Add(literal1, Add(literal2, literal3))
-      .semanticEquals(Add(Add(literal2, literal1), literal3)))
-    assert(Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiAdd])
-    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, default.toString)
+      .semanticEquals(Add(Add(literal1, literal2), literal3)))
+    assert(Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // Multiply
+    assert(Multiply(literal1, Multiply(literal2, literal3))
+      .semanticEquals(Multiply(Multiply(literal1, literal2), literal3)))
+    assert(Multiply(literal1, Multiply(literal2, literal3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // And
+    val literalBool1 = Literal.create(true, BooleanType)
+    val literalBool2 = Literal.create(true, BooleanType)
+    val literalBool3 = Literal.create(true, BooleanType)
+    assert(And(literalBool1, And(literalBool2, literalBool3))
+      .semanticEquals(And(And(literalBool1, literalBool2), literalBool3)))
+    assert(And(literalBool1, And(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // Or
+    assert(Or(literalBool1, Or(literalBool2, literalBool3))
+      .semanticEquals(Or(Or(literalBool1, literalBool2), literalBool3)))
+    assert(Or(literalBool1, Or(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // BitwiseAnd
+    val literalBit1 = Literal(1)
+    val literalBit2 = Literal(2)
+    val literalBit3 = Literal(3)
+    assert(BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .semanticEquals(BitwiseAnd(BitwiseAnd(literalBit1, literalBit2), literalBit3)))
+    assert(BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // BitwiseOr
+    assert(BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .semanticEquals(BitwiseOr(BitwiseOr(literalBit1, literalBit2), literalBit3)))
+    assert(BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // BitwiseXor
+    assert(BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .semanticEquals(BitwiseXor(BitwiseXor(literalBit1, literalBit2), literalBit3)))
+    assert(BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
   }
 
-  test("SPARK-42162: Add expression canonicalization should not use MultiAdd memory" +
-    " optimization when threshold is not met") {
-    val default = SQLConf.get.getConf(MULTI_ADD_OPT_THRESHOLD)
-    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, "100")
+  test("SPARK-42162: Commutative expression canonicalization should not use" +
+    " MultiCommutativeOp memory optimization when threshold is not met") {
+    val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+    SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, "100")
+
+    // Add
     val d = Decimal(1.2)
     val literal1 = Literal.create(d, DecimalType(2, 1))
     val literal2 = Literal.create(d, DecimalType(2, 1))
     val literal3 = Literal.create(d, DecimalType(3, 2))
     assert(Add(literal1, Add(literal2, literal3))
-      .semanticEquals(Add(Add(literal2, literal1), literal3)))
-    assert(!Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiAdd])
-    SQLConf.get.setConfString(MULTI_ADD_OPT_THRESHOLD.key, default.toString)
+      .semanticEquals(Add(Add(literal1, literal2), literal3)))
+    assert(!Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // Multiply
+    assert(Multiply(literal1, Multiply(literal2, literal3))
+      .semanticEquals(Multiply(Multiply(literal1, literal2), literal3)))
+    assert(!Multiply(literal1, Multiply(literal2, literal3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // And
+    val literalBool1 = Literal.create(true, BooleanType)
+    val literalBool2 = Literal.create(true, BooleanType)
+    val literalBool3 = Literal.create(true, BooleanType)
+    assert(And(literalBool1, And(literalBool2, literalBool3))
+      .semanticEquals(And(And(literalBool1, literalBool2), literalBool3)))
+    assert(!And(literalBool1, And(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // Or
+    assert(Or(literalBool1, Or(literalBool2, literalBool3))
+      .semanticEquals(Or(Or(literalBool1, literalBool2), literalBool3)))
+    assert(!Or(literalBool1, Or(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // BitwiseAnd
+    val literalBit1 = Literal(1)
+    val literalBit2 = Literal(2)
+    val literalBit3 = Literal(3)
+    assert(BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .semanticEquals(BitwiseAnd(BitwiseAnd(literalBit1, literalBit2), literalBit3)))
+    assert(!BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // BitwiseOr
+    assert(BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .semanticEquals(BitwiseOr(BitwiseOr(literalBit1, literalBit2), literalBit3)))
+    assert(!BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    // BitwiseXor
+    assert(BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .semanticEquals(BitwiseXor(BitwiseXor(literalBit1, literalBit2), literalBit3)))
+    assert(!BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
+
+    SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
   }
 }

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, Logical
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 
 /**
@@ -805,7 +806,14 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case And(l, r) => Seq(l, r) }).reduce(And)
+    val operands = orderCommutative({ case And(l, r) => Seq(l, r) })
+    val reorderResult =
+      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
+        operands.reduce(And)
+      } else {
+        MultiCommutativeOp(operands, None)(this)
+      }
+    reorderResult
   }
 }
 
@@ -899,7 +907,14 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case Or(l, r) => Seq(l, r) }).reduce(Or)
+    val operands = orderCommutative({ case Or(l, r) => Seq(l, r) })
+    val reorderResult =
+      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
+        operands.reduce(Or)
+      } else {
+        MultiCommutativeOp(operands, None)(this)
+      }
+    reorderResult
   }
 }
 

@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 
 
@@ -62,7 +64,14 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case BitwiseAnd(l, r) => Seq(l, r) }).reduce(BitwiseAnd)
+    val operands = orderCommutative({ case BitwiseAnd(l, r) => Seq(l, r) })
+    val reorderResult =
+      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
+        operands.reduce(BitwiseAnd)
+      } else {
+        MultiCommutativeOp(operands, None)(this)
+      }
+    reorderResult
   }
 }
 
@@ -106,7 +115,14 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     newLeft: Expression, newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case BitwiseOr(l, r) => Seq(l, r) }).reduce(BitwiseOr)
+    val operands = orderCommutative({ case BitwiseOr(l, r) => Seq(l, r) })
+    val reorderResult =
+      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
+        operands.reduce(BitwiseOr)
+      } else {
+        MultiCommutativeOp(operands, None)(this)
+      }
+    reorderResult
   }
 }
 
@@ -150,7 +166,14 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case BitwiseXor(l, r) => Seq(l, r) }).reduce(BitwiseXor)
+    val operands = orderCommutative({ case BitwiseXor(l, r) => Seq(l, r) })
+    val reorderResult =
+      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
+        operands.reduce(BitwiseXor)
+      } else {
+        MultiCommutativeOp(operands, None)(this)
+      }
+    reorderResult
   }
 }
 
