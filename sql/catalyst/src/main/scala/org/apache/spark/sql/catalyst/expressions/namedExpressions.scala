@@ -424,7 +424,7 @@ case class PrettyAttribute(
 }
 
 /**
- * An expression that has to be resolved against a scope of attributes.
+ * An expression that has to be resolved against a scope of resolved attributes.
  */
 case class ScopedExpression(child: Expression, scope: AttributeSeq)
   extends UnaryExpression with Unevaluable {

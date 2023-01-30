@@ -1543,6 +1543,33 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
   }
 
+  test("SPARK-42199: resolve expression against scoped attributes") {
+    val plan = testRelation.select($"a".as("value")).analyze
+    implicit val intEncoder = ExpressionEncoder[Int]
+    val appendCols = AppendColumns[Int, Int]((x: Int) => x, plan)
+
+    // AppendColumns adds a duplicate 'value' column, which makes $"value" ambiguous
+    assertAnalysisErrorClass(
+      Project(
+        Seq($"value"),
+        appendCols
+      ),
+      "AMBIGUOUS_REFERENCE",
+      Map(
+        "name" -> "`value`",
+        "referenceNames" -> "[`value`, `value`]"))
+
+    // We can use ScopedExpression to restrict resolution of $"value" to child of AppendColumns
+    checkAnalysis(
+      Project(
+        // 'value' is resolved against plan, not this Project's child
+        Seq(ScopedExpression($"value", appendCols.child.output).as("value")),
+        // this appends another column 'value'
+        appendCols
+      ),
+      Project(Seq(plan.output.head.as("value")), appendCols.analyze))
+  }
+
   test("SPARK-38591: resolve left and right CoGroup sort order on respective side only") {
     def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
       Iterator.empty
