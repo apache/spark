@@ -582,7 +582,6 @@ class SparkConnectClient(object):
                                 "Received incorrect session identifier for request: "
                                 f"{b.client_id} != {self._session_id}"
                             )
-                        continue
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
