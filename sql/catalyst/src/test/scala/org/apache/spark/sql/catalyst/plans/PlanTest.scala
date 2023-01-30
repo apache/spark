@@ -164,10 +164,13 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
 
   private def normalizeAliases(plan: LogicalPlan): LogicalPlan = {
     plan transformWithSubqueries {
-      case p: LogicalPlan =>
-        p.transformAllExpressions {
-          case a: UnresolvedAlias => a.copy(child = a.child, aliasFunc = None)
+      case uw: UnresolvedWith =>
+        val cteRelations = uw.cteRelations.map { case (alias, cteDef) =>
+          (alias, normalizeAliases(cteDef).asInstanceOf[SubqueryAlias])
         }
+        uw.copy(cteRelations = cteRelations)
+      case p: LogicalPlan =>
+        p.transformAllExpressions { case a: UnresolvedAlias => a.copy(aliasFunc = None) }
     }
   }
 
