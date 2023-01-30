@@ -735,7 +735,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - name: Build with Maven
+      - name: Build and Test with Maven
         run: |
           export SCALA_VERSION=2.12
           if [[ "SCALA_PROFILE" == "scala2.13" ]] ; then 
