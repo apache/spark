@@ -124,7 +124,8 @@ object SparkConnectServerUtils {
         f.getName.startsWith("spark-connect-assembly") && f.getName.endsWith(".jar")) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
-        f.getName.startsWith("spark-connect") && f.getName.endsWith(".jar"))
+        f.getName.startsWith("spark-connect") &&
+        f.getName.endsWith(s"${org.apache.spark.SPARK_VERSION}.jar"))
     }
     // It is possible we found more than one: one built by maven, and another by SBT
     assert(
