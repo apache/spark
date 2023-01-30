@@ -586,6 +586,12 @@
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
   },
+  "INCOMPATIBLE_JOIN_TYPES" : {
+    "message" : [
+      "The join types <joinType1> and <joinType2> are incompatible."
+    ],
+    "sqlState" : "42818"
+  },
   "INCOMPLETE_TYPE_DEFINITION" : {
     "message" : [
       "Incomplete complex type:"
@@ -1519,11 +1525,6 @@
           "JOIN USING with LATERAL correlation."
         ]
       },
-      "LATERAL_NATURAL_JOIN" : {
-        "message" : [
-          "NATURAL join with LATERAL correlation."
-        ]
-      },
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
@@ -1532,11 +1533,6 @@
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
-        ]
-      },
-      "NATURAL_CROSS_JOIN" : {
-        "message" : [
-          "NATURAL CROSS JOIN."
         ]
       },
       "ORC_TYPE_CAST" : {

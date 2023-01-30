@@ -111,13 +111,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
   }
 
-  def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
-      messageParameters = Map.empty,
-      ctx)
-  }
-
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
@@ -165,10 +158,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def naturalCrossJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
+  def incompatibleJoinTypesError(
+      joinType1: String, joinType2: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
-      messageParameters = Map.empty,
+      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      messageParameters = Map(
+        "joinType1" -> toSQLType(joinType1),
+        "joinType2" -> toSQLType(joinType2)),
       ctx = ctx)
   }
 
