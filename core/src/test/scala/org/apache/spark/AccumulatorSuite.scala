@@ -93,7 +93,8 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("SPARK-41497: accumulators should be reported in the case of task retry with rdd cache") {
     // Set up a cluster with 2 executors
     val conf = new SparkConf()
-      .setMaster("local-cluster[2, 1, 1024]").setAppName("TaskSchedulerImplSuite")
+      .setMaster("local-cluster[2, 1, 1024]")
+      .setAppName("test")
     sc = new SparkContext(conf)
     val myAcc = sc.longAccumulator("myAcc")
     // Initiate a rdd with only one partition so there's only one task and specify the storage level

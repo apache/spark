@@ -973,13 +973,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("SPARK-14252: getOrElseUpdate should still read from remote storage") {
-    val store = makeBlockManager(8000, "executor1")
+    val store = spy(makeBlockManager(8000, "executor1"))
     val store2 = makeBlockManager(8000, "executor2")
     val list1 = List(new Array[Byte](4000))
+    val blockId = RDDBlockId(0, 0)
     store2.putIterator(
-      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(store.getOrElseUpdate(
-      "list1",
+      blockId, list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+
+    doAnswer { _ => true }.when(store).isRDDBlockVisible(mc.any())
+    assert(store.getOrElseUpdateRDDBlock(
+      0L,
+      blockId,
       StorageLevel.MEMORY_ONLY,
       ClassTag.Any,
       () => fail("attempted to compute locally")).isLeft)
@@ -2199,8 +2203,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     store.putSingle("my-block-id", new Array[User](300), StorageLevel.MEMORY_AND_DISK)
 
     val kryoException = intercept[KryoException] {
-      store.getOrElseUpdate("my-block-id", StorageLevel.MEMORY_AND_DISK, ClassTag.Object,
-        () => List(new Array[User](1)).iterator)
+      store.get("my-block-id")
     }
     assert(kryoException.getMessage === "java.io.IOException: Input/output error")
     assertUpdateBlockInfoReportedForRemovingBlock(store, "my-block-id",

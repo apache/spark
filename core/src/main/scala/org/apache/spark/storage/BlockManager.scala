@@ -1339,19 +1339,9 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
     val isCacheVisible = isRDDBlockVisible(blockId)
-    var computed: Boolean = false
-    val getIterator = () => {
-      computed = true
-      makeIterator()
-    }
-
-    val res = getOrElseUpdate(blockId, level, classTag, getIterator)
+    val res = getOrElseUpdate(blockId, level, classTag, makeIterator, isCacheVisible)
     if (res.isLeft && !isCacheVisible) {
-      if (!computed) {
-        // Loaded from cache, re-compute to update accumulators.
-        makeIterator()
-      }
-      // Block exists and not visible, report taskId -> blockId info to master.
+      // Block exists but not visible, report taskId -> blockId info to master.
       master.updateRDDBlockTaskInfo(blockId, taskId)
     }
 
@@ -1365,21 +1355,30 @@ private[spark] class BlockManager(
    * @return either a BlockResult if the block was successfully cached, or an iterator if the block
    *         could not be cached.
    */
-  private[spark] def getOrElseUpdate[T](
+  private def getOrElseUpdate[T](
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[T],
-      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
-    // Attempt to read the block from local or remote storage. If it's present, then we don't need
-    // to go through the local-get-or-put path.
-    get[T](blockId)(classTag) match {
-      case Some(block) =>
-        return Left(block)
-      case _ =>
+      makeIterator: () => Iterator[T],
+      isCacheVisible: Boolean = true): Either[BlockResult, Iterator[T]] = {
+    var iterator = makeIterator
+    if (isCacheVisible) {
+      // Attempt to read the block from local or remote storage. If it's present, then we don't need
+      // to go through the local-get-or-put path.
+      get[T](blockId)(classTag) match {
+        case Some(block) =>
+          return Left(block)
+        case _ =>
         // Need to compute the block.
+      }
+    } else {
+      // Since cache is not visible, force to compute to report accumulator updates.
+      val data = makeIterator()
+      iterator = () => data
     }
+
     // Initially we hold no locks on this block.
-    doPutIterator(blockId, makeIterator, level, classTag, keepReadLock = true) match {
+    doPutIterator(blockId, iterator, level, classTag, keepReadLock = true) match {
       case None =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
