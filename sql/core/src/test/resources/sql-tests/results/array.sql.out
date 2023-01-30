@@ -471,6 +471,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "\"ARRAY\"",
     "functionName" : "`array_insert`",
