@@ -76,6 +76,7 @@
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-repl_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
+            <type>test-jar</type>
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.spark</groupId>
