@@ -892,7 +892,7 @@ object NullDownPropagation extends Rule[LogicalPlan] {
  * Other optimizations will take advantage of the propagated foldable expressions. For example,
  * this rule can optimize
  * {{{
- *   SELECT 1.0 x, 'abc' y, Now() z ORDER BY x, y, 3
+ *   SELECT 1.0 x, 'abc' y, Now() z ORDER BY x, y, z
  * }}}
  * to
  * {{{
