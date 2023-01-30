@@ -24,7 +24,7 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     PythonUDF,
-    CommonUserDefinedFunction,
+    CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.types import DataType, StringType
@@ -129,7 +129,7 @@ class UserDefinedFunction:
             command=CloudPickleSerializer().dumps((self.func, self._returnType)),
         )
         return Column(
-            CommonUserDefinedFunction(
+            CommonInlineUserDefinedFunction(
                 function_name=self._name,
                 deterministic=self.deterministic,
                 arguments=arg_exprs,
