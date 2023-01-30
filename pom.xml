@@ -103,7 +103,6 @@
     <module>connector/connect/server</module>
     <module>connector/connect/common</module>
     <module>connector/connect/client/jvm</module>
-    <module>connector/connect/client/integration-tests</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
@@ -3493,6 +3492,13 @@
       <id>docker-integration-tests</id>
       <modules>
         <module>connector/docker-integration-tests</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>connect-client-tests</id>
+      <modules>
+        <module>connector/connect/client/jvm-e2e-tests</module>
       </modules>
     </profile>
 
