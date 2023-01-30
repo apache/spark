@@ -60,7 +60,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * | x x x x x x x x x x x x | x x x x x x x x x x x x | x x x x x x x x x x x x |
    * |                         |----l1 ----|---- l2 -----|
    *                        lastStart   timestamp   lastStartWrong
-   * Here l1 = (timestamp - startTime) % slideDuration; lastStart = timeStamp - l1
+   * Normally when timestamp > startTime, here l1 = (timestamp - startTime) % slideDuration;
+   * And lastStart = timeStamp - l1
    * However, when timestamp < startTime, the result of (timestamp - startTime) % slideDuration is
    * -l2 (note the negative sign), and lastStart is then at the position of lastStartWrong.
    * So we need to subtract a slideDuration.
