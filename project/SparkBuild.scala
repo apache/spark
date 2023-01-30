@@ -55,7 +55,6 @@ object BuildCommons {
   val connectCommon = ProjectRef(buildLocation, "connect-common")
   val connect = ProjectRef(buildLocation, "connect")
   val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
-  val connectClientE2ETests = ProjectRef(buildLocation, "connect-client-jvm-e2e-tests")
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
@@ -66,10 +65,10 @@ object BuildCommons {
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
+    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests, connectClientE2ETests) =
     Seq("kubernetes", "mesos", "yarn",
       "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _)) ++ Seq(connectClientE2ETests)
+      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests", "connect-client-jvm-e2e-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
