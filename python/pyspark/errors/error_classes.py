@@ -74,9 +74,9 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a str, got <arg_type>."
     ]
   },
-  "NOT_BOOL_OR_DICT_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE" : {
+  "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE" : {
     "message" : [
-      "Argument `<arg_name>` should be a boolean, dict, float, integer or string, got <arg_type>."
+      "Argument `<arg_name>` should be a boolean, dict, float, integer, string or tuple, got <arg_type>."
     ]
   },
   "NOT_BOOL_OR_DICT_FLOAT_OR_INTEGER_OR_STRING" : {
@@ -91,7 +91,7 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_BOOL_OR_STRING" : {
     "message" : [
-      "Argument `<arg_name>` should be a boolean or list, got <arg_type>."
+      "Argument `<arg_name>` should be a boolean or string, got <arg_type>."
     ]
   },
   "NOT_COLUMN_OR_DATATYPE_OR_STRING" : {
@@ -121,7 +121,7 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_FLOAT_OR_INTEGER" : {
     "message" : [
-      "Argument `<arg_name>` should be a float integer, got <arg_type>."
+      "Argument `<arg_name>` should be a float or integer, got <arg_type>."
     ]
   },
   "NOT_FLOAT_OR_INTEGER_OR_LIST_OR_STRING" : {

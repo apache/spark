@@ -4221,7 +4221,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict,)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
                 message_parameters={
                     "arg_name": "to_replace",
                     "arg_type": type(to_replace).__name__,
