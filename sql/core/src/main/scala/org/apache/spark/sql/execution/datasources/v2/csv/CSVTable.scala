@@ -55,6 +55,8 @@ case class CSVTable(
     }
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: BinaryType => false
+
     case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
