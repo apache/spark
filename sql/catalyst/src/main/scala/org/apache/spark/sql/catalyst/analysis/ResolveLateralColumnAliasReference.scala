@@ -182,6 +182,10 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
               case a: Attribute => false
               case s: ScalarSubquery if s.children.nonEmpty
                 && !groupingExpressions.exists(_.semanticEquals(s)) => false
+              // Manually skip detection on function itself because it can be an aggregate function.
+              // This is to avoid expressions like sum(salary) over () eligible to lift up.
+              case WindowExpression(function, spec) =>
+                function.children.forall(eligibleToLiftUp) && eligibleToLiftUp(spec)
               case e => e.children.forall(eligibleToLiftUp)
             }
           }

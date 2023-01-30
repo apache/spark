@@ -421,6 +421,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   errorClass = "_LEGACY_ERROR_TEMP_2423",
                   messageParameters = Map("sqlExpr" -> s.sql))
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
+              // There should be no Window in Aggregate - this case will fail later check anyway.
+              // Perform this check for special case of lateral column alias, when the window
+              // expression is not eligible to propagate to upper plan because it is not valid,
+              // containing non-group-by or non-aggregate-expressions.
+              case WindowExpression(function, spec) =>
+                function.children.foreach(checkValidAggregateExpression)
+                checkValidAggregateExpression(spec)
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
