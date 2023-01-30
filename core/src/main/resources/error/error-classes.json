@@ -1703,11 +1703,6 @@
           "Correlated scalar subqueries must be aggregated to return at most one row."
         ]
       },
-      "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT" : {
-        "message" : [
-          "The output of a correlated scalar subquery must be aggregated."
-        ]
-      },
       "NON_CORRELATED_COLUMNS_IN_GROUP_BY" : {
         "message" : [
           "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns: <value>."

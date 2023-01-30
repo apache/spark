@@ -868,7 +868,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (aggregates.isEmpty) {
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
+            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
           messageParameters = Map.empty)
       }
 

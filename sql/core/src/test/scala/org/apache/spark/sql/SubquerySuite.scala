@@ -558,7 +558,7 @@ class SubquerySuite extends QueryTest
     checkErrorMatchPVals(
       exception2,
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
+        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
       parameters = Map.empty[String, String],
       sqlState = None,
       context = ExpectedContext(
