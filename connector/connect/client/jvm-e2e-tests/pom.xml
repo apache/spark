@@ -48,14 +48,12 @@
             <scope>test</scope>
             <version>${project.version}</version>
         </dependency>
-        <!--
         <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-compiler</artifactId>
+            <version>${scala.version}</version>
             <scope>test</scope>
-            <version>${project.version}</version>
         </dependency>
-        -->
     </dependencies>
     <build>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
