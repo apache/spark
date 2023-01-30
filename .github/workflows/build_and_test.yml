@@ -731,15 +731,20 @@ jobs:
           java-version: ${{ matrix.java }}
       - name: Build with Maven
         run: |
+          export SCALA_VERSION=2.12
+          if [[ "SCALA_PROFILE" == "scala2.13" ]] ; then 
+             export SCALA_VERSION=2.13; 
+             ./dev/change-scala-version.sh 2.13
+          fi
           export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
           # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl repl -am
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/common
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/server
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/client/jvm
-          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} clean test -pl connector/connect/client/jvm-e2e-tests -Pconnect-client-tests
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl repl -am -Pscala-$SCALA_VERSION
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/common -Pscala-$SCALA_VERSION
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/server -Pscala-$SCALA_VERSION
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} package -pl connector/connect/client/jvm -Pscala-$SCALA_VERSION
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} clean test -pl connector/connect/client/jvm-e2e-tests -Pscala-$SCALA_VERSION -Pconnect-client-tests
           rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
