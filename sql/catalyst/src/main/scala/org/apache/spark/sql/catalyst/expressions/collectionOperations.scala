@@ -4744,54 +4744,51 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
       s"""
          |int $itemInsertionIndex = 0;
-         |boolean $newPosExtendsArrayLeft = false;
          |int $resLength = 0;
          |int $adjustedAllocIdx = 0;
          |boolean $insertedItemIsNull = ${itemExpr.isNull};
          |
-         |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements() - 1) {
-         |  $itemInsertionIndex = 0;
-         |  $newPosExtendsArrayLeft = true;
-         |} else if ($pos < 0) {
-         |  $itemInsertionIndex = $pos + $arr.numElements();
-         |} else if ($pos > 0) {
-         |  $itemInsertionIndex = $pos;
-         |}
-         |
-         |if ($newPosExtendsArrayLeft) {
+         |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements() - 1)) {
          |  $resLength = java.lang.Math.abs($pos) + 1;
-         |} else {
-         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
-         |}
-         |
-         |$allocation
-         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |  $adjustedAllocIdx = $i;
-         |  if ($newPosExtendsArrayLeft) {
-         |    $adjustedAllocIdx =
-         |        $adjustedAllocIdx + 1 + java.lang.Math.abs($pos + $arr.numElements());
+         |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+         |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
          |  }
-         |  if ($i >= $itemInsertionIndex && !$newPosExtendsArrayLeft) {
-         |    $adjustedAllocIdx = $adjustedAllocIdx + 1;
+         |  $allocation
+         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |    $adjustedAllocIdx = $i + 1 + java.lang.Math.abs($pos + $arr.numElements());
+         |    $assignment
          |  }
-         |  $assignment
-         |}
-         |
-         |${CodeGenerator.setArrayElement(
-            values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
-         |
-         |if ($newPosExtendsArrayLeft) {
+         |  ${CodeGenerator.setArrayElement(
+              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
          |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
          |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
          |  }
+         |  ${ev.value} = $values;
          |} else {
+         |  $itemInsertionIndex = $pos;
+         |  if ($pos < 0) {
+         |    $itemInsertionIndex = $itemInsertionIndex + $arr.numElements();
+         |  }
+         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
+         |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+         |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+         |  }
+         |  $allocation
+         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |    $adjustedAllocIdx = $i;
+         |    if ($i >= $itemInsertionIndex) {
+         |      $adjustedAllocIdx = $adjustedAllocIdx + 1;
+         |    }
+         |    $assignment
+         |  }
+         |  ${CodeGenerator.setArrayElement(
+              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
          |  for (int $j = $arr.numElements(); $j < $resLength - 1; $j ++) {
          |    $values.setNullAt($j);
          |  }
+         |  ${ev.value} = $values;
          |}
-         |
-         |${ev.value} = $values;
-       """.stripMargin
+      """.stripMargin
     }
 
     val leftGen = first.genCode(ctx)
