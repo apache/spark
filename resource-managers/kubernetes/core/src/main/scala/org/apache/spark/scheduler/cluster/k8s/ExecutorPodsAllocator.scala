@@ -90,6 +90,8 @@ class ExecutorPodsAllocator(
 
   protected val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
+  protected var stalledStartTime: Instant = null
+
   val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
       .inNamespace(namespace)
@@ -387,7 +389,20 @@ class ExecutorPodsAllocator(
     // number of pending pods and new snapshot arrives in case of waiting for releasing of the
     // existing PVCs
     val remainingSlotFromPendingPods = maxPendingPods - totalNotRunningPodCount
-    if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0 &&
+    if (remainingSlotFromPendingPods <= 0) {
+      // Only count as stalled if we have not allocated _anything_ this time through.
+      val howLong = stalledStartTime match {
+        case null =>
+          stalledStartTime = Instant.now()
+          ""
+        case _ =>
+          val durationSeconds = Instant.now().getEpochSecond() - stalledStartTime.getEpochSecond()
+          val duration = "${durationSeconds / 60} minutes , %{durationSeconds % 60} seconds"
+          s" This has been happening for ${duration}."
+      }
+      logWarning(s"Not requesting more pods as not running count $totalNotRunningPodCount " +
+        s"exceeds $maxPendingPods (${KUBERNETES_MAX_PENDING_PODS.key}).$howLong")
+    } else if (podsToAllocateWithRpId.size > 0 &&
         !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
       ExecutorPodsAllocator.splitSlots(podsToAllocateWithRpId, remainingSlotFromPendingPods)
         .foreach { case ((rpId, podCountForRpId, targetNum), sharedSlotFromPendingPods) =>
