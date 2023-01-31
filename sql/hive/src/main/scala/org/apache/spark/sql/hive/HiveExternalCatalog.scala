@@ -815,7 +815,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
       val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
-      if (DataType.equalsIgnoreCaseAndNullability(reorderedSchema, table.schema) ||
+      // TimestampType and TimestampNTZType use the same catalog string "timestamp", since Hive
+      // metastore only supports one timestamp type. If the catalog strings from Hive metastore
+      // and Spark SQL is consistent, Spark SQL will use the version from Spark SQL which is more
+      // accurate.
+      if (reorderedSchema.catalogString.toLowerCase(Locale.ROOT) ==
+        table.schema.catalogString.toLowerCase(Locale.ROOT) ||
           options.respectSparkSchema) {
         hiveTable.copy(
           schema = reorderedSchema,

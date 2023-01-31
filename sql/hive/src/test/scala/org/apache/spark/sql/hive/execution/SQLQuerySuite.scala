@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
 import java.util.{Locale, Set}
 
 import com.google.common.io.Files
@@ -127,6 +128,24 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql("SELECT genoutput.* FROM src " +
           "LATERAL VIEW explode(map('key1', 100, 'key2', 200)) genoutput AS key, value")
       checkAnswer(query, Row("key1", 100) :: Row("key2", 200) :: Nil)
+    }
+  }
+
+  test("SPARK-36180: Support TimestampNTZ type in Hive") {
+    withTable("tb") {
+      val dt = "2018-11-17 13:33:33.0"
+      val ddl =
+        s"CREATE TABLE tb as SELECT TIMESTAMP_LTZ '$dt' as c0, TIMESTAMP_NTZ '$dt' as c1"
+      sql(ddl)
+      val df = sql("SELECT c0, c1 FROM tb")
+      checkAnswer(df, Row(
+        Timestamp.valueOf(dt),
+        LocalDateTime.parse(dt.replace(" ", "T"))))
+      val dt2 = "2023-01-01 00:00:00"
+      sql(s"ALTER TABLE tb ADD COLUMN c2 TIMESTAMP_NTZ")
+      sql(s"INSERT INTO tb values(TIMESTAMP'$dt2', TIMESTAMP_NTZ'$dt', TIMESTAMP_NTZ'$dt2')")
+      checkAnswer(sql("select c2 from tb"),
+        Seq(Row(null), Row(LocalDateTime.parse(dt2.replace(" ", "T")))))
     }
   }
 
