@@ -56,7 +56,6 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
@@ -73,7 +72,7 @@ object SimpleAnalyzer extends Analyzer(
     new SessionCatalog(
       new InMemoryCatalog,
       FunctionRegistry.builtin,
-      EmptyTableFunctionRegistry) {
+      TableFunctionRegistry.builtin) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
     })) {
   override def resolver: Resolver = caseSensitiveResolution
@@ -191,10 +190,10 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
-  override protected def isPlanIntegral(
+  override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Boolean = {
-    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan)
+      currentPlan: LogicalPlan): Option[String] = {
+    LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan)
   }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
@@ -984,7 +983,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * projecting away metadata columns prematurely.
    */
   object AddMetadataColumns extends Rule[LogicalPlan] {
-
     import org.apache.spark.sql.catalyst.util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
@@ -1039,7 +1037,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         s.withMetadataColumns()
       case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
         val newProj = p.copy(
-          projectList = p.projectList ++ p.metadataOutput,
+          // Do not leak the qualified-access-only restriction to normal plan outputs.
+          projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
           child = addMetadataCol(p.child, requiredAttrIds))
         newProj.copyTagsFrom(p)
         newProj
@@ -1594,6 +1593,37 @@ class Analyzer(override val catalogManager: CatalogManager)
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
+      case mg: MapGroups if mg.dataOrder.exists(!_.resolved) =>
+        // Resolve against `AppendColumns`'s children, instead of `AppendColumns`,
+        // because `AppendColumns`'s serializer might produce conflict attribute
+        // names leading to ambiguous references exception.
+        val planForResolve = mg.child match {
+          case appendColumns: AppendColumns => appendColumns.child
+          case plan => plan
+        }
+        val resolvedOrder = mg.dataOrder
+            .map(resolveExpressionByPlanOutput(_, planForResolve).asInstanceOf[SortOrder])
+        mg.copy(dataOrder = resolvedOrder)
+
+      // Left and right sort expression have to be resolved against the respective child plan only
+      case cg: CoGroup if cg.leftOrder.exists(!_.resolved) || cg.rightOrder.exists(!_.resolved) =>
+        // Resolve against `AppendColumns`'s children, instead of `AppendColumns`,
+        // because `AppendColumns`'s serializer might produce conflict attribute
+        // names leading to ambiguous references exception.
+        val (leftPlanForResolve, rightPlanForResolve) = Seq(cg.left, cg.right).map {
+          case appendColumns: AppendColumns => appendColumns.child
+          case plan => plan
+        } match {
+          case Seq(left, right) => (left, right)
+        }
+
+        val resolvedLeftOrder = cg.leftOrder
+          .map(resolveExpressionByPlanOutput(_, leftPlanForResolve).asInstanceOf[SortOrder])
+        val resolvedRightOrder = cg.rightOrder
+          .map(resolveExpressionByPlanOutput(_, rightPlanForResolve).asInstanceOf[SortOrder])
+
+        cg.copy(leftOrder = resolvedLeftOrder, rightOrder = resolvedRightOrder)
+
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
@@ -1950,6 +1980,11 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
+        case f0: UnresolvedFunction if !f0.isDistinct &&
+          f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
+          f0.arguments == Seq(UnresolvedStar(None)) =>
+          // Transform COUNT(*) into COUNT(1).
+          f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
@@ -4045,9 +4080,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                   case Some(colName) =>
                     ResolvedFieldPosition(ColumnPosition.after(colName))
                   case None =>
-                    val name = if (resolvedParentName.isEmpty) "root" else resolvedParentName.quoted
                     throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(
-                      after, name)
+                      col.colName, allFields)
                 }
               case _ => ResolvedFieldPosition(u.position)
             }

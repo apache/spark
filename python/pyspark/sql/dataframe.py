@@ -506,7 +506,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> type(df.write)
-        <class 'pyspark.sql.readwriter.DataFrameWriter'>
+        <class '...readwriter.DataFrameWriter'>
 
         Write the DataFrame as a table.
 

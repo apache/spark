@@ -20,9 +20,9 @@ user experience across all languages. Please follow the below guidelines:
 * [Connection string configuration](docs/client-connection-string.md)
 * [Adding new messages](docs/adding-proto-messages.md) in the Spark Connect protocol.
 
-### Python client developement
+### Python client development
 
-Python-specific developement guidelines are located in [python/docs/source/development/testing.rst](https://github.com/apache/spark/blob/master/python/docs/source/development/testing.rst) that is published at [Development tab](https://spark.apache.org/docs/latest/api/python/development/index.html) in PySpark documentation.
+Python-specific development guidelines are located in [python/docs/source/development/testing.rst](https://github.com/apache/spark/blob/master/python/docs/source/development/testing.rst) that is published at [Development tab](https://spark.apache.org/docs/latest/api/python/development/index.html) in PySpark documentation.
 
 ### Build with user-defined `protoc` and `protoc-gen-grpc-java`
 

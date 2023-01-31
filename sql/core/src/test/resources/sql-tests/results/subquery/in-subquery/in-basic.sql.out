@@ -40,6 +40,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "leftColumns" : "\"a1\", \"b1\"",
     "leftLength" : "2",

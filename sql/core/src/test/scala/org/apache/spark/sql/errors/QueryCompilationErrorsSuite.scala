@@ -277,7 +277,7 @@ class QueryCompilationErrorsSuite
       exception = groupingColMismatchEx,
       errorClass = "GROUPING_COLUMN_MISMATCH",
       parameters = Map("grouping" -> "earnings.*", "groupingColumns" -> "course.*,year.*"),
-      sqlState = Some("42000"),
+      sqlState = Some("42803"),
       matchPVals = true)
   }
 
@@ -290,7 +290,7 @@ class QueryCompilationErrorsSuite
       errorClass = "GROUPING_ID_COLUMN_MISMATCH",
       parameters = Map("groupingIdColumn" -> "earnings.*",
       "groupByColumns" -> "course.*,year.*"),
-      sqlState = Some("42000"),
+      sqlState = Some("42803"),
       matchPVals = true)
   }
 
@@ -674,8 +674,9 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
-        "functionName" -> "`cast`"
-      ),
+        "functionName" -> "`cast`",
+        "expectedNum" -> "0",
+        "actualNum" -> "1"),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }

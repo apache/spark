@@ -52,7 +52,7 @@ trait FileWrite extends Write {
 
   override def toBatch: BatchWrite = {
     val sparkSession = SparkSession.active
-    validateInputs(sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    validateInputs(sparkSession.sessionState.conf)
     val path = new Path(paths.head)
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -80,7 +80,8 @@ trait FileWrite extends Write {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
-  private def validateInputs(caseSensitiveAnalysis: Boolean): Unit = {
+  private def validateInputs(sqlConf: SQLConf): Unit = {
+    val caseSensitiveAnalysis = sqlConf.caseSensitiveAnalysis
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
 
@@ -90,7 +91,7 @@ trait FileWrite extends Write {
     }
     val pathName = paths.head
     SchemaUtils.checkColumnNameDuplication(schema.fields.map(_.name), caseSensitiveAnalysis)
-    DataSource.validateSchema(schema)
+    DataSource.validateSchema(schema, sqlConf)
 
     // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.
     schema.foreach { field =>

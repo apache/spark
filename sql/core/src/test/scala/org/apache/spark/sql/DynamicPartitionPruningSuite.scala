@@ -1616,6 +1616,36 @@ abstract class DynamicPartitionPruningSuiteBase
       assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
     }
   }
+
+  test("SPARK-39217: Makes DPP support the pruning side has Union") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT f.store_id,
+          |       f.date_id,
+          |       s.state_province
+          |FROM (SELECT 4 AS store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_sk
+          |      WHERE  date_id >= 1300
+          |      UNION ALL
+          |      SELECT   store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_stats
+          |      WHERE  date_id <= 1000) f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id
+          |WHERE s.country IN ('US', 'NL')
+          |""".stripMargin)
+
+      checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+      checkAnswer(df, Row(4, 1300, "California") :: Row(1, 1000, "North-Holland") :: Nil)
+      // CleanupDynamicPruningFilters should remove DPP in first child of union
+      assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase

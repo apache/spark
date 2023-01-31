@@ -36,7 +36,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
@@ -56,7 +56,7 @@ abstract class CSVSuite
 
   override protected def dataSourceFormat = "csv"
 
-  private val carsFile = "test-data/cars.csv"
+  protected val carsFile = "test-data/cars.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
   private val carsFile8859 = "test-data/cars_iso-8859-1.csv"
   private val carsTsvFile = "test-data/cars.tsv"
@@ -370,8 +370,11 @@ abstract class CSVSuite
           .load(testFile(carsFile)).collect()
       }
 
-      assert(exception.getMessage.contains("Malformed CSV record"))
-      assert(ExceptionUtils.getRootCause(exception).isInstanceOf[RuntimeException])
+      checkError(
+        exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+        errorClass = "MALFORMED_CSV_RECORD",
+        parameters = Map("badRecord" -> "2015,Chevy,Volt")
+      )
     }
   }
 
@@ -3138,6 +3141,24 @@ class CSVv1Suite extends CSVSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "csv")
+
+  test("test for FAILFAST parsing mode on CSV v1") {
+    Seq(false, true).foreach { multiLine =>
+      val exception = intercept[SparkException] {
+        spark.read
+          .format("csv")
+          .option("multiLine", multiLine)
+          .options(Map("header" -> "true", "mode" -> "failfast"))
+          .load(testFile(carsFile)).collect()
+      }
+
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkException],
+        errorClass = "_LEGACY_ERROR_TEMP_2177",
+        parameters = Map("failFastMode" -> "FAILFAST")
+      )
+    }
+  }
 }
 
 class CSVv2Suite extends CSVSuite {
@@ -3145,6 +3166,25 @@ class CSVv2Suite extends CSVSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("test for FAILFAST parsing mode on CSV v2") {
+    Seq(false, true).foreach { multiLine =>
+      val exception = intercept[SparkException] {
+        spark.read
+          .format("csv")
+          .option("multiLine", multiLine)
+          .options(Map("header" -> "true", "mode" -> "failfast"))
+          .load(testFile(carsFile)).collect()
+      }
+
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkException],
+        errorClass = "_LEGACY_ERROR_TEMP_2064",
+        parameters = Map("path" -> s".*$carsFile"),
+        matchPVals = true
+      )
+    }
+  }
 }
 
 class CSVLegacyTimeParserSuite extends CSVSuite {

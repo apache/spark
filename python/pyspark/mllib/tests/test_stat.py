@@ -24,7 +24,7 @@ from pyspark.mllib.linalg import Vectors, Matrices
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
-from pyspark.sql.utils import IllegalArgumentException
+from pyspark.errors import IllegalArgumentException
 from pyspark.testing.mllibutils import MLlibTestCase
 
 
