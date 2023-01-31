@@ -344,7 +344,7 @@ class KryoDeserializationStream(
     override protected def getNext(): Any = {
       if (KryoDeserializationStream.this.hasNext) {
         try {
-          return readValue[Any]()
+          return readObject[Any]()
         } catch {
           case eof: EOFException =>
         }

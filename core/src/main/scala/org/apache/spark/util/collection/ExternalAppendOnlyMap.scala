@@ -505,13 +505,13 @@ class ExternalAppendOnlyMap[K, V, C](
      * If no more pairs are left, return null.
      */
     private def readNextItem(): (K, C) = {
-      val next = batchIterator.next()
+      val item = batchIterator.next()
       objectsRead += 1
       if (objectsRead == serializerBatchSize) {
         objectsRead = 0
         batchIterator = nextBatchIterator()
       }
-      next
+      item
     }
 
     override def hasNext: Boolean = {
