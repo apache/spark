@@ -227,6 +227,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val rp = rpb.build()
 
     val confWithLowMaxPendingPods = conf.clone.set(KUBERNETES_MAX_PENDING_PODS.key, "3")
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithLowMaxPendingPods, secMgr,
       executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
@@ -237,6 +238,13 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, rp.id))
     verify(podResource, times(3)).create()
+    // We should have allocated something in each RPI so we don't count as "stalled."
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+
+    // Now we should be stalled
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(rp -> 7))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.stalledStartTime != null)
 
     // Mark executor 2 and 3 as pending, leave 1 as newly created but this does not free up
     // any pending pod slot so no new pod is requested
@@ -246,6 +254,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
     verify(podResource, times(3)).create()
     verify(labeledPods, never()).delete()
+    assert(podsAllocatorUnderTest.stalledStartTime != null)
 
     // Downscaling for defaultProfile resource ID with 1 executor to make one free slot
     // for pendings pods
@@ -263,6 +272,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(5, rp.id))
     verify(labeledPods, times(1)).delete()
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
   }
 
   test("Initially request executors in batches. Do not request another batch if the" +
