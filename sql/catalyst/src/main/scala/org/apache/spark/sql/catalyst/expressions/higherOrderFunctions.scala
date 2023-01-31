@@ -452,7 +452,7 @@ case class ArraySort(
       secondElemVar.value.set(o2)
       val cmp = f.eval(inputRow)
       if (!allowNullComparisonResult && cmp == null) {
-        throw QueryExecutionErrors.nullComparisonResultError()
+        throw QueryExecutionErrors.comparatorReturnsNull(o1.toString, o1.toString)
       }
       cmp.asInstanceOf[Int]
     }

@@ -573,6 +573,94 @@ class DatasetSuite extends QueryTest
       "a", "30", "b", "3", "c", "1")
   }
 
+  test("groupBy, flatMapSorted") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
+    val aggregated = grouped.flatMapSortedGroups($"seq", expr("length(key)"), $"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "(a,1,10), (a,2,20)",
+      "b", "(b,1,2), (b,2,1)",
+      "c", "(c,1,1)"
+    )
+
+    // Star is not allowed as group sort column
+    checkError(
+      exception = intercept[AnalysisException] {
+        grouped.flatMapSortedGroups($"*") {
+          (g, iter) => Iterator(g, iter.mkString(", "))
+        }
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1020",
+      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
+  }
+
+  test("groupBy function, flatMapSorted") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    // groupByKey Row => String adds key columns `value` to the dataframe
+    val grouped = ds.groupByKey(v => v.getString(0))
+    // $"value" here is expected to not reference the key column
+    val aggregated = grouped.flatMapSortedGroups($"seq", expr("length(key)"), $"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "[a,1,10], [a,2,20]",
+      "b", "[b,1,2], [b,2,1]",
+      "c", "[c,1,1]"
+    )
+
+    // Star is not allowed as group sort column
+    checkError(
+      exception = intercept[AnalysisException] {
+        grouped.flatMapSortedGroups($"*") {
+          (g, iter) => Iterator(g, iter.mkString(", "))
+        }
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1020",
+      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
+  }
+
+  test("groupBy, flatMapSorted desc") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
+    val aggregated = grouped.flatMapSortedGroups($"seq".desc, expr("length(key)"), $"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "(a,2,20), (a,1,10)",
+      "b", "(b,2,1), (b,1,2)",
+      "c", "(c,1,1)"
+    )
+  }
+
+  test("groupBy function, flatMapSorted desc") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    // groupByKey Row => String adds key columns `value` to the dataframe
+    val grouped = ds.groupByKey(v => v.getString(0))
+    // $"value" here is expected to not reference the key column
+    val aggregated = grouped.flatMapSortedGroups($"seq".desc, expr("length(key)"), $"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "[a,2,20], [a,1,10]",
+      "b", "[b,2,1], [b,1,2]",
+      "c", "[c,1,1]"
+    )
+  }
+
   test("groupBy function, mapValues, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val keyValue = ds.groupByKey(_._1).mapValues(_._2)
@@ -725,6 +813,79 @@ class DatasetSuite extends QueryTest
     checkDatasetUnorderly(
       cogrouped,
       1 -> "a", 2 -> "bc", 3 -> "d")
+  }
+
+  test("cogroup with groupBy and sorted") {
+    val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
+    val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
+    val groupedLeft = left.groupBy($"_1").as[Int, (Int, String)]
+    val groupedRight = right.groupBy($"_1").as[Int, (Int, String)]
+
+    val neitherSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#wa", 5 -> "hello#xzy")
+    val leftSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#wa", 5 -> "hello#xzy")
+    val rightSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#aw", 5 -> "hello#xyz")
+    val bothSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#aw", 5 -> "hello#xyz")
+    val bothDescSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzijkabc#wa", 5 -> "hello#zyx")
+
+    val ascOrder = Seq($"_2")
+    val descOrder = Seq($"_2".desc)
+    val exprOrder = Seq(substring($"_2", 0, 1))
+    val none = Seq.empty
+
+    Seq(
+      ("neither", none, none, neitherSortedExpected),
+      ("left", ascOrder, none, leftSortedExpected),
+      ("right", none, ascOrder, rightSortedExpected),
+      ("both", ascOrder, ascOrder, bothSortedExpected),
+      ("expr", exprOrder, exprOrder, bothSortedExpected),
+      ("both desc", descOrder, descOrder, bothDescSortedExpected)
+    ).foreach { case (label, leftOrder, rightOrder, expected) =>
+      withClue(s"$label sorted") {
+        val cogrouped = groupedLeft.cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*) {
+          (key, left, right) =>
+            Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
+        }
+
+        checkDatasetUnorderly(cogrouped, expected.toList: _*)
+      }
+    }
+  }
+
+  test("cogroup with groupBy function and sorted") {
+    val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
+    val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
+    // this groupByKey produces conflicting _1 and _2 columns
+    // that should be ignored when resolving sort expressions
+    val groupedLeft = left.groupByKey(row => (row._1, row._1))
+    val groupedRight = right.groupByKey(row => (row._1, row._1))
+
+    val neitherSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#wa", 5 -> "hello#xzy")
+    val leftSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#wa", 5 -> "hello#xzy")
+    val rightSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#aw", 5 -> "hello#xyz")
+    val bothSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#aw", 5 -> "hello#xyz")
+    val bothDescSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzijkabc#wa", 5 -> "hello#zyx")
+
+    val ascOrder = Seq($"_2")
+    val descOrder = Seq($"_2".desc)
+    val exprOrder = Seq(substring($"_2", 0, 1))
+    val none = Seq.empty
+
+    Seq(
+      ("neither", none, none, neitherSortedExpected),
+      ("left", ascOrder, none, leftSortedExpected),
+      ("right", none, ascOrder, rightSortedExpected),
+      ("both", ascOrder, ascOrder, bothSortedExpected),
+      ("expr", exprOrder, exprOrder, bothSortedExpected),
+      ("both desc", descOrder, descOrder, bothDescSortedExpected)
+    ).foreach { case (label, leftOrder, rightOrder, expected) =>
+      withClue(s"$label sorted") {
+        val cogrouped = groupedLeft.cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*) {
+          (key, left, right) =>
+            Iterator(key._1 -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
+        }
+        checkDatasetUnorderly(cogrouped, expected.toList: _*)
+      }
+    }
   }
 
   test("SPARK-34806: observation on datasets") {

@@ -580,7 +580,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("sentences()")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("sentences"),
         "expectedNum" -> "[1, 2, 3]",

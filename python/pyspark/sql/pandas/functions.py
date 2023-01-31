@@ -25,6 +25,7 @@ from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
+from pyspark.sql.utils import is_remote
 
 
 class PandasUDFType:
@@ -50,6 +51,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     API in general.
 
     .. versionadded:: 2.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -449,4 +453,9 @@ def _create_pandas_udf(f, returnType, evalType):
             "or three arguments (key, left, right)."
         )
 
-    return _create_udf(f, returnType, evalType)
+    if is_remote():
+        from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
+
+        return _create_connect_udf(f, returnType, evalType)
+    else:
+        return _create_udf(f, returnType, evalType)

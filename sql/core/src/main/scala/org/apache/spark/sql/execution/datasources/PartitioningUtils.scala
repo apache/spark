@@ -488,10 +488,10 @@ object PartitioningUtils extends SQLConfHelper {
 
     val timestampTry = Try {
       val unescapedRaw = unescapePathName(raw)
-      // the inferred data type is consistent with the default timestamp type
-      val timestampType = conf.timestampType
       // try and parse the date, if no exception occurs this is a candidate to be resolved as
-      // TimestampType or TimestampNTZType
+      // TimestampType or TimestampNTZType. The inference timestamp typ is controlled by the conf
+      // "spark.sql.inferTimestampNTZInDataSources.enabled".
+      val timestampType = conf.timestampTypeInSchemaInference
       timestampType match {
         case TimestampType => timestampFormatter.parse(unescapedRaw)
         case TimestampNTZType => timestampFormatter.parseWithoutTimeZone(unescapedRaw)

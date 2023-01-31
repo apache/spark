@@ -8,7 +8,7 @@ pandas
 scipy
 plotly
 mlflow>=1.0
-sklearn
+scikit-learn
 matplotlib<3.3.0
 memory-profiler==0.60.0
 
@@ -59,3 +59,7 @@ googleapis-common-protos==1.56.4
 mypy-protobuf==3.3.0
 googleapis-common-protos-stubs==2.2.0
 grpc-stubs==1.24.11
+
+# TorchDistributor dependencies
+torch==1.13.1
+torchvision==0.14.1

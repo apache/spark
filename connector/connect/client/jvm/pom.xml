@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.4.0-SNAPSHOT</version>
+    <version>3.5.0-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
@@ -32,6 +32,7 @@
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
+    <guava.version>31.0.1-jre</guava.version>
   </properties>
 
   <dependencies>
@@ -46,11 +47,40 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!--TODO: fix the dependency once the catalyst refactoring is done-->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf.version}</version>
       <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${guava.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <!--
+      SPARK-42213: Add `repl` as test dependency to solve the issue that
+      `ClientE2ETestSuite` cannot find `repl.Main` when maven test.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-repl_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+      <!-- Exclude sql module to resolve compilation conflicts -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-sql_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -66,7 +96,7 @@
   <build>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
-      <!-- Shade all Protobuf dependencies of this build -->
+      <!-- Shade all Guava / Protobuf dependencies of this build -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
@@ -74,6 +104,7 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
+              <include>com.google.guava:*</include>
               <include>com.google.protobuf:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
@@ -84,6 +115,20 @@
               <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
               <includes>
                 <include>com.google.protobuf.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.guava</shadedPattern>
+              <includes>
+                <include>com.google.common.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.guava</shadedPattern>
+              <includes>
+                <include>com.google.thirdparty.**</include>
               </includes>
             </relocation>
           </relocations>

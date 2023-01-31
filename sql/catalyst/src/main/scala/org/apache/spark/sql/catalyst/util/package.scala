@@ -213,11 +213,17 @@ package object util extends Logging {
         .build()
     )
 
-    def markAsAllowAnyAccess(): Attribute = attr.withMetadata(
-      new MetadataBuilder()
-        .withMetadata(attr.metadata)
-        .remove(QUALIFIED_ACCESS_ONLY)
-        .build()
-    )
+    def markAsAllowAnyAccess(): Attribute = {
+      if (qualifiedAccessOnly) {
+        attr.withMetadata(
+          new MetadataBuilder()
+            .withMetadata(attr.metadata)
+            .remove(QUALIFIED_ACCESS_ONLY)
+            .build()
+        )
+      } else {
+        attr
+      }
+    }
   }
 }

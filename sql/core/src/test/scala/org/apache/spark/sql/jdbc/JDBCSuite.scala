@@ -276,6 +276,20 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "INSERT INTO test.datetime VALUES ('2018-07-12', '2018-07-12 09:51:15.0')").executeUpdate()
     conn.commit()
 
+    conn.prepareStatement(
+      "CREATE TABLE test.composite_name (`last name` TEXT(32) NOT NULL, id INTEGER NOT NULL)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO test.composite_name VALUES ('smith', 1)").executeUpdate()
+    conn.prepareStatement("INSERT INTO test.composite_name VALUES ('jones', 2)").executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+        |CREATE OR REPLACE TEMPORARY VIEW composite_name
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.COMPOSITE_NAME', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
@@ -1962,5 +1976,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-41990: Filter with composite name") {
+    val df = sql("SELECT * FROM composite_name WHERE `last name` = 'smith'")
+    assert(df.collect.toSet === Set(Row("smith", 1)))
   }
 }

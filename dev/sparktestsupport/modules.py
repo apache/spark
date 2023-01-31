@@ -279,6 +279,7 @@ connect = Module(
     ],
     sbt_test_goals=[
         "connect/test",
+        "connect-client-jvm/test",
     ],
 )
 
@@ -430,6 +431,7 @@ pyspark_core = Module(
         "pyspark.tests.test_taskcontext",
         "pyspark.tests.test_util",
         "pyspark.tests.test_worker",
+        "pyspark.tests.test_stage_sched",
     ],
 )
 
@@ -466,6 +468,7 @@ pyspark_sql = Module(
         "pyspark.sql.observation",
         # unittests
         "pyspark.sql.tests.test_arrow",
+        "pyspark.sql.tests.test_arrow_python_udf",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
@@ -517,9 +520,15 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",
+        "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_catalog",
+        "pyspark.sql.tests.connect.test_parity_serde",
         "pyspark.sql.tests.connect.test_parity_functions",
+        "pyspark.sql.tests.connect.test_parity_group",
         "pyspark.sql.tests.connect.test_parity_dataframe",
+        "pyspark.sql.tests.connect.test_parity_types",
+        "pyspark.sql.tests.connect.test_parity_column",
+        "pyspark.sql.tests.connect.test_parity_readwriter",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -613,8 +622,10 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_base",
         "pyspark.ml.tests.test_evaluation",
         "pyspark.ml.tests.test_feature",
+        "pyspark.ml.tests.test_functions",
         "pyspark.ml.tests.test_image",
         "pyspark.ml.tests.test_linalg",
+        "pyspark.ml.tests.test_model_cache",
         "pyspark.ml.tests.test_param",
         "pyspark.ml.tests.test_persistence",
         "pyspark.ml.tests.test_pipeline",
@@ -623,6 +634,8 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_tuning",
         "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
+        "pyspark.ml.torch.tests.test_distributor",
+        "pyspark.ml.torch.tests.test_log_communication",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -746,6 +759,16 @@ pyspark_pandas_slow = Module(
     ],
 )
 
+pyspark_errors = Module(
+    name="pyspark-errors",
+    dependencies=[],
+    source_file_regexes=["python/pyspark/errors"],
+    python_test_goals=[
+        # unittests
+        "pyspark.errors.tests.test_errors",
+    ],
+)
+
 sparkr = Module(
     name="sparkr",
     dependencies=[hive, mllib],
@@ -801,7 +824,7 @@ kubernetes = Module(
     name="kubernetes",
     dependencies=[],
     source_file_regexes=["resource-managers/kubernetes"],
-    build_profile_flags=["-Pkubernetes"],
+    build_profile_flags=["-Pkubernetes", "-Pvolcano"],
     sbt_test_goals=["kubernetes/test"],
 )
 

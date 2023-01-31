@@ -90,6 +90,7 @@ class SQLAppStatusListener(
           // data corresponding to the execId.
           val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
           val executionData = new LiveExecutionData(executionId)
+          executionData.rootExecutionId = sqlStoreData.rootExecutionId
           executionData.description = sqlStoreData.description
           executionData.details = sqlStoreData.details
           executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
@@ -340,7 +341,7 @@ class SQLAppStatusListener(
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    val SparkListenerSQLExecutionStart(executionId, description, details,
+    val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
       physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
@@ -355,6 +356,7 @@ class SQLAppStatusListener(
     kvstore.write(graphToStore)
 
     val exec = getOrCreateExecution(executionId)
+    exec.rootExecutionId = rootExecutionId
     exec.description = description
     exec.details = details
     exec.physicalPlanDescription = physicalPlanDescription
@@ -483,6 +485,7 @@ class SQLAppStatusListener(
 
 private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
+  var rootExecutionId: Long = _
   var description: String = null
   var details: String = null
   var physicalPlanDescription: String = null
@@ -505,6 +508,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   override protected def doUpdate(): Any = {
     new SQLExecutionUIData(
       executionId,
+      rootExecutionId,
       description,
       details,
       physicalPlanDescription,

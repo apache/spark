@@ -226,9 +226,21 @@ case class DropTableCommand(
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw QueryCompilationErrors.cannotDropViewWithDropTableError()
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP TABLE",
+            requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
+            objectName = catalog.getTableMetadata(tableName).qualifiedName,
+            foundType = catalog.getTableMetadata(tableName).tableType.name,
+            alternative = "DROP VIEW"
+          )
         case o if o != CatalogTableType.VIEW && isView =>
-          throw QueryCompilationErrors.cannotDropViewWithDropTableError()
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP VIEW",
+            requiredType = CatalogTableType.VIEW.name,
+            objectName = catalog.getTableMetadata(tableName).qualifiedName,
+            foundType = o.name,
+            alternative = "DROP TABLE"
+          )
         case _ =>
       }
 

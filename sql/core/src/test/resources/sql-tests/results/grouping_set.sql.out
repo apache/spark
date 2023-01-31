@@ -136,7 +136,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'ROLLUP'",
     "hint" : ": extra input 'ROLLUP'"
@@ -152,7 +152,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'CUBE'",
     "hint" : ": extra input 'CUBE'"
@@ -168,7 +168,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"c1\"",
     "expressionAnyValue" : "\"any_value(c1)\""

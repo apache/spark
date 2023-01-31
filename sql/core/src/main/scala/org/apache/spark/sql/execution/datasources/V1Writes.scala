@@ -77,8 +77,12 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
         case write: V1WriteCommand if !write.child.isInstanceOf[WriteFiles] =>
           val newQuery = prepareQuery(write, write.query)
           val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
-          val newChild = WriteFiles(newQuery, write.fileFormat, write.partitionColumns,
+          val writeFiles = WriteFiles(newQuery, write.fileFormat, write.partitionColumns,
             write.bucketSpec, write.options, write.staticPartitions)
+          val newChild = writeFiles.transformExpressions {
+            case a: Attribute if attrMap.contains(a) =>
+              a.withExprId(attrMap(a).exprId)
+          }
           val newWrite = write.withNewChildren(newChild :: Nil).transformExpressions {
             case a: Attribute if attrMap.contains(a) =>
               a.withExprId(attrMap(a).exprId)

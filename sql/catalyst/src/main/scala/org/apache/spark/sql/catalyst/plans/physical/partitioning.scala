@@ -324,13 +324,13 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  *
  * @param expressions partition expressions for the partitioning.
  * @param numPartitions the number of partitions
- * @param partitionValuesOpt if set, the values for the cluster keys of the distribution, must be
- *                           in ascending order.
+ * @param partitionValues the values for the cluster keys of the distribution, must be
+ *                        in ascending order.
  */
 case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
-    partitionValuesOpt: Option[Seq[InternalRow]] = None) extends Partitioning {
+    partitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -360,7 +360,7 @@ object KeyGroupedPartitioning {
   def apply(
       expressions: Seq[Expression],
       partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
-    KeyGroupedPartitioning(expressions, partitionValues.size, Some(partitionValues))
+    KeyGroupedPartitioning(expressions, partitionValues.size, partitionValues)
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
@@ -692,14 +692,12 @@ case class KeyGroupedShuffleSpec(
     //        partition keys must share overlapping positions in their respective clustering keys.
     //    3.3 each pair of partition expressions at the same index must share compatible
     //        transform functions.
-    //  4. the partition values, if present on both sides, are following the same order.
+    //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
-          partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
-            case (left, right) => left.zip(right).forall { case (l, r) =>
-              ordering.compare(l, r) == 0
-            }
+          partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
+            case (left, right) => ordering.compare(left, right) == 0
           }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)

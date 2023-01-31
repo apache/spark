@@ -241,7 +241,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`year`",
     "proposal" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
@@ -285,6 +285,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -345,7 +346,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
-  "sqlState" : "42000",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "pivotType" : "struct<course:string,year:int>",
     "value" : "dotNET",
@@ -366,7 +367,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`s`",
     "proposal" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
@@ -393,7 +394,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NON_LITERAL_PIVOT_VALUES",
-  "sqlState" : "42000",
+  "sqlState" : "42K08",
   "messageParameters" : {
     "expression" : "\"course\""
   }
@@ -484,7 +485,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
-  "sqlState" : "42000",
+  "sqlState" : "42818",
   "messageParameters" : {
     "columnName" : "`__auto_generated_subquery_name`.`m`"
   }
@@ -507,7 +508,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
-  "sqlState" : "42000",
+  "sqlState" : "42818",
   "messageParameters" : {
     "columnName" : "`named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`"
   }

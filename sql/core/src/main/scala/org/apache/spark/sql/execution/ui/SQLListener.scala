@@ -43,6 +43,8 @@ case class SparkListenerSQLAdaptiveSQLMetricUpdates(
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
     executionId: Long,
+    // if the execution is a root, then rootExecutionId == executionId
+    rootExecutionId: Long,
     description: String,
     details: String,
     physicalPlanDescription: String,

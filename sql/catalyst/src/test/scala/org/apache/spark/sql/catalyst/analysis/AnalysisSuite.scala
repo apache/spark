@@ -28,7 +28,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -118,6 +118,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
+  }
+
+  test("SPARK-42108: transform count(*) to count(1)") {
+    val a = testRelation.output(0)
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: Nil, testRelation))
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() ::
+          Alias(UnresolvedFunction("count" :: Nil,
+            UnresolvedAttribute("a") :: Nil, isDistinct = false), "y")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: count(a).as("y") :: Nil, testRelation))
   }
 
   test("resolve sort references - filter/limit") {
@@ -517,8 +535,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-20311 range(N) as alias") {
     def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
-        .select(star())
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("range",
+          UnresolvedTableValuedFunction("range", args.map(Literal(_))), outputNames)
+        .select(star()))
     }
     assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
@@ -1308,5 +1328,63 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         plan = parsePlan("SELECT c FROM a WHERE c < :param2"),
         args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
       parsePlan("SELECT c FROM a WHERE c < 20"))
+  }
+
+  test("SPARK-41489: type of filter expression should be a bool") {
+    assertAnalysisErrorClass(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id)
+         |SELECT *
+         |FROM t1
+         |WHERE 'true'""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
+      ,
+      queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
+  }
+
+  test("SPARK-38591: resolve left and right CoGroup sort order on respective side only") {
+    def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
+      Iterator.empty
+    }
+
+    implicit val intEncoder = ExpressionEncoder[Int]
+
+    val left = testRelation2.select($"e").analyze
+    val right = testRelation3.select($"e").analyze
+    val leftWithKey = AppendColumns[Int, Int]((x: Int) => x, left)
+    val rightWithKey = AppendColumns[Int, Int]((x: Int) => x, right)
+    val order = SortOrder($"e", Ascending)
+
+    val cogroup = leftWithKey.cogroup[Int, Int, Int, Int](
+      rightWithKey,
+      func,
+      leftWithKey.newColumns,
+      rightWithKey.newColumns,
+      left.output,
+      right.output,
+      order :: Nil,
+      order :: Nil
+    )
+
+    // analyze the plan
+    val actualPlan = getAnalyzer.executeAndCheck(cogroup, new QueryPlanningTracker)
+    val cg = actualPlan.collectFirst {
+      case cg: CoGroup => cg
+    }
+    // assert sort order reference only their respective plan
+    assert(cg.isDefined)
+    cg.foreach { cg =>
+      assert(cg.leftOrder != cg.rightOrder)
+
+      assert(cg.leftOrder.flatMap(_.references).nonEmpty)
+      assert(cg.leftOrder.flatMap(_.references).forall(cg.left.output.contains))
+      assert(!cg.leftOrder.flatMap(_.references).exists(cg.right.output.contains))
+
+      assert(cg.rightOrder.flatMap(_.references).nonEmpty)
+      assert(cg.rightOrder.flatMap(_.references).forall(cg.right.output.contains))
+      assert(!cg.rightOrder.flatMap(_.references).exists(cg.left.output.contains))
+    }
   }
 }

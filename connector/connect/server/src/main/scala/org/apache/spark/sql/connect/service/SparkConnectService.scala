@@ -222,7 +222,7 @@ object SparkConnectService {
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.
-  private type SessionCacheKey = (String, String);
+  private type SessionCacheKey = (String, String)
 
   private var server: Server = _
 
@@ -259,7 +259,7 @@ object SparkConnectService {
   /**
    * Starts the GRPC Serivce.
    */
-  def startGRPCService(): Unit = {
+  private def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
     val port = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sb = NettyServerBuilder
@@ -283,9 +283,14 @@ object SparkConnectService {
     startGRPCService()
   }
 
-  def stop(): Unit = {
+  def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = {
     if (server != null) {
-      server.shutdownNow()
+      if (timeout.isDefined && unit.isDefined) {
+        server.shutdown()
+        server.awaitTermination(timeout.get, unit.get)
+      } else {
+        server.shutdownNow()
+      }
     }
   }
 }

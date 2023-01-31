@@ -83,6 +83,7 @@ class SQLAppStatusStore(
 
 class SQLExecutionUIData(
     @KVIndexParam val executionId: Long,
+    val rootExecutionId: Long,
     val description: String,
     val details: String,
     val physicalPlanDescription: String,
