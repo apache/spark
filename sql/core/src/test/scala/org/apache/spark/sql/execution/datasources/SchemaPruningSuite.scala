@@ -1131,4 +1131,34 @@ abstract class SchemaPruningSuite
       .select($"id", $"name.first")
     checkScan(query, "struct<id:int, name:struct<first:string>>")
   }
+
+  testSchemaPruning("SPARK-42163: GetArrayItem and GetMapItem with non-foldable index") {
+    // Technically, there's no reason that we can't support a non-foldable index, it's just tricky
+    // with the existing pruning code. If we ever do support it, this test can be modified to check
+    // for a narrower scan schema.
+    val arrayQuery =
+      sql("""
+            |SELECT
+            |employer.company, friends[employer.id].first
+            |FROM contacts
+            |""".stripMargin)
+    checkScan(arrayQuery,
+        """struct<friends:array<struct<first:string,middle:string,last:string>>,
+          |employer:struct<id:int,company:struct<name:string,address:string>>>""".stripMargin)
+    checkAnswer(arrayQuery,
+      Row(Row("abc", "123 Business Street"), "Susan") ::
+      Row(null, null) :: Row(null, null) :: Row(null, null) :: Nil)
+
+    val mapQuery =
+      sql("""
+            |SELECT
+            |employer.id, relatives[employer.company.name].first
+            |FROM contacts
+            |""".stripMargin)
+    checkScan(mapQuery,
+        """struct<relatives:map<string,struct<first:string,middle:string,last:string>>,
+          |employer:struct<id:int,company:struct<name:string>>>""".stripMargin)
+    checkAnswer(mapQuery, Row(0, null) :: Row(1, null) ::
+      Row(null, null) :: Row(null, null) :: Nil)
+  }
 }

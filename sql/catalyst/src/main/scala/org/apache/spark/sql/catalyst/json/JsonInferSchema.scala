@@ -152,7 +152,11 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
           decimalTry.get
         } else if (options.inferTimestamp &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-          SQLConf.get.timestampType
+          if (SQLConf.get.inferTimestampNTZInDataSources) {
+            TimestampNTZType
+          } else {
+            TimestampType
+          }
         } else if (options.inferTimestamp &&
             timestampFormatter.parseOptional(field).isDefined) {
           TimestampType
