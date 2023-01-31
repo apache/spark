@@ -156,7 +156,7 @@ private[hive] case class HiveGenericUDF(
 
   // Visible for codegen
   @transient
-  lazy val unwrapper = unwrapperFor(returnInspector)
+  lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
 
   @transient
   private lazy val isUDFDeterministic = {
@@ -166,8 +166,8 @@ private[hive] case class HiveGenericUDF(
 
   // Visible for codegen
   @transient
-  lazy val deferredObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
-    new DeferredObjectAdapter(inspect, child.dataType)
+  lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
+    case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
   }.toArray[DeferredObject]
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)

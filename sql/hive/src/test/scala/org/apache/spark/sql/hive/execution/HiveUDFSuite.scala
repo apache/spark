@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
-import org.apache.spark.{SparkFiles, TestUtils}
+import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -716,12 +716,30 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("SPARK-42051: HiveGenericUDF Codegen Support") {
     withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
       sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFMaskHash].getName}'")
-      withTable("CodeGenHiveGenericUDF") {
+      withTable("HiveGenericUDFTable") {
         sql(s"create table HiveGenericUDFTable as select 'Spark SQL' as v")
         val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
         val plan = df.queryExecution.executedPlan
         assert(plan.isInstanceOf[WholeStageCodegenExec])
         checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
+      }
+    }
+  }
+
+  test("SPARK-42051: HiveGenericUDF Codegen Support w/ execution failure") {
+    withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFAssertTrue].getName}'")
+      withTable("HiveGenericUDFTable") {
+        sql(s"create table HiveGenericUDFTable as select false as v")
+        val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
+        val e = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException]
+        checkError(
+          e,
+          "FAILED_EXECUTE_UDF",
+          parameters = Map(
+            "functionName" -> s"${classOf[GenericUDFAssertTrue].getName}",
+            "signature" -> "boolean",
+            "result" -> "void"))
       }
     }
   }
