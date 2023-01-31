@@ -207,7 +207,7 @@ class QueryExecutionErrorsSuite
       exception = e1,
       errorClass = "REPEATED_CLAUSE",
       parameters = Map("clause" -> "PIVOT", "operation" -> "SUBQUERY"),
-      sqlState = "42616")
+      sqlState = "42614")
 
     val e2 = intercept[SparkUnsupportedOperationException] {
       trainingSales
