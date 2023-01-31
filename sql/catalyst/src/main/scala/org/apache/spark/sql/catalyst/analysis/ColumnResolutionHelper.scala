@@ -146,7 +146,7 @@ trait ColumnResolutionHelper extends Logging {
           val attrCandidates = getAttrCandidates()
           val matched = attrCandidates.filter(a => conf.resolver(a.name, colName))
           if (matched.length != expectedNumCandidates) {
-            throw QueryCompilationErrors.incompatibleViewSchemaChange(
+            throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
               viewName, colName, expectedNumCandidates, matched, viewDDL)
           }
           matched(ordinal)
