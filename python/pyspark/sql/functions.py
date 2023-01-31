@@ -7812,6 +7812,9 @@ def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or str
@@ -10040,6 +10043,7 @@ def udf(
     ...
 
 
+@try_remote_functions
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
@@ -10049,6 +10053,9 @@ def udf(
     """Creates a user defined function (UDF).
 
     .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------

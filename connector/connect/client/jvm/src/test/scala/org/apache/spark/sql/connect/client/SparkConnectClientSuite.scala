@@ -24,6 +24,7 @@ import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
@@ -151,11 +152,20 @@ class SparkConnectClientSuite
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
 
+  private var inputPlan: proto.Plan = _
+
+  private[sql] def getAndClearLatestInputPlan(): proto.Plan = {
+    val plan = inputPlan
+    inputPlan = null
+    plan
+  }
+
   override def analyzePlan(
       request: AnalyzePlanRequest,
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestClientId = request.getClientId
+    inputPlan = request.getPlan
     val response = AnalyzePlanResponse
       .newBuilder()
       .setClientId(requestClientId)

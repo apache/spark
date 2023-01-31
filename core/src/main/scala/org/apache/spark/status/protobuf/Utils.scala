@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
-import com.google.protobuf.MessageOrBuilder
+import java.util.{Map => JMap}
 
 object Utils {
   def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
@@ -26,7 +26,7 @@ object Utils {
     None
   }
 
-  def setStringField(input: String, f: String => MessageOrBuilder): Unit = {
+  def setStringField(input: String, f: String => Any): Unit = {
     if (input != null) {
       f(input)
     }
@@ -36,5 +36,11 @@ object Utils {
     result()
   } else {
     null
+  }
+
+  def setJMapField[K, V](input: JMap[K, V], putAllFunc: JMap[K, V] => Any): Unit = {
+    if (input != null && !input.isEmpty) {
+      putAllFunc(input)
+    }
   }
 }

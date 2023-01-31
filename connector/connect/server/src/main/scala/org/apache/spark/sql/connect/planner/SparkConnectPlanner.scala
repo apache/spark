@@ -57,7 +57,7 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(session: SparkSession) {
+class SparkConnectPlanner(val session: SparkSession) {
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
@@ -691,9 +691,12 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       logical.OneRowRelation()
     }
-    val projection =
-      rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
-    logical.Project(projectList = projection.toSeq, child = baseRel)
+
+    val projection = rel.getExpressionsList.asScala.toSeq
+      .map(transformExpression)
+      .map(toNamedExpression)
+
+    logical.Project(projectList = projection, child = baseRel)
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
@@ -739,10 +742,17 @@ class SparkConnectPlanner(session: SparkSession) {
         transformWindowExpression(exp.getWindow)
       case proto.Expression.ExprTypeCase.EXTENSION =>
         transformExpressionPlugin(exp.getExtension)
+      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
+        transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
+  }
+
+  private def toNamedExpression(expr: Expression): NamedExpression = expr match {
+    case named: NamedExpression => named
+    case expr => UnresolvedAlias(expr)
   }
 
   private def transformExpressionPlugin(extension: ProtoAny): Expression = {
@@ -806,6 +816,65 @@ class SparkConnectPlanner(session: SparkSession) {
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     }
+  }
+
+  /**
+   * Translates a user-defined function from proto to the Catalyst expression.
+   *
+   * @param fun
+   *   Proto representation of the function call.
+   * @return
+   *   Expression.
+   */
+  private def transformCommonInlineUserDefinedFunction(
+      fun: proto.CommonInlineUserDefinedFunction): Expression = {
+    fun.getFunctionCase match {
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+        transformPythonUDF(fun)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+    }
+  }
+
+  /**
+   * Translates a Python user-defined function from proto to the Catalyst expression.
+   *
+   * @param fun
+   *   Proto representation of the Python user-defined function.
+   * @return
+   *   PythonUDF.
+   */
+  private def transformPythonUDF(fun: proto.CommonInlineUserDefinedFunction): PythonUDF = {
+    val udf = fun.getPythonUdf
+    PythonUDF(
+      name = fun.getFunctionName,
+      func = transformPythonFunction(udf),
+      dataType = DataType.parseTypeWithFallback(
+        schema = udf.getOutputType,
+        parser = DataType.fromDDL,
+        fallbackParser = DataType.fromJson) match {
+        case s: DataType => s
+        case other => throw InvalidPlanInput(s"Invalid return type $other")
+      },
+      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+      evalType = udf.getEvalType,
+      udfDeterministic = fun.getDeterministic)
+  }
+
+  private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
+    SimplePythonFunction(
+      command = fun.getCommand.toByteArray,
+      // Empty environment variables
+      envVars = Maps.newHashMap(),
+      // No imported Python libraries
+      pythonIncludes = Lists.newArrayList(),
+      pythonExec = pythonExec,
+      pythonVer = "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      // Empty broadcast variables
+      broadcastVars = Lists.newArrayList(),
+      // Null accumulator
+      accumulator = null)
   }
 
   /**
@@ -1245,11 +1314,6 @@ class SparkConnectPlanner(session: SparkSession) {
     }
     val input = transformRelation(rel.getInput)
 
-    def toNamedExpression(expr: Expression): NamedExpression = expr match {
-      case named: NamedExpression => named
-      case expr => UnresolvedAlias(expr)
-    }
-
     val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq.map(transformExpression)
     val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
@@ -1348,11 +1412,15 @@ class SparkConnectPlanner(session: SparkSession) {
   private def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
     val function = SimplePythonFunction(
       cf.getSerializedFunction.toByteArray,
+      // Empty environment variables
       Maps.newHashMap(),
+      // No imported Python libraries
       Lists.newArrayList(),
       pythonExec,
       "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      // Empty broadcast variables
       Lists.newArrayList(),
+      // Null accumulator
       null)
 
     val udf = UserDefinedPythonFunction(

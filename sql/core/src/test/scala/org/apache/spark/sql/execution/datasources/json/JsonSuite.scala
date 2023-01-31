@@ -2770,7 +2770,7 @@ abstract class JsonSuite
         .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .json(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
         val res = spark.read
           .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
           .option("inferTimestamp", "true")
@@ -2792,7 +2792,7 @@ abstract class JsonSuite
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .json(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "false") {
         val res = spark.read
           .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
           .option("inferTimestamp", "true")
@@ -2835,11 +2835,11 @@ abstract class JsonSuite
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
         SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
 
-      for (timestampType <- timestampTypes) {
-        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+      Seq(true, false).foreach { inferTimestampNTZ =>
+        withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
           val res = spark.read.option("inferTimestamp", "true").json(path.getAbsolutePath)
 
-          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+          if (inferTimestampNTZ) {
             checkAnswer(res, exp)
           } else {
             checkAnswer(

@@ -17,12 +17,16 @@
 
 import array
 import datetime
+import os
 import unittest
 import shutil
 import tempfile
+from collections import defaultdict
 
+from pyspark.errors import PySparkTypeError
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.sql import SparkSession, Row
+from pyspark.sql import SparkSession as PySparkSession, Row
+from pyspark.sql.connect.client import Retrying
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -33,10 +37,17 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
-from pyspark.testing.utils import ReusedPySparkTestCase
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.sql.connect.client import SparkConnectException, SparkConnectAnalysisException
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    ReusedConnectTestCase,
+)
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.errors import (
+    SparkConnectException,
+    SparkConnectAnalysisException,
+    SparkConnectParseException,
+    SparkConnectTempTableAlreadyExistsException,
+)
 
 if should_test_connect:
     import grpc
@@ -52,22 +63,25 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
+class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        cls.hive_available = True
-        # Create the new Spark Session
-        cls.spark = SparkSession(cls.sc)
+        super(SparkConnectSQLTestCase, cls).setUpClass()
+        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
+        # PySpark libraries.
+        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
+
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark sesion.
+        cls.spark = PySparkSession._instantiatedSession
+        assert cls.spark is not None
+
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.testDataStr = [Row(key=str(i)) for i in range(100)]
-        cls.df = cls.sc.parallelize(cls.testData).toDF()
-        cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
+        cls.df = cls.spark.sparkContext.parallelize(cls.testData).toDF()
+        cls.df_text = cls.spark.sparkContext.parallelize(cls.testDataStr).toDF()
 
         cls.tbl_name = "test_connect_basic_table_1"
         cls.tbl_name2 = "test_connect_basic_table_2"
@@ -83,12 +97,12 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
     @classmethod
     def tearDownClass(cls):
         cls.spark_connect_clean_up_test_data()
-        ReusedPySparkTestCase.tearDownClass()
+        cls.spark = cls.connect  # Stopping Spark Connect closes the session in JVM at the server.
+        super(SparkConnectSQLTestCase, cls).setUpClass()
+        del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
 
     @classmethod
     def spark_connect_load_test_data(cls):
-        # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
@@ -456,7 +470,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -502,7 +516,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -693,6 +707,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_dataframe_with_coercion(self):
+        data1 = [[1.33, 1], ["2.1", 1]]
+        data2 = [[True, 1], ["false", 1]]
+
+        for data in [data1, data2]:
+            cdf = self.connect.createDataFrame(data, ["a", "b"])
+            sdf = self.spark.createDataFrame(data, ["a", "b"])
+
+            self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_nested_type_create_from_rows(self):
         data1 = [Row(a=1, b=Row(c=2, d=Row(e=3, f=Row(g=4, h=Row(i=5)))))]
@@ -1201,7 +1226,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(SparkConnectException):
+            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -1213,7 +1238,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(SparkConnectException):
+            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -1427,7 +1452,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
             self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
 
-        with self.assertRaises(SparkConnectException) as context:
+        with self.assertRaises(SparkConnectAnalysisException) as context:
             self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
             self.assertIn(
                 """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
@@ -1535,7 +1560,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # Hint with unsupported parameter values
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
@@ -1549,7 +1574,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).toPandas()
 
         # Hint with wrong combination
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_join_hint(self):
@@ -1740,8 +1765,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
-        with self.assertRaisesRegex(TypeError, "key must be float, int, or string"):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.stat.sampleBy(cdf.key, fractions={0: 0.1, None: 0.2}, seed=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+            message_parameters={
+                "arg_name": "fractions",
+                "arg_type": "dict",
+                "allowed_types": "float, int, str",
+                "return_type": "NoneType",
+            },
+        )
 
         with self.assertRaises(SparkConnectException):
             cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 1.2}, seed=0).show()
@@ -1867,7 +1903,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartition with unsupported parameter values
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).repartition("id+1").toPandas()
 
     def test_repartition_by_range(self) -> None:
@@ -1891,7 +1927,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartitionByRange with unsupported parameter values
-        with self.assertRaises(SparkConnectException):
+        with self.assertRaises(SparkConnectAnalysisException):
             self.connect.read.table(self.tbl_name).repartitionByRange("id+1").toPandas()
 
     def test_agg_with_two_agg_exprs(self) -> None:
@@ -2591,8 +2627,118 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 getattr(df.write, f)()
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class ChannelBuilderTests(ReusedPySparkTestCase):
+class ClientTests(unittest.TestCase):
+    def test_retry_error_handling(self):
+        # Helper class for wrapping the test.
+        class TestError(grpc.RpcError, Exception):
+            def __init__(self, code: grpc.StatusCode):
+                self._code = code
+
+            def code(self):
+                return self._code
+
+        def stub(retries, w, code):
+            w["attempts"] += 1
+            if w["attempts"] < retries:
+                w["raised"] += 1
+                raise TestError(code)
+
+        # Check that max_retries 1 is only one retry so two attempts.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=1,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(2, call_wrap["attempts"])
+        self.assertEqual(1, call_wrap["raised"])
+
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
+        # Exceed the retries.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: True,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+                initial_backoff=50,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertTrue(call_wrap["attempts"] < 5)
+        self.assertEqual(call_wrap["raised"], 3)
+
+        # Check that only specific exceptions are retried.
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
+        # Exceed the retries.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+                initial_backoff=50,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 3)
+
+        # Test that another error is always thrown.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=4,
+                backoff_multiplier=1,
+                initial_backoff=1,
+                max_backoff=10,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(call_wrap["attempts"], 1)
+        self.assertEqual(call_wrap["raised"], 1)
+
+
+class ChannelBuilderTests(unittest.TestCase):
     def test_invalid_connection_strings(self):
         invalid = [
             "scc://host:12",
