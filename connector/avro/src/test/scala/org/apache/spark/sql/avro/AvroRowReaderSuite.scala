@@ -63,7 +63,9 @@ class AvroRowReaderSuite
       }
       val filePath = fileScan.get.fileIndex.inputFiles(0)
       val fileSize = new File(new URI(filePath)).length
+      // scalastyle:off pathfromuri
       val in = new FsInput(new Path(new URI(filePath)), new Configuration())
+      // scalastyle:on pathfromuri
       val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
 
       val it = new Iterator[InternalRow] with AvroUtils.RowReader {

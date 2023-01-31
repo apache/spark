@@ -814,7 +814,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases
         col0 = col("a").alias("martin")
-        self.assertEqual("Column<'Alias(ColumnReference(a), (martin))'>", str(col0))
+        self.assertEqual("Column<'a AS martin'>", str(col0))
 
         col0 = col("a").alias("martin", metadata={"pii": True})
         plan = col0.to_plan(self.session.client)

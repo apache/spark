@@ -20,6 +20,34 @@
 Errors
 ======
 
+Classes
+-------
+
+.. currentmodule:: pyspark.errors
+
+.. autosummary::
+    :toctree: api/
+
+    PySparkException
+    AnalysisException
+    ParseException
+    IllegalArgumentException
+    StreamingQueryException
+    QueryExecutionException
+    PythonException
+    UnknownException
+    SparkUpgradeException
+    SparkConnectAnalysisException
+    SparkConnectException
+    SparkConnectGrpcException
+    SparkConnectParseException
+    SparkConnectTempTableAlreadyExistsException
+    SparkConnectIllegalArgumentException
+
+
+Methods
+-------
+
 .. currentmodule:: pyspark.errors
 
 .. autosummary::
@@ -27,3 +55,4 @@ Errors
 
     PySparkException.getErrorClass
     PySparkException.getMessageParameters
+    PySparkException.getSqlState

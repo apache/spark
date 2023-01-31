@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWrapper}
 import org.apache.spark.status.protobuf.StoreTypes.{DeterministicLevel => GDeterministicLevel}
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
 class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraphWrapper] {
@@ -56,8 +57,8 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraph
   private def serializeRDDOperationClusterWrapper(op: RDDOperationClusterWrapper):
     StoreTypes.RDDOperationClusterWrapper = {
     val builder = StoreTypes.RDDOperationClusterWrapper.newBuilder()
-    builder.setId(op.id)
-    builder.setName(op.name)
+    setStringField(op.id, builder.setId)
+    setStringField(op.name, builder.setName)
     op.childNodes.foreach { node =>
       builder.addChildNodes(serializeRDDOperationNode(node))
     }
@@ -70,8 +71,8 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraph
   private def deserializeRDDOperationClusterWrapper(op: StoreTypes.RDDOperationClusterWrapper):
     RDDOperationClusterWrapper = {
     new RDDOperationClusterWrapper(
-      id = op.getId,
-      name = op.getName,
+      id = getStringField(op.hasId, op.getId),
+      name = getStringField(op.hasName, op.getName),
       childNodes = op.getChildNodesList.asScala.map(deserializeRDDOperationNode),
       childClusters =
         op.getChildClustersList.asScala.map(deserializeRDDOperationClusterWrapper)
@@ -83,10 +84,10 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraph
       node.outputDeterministicLevel)
     val builder = StoreTypes.RDDOperationNode.newBuilder()
     builder.setId(node.id)
-    builder.setName(node.name)
+    setStringField(node.name, builder.setName)
+    setStringField(node.callsite, builder.setCallsite)
     builder.setCached(node.cached)
     builder.setBarrier(node.barrier)
-    builder.setCallsite(node.callsite)
     builder.setOutputDeterministicLevel(outputDeterministicLevel)
     builder.build()
   }
@@ -94,10 +95,10 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe[RDDOperationGraph
   private def deserializeRDDOperationNode(node: StoreTypes.RDDOperationNode): RDDOperationNode = {
     RDDOperationNode(
       id = node.getId,
-      name = node.getName,
+      name = getStringField(node.hasName, node.getName),
       cached = node.getCached,
       barrier = node.getBarrier,
-      callsite = node.getCallsite,
+      callsite = getStringField(node.hasCallsite, node.getCallsite),
       outputDeterministicLevel = DeterministicLevelSerializer.deserialize(
         node.getOutputDeterministicLevel)
     )

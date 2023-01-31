@@ -17,6 +17,7 @@
 
 import inspect
 import warnings
+import functools
 from typing import (
     Any,
     Dict,
@@ -33,6 +34,10 @@ from typing import (
 
 import numpy as np
 
+from pyspark.errors.exceptions import (
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -40,14 +45,21 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
     ColumnReference,
     UnresolvedFunction,
+    UnresolvedStar,
     SQLExpression,
     LambdaFunction,
+    UnresolvedNamedLambdaVariable,
 )
+from pyspark.sql.connect.udf import _create_udf
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType
+from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        DataTypeOrString,
+        UserDefinedFunctionLike,
+    )
     from pyspark.sql.connect.dataframe import DataFrame
 
 
@@ -111,15 +123,17 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
 
     # Validate that the function arity is between 1 and 3.
     if not (1 <= len(parameters) <= 3):
-        raise ValueError(
-            "f should take between 1 and 3 arguments, but provided function takes {}".format(
-                len(parameters)
-            )
+        raise PySparkValueError(
+            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": f.__name__, "num_args": str(len(parameters))},
         )
 
     # Verify that all arguments can be used as positional arguments.
     if not all(p.kind in supported_parameter_types for p in parameters):
-        raise ValueError("All arguments of f must be usable as POSITIONAL arguments")
+        raise PySparkValueError(
+            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": f.__name__},
+        )
 
     return parameters
 
@@ -137,14 +151,21 @@ def _create_lambda(f: Callable) -> LambdaFunction:
     parameters = _get_lambda_parameters(f)
 
     arg_names = ["x", "y", "z"][: len(parameters)]
-    arg_cols = [column(arg) for arg in arg_names]
+    arg_exprs = [
+        UnresolvedNamedLambdaVariable([UnresolvedNamedLambdaVariable.fresh_var_name(arg_name)])
+        for arg_name in arg_names
+    ]
+    arg_cols = [Column(arg_expr) for arg_expr in arg_exprs]
 
     result = f(*arg_cols)
 
     if not isinstance(result, Column):
-        raise ValueError(f"Callable {f} should return Column, got {type(result)}")
+        raise PySparkValueError(
+            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            message_parameters={"func_name": f.__name__, "return_type": type(result).__name__},
+        )
 
-    return LambdaFunction(result._expr, arg_names)
+    return LambdaFunction(result._expr, arg_exprs)
 
 
 def _invoke_higher_order_function(
@@ -181,7 +202,12 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    return Column(ColumnReference(col))
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -197,7 +223,10 @@ def lit(col: Any) -> Column:
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
-            raise TypeError("The type of array scalar '%s' is not supported" % (col.dtype))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                message_parameters={"dtype": col.dtype.name},
+            )
 
         # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
         # Actually this is not a problem for Connect, but here still convert it
@@ -232,7 +261,10 @@ def broadcast(df: "DataFrame") -> "DataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
-        raise TypeError(f"'df' must be a DataFrame, but got {type(df).__name__} {df}")
+        raise PySparkTypeError(
+            error_class="NOT_A_DATAFRAME",
+            message_parameters={"arg_name": "df", "arg_type": type(df).__name__},
+        )
     return df.hint("broadcast")
 
 
@@ -255,7 +287,10 @@ expr.__doc__ = pysparkfuncs.expr.__doc__
 
 def greatest(*cols: "ColumnOrName") -> Column:
     if len(cols) < 2:
-        raise ValueError("greatest should take at least two columns")
+        raise PySparkValueError(
+            error_class="WRONG_NUM_COLUMNS",
+            message_parameters={"func_name": "greatest", "num_cols": "2"},
+        )
     return _invoke_function_over_columns("greatest", *cols)
 
 
@@ -271,7 +306,10 @@ input_file_name.__doc__ = pysparkfuncs.input_file_name.__doc__
 
 def least(*cols: "ColumnOrName") -> Column:
     if len(cols) < 2:
-        raise ValueError("least should take at least two columns")
+        raise PySparkValueError(
+            error_class="WRONG_NUM_COLUMNS",
+            message_parameters={"func_name": "least", "num_cols": "2"},
+        )
     return _invoke_function_over_columns("least", *cols)
 
 
@@ -336,7 +374,10 @@ spark_partition_id.__doc__ = pysparkfuncs.spark_partition_id.__doc__
 def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
-        raise TypeError("condition should be a Column")
+        raise PySparkTypeError(
+            error_class="NOT_A_COLUMN",
+            message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+        )
 
     value_col = value if isinstance(value, Column) else lit(value)
 
@@ -1111,6 +1152,13 @@ def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName
 array.__doc__ = pysparkfuncs.array.__doc__
 
 
+def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_append", col1, col2)
+
+
+array_append.__doc__ = pysparkfuncs.array_append.__doc__
+
+
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_contains", _to_col(col), lit(value))
 
@@ -1308,7 +1356,10 @@ def from_csv(
     elif isinstance(schema, str):
         _schema = lit(schema)
     else:
-        raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+        )
 
     if options is None:
         return _invoke_function("from_csv", _to_col(col), _schema)
@@ -1331,8 +1382,9 @@ def from_json(
     elif isinstance(schema, str):
         _schema = lit(schema)
     else:
-        raise TypeError(
-            f"schema should be a Column or str or DataType, but got {type(schema).__name__}"
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_DATATYPE_OR_STRING",
+            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1491,7 +1543,10 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     elif isinstance(csv, str):
         _csv = lit(csv)
     else:
-        raise TypeError(f"csv should be a Column or str, but got {type(csv).__name__}")
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
+        )
 
     if options is None:
         return _invoke_function("schema_of_csv", _csv)
@@ -1508,7 +1563,10 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     elif isinstance(json, str):
         _json = lit(json)
     else:
-        raise TypeError(f"json should be a Column or str, but got {type(json).__name__}")
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
+        )
 
     if options is None:
         return _invoke_function("schema_of_json", _json)
@@ -1541,14 +1599,20 @@ def slice(
     elif isinstance(start, int):
         _start = lit(start)
     else:
-        raise TypeError(f"start should be a Column, str or int, but got {type(start).__name__}")
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "start", "arg_type": type(start).__name__},
+        )
 
     if isinstance(length, (Column, str)):
         _length = length
     elif isinstance(length, int):
         _length = lit(length)
     else:
-        raise TypeError(f"start should be a Column, str or int, but got {type(length).__name__}")
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
+        )
 
     return _invoke_function_over_columns("slice", col, _start, _length)
 
@@ -1737,12 +1801,14 @@ def overlay(
     len: Union["ColumnOrName", int] = -1,
 ) -> Column:
     if not isinstance(pos, (int, str, Column)):
-        raise TypeError(
-            "pos should be an integer or a Column / column name, got {}".format(type(pos))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
     if len is not None and not isinstance(len, (int, str, Column)):
-        raise TypeError(
-            "len should be an integer or a Column / column name, got {}".format(type(len))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
     if isinstance(pos, int):
@@ -2157,18 +2223,25 @@ def window(
     startTime: Optional[str] = None,
 ) -> Column:
     if windowDuration is None or not isinstance(windowDuration, str):
-        raise TypeError(
-            f"windowDuration should be as a string, "
-            f"but got {type(windowDuration).__name__} {windowDuration}"
+        raise PySparkTypeError(
+            error_class="NOT_A_STRING",
+            message_parameters={
+                "arg_name": "windowDuration",
+                "arg_type": type(windowDuration).__name__,
+            },
         )
     if slideDuration is not None and not isinstance(slideDuration, str):
-        raise TypeError(
-            f"slideDuration should be as a string, "
-            f"but got {type(slideDuration).__name__} {slideDuration}"
+        raise PySparkTypeError(
+            error_class="NOT_A_STRING",
+            message_parameters={
+                "arg_name": "slideDuration",
+                "arg_type": type(slideDuration).__name__,
+            },
         )
     if startTime is not None and not isinstance(startTime, str):
-        raise TypeError(
-            f"startTime should be as a string, " f"but got {type(startTime).__name__} {startTime}"
+        raise PySparkTypeError(
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
         )
 
     time_col = _to_col(timeColumn)
@@ -2201,9 +2274,9 @@ window_time.__doc__ = pysparkfuncs.window_time.__doc__
 
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     if gapDuration is None or not isinstance(gapDuration, (Column, str)):
-        raise TypeError(
-            f"gapDuration should be as a string or Column, "
-            f"but got {type(gapDuration).__name__} {gapDuration}"
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "gapDuration", "arg_type": type(gapDuration).__name__},
         )
 
     time_col = _to_col(timeColumn)
@@ -2226,7 +2299,13 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     elif isinstance(numBuckets, Column):
         _numBuckets = numBuckets
     else:
-        raise TypeError("numBuckets should be a Column or an int, got {}".format(type(numBuckets)))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INTEGER",
+            message_parameters={
+                "arg_name": "numBuckets",
+                "arg_type": type(numBuckets).__name__,
+            },
+        )
 
     return _invoke_function("bucket", _numBuckets, _to_col(col))
 
@@ -2268,7 +2347,10 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
-        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+        )
     _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
     return _invoke_function("assert_true", _to_col(col), _err_msg)
 
@@ -2278,7 +2360,10 @@ assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
 
 def raise_error(errMsg: Union[Column, str]) -> Column:
     if not isinstance(errMsg, (str, Column)):
-        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+        )
     _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
     return _invoke_function("raise_error", _err_msg)
 
@@ -2345,8 +2430,24 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 
 
-def udf(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError("udf() is not implemented.")
+def udf(
+    f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
+    returnType: "DataTypeOrString" = StringType(),
+) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
+    from pyspark.rdd import PythonEvalType
+
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(
+            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+        )
+    else:
+        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+
+
+udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
 def pandas_udf(*args: Any, **kwargs: Any) -> None:
@@ -2375,17 +2476,11 @@ def _test() -> None:
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__
         del pyspark.sql.connect.functions.unix_timestamp.__doc__
 
-        # TODO(SPARK-41757): Fix String representation for Column class
-        del pyspark.sql.connect.functions.col.__doc__
-
         # TODO(SPARK-41812): Proper column names after join
         del pyspark.sql.connect.functions.count_distinct.__doc__
 
         # TODO(SPARK-41843): Implement SparkSession.udf
         del pyspark.sql.connect.functions.call_udf.__doc__
-
-        # TODO(SPARK-41845): Fix count bug
-        del pyspark.sql.connect.functions.count.__doc__
 
         globs["spark"] = (
             PySparkSession.builder.appName("sql.connect.functions tests")

@@ -439,7 +439,7 @@ object ScalaReflection extends ScalaReflection {
       val getter = if (classOf[scala.collection.Set[_]].isAssignableFrom(ctag.runtimeClass)) {
         // There's no corresponding Catalyst type for `Set`, we serialize a `Set` to Catalyst array.
         // Note that the property of `Set` is only kept when manipulating the data as domain object.
-        Invoke(input, "toSeq", ObjectType(classOf[Seq[_]]))
+        Invoke(input, "toSeq", ObjectType(classOf[scala.collection.Seq[_]]))
       } else {
         input
       }

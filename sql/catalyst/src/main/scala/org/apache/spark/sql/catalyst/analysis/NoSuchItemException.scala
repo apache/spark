@@ -131,6 +131,6 @@ class NoSuchPartitionsException(errorClass: String, messageParameters: Map[Strin
 class NoSuchTempFunctionException(func: String)
   extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
 
-class NoSuchIndexException(message: String, cause: Option[Throwable] = None)
+class NoSuchIndexException(indexName: String, tableName: String, cause: Option[Throwable] = None)
   extends AnalysisException(errorClass = "INDEX_NOT_FOUND",
-    Map("message" -> message), cause)
+    Map("indexName" -> indexName, "tableName" -> tableName), cause)

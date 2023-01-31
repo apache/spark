@@ -185,7 +185,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     checkError(
       exception = intercept[AnalysisException] {sql(query)},
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
-      sqlState = "42000",
+      sqlState = "42702",
       parameters = parameters
     )
   }

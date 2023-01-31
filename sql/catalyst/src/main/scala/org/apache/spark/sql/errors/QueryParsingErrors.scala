@@ -292,6 +292,27 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
+  def nestedTypeMissingElementTypeError(
+      dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+    dataType match {
+      case "array" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+          messageParameters = Map("elementType" -> "<INT>"),
+          ctx)
+      case "struct" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+          messageParameters = Map.empty,
+          ctx)
+      case "map" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+          messageParameters = Map.empty,
+          ctx)
+    }
+  }
+
   def partitionTransformNotExpectedError(
       name: String, describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(

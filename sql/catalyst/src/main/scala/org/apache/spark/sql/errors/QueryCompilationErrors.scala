@@ -295,10 +295,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def referenceColNotFoundForAlterTableChangesError(
-      after: TableChange.After, parentName: String): Throwable = {
+      fieldName: String, fields: Array[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1003",
-      messageParameters = Map("after" -> after.toString, "parentName" -> parentName))
+      errorClass = "FIELD_NOT_FOUND",
+      messageParameters = Map(
+        "fieldName" -> toSQLId(fieldName),
+        "fields" -> fields.mkString(", ")))
   }
 
   def windowSpecificationNotDefinedError(windowName: String): Throwable = {
@@ -657,29 +659,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       origin = context)
   }
 
-  def invalidFunctionArgumentsError(
-      name: String, expectedNum: String, actualNum: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
-      messageParameters = Map(
-        "functionName" -> toSQLId(name),
-        "expectedNum" -> expectedNum,
-        "actualNum" -> actualNum.toString))
-  }
-
-  def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
-    if (validParametersCount.isEmpty) {
+  def wrongNumArgsError(
+      name: String,
+      validParametersCount: Seq[Any],
+      actualNumber: Int,
+      legacyNum: String = "",
+      legacyConfKey: String = "",
+      legacyConfValue: String = ""): Throwable = {
+    val expectedNumberOfParameters = if (validParametersCount.isEmpty) {
+      "0"
+    } else if (validParametersCount.length == 1) {
+      validParametersCount.head.toString
+    } else {
+      validParametersCount.mkString("[", ", ", "]")
+    }
+    if (legacyNum.isEmpty) {
       new AnalysisException(
         errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-        messageParameters = Map("functionName" -> toSQLId(name)))
+        messageParameters = Map(
+          "functionName" -> toSQLId(name),
+          "expectedNum" -> expectedNumberOfParameters,
+          "actualNum" -> actualNumber.toString))
     } else {
-      val expectedNumberOfParameters = if (validParametersCount.length == 1) {
-        validParametersCount.head.toString
-      } else {
-        validParametersCount.mkString("[", ", ", "]")
-      }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
+      new AnalysisException(
+        errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+        messageParameters = Map(
+          "functionName" -> toSQLId(name),
+          "expectedNum" -> expectedNumberOfParameters,
+          "actualNum" -> actualNumber.toString,
+          "legacyNum" -> legacyNum,
+          "legacyConfKey" -> legacyConfKey,
+          "legacyConfValue" -> legacyConfValue)
+      )
     }
   }
 
@@ -777,10 +788,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("database" -> quoted))
   }
 
-  def cannotDropViewWithDropTableError(): Throwable = {
+  def wrongCommandForObjectTypeError(
+      operation: String,
+      requiredType: String,
+      objectName: String,
+      foundType: String,
+      alternative: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1056",
-      messageParameters = Map.empty)
+      errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+      messageParameters = Map(
+        "operation" -> operation,
+        "requiredType" -> requiredType,
+        "objectName" -> objectName,
+        "foundType" -> foundType,
+        "alternative" -> alternative
+      )
+    )
   }
 
   def showColumnsWithConflictDatabasesError(
@@ -2393,22 +2416,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cmdOnlyWorksOnPartitionedTablesError(cmd: String, tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnPartitionedTablesError(
+      operation: String,
+      tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "NOT_A_PARTITIONED_TABLE",
       messageParameters = Map(
-        "cmd" -> cmd,
+        "operation" -> toSQLStmt(operation),
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "_LEGACY_ERROR_TEMP_2446",
       messageParameters = Map(
         "cmd" -> cmd,
         "tableIdentWithDB" -> tableIdentWithDB))
-    new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
-      s"location provided: $tableIdentWithDB")
   }
 
   def actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(
@@ -2862,9 +2885,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("quote" -> quote))
   }
 
-  def sortByNotUsedWithBucketByError(): Throwable = {
+  def sortByWithoutBucketingError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1311",
+      errorClass = "SORT_BY_WITHOUT_BUCKETING",
       messageParameters = Map.empty)
   }
 
@@ -3400,5 +3423,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "aggFunc" -> toSQLExpr(aggExpr)
       )
     )
+  }
+
+  def dataTypeOperationUnsupportedError(): Throwable = {
+    SparkException.internalError(
+      "The operation `dataType` is not supported.")
+  }
+
+  def nullableRowIdError(nullableRowIdAttrs: Seq[AttributeReference]): Throwable = {
+    new AnalysisException(
+      errorClass = "NULLABLE_ROW_ID_ATTRIBUTES",
+      messageParameters = Map("nullableRowIdAttrs" -> nullableRowIdAttrs.mkString(", ")))
   }
 }

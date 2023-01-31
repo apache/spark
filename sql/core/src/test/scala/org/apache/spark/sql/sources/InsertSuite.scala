@@ -2126,7 +2126,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             """.stripMargin)
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        sqlState = "42000",
+        sqlState = "42703",
         parameters = Map(
           "objectName" -> "`c3`",
           "proposal" ->

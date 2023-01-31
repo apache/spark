@@ -472,4 +472,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       }
     }
   }
+
+  test("Encoding an ArraySeq/WrappedArray in scala-2.13") {
+    val schema = new StructType()
+      .add("headers", ArrayType(new StructType()
+        .add("key", StringType)
+        .add("value", BinaryType)))
+    val encoder = RowEncoder(schema, lenient = true).resolveAndBind()
+    val data = Row(mutable.WrappedArray.make(Array(Row("key", "value".getBytes))))
+    val row = encoder.createSerializer()(data)
+  }
 }

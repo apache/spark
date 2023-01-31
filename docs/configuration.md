@@ -1776,7 +1776,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.kryo.unsafe</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to use unsafe based Kryo serializer. Can be
     substantially faster by using Unsafe Based IO.

@@ -55,7 +55,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42000",
+  "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"data\"",
     "expressionAnyValue" : "\"any_value(data)\""
@@ -72,7 +72,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`FROM`"
   },
@@ -639,7 +639,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v7_temp`"
   },
@@ -661,7 +661,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v10_temp`"
   },
@@ -683,7 +683,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42000",
+  "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v11_temp`"
   },

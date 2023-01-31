@@ -439,9 +439,6 @@ def _test() -> None:
             .getOrCreate()
         )
 
-        # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
-        del pyspark.sql.connect.column.Column.withField.__doc__
-
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.column,
             globs=globs,

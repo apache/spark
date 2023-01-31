@@ -51,7 +51,7 @@ from pyspark.sql.types import (
     NullType,
     TimestampType,
 )
-from pyspark.sql.utils import PythonException
+from pyspark.errors import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

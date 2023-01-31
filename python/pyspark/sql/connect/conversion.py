@@ -16,6 +16,7 @@
 #
 
 import datetime
+import decimal
 
 import pyarrow as pa
 
@@ -30,6 +31,7 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     NullType,
+    DecimalType,
 )
 
 from pyspark.sql.connect.types import to_arrow_schema
@@ -66,6 +68,9 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always truncate
             return True
+        elif isinstance(dataType, DecimalType):
+            # Convert Decimal('NaN') to None
+            return True
         else:
             return False
 
@@ -92,7 +97,7 @@ class LocalDataToArrowConversion:
                 if value is None:
                     return None
                 else:
-                    assert isinstance(value, (Row, dict)), f"{type(value)} {value}"
+                    assert isinstance(value, (tuple, dict)), f"{type(value)} {value}"
 
                     _dict = {}
                     if isinstance(value, dict):
@@ -167,6 +172,17 @@ class LocalDataToArrowConversion:
                     return value.astimezone(datetime.timezone.utc)
 
             return convert_timestample
+
+        elif isinstance(dataType, DecimalType):
+
+            def convert_decimal(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, decimal.Decimal)
+                    return None if value.is_nan() else value
+
+            return convert_decimal
 
         else:
 

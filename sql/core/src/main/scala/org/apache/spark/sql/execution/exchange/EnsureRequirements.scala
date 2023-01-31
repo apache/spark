@@ -198,11 +198,8 @@ case class EnsureRequirements(
                 // Check if the two children are partition keys compatible. If so, find the
                 // common set of partition values, and adjust the plan accordingly.
                 if (leftSpec.areKeysCompatible(rightSpec)) {
-                  assert(leftSpec.partitioning.partitionValuesOpt.isDefined)
-                  assert(rightSpec.partitioning.partitionValuesOpt.isDefined)
-
-                  val leftPartValues = leftSpec.partitioning.partitionValuesOpt.get
-                  val rightPartValues = rightSpec.partitioning.partitionValuesOpt.get
+                  val leftPartValues = leftSpec.partitioning.partitionValues
+                  val rightPartValues = rightSpec.partitioning.partitionValues
 
                   val mergedPartValues = Utils.mergeOrdered(
                     Seq(leftPartValues, rightPartValues))(leftSpec.ordering).toSeq.distinct

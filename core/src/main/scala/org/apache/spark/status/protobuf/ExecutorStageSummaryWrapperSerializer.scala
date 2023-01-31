@@ -18,6 +18,8 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.ExecutorStageSummaryWrapper
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
 class ExecutorStageSummaryWrapperSerializer
   extends ProtobufSerDe[ExecutorStageSummaryWrapper] {
@@ -27,8 +29,8 @@ class ExecutorStageSummaryWrapperSerializer
     val builder = StoreTypes.ExecutorStageSummaryWrapper.newBuilder()
       .setStageId(input.stageId.toLong)
       .setStageAttemptId(input.stageAttemptId)
-      .setExecutorId(input.executorId)
       .setInfo(info)
+    setStringField(input.executorId, builder.setExecutorId)
     builder.build().toByteArray
   }
 
@@ -38,7 +40,7 @@ class ExecutorStageSummaryWrapperSerializer
     new ExecutorStageSummaryWrapper(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
-      executorId = binary.getExecutorId,
+      executorId = getStringField(binary.hasExecutorId, () => weakIntern(binary.getExecutorId)),
       info = info)
   }
 }
