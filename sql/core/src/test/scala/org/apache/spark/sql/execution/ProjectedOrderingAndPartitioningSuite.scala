@@ -159,4 +159,22 @@ class ProjectedOrderingAndPartitioningSuite
     assert(outputOrdering.head.sameOrderExpressions.map(_.sql) ==
       Seq("aa", "(b + b)", "(a + b)", "(a + a)"))
   }
+
+  test("SPARK-42049: Improve AliasAwareOutputExpression - ordering partly projected") {
+    val df = spark.range(2).orderBy($"id" + 1, $"id" + 2)
+
+    val df1 = df.selectExpr("id + 1 AS a", "id + 2 AS b")
+    val outputOrdering1 = df1.queryExecution.optimizedPlan.outputOrdering
+    assert(outputOrdering1.size == 2)
+    assert(outputOrdering1.map(_.sql) == Seq("a ASC NULLS FIRST", "b ASC NULLS FIRST"))
+
+    val df2 = df.selectExpr("id + 1 AS a")
+    val outputOrdering2 = df2.queryExecution.optimizedPlan.outputOrdering
+    assert(outputOrdering2.size == 1)
+    assert(outputOrdering2.head.sql == "a ASC NULLS FIRST")
+
+    val df3 = df.selectExpr("id + 2 AS b")
+    val outputOrdering3 = df3.queryExecution.optimizedPlan.outputOrdering
+    assert(outputOrdering3.size == 0)
+  }
 }

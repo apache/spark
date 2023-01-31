@@ -44,7 +44,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
     val aliases = mutable.Map[Expression, mutable.ArrayBuffer[Attribute]]()
     outputExpressions.reverse.foreach {
       case a @ Alias(child, _) =>
-        val buffer = aliases.getOrElseUpdate(strip(child.canonicalized), mutable.ArrayBuffer.empty)
+        val buffer = aliases.getOrElseUpdate(strip(child).canonicalized, mutable.ArrayBuffer.empty)
         if (buffer.size < aliasCandidateLimit) {
           buffer += a.toAttribute
         }
@@ -96,7 +96,11 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
 
   override final def outputOrdering: Seq[SortOrder] = {
     if (hasAlias) {
-      orderingExpressions.flatMap { sortOrder =>
+      // Take the first `SortOrder`s only until they can be projected.
+      // E.g. we have child ordering `Seq(SortOrder(a), SortOrder(b))` then
+      // if only `a AS x` can be projected then we can return Seq(SortOrder(x))`
+      // but if only `b AS y` can be projected we can't return `Seq(SortOrder(y))`.
+      orderingExpressions.iterator.map { sortOrder =>
         val orderingSet = mutable.Set.empty[Expression]
         val sameOrderings = sortOrder.children.toStream
           .flatMap(projectExpression)
@@ -108,7 +112,7 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
         } else {
           None
         }
-      }
+      }.takeWhile(_.isDefined).flatten.toSeq
     } else {
       orderingExpressions
     }
