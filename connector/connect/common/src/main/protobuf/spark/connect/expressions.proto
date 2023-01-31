@@ -44,7 +44,7 @@ message Expression {
     UnresolvedExtractValue unresolved_extract_value = 12;
     UpdateFields update_fields = 13;
     UnresolvedNamedLambdaVariable unresolved_named_lambda_variable = 14;
-    ScalarInlineUserDefinedFunction scalar_inline_user_defined_function = 15;
+    CommonInlineUserDefinedFunction common_inline_user_defined_function = 15;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -297,7 +297,7 @@ message Expression {
   }
 }
 
-message ScalarInlineUserDefinedFunction {
+message CommonInlineUserDefinedFunction {
   // (Required) Name of the user-defined function.
   string function_name = 1;
   // (Required) Indicate if the user-defined function is deterministic.
