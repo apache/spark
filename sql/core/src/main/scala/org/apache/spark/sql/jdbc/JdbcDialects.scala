@@ -556,34 +556,6 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def getJdbcSQLBuilder(options: JDBCOptions): JdbcSQLBuilder = new JdbcSQLBuilder(this, options)
 
-  /**
-   * returns the SQL text for the SELECT statement.
-   *
-   * @param options - JDBC options that contains url, table and other information.
-   * @param columnList - The names of the columns or aggregate columns to SELECT.
-   * @param tableSampleClause - The table sample clause for the SELECT statement.
-   * @param whereClause - The WHERE clause for the SELECT statement.
-   * @param groupByClause - The group by clause for the SELECT statement.
-   * @param orderByClause - The order by clause for the SELECT statement.
-   * @param limitClause - The LIMIT clause for the SELECT statement.
-   * @param offsetClause - The OFFSET clause for the SELECT statement.
-   * @return
-   */
-  def getSQLText(
-      options: JDBCOptions,
-      columnList: String,
-      tableSampleClause: String,
-      whereClause: String,
-      groupByClause: String,
-      orderByClause: String,
-      limitClause: String,
-      offsetClause: String): String = {
-
-    options.prepareQuery +
-      s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
-      s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"
-  }
-
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =
