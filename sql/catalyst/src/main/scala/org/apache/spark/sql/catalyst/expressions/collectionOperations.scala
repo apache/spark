@@ -4729,7 +4729,6 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val item = itemExpr.value
 
       val itemInsertionIndex = ctx.freshName("itemInsertionIndex")
-      val newPosExtendsArrayLeft = ctx.freshName("newPosExtendsArrayLeft")
       val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
       val resLength = ctx.freshName("resLength")
       val insertedItemIsNull = ctx.freshName("insertedItemIsNull")
@@ -4749,10 +4748,12 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |boolean $insertedItemIsNull = ${itemExpr.isNull};
          |
          |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements() - 1)) {
+         |
          |  $resLength = java.lang.Math.abs($pos) + 1;
          |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
          |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
          |  }
+         |
          |  $allocation
          |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
          |    $adjustedAllocIdx = $i + 1 + java.lang.Math.abs($pos + $arr.numElements());
@@ -4760,19 +4761,24 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |  }
          |  ${CodeGenerator.setArrayElement(
               values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
+         |
          |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
          |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
          |  }
+         |
          |  ${ev.value} = $values;
          |} else {
+         |
          |  $itemInsertionIndex = $pos;
          |  if ($pos < 0) {
          |    $itemInsertionIndex = $itemInsertionIndex + $arr.numElements();
          |  }
+         |
          |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
          |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
          |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
          |  }
+         |
          |  $allocation
          |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
          |    $adjustedAllocIdx = $i;
@@ -4783,9 +4789,11 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |  }
          |  ${CodeGenerator.setArrayElement(
               values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
+         |
          |  for (int $j = $arr.numElements(); $j < $resLength - 1; $j ++) {
          |    $values.setNullAt($j);
          |  }
+         |
          |  ${ev.value} = $values;
          |}
       """.stripMargin
