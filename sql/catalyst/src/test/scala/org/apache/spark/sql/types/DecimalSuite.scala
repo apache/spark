@@ -364,4 +364,5 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         s"unscaled: $unscaled, scaleFrom: $scaleFrom, scaleTo: $scaleTo, mode: $roundMode")
     }
   }
+
 }
