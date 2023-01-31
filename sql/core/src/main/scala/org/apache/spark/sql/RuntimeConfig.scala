@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -162,7 +163,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
     }
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
         ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
-      throw QueryCompilationErrors.cannotModifyValueOfSparkConfigError(key)
+      throw QueryCompilationErrors.cannotModifyValueOfSparkConfigError(key, Utils.DOC_ROOT_DIR)
     }
   }
 }

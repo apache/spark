@@ -55,7 +55,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
@@ -2646,7 +2646,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       parameters = Map(
         "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
-        "actualNum" -> "3"
+        "actualNum" -> "3",
+        "docroot" -> Utils.DOC_ROOT_DIR
       ),
       context = ExpectedContext(
         start = 7,

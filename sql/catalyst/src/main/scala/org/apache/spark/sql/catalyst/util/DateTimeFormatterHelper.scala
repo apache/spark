@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
+import org.apache.spark.util.Utils
 
 trait DateTimeFormatterHelper {
   private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
@@ -184,12 +185,13 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(
+        pattern, e, Utils.DOC_ROOT_DIR)
   }
 
   protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
     case e: IllegalArgumentException =>
-      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e, Utils.DOC_ROOT_DIR)
   }
 }
 

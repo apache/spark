@@ -50,6 +50,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "7",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "6",
     "functionName" : "`make_timestamp_ntz`"
   },

@@ -104,6 +104,9 @@ private[spark] object Utils extends Logging {
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
+  /** Root directory for Apache Spark documentation. */
+  val DOC_ROOT_DIR = "https://spark.apache.org/docs/latest"
+
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
 

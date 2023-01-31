@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -58,7 +59,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`curdate`",
         "expectedNum" -> "0",
-        "actualNum" -> "1"
+        "actualNum" -> "1",
+        "docroot" -> Utils.DOC_ROOT_DIR
       ),
       context = ExpectedContext("", "", 7, 16, "CURDATE(1)")
     )

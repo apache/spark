@@ -10,6 +10,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'GGGGG'"
   }
 }
@@ -26,6 +27,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'yyyyyyy'"
   }
 }
@@ -60,6 +62,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'MMMMM'"
   }
 }
@@ -76,6 +79,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'LLLLL'"
   }
 }
@@ -92,6 +96,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'EEEEE'"
   }
 }
@@ -108,6 +113,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'FF'"
   }
 }
@@ -124,6 +130,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'ddd'"
   }
 }
@@ -140,6 +147,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'DDDD'"
   }
 }
@@ -156,6 +164,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'HHH'"
   }
 }
@@ -172,6 +181,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'hhh'"
   }
 }
@@ -188,6 +198,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'kkk'"
   }
 }
@@ -204,6 +215,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'KKK'"
   }
 }
@@ -220,6 +232,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'mmm'"
   }
 }
@@ -236,6 +249,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'sss'"
   }
 }
@@ -252,6 +266,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'SSSSSSSSSS'"
   }
 }
@@ -268,6 +283,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'aa'"
   }
 }
@@ -293,6 +309,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'zzzzz'"
   }
 }
@@ -318,6 +335,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'ZZZZZZ'"
   }
 }
@@ -388,6 +406,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'Y'"
   }
 }
@@ -404,6 +423,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'w'"
   }
 }
@@ -420,6 +440,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'W'"
   }
 }
@@ -436,6 +457,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'u'"
   }
 }

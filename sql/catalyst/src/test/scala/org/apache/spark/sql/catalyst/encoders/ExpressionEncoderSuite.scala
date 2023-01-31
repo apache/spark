@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.util.{ClosureCleaner, Utils}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -490,7 +490,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     checkError(
       exception = exception,
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "Any")
+      parameters = Map(
+        "typeName" -> "Any",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
   }
 

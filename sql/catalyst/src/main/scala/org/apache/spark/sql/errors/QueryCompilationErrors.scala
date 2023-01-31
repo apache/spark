@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DEC
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Object for grouping error messages from exceptions thrown during query compilation.
@@ -677,7 +678,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         messageParameters = Map(
           "functionName" -> toSQLId(name),
           "expectedNum" -> expectedNumberOfParameters,
-          "actualNum" -> actualNumber.toString))
+          "actualNum" -> actualNumber.toString,
+          "docroot" -> Utils.DOC_ROOT_DIR))
     } else {
       new AnalysisException(
         errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
@@ -2987,10 +2989,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("key" -> key))
   }
 
-  def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
+  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1326",
-      messageParameters = Map("key" -> key))
+      messageParameters = Map("key" -> key, "docroot" -> docroot))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {

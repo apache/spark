@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -584,7 +585,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> toSQLId("sentences"),
         "expectedNum" -> "[1, 2, 3]",
-        "actualNum" -> "0"
+        "actualNum" -> "0",
+        "docroot" -> Utils.DOC_ROOT_DIR
       ),
       context = ExpectedContext(
         fragment = "sentences()",

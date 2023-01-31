@@ -24,6 +24,7 @@ import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, st
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
 
@@ -676,7 +677,8 @@ class QueryCompilationErrorsSuite
       parameters = Map(
         "functionName" -> "`cast`",
         "expectedNum" -> "0",
-        "actualNum" -> "1"),
+        "actualNum" -> "1",
+        "docroot" -> Utils.DOC_ROOT_DIR),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }

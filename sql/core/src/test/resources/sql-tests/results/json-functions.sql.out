@@ -115,6 +115,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "[1, 2]",
     "functionName" : "`to_json`"
   },
@@ -241,6 +242,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "[2, 3]",
     "functionName" : "`from_json`"
   },
@@ -588,6 +590,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "1",
     "functionName" : "`json_array_length`"
   },
@@ -676,6 +679,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "1",
     "functionName" : "`json_object_keys`"
   },

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -158,7 +159,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -168,7 +170,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
     assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes() ==
@@ -1781,7 +1784,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -1792,7 +1796,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
-        "actualNum" -> "4")
+        "actualNum" -> "4",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
     assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes() == DataTypeMismatch(
       errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -1912,7 +1917,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
 
     // first input to function etl should have IntegerType

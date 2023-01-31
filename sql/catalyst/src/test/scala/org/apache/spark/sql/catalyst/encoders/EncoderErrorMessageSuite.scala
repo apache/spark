@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
+import org.apache.spark.util.Utils
 
 class NonEncodable(i: Int)
 
@@ -56,35 +57,45 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]),
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable")
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]),
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable")
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]),
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable")
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]),
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable")
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]),
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable")
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
   }
 

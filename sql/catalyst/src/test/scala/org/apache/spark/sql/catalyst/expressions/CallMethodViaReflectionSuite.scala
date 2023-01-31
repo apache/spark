@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /** A static class for testing purpose. */
 object ReflectStaticClass {
@@ -106,7 +107,8 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -116,7 +118,8 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
     assert(CallMethodViaReflection(
       Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==

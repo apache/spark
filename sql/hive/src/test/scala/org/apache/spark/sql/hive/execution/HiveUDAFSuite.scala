@@ -36,6 +36,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.util.Utils
 
 @SlowHiveTest
 class HiveUDAFSuite extends QueryTest
@@ -179,7 +180,8 @@ class HiveUDAFSuite extends QueryTest
         parameters = Map(
           "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",
-          "actualNum" -> "1"),
+          "actualNum" -> "1",
+          "docroot" -> Utils.DOC_ROOT_DIR),
         context = ExpectedContext(
           fragment = "longProductSum(100)",
           start = 7,

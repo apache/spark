@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -326,7 +327,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
-        "actualNum" -> "3")
+        "actualNum" -> "3",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
 
     // The given keys of function map should all be the same type
@@ -444,7 +446,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",
-        "actualNum" -> "3")
+        "actualNum" -> "3",
+        "docroot" -> Utils.DOC_ROOT_DIR)
     )
   }
 
