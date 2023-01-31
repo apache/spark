@@ -28,12 +28,39 @@ import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
  */
 class JdbcSQLBuilder(dialect: JdbcDialect, options: JDBCOptions) {
 
+  /**
+   * `columns`, but as a String suitable for injection into a SQL query.
+   */
   var columnList: String = "1"
+
+  /**
+   * A WHERE clause representing both `filters`, if any, and the current partition.
+   */
   var whereClause: String = ""
+
+  /**
+   * A GROUP BY clause representing pushed-down grouping columns.
+   */
   var groupByClause: String = ""
+
+  /**
+   * A ORDER BY clause representing pushed-down sort of top n.
+   */
   var orderByClause: String = ""
+
+  /**
+   * A LIMIT clause representing pushed-down limit.
+   */
   var limitClause: String = ""
+
+  /**
+   * A OFFSET clause representing pushed-down offset.
+   */
   var offsetClause: String = ""
+
+  /**
+   * A table sample clause representing pushed-down table sample.
+   */
   var tableSampleClause: String = ""
 
   def withColumns(columns: Array[String]): JdbcSQLBuilder = {
