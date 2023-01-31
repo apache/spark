@@ -1758,7 +1758,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("dataType" -> field.dataType.catalogString))
   }
 
-  def incompatibleViewSchemaChange(
+  def incompatibleViewSchemaChangeError(
       viewName: String,
       colName: String,
       expectedNum: Int,
@@ -1766,21 +1766,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       viewDDL: Option[String]): Throwable = {
     viewDDL.map { v =>
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1176",
+        errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,
           "expectedNum" -> expectedNum.toString,
           "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]"),
-          "viewDDL" -> v))
+          "suggestion" -> v))
     }.getOrElse {
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1177",
+        errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,
           "expectedNum" -> expectedNum.toString,
-          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]")))
+          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]"),
+          "suggestion" -> "CREATE OR REPLACE TEMPORARY VIEW"))
     }
   }
 
