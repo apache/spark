@@ -62,7 +62,7 @@ private[scheduler] class HealthTracker (
   HealthTracker.validateExcludeOnFailureConfs(conf)
   private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
   private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
-  val EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS = HealthTracker.getExludeOnFailureTimeout(conf)
+  val EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS = HealthTracker.getExcludeOnFailureTimeout(conf)
   private val EXCLUDE_FETCH_FAILURE_ENABLED =
     conf.get(config.EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED)
   private val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
@@ -93,7 +93,7 @@ private[scheduler] class HealthTracker (
    * remove from this when executors are removed from spark, so we can track when we get multiple
    * successive excluded executors on one node.  Nonetheless, it will not grow too large because
    * there cannot be many excluded executors on one node, before we stop requesting more
-   * executors on that node, and we clean up the list of exluded executors once an executor has
+   * executors on that node, and we clean up the list of excluded executors once an executor has
    * been excluded for EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS.
    */
   val nodeToExcludedExecs = new HashMap[String, HashSet[String]]()
@@ -110,7 +110,7 @@ private[scheduler] class HealthTracker (
       // Apply the timeout to excluded nodes and executors
       val execsToInclude = executorIdToExcludedStatus.filter(_._2.expiryTime < now).keys
       if (execsToInclude.nonEmpty) {
-        // Include any executors that have been exluded longer than the excludeOnFailure timeout.
+        // Include any executors that have been excluded longer than the excludeOnFailure timeout.
         logInfo(s"Removing executors $execsToInclude from exclude list because the " +
           s"the executors have reached the timed out")
         execsToInclude.foreach { exec =>
@@ -382,7 +382,7 @@ private[scheduler] class HealthTracker (
     /**
      * Apply the timeout to individual tasks.  This is to prevent one-off failures that are very
      * spread out in time (and likely have nothing to do with problems on the executor) from
-     * triggering exlusion.  However, note that we do *not* remove executors and nodes from
+     * triggering exclusion.  However, note that we do *not* remove executors and nodes from
      * being excluded as we expire individual task failures -- each have their own timeout.  E.g.,
      * suppose:
      *  * timeout = 10, maxFailuresPerExec = 2
@@ -447,7 +447,7 @@ private[spark] object HealthTracker extends Logging {
     }
   }
 
-  def getExludeOnFailureTimeout(conf: SparkConf): Long = {
+  def getExcludeOnFailureTimeout(conf: SparkConf): Long = {
     conf.get(config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF).getOrElse {
       conf.get(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF).getOrElse {
         Utils.timeStringAsMs(DEFAULT_TIMEOUT)
@@ -484,7 +484,7 @@ private[spark] object HealthTracker extends Logging {
       }
     }
 
-    val timeout = getExludeOnFailureTimeout(conf)
+    val timeout = getExcludeOnFailureTimeout(conf)
     if (timeout <= 0) {
       // first, figure out where the timeout came from, to include the right conf in the message.
       conf.get(config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF) match {

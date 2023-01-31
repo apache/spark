@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -149,25 +150,25 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // type checking
-    assert(Elt(Seq.empty).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> "`elt`",
-          "expectedNum" -> "> 1",
-          "actualNum" -> "0"
-        )
-      )
+    checkError(
+      exception = intercept[AnalysisException] {
+        Elt(Seq.empty).checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`elt`",
+        "expectedNum" -> "> 1",
+        "actualNum" -> "0")
     )
-    assert(Elt(Seq(Literal(1))).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> "`elt`",
-          "expectedNum" -> "> 1",
-          "actualNum" -> "1"
-        )
-      )
+    checkError(
+      exception = intercept[AnalysisException] {
+        Elt(Seq(Literal(1))).checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`elt`",
+        "expectedNum" -> "> 1",
+        "actualNum" -> "1")
     )
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
     assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes() ==
@@ -375,12 +376,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Mask") {
-    def getExpectedValue(expected: String): String =
-      if ("null".equals(expected)) null else expected
-
+    val NULL_LITERAL = Literal(null, StringType)
     val inputString1 = Literal("AbCD123-@$#")
     val inputString2 = Literal("abcd-EFGH-8765-4321")
-    val inputString3 = Literal.create(null, StringType)
     val firstItem = (
       inputString1,
       Array(
@@ -405,57 +403,36 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "abcd*EFGH*dddd*dddd",
         "abcd*EFGH*8765*4321",
         "abcd-EFGH-8765-4321"))
-    val thirdItem = (
-      inputString3,
-      Array("null", "null", "null", "null", "null", "null", "null", "null", "null"))
 
-    Seq(firstItem, secondItem, thirdItem).foreach {
+    Seq(firstItem, secondItem).foreach {
       case (input: Literal, expectedList: Array[String]) =>
-        checkEvaluation(new Mask(input), getExpectedValue(expectedList(0)))
-        checkEvaluation(new Mask(input, Literal('Q')), getExpectedValue(expectedList(1)))
-        checkEvaluation(
-          new Mask(input, Literal('Q'), Literal('q')),
-          getExpectedValue(expectedList(2)))
+        checkEvaluation(new Mask(input), expectedList(0))
+        checkEvaluation(new Mask(input, Literal('Q')), expectedList(1))
+        checkEvaluation(new Mask(input, Literal('Q'), Literal('q')), expectedList(2))
         checkEvaluation(
           new Mask(input, Literal('Q'), Literal('q'), Literal('d')),
-          getExpectedValue(expectedList(3)))
+          expectedList(3))
         checkEvaluation(
           new Mask(input, Literal('Q'), Literal('q'), Literal('d'), Literal('*')),
-          getExpectedValue(expectedList(4)))
+          expectedList(4))
         checkEvaluation(
-          new Mask(input, Literal("-1"), Literal('q'), Literal('d'), Literal('*')),
-          getExpectedValue(expectedList(5)))
+          new Mask(input, NULL_LITERAL, Literal('q'), Literal('d'), Literal('*')),
+          expectedList(5))
         checkEvaluation(
-          new Mask(input, Literal("-1"), Literal("-1"), Literal('d'), Literal('*')),
-          getExpectedValue(expectedList(6)))
+          new Mask(input, NULL_LITERAL, NULL_LITERAL, Literal('d'), Literal('*')),
+          expectedList(6))
         checkEvaluation(
-          new Mask(input, Literal("-1"), Literal("-1"), Literal("-1"), Literal('*')),
-          getExpectedValue(expectedList(7)))
+          new Mask(input, NULL_LITERAL, NULL_LITERAL, NULL_LITERAL, Literal('*')),
+          expectedList(7))
         checkEvaluation(
-          new Mask(input, Literal("-1"), Literal("-1"), Literal("-1"), Literal("-1")),
-          getExpectedValue(expectedList(8)))
+          new Mask(input, NULL_LITERAL, NULL_LITERAL, NULL_LITERAL, NULL_LITERAL),
+          expectedList(8))
         assert(
-          new Mask(input, Literal("-1"), Literal('q'), Literal('d'), Literal('*'))
+          new Mask(input, NULL_LITERAL, Literal('q'), Literal('d'), Literal('*'))
             .checkInputDataTypes()
             .isSuccess)
         assert(
-          new Mask(input, Literal(null), Literal("-1"), Literal("-1"), Literal("-1"))
-            .checkInputDataTypes()
-            .isFailure)
-        assert(
-          new Mask(input, Literal("Q"), Literal(null), Literal("-1"), Literal("-1"))
-            .checkInputDataTypes()
-            .isFailure)
-        assert(
-          new Mask(input, Literal("Q"), Literal("q"), Literal(null), Literal("-1"))
-            .checkInputDataTypes()
-            .isFailure)
-        assert(
-          new Mask(input, Literal("Q"), Literal("q"), Literal("n"), Literal(null))
-            .checkInputDataTypes()
-            .isFailure)
-        assert(
-          new Mask(input, Literal(null), Literal(null), Literal(null), Literal(null))
+          new Mask(input, Literal("QQ"), Literal('q'), Literal('d'), Literal('*'))
             .checkInputDataTypes()
             .isFailure)
     }
@@ -1796,21 +1773,27 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // arguments checking
-    assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes() == DataTypeMismatch(
-      errorSubClass = "WRONG_NUM_ARGS",
-      messageParameters = Map(
+    checkError(
+      exception = intercept[AnalysisException] {
+        ParseUrl(Seq(Literal("1"))).checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
         "actualNum" -> "1")
-    ))
-    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"),
-      Literal("4"))).checkInputDataTypes() == DataTypeMismatch(
-      errorSubClass = "WRONG_NUM_ARGS",
-      messageParameters = Map(
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"),
+          Literal("4"))).checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
         "actualNum" -> "4")
-    ))
+    )
     assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes() == DataTypeMismatch(
       errorSubClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
@@ -1921,15 +1904,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // requires at least two arguments
     val indexExpr1 = Literal(8)
     val expr1 = Elt(Seq(indexExpr1))
-    assert(expr1.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> "`elt`",
-          "expectedNum" -> "> 1",
-          "actualNum" -> "1"
-        )
-      )
+    checkError(
+      exception = intercept[AnalysisException] {
+        expr1.checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`elt`",
+        "expectedNum" -> "> 1",
+        "actualNum" -> "1")
     )
 
     // first input to function etl should have IntegerType

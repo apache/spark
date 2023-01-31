@@ -336,10 +336,10 @@ class ColumnReference(Expression):
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, unparsed_identifier: str) -> None:
         super().__init__()
-        assert isinstance(name, str)
-        self._unparsed_identifier = name
+        assert isinstance(unparsed_identifier, str)
+        self._unparsed_identifier = unparsed_identifier
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -353,6 +353,43 @@ class ColumnReference(Expression):
 
     def __repr__(self) -> str:
         return f"{self._unparsed_identifier}"
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, ColumnReference)
+            and other._unparsed_identifier == self._unparsed_identifier
+        )
+
+
+class UnresolvedStar(Expression):
+    def __init__(self, unparsed_target: Optional[str]):
+        super().__init__()
+
+        if unparsed_target is not None:
+            assert isinstance(unparsed_target, str) and unparsed_target.endswith(".*")
+
+        self._unparsed_target = unparsed_target
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        expr = proto.Expression()
+        expr.unresolved_star.SetInParent()
+        if self._unparsed_target is not None:
+            expr.unresolved_star.unparsed_target = self._unparsed_target
+        return expr
+
+    def __repr__(self) -> str:
+        if self._unparsed_target is not None:
+            return f"unresolvedstar({self._unparsed_target})"
+        else:
+            return "unresolvedstar()"
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, UnresolvedStar)
+            and other._unparsed_target == self._unparsed_target
+        )
 
 
 class SQLExpression(Expression):
@@ -369,6 +406,9 @@ class SQLExpression(Expression):
         expr = proto.Expression()
         expr.expression_string.expression = self._expr
         return expr
+
+    def __eq__(self, other: Any) -> bool:
+        return other is not None and isinstance(other, SQLExpression) and other._expr == self._expr
 
 
 class SortOrder(Expression):
@@ -438,6 +478,69 @@ class UnresolvedFunction(Expression):
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
+class PythonUDF:
+    """Represents a Python user-defined function."""
+
+    def __init__(
+        self,
+        output_type: str,
+        eval_type: int,
+        command: bytes,
+    ) -> None:
+        self._output_type = output_type
+        self._eval_type = eval_type
+        self._command = command
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
+        expr = proto.PythonUDF()
+        expr.output_type = self._output_type
+        expr.eval_type = self._eval_type
+        expr.command = self._command
+        return expr
+
+    def __repr__(self) -> str:
+        return (
+            f"{self._output_type}, {self._eval_type}, "
+            f"{self._command}"  # type: ignore[str-bytes-safe]
+        )
+
+
+class CommonInlineUserDefinedFunction(Expression):
+    """Represents a user-defined function with an inlined defined function body of any programming
+    languages."""
+
+    def __init__(
+        self,
+        function_name: str,
+        deterministic: bool,
+        arguments: Sequence[Expression],
+        function: PythonUDF,
+    ):
+        self._function_name = function_name
+        self._deterministic = deterministic
+        self._arguments = arguments
+        self._function = function
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        expr = proto.Expression()
+        expr.common_inline_user_defined_function.function_name = self._function_name
+        expr.common_inline_user_defined_function.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            expr.common_inline_user_defined_function.arguments.extend(
+                [arg.to_plan(session) for arg in self._arguments]
+            )
+        expr.common_inline_user_defined_function.python_udf.CopyFrom(
+            self._function.to_plan(session)
+        )
+        return expr
+
+    def __repr__(self) -> str:
+        return (
+            f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])}), "
+            f"{self._deterministic}, {self._function}"
+        )
 
 
 class WithField(Expression):

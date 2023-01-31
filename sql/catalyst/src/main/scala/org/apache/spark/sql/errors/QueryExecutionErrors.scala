@@ -1443,8 +1443,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
-        "fieldName" -> parser.getCurrentName.toString(),
-        "fieldValue" -> parser.getText.toString(),
+        "fieldName" -> toSQLValue(parser.getCurrentName, StringType),
+        "fieldValue" -> parser.getText,
         "jsonType" -> jsonType.toString(),
         "dataType" -> toSQLType(dataType)))
   }
@@ -1735,23 +1735,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "batchName" -> batchName,
         "plan" -> sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")))
-  }
-
-  def structuralIntegrityOfInputPlanIsBrokenInClassError(
-      className: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2173",
-      messageParameters = Map(
-        "className" -> className))
-  }
-
-  def structuralIntegrityIsBrokenAfterApplyingRuleError(
-      ruleName: String, batchName: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2174",
-      messageParameters = Map(
-        "ruleName" -> ruleName,
-        "batchName" -> batchName))
   }
 
   def ruleIdNotFoundForRuleError(ruleName: String): Throwable = {

@@ -19,10 +19,12 @@ package org.apache.spark.deploy.k8s.integrationtest
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.Pod
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.matchers.should.Matchers._
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.SPARK_PI_MAIN_CLASS
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
@@ -30,6 +32,21 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   import BasicTestsSuite._
   import KubernetesSuite.{k8sTestTag, localTestTag}
   import KubernetesSuite.{TIMEOUT, INTERVAL}
+
+  test("SPARK-42190: Run SparkPi with local[*]", k8sTestTag) {
+    sparkAppConf.set("spark.kubernetes.driver.master", "local[10]")
+    runSparkApplicationAndVerifyCompletion(
+      containerLocalSparkDistroExamplesJar,
+      SPARK_PI_MAIN_CLASS,
+      Seq("local[10]", "Pi is roughly 3"),
+      Seq(),
+      Array.empty[String],
+      doBasicDriverPodCheck,
+      _ => (),
+      isJVM = true,
+      executorPatience =
+        Some((Some(PatienceConfiguration.Interval(Span(0, Seconds))), None)))
+  }
 
   test("Run SparkPi with no resources", k8sTestTag) {
     runSparkPiAndVerifyCompletion()

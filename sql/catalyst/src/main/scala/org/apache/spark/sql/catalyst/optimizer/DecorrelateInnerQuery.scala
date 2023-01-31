@@ -136,6 +136,15 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
+   * Collect outer references in all expressions in a plan tree.
+   */
+  private def collectOuterReferencesInPlanTree(plan: LogicalPlan): AttributeSet = {
+    AttributeSet(plan.flatMap(
+      _.expressions.flatMap(
+        _.collect { case o: OuterReference => o.toAttribute })))
+  }
+
+  /**
    * Build a mapping between outer references with equivalent inner query attributes.
    * E.g. [outer(a) = x, y = outer(b), outer(c) = z + 1] => {a -> x, b -> y}
    */
@@ -243,13 +252,37 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
+   * Rewrites a domain join cond so that it can be pushed to the right side of a
+   * union/intersect/except operator.
+   */
+  def pushConditionsThroughUnion(
+      conditions: Seq[Expression],
+      union: Union,
+      child: LogicalPlan): Seq[Expression] = {
+    // The output attributes are always equal to the left child's output
+    assert(union.output.size == child.output.size)
+    val map = AttributeMap(union.output.zip(child.output))
+    conditions.map {
+      // The left hand side is the domain attribute used in the inner query and the right hand side
+      // is the attribute from the outer query. (See comment above in buildDomainAttrMap.)
+      // We need to remap the attribute names used in the inner query (left hand side) to account
+      // for the different names in each union child. We should not remap the attribute names used
+      // in the outer query.
+      case EqualNullSafe(left: Attribute, right: Expression) =>
+        EqualNullSafe(map.getOrElse(left, left), right)
+      case EqualTo(left: Attribute, right: Expression) =>
+        EqualTo(map.getOrElse(left, left), right)
+    }
+  }
+
+  /**
    * Rewrite all [[DomainJoin]]s in the inner query to actual joins with the outer query.
    */
   def rewriteDomainJoins(
       outerPlan: LogicalPlan,
       innerPlan: LogicalPlan,
       conditions: Seq[Expression]): LogicalPlan = innerPlan match {
-    case d @ DomainJoin(domainAttrs, child, joinType, condition) =>
+    case d @ DomainJoin(domainAttrs, child, joinType, outerJoinCondition) =>
       val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
 
       val newChild = joinType match {
@@ -259,9 +292,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // and use the new join conditions to rewrite domain joins in its child. For example:
           // DomainJoin [c'] LeftOuter (a = c') with domainAttrMap: { c' -> _1 }.
           // Then the new conditions to use will be [(a = _1)].
-          assert(condition.isDefined,
+          assert(outerJoinCondition.isDefined,
             s"LeftOuter domain join should always have the join condition defined:\n$d")
-          val newCond = condition.get.transform {
+          val newCond = outerJoinCondition.get.transform {
             case a: Attribute => domainAttrMap.getOrElse(a, a)
           }
           // Recursively rewrite domain joins using the new conditions.
@@ -297,11 +330,15 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // Join joinType condition
           // :- Domain
           // +- Inner Query
-          case _ => Join(domain, newChild, joinType, condition, JoinHint.NONE)
+          case _ => Join(domain, newChild, joinType, outerJoinCondition, JoinHint.NONE)
         }
       } else {
         throw new IllegalStateException(
           s"Unable to rewrite domain join with conditions: $conditions\n$d.")
+      }
+    case u: Union =>
+      u.mapChildren { child =>
+        rewriteDomainJoins(outerPlan, child, pushConditionsThroughUnion(conditions, u, child))
       }
     case p: LogicalPlan =>
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
@@ -320,8 +357,15 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // expressions from the inner query that is used to replace outer references.
     type ReturnType = (LogicalPlan, Seq[Expression], AttributeMap[Attribute])
 
-    // Decorrelate the input plan with a set of parent outer references and a boolean flag
-    // indicating whether the result of the plan will be aggregated. Steps:
+    // Decorrelate the input plan.
+    // parentOuterReferences: a set of parent outer references. As we recurse down we collect the
+    // set of outer references that are part of the Domain, and use it to construct the DomainJoins
+    // and join conditions.
+    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated.
+    // underSetOp: a boolean flag indicating whether a set operator (e.g. UNION) is a parent of the
+    // inner plan.
+    //
+    // Steps:
     // 1. Recursively collects outer references from the inner query until it reaches a node
     //    that does not contain correlated value.
     // 2. Inserts an optional [[DomainJoin]] node to indicate whether a domain (inner) join is
@@ -333,7 +377,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
     def decorrelate(
         plan: LogicalPlan,
         parentOuterReferences: AttributeSet,
-        aggregated: Boolean = false): ReturnType = {
+        aggregated: Boolean = false,
+        underSetOp: Boolean = false
+    ): ReturnType = {
       val isCorrelated = hasOuterReferences(plan)
       if (!isCorrelated) {
         // We have reached a plan without correlation to the outer plan.
@@ -385,7 +431,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val (correlated, uncorrelated) = conditions.partition(containsOuter)
             // Find outer references that can be substituted by attributes from the inner
             // query using the equality predicates.
-            val equivalences = collectEquivalentOuterReferences(correlated)
+            // If we are under a set op, we never use the predicates directly to substitute outer
+            // refs for now. Future improvement: use the predicates directly if they exist in all
+            // children of the set op.
+            val equivalences =
+              if (underSetOp) AttributeMap.empty[Attribute]
+              else collectEquivalentOuterReferences(correlated)
             // Correlated predicates can be removed from the Filter's condition and used as
             // join conditions with the outer query. However, if the results of the sub-tree
             // is aggregated, only certain correlated equality predicates can be used, because
@@ -427,16 +478,21 @@ object DecorrelateInnerQuery extends PredicateHelper {
             //            :- Relation [c, d]
             //            +- Aggregate [b] [b AS b']          -- [(1)] (Domain)
             //               +- Relation [a, b]
-            if (aggregated) {
+            if (aggregated || underSetOp) {
               // Split the correlated predicates into predicates that can and cannot be directly
               // used as join conditions with the outer query depending on whether they can
               // be pulled up over an Aggregate without changing the semantics of the plan.
-              val (equalityCond, predicates) = correlated.partition(canPullUpOverAgg)
+              // If we are under a set op, we never use the predicates directly for now. Future
+              // improvement: use the predicates directly if they exist in all children of the set
+              // op.
+              val (equalityCond, predicates) =
+                if (underSetOp) (Seq.empty[Expression], correlated)
+                else correlated.partition(canPullUpOverAgg)
               val outerReferences = collectOuterReferences(predicates)
               val newOuterReferences =
                 parentOuterReferences ++ outerReferences -- equivalences.keySet
               val (newChild, joinCond, outerReferenceMap) =
-                decorrelate(child, newOuterReferences, aggregated)
+                decorrelate(child, newOuterReferences, aggregated, underSetOp)
               // Add the outer references mapping collected from the equality conditions.
               val newOuterReferenceMap = outerReferenceMap ++ equivalences
               // Replace all outer references in the non-equality predicates.
@@ -456,7 +512,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // can be directly used as outer query join conditions.
               val newOuterReferences = parentOuterReferences -- equivalences.keySet
               val (newChild, joinCond, outerReferenceMap) =
-                decorrelate(child, newOuterReferences, aggregated)
+                decorrelate(child, newOuterReferences, aggregated, underSetOp)
               // Add the outer references mapping collected from the equality conditions.
               val newOuterReferenceMap = outerReferenceMap ++ equivalences
               val newFilter = uncorrelated match {
@@ -471,7 +527,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val outerReferences = collectOuterReferences(projectList)
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =
-              decorrelate(child, newOuterReferences, aggregated)
+              decorrelate(child, newOuterReferences, aggregated, underSetOp)
             // Replace all outer references in the original project list and keep the output
             // attributes unchanged.
             val newProjectList = replaceOuterInNamedExpressions(projectList, outerReferenceMap)
@@ -485,7 +541,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =
-              decorrelate(child, newOuterReferences, aggregated = true)
+              decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
             // Replace all outer references in grouping and aggregate expressions, and keep
             // the output attributes unchanged.
             val newGroupingExpr = replaceOuterReferences(groupingExpressions, outerReferenceMap)
@@ -627,7 +683,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
 
           case d: Distinct =>
             val (newChild, joinCond, outerReferenceMap) =
-              decorrelate(d.child, parentOuterReferences, aggregated = true)
+              decorrelate(d.child, parentOuterReferences, aggregated = true, underSetOp)
             (d.copy(child = newChild), joinCond, outerReferenceMap)
 
           case j @ Join(left, right, joinType, condition, _) =>
@@ -644,12 +700,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
               case _ => hasOuterReferences(right)
             }
             val (newLeft, leftJoinCond, leftOuterReferenceMap) = if (shouldPushToLeft) {
-              decorrelate(left, newOuterReferences, aggregated)
+              decorrelate(left, newOuterReferences, aggregated, underSetOp)
             } else {
               (left, Nil, AttributeMap.empty[Attribute])
             }
             val (newRight, rightJoinCond, rightOuterReferenceMap) = if (shouldPushToRight) {
-              decorrelate(right, newOuterReferences, aggregated)
+              decorrelate(right, newOuterReferences, aggregated, underSetOp)
             } else {
               (right, Nil, AttributeMap.empty[Attribute])
             }
@@ -667,6 +723,47 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 
+          case u: Union =>
+            // Set ops are decorrelated by pushing the domain join into each child. For details see
+            // https://docs.google.com/document/d/11b9ClCF2jYGU7vU2suOT7LRswYkg6tZ8_6xJbvxfh2I/edit
+
+            // First collect outer references from all children - these must all be added to the
+            // Domain (otherwise we’d be unioning together inner values corresponding to different
+            // outer values).
+            //
+            // As an example, this inner subquery:
+            //   select c from t1 where t1.a = t_outer.a
+            //   UNION ALL
+            //   select c from t2 where t2.b = t_outer.b
+            // has columns a, b in the Domain and is rewritten to:
+            //   select c, t_outer.a, t_outer.b from t1 join t_outer where t1.a = t_outer.a
+            //   UNION ALL
+            //   select c, t_outer.a, t_outer.b from t2 join t_outer where t2.b = t_outer.b
+            val collectedChildOuterReferences = collectOuterReferencesInPlanTree(u)
+            val newOuterReferences = AttributeSet(
+              parentOuterReferences ++ collectedChildOuterReferences)
+
+            val childDecorrelateResults =
+              u.children.map { child =>
+                val (decorrelatedChild, newJoinCond, newOuterReferenceMap) =
+                  decorrelate(child, newOuterReferences, aggregated, underSetOp = true)
+                // Create a Project to ensure that the domain attributes are added to the same
+                // positions in each child of the union. If we don't explicitly construct this
+                // Project, they could get added at the beginning or the end of the output columns
+                // depending on the child plan.
+                // The inner expressions for the domain are the values of newOuterReferenceMap.
+                val domainProjections = collectedChildOuterReferences.map(newOuterReferenceMap(_))
+                val newChild = Project(child.output ++ domainProjections, decorrelatedChild)
+                (newChild, newJoinCond, newOuterReferenceMap)
+              }
+
+            val newChildren = childDecorrelateResults.map(_._1)
+            // Need to use the join cond and outer ref map from the first child, because attribute
+            // names are from the first child
+            val newJoinCond = childDecorrelateResults.head._2
+            val newOuterReferenceMap = AttributeMap(childDecorrelateResults.head._3)
+            (u.withNewChildren(newChildren), newJoinCond, newOuterReferenceMap)
+
           case g: Generate if g.requiredChildOutput.isEmpty =>
             // Generate with non-empty required child output cannot host
             // outer reference. It is blocked by CheckAnalysis.
@@ -683,7 +780,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val outerReferences = collectOuterReferences(u.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in $u")
             val (newChild, joinCond, outerReferenceMap) =
-              decorrelate(u.child, parentOuterReferences, aggregated)
+              decorrelate(u.child, parentOuterReferences, aggregated, underSetOp)
             (u.withNewChildren(newChild :: Nil), joinCond, outerReferenceMap)
 
           case o =>

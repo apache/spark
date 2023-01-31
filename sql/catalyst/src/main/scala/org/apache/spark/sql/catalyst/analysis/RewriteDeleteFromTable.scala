@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{EqualNullSafe, Expression, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, EqualNullSafe, Expression, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LogicalPlan, ReplaceData}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LogicalPlan, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, SupportsRowLevelOperations, TruncatableTable}
+import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
-import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -45,7 +46,12 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 
         case r @ DataSourceV2Relation(t: SupportsRowLevelOperations, _, _, _, _) =>
           val table = buildOperationTable(t, DELETE, CaseInsensitiveStringMap.empty())
-          buildReplaceDataPlan(r, table, cond)
+          table.operation match {
+            case _: SupportsDelta =>
+              buildWriteDeltaPlan(r, table, cond)
+            case _ =>
+              buildReplaceDataPlan(r, table, cond)
+          }
 
         case DataSourceV2Relation(_: SupportsDeleteV2, _, _, _, _) =>
           // don't rewrite as the table supports deletes only with filters
@@ -81,5 +87,31 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
     ReplaceData(writeRelation, cond, remainingRowsPlan, relation)
+  }
+
+  // build a rewrite plan for sources that support row deltas
+  private def buildWriteDeltaPlan(
+      relation: DataSourceV2Relation,
+      operationTable: RowLevelOperationTable,
+      cond: Expression): WriteDelta = {
+
+    // resolve all needed attrs (e.g. row ID and any required metadata attrs)
+    val operation = operationTable.operation.asInstanceOf[SupportsDelta]
+    val rowIdAttrs = resolveRowIdAttrs(relation, operation)
+    val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
+
+    // construct a read relation and include all required metadata columns
+    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
+
+    // construct a plan that only contains records to delete
+    val deletedRowsPlan = Filter(cond, readRelation)
+    val operationType = Alias(Literal(DELETE_OPERATION), OPERATION_COLUMN)()
+    val requiredWriteAttrs = dedupAttrs(rowIdAttrs ++ metadataAttrs)
+    val project = Project(operationType +: requiredWriteAttrs, deletedRowsPlan)
+
+    // build a plan to write deletes to the table
+    val writeRelation = relation.copy(table = operationTable)
+    val projections = buildWriteDeltaProjections(project, Nil, rowIdAttrs, metadataAttrs)
+    WriteDelta(writeRelation, cond, project, relation, projections)
   }
 }

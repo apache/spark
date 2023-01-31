@@ -1911,6 +1911,25 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     assert(listener.deadExecutors.size === 0)
   }
 
+  test("SPARK-41683: Should correctly calculate numActiveStages if some stages are not submitted") {
+    val stage1 = new StageInfo( 0, 0, "stage1", 0, Seq.empty, Seq.empty, "", resourceProfileId = 0)
+    val stage2 = new StageInfo( 1, 0, "stage2", 0, Seq.empty, Seq.empty, "", resourceProfileId = 0)
+    val stage3 = new StageInfo( 2, 0, "stage3", 0, Seq.empty, Seq.empty, "", resourceProfileId = 0)
+
+    val listener = new AppStatusListener(store, conf, true)
+    listener.onApplicationStart(SparkListenerApplicationStart("app", Some("app"), 0L, "none", None))
+    listener.onJobStart(SparkListenerJobStart(0, 0L, Seq(stage1, stage2, stage3)))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage1))
+    listener.onStageCompleted(SparkListenerStageCompleted(stage1))
+    listener.onJobEnd(SparkListenerJobEnd(0, 10000L, JobSucceeded))
+    listener.onApplicationEnd(SparkListenerApplicationEnd(1L))
+
+    val jobs = KVUtils.mapToSeq(store.view(classOf[JobDataWrapper]))(_.info)
+    assert(jobs.length == 1)
+    val job = jobs.head
+    assert(job.numActiveStages == 0)
+  }
+
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {

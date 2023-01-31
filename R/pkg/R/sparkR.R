@@ -40,8 +40,15 @@ sparkR.session.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
     if (exists(".sparkRjsc", envir = env)) {
-      sc <- get(".sparkRjsc", envir = env)
-      callJMethod(sc, "stop")
+      # Should try catch for every use of the connection in case
+      # the connection is timed-out, see also SPARK-42186.
+      tryCatch({
+        sc <- get(".sparkRjsc", envir = env)
+        callJMethod(sc, "stop")
+      },
+      error = function(err) {
+        warning(err)
+      })
       rm(".sparkRjsc", envir = env)
 
       if (exists(".sparkRsession", envir = env)) {
@@ -56,20 +63,35 @@ sparkR.session.stop <- function() {
     }
 
     if (exists(".backendLaunched", envir = env)) {
-      callJStatic("SparkRHandler", "stopBackend")
+      tryCatch({
+        callJStatic("SparkRHandler", "stopBackend")
+      },
+      error = function(err) {
+        warning(err)
+      })
     }
 
     # Also close the connection and remove it from our env
-    conn <- get(".sparkRCon", envir = env)
-    close(conn)
+    tryCatch({
+      conn <- get(".sparkRCon", envir = env)
+      close(conn)
+    },
+    error = function(err) {
+      warning(err)
+    })
 
     rm(".sparkRCon", envir = env)
     rm(".scStartTime", envir = env)
   }
 
   if (exists(".monitorConn", envir = env)) {
-    conn <- get(".monitorConn", envir = env)
-    close(conn)
+    tryCatch({
+      conn <- get(".monitorConn", envir = env)
+      close(conn)
+    },
+    error = function(err) {
+      warning(err)
+    })
     rm(".monitorConn", envir = env)
   }
 
