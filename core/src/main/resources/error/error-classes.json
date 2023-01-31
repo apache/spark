@@ -1211,7 +1211,7 @@
     "message" : [
       "The <clause> clause may be used at most once per <operation> operation."
     ],
-    "sqlState" : "2202G"
+    "sqlState" : "42616"
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
