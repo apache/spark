@@ -3109,13 +3109,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("array_insert functions") {
     val fiveShort: Short = 5
 
-    val df1 = Seq((Array[Int](3, 2, 5, 1, 2), 5, 3)).toDF("a", "b", "c")
+    val df1 = Seq((Array[Integer](3, 2, 5, 1, 2), 5, 3)).toDF("a", "b", "c")
     val df2 = Seq((Array[Short](1, 2, 3, 4), 4, fiveShort)).toDF("a", "b", "c")
     val df3 = Seq((Array[Double](3.0, 2.0, 5.0, 1.0, 2.0), 1, 3.0)).toDF("a", "b", "c")
     val df4 = Seq((Array[Boolean](true, false), 2, false)).toDF("a", "b", "c")
     val df5 = Seq((Array[String]("a", "b", "c"), 0, "d")).toDF("a", "b", "c")
     val df6 = Seq((Array[String]("a", null, "b", "c"), 4, "d")).toDF("a", "b", "c")
-    val df7 = Seq((Array[Integer](3, 2, 5, null, 1, 2), 5, 3)).toDF("a", "b", "c")
 
     checkAnswer(df1.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
     checkAnswer(df2.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq[Short](1, 2, 3, 4, 5))))
@@ -3144,10 +3143,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df5.select(array_insert(lit(null).cast("array<string>"), col("b"), col("c"))),
       Seq(Row(null))
     )
-    checkAnswer(
-      df7.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, null, 1, 2, null, 3))))
-    checkAnswer(
-      df7.selectExpr("array_insert(a, -7, c)"), Seq(Row(Seq(3, null, 3, 2, 5, null, 1, 2))))
+    checkAnswer(df1.selectExpr("array_insert(a, 6, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
   }
 
   test("transform function - array for primitive type not containing null") {
