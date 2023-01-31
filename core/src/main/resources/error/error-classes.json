@@ -986,12 +986,6 @@
     ],
     "sqlState" : "42803"
   },
-  "MISSING_STATIC_PARTITION_COLUMN" : {
-    "message" : [
-      "Unknown static partition column: <columnName>."
-    ],
-    "sqlState" : "42000"
-  },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
