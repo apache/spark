@@ -16,7 +16,6 @@
 # limitations under the License.
 #
 
-import collections
 import json
 import unittest
 
