@@ -3589,6 +3589,16 @@ class DataFrameSuite extends QueryTest
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
+
+  test("SPARK-42251: Forbid deicmal type if precision less than 1") {
+    withTempPath { path =>
+      Seq(BigDecimal(0)).toDF("c").write.json(path.getCanonicalPath)
+      val err = intercept[Exception] {
+        spark.read.schema("c decimal(0, 0)").json(path.getCanonicalPath)
+      }
+      assert(err.getMessage.contains("decimal can only support precision in range [1, 38]"))
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

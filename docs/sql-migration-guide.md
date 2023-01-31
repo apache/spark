@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.4 to 3.5
+
+  - Since Spark 3.5, decimal type precision can not less than 1, for example the follow query will fail `SELECT CAST(0 AS decimal(0, 0))`.
+
 ## Upgrading from Spark SQL 3.3 to 3.4
   
   - Since Spark 3.4, Number or Number(\*) from Teradata will be treated as Decimal(38,18). In Spark 3.3 or earlier, Number or Number(\*) from Teradata will be treated as Decimal(38, 0), in which case the fractional part will be removed.
