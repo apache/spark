@@ -19,7 +19,8 @@
   "AMBIGUOUS_REFERENCE_TO_FIELDS" : {
     "message" : [
       "Ambiguous reference to fields <fields>."
-    ]
+    ],
+    "sqlState" : "42000"
   },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
@@ -675,11 +676,6 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
-  "INVALID_CHILD_FIELD_TYPE" : {
-    "message" : [
-      "Can't extract value from <child>: need struct type but got <other>."
-    ]
-  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -691,6 +687,12 @@
       "The location name cannot be empty string, but `<location>` was given."
     ]
   },
+  "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
+    "message" : [
+      "Can't extract value from <base>: need a complex type [struct, array, map] but got <other>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_EXTRACT_FIELD" : {
     "message" : [
       "Cannot extract <field> from <expr>."
@@ -699,7 +701,8 @@
   "INVALID_EXTRACT_FIELD_TYPE" : {
     "message" : [
       "Field name should be String Literal, but it's <extraction>."
-    ]
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_FIELD_NAME" : {
     "message" : [

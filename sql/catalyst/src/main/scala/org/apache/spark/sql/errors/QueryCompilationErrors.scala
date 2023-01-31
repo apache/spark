@@ -1100,9 +1100,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("extraction" -> extraction.toString))
       case other =>
         new AnalysisException(
-          errorClass = "INVALID_CHILD_FIELD_TYPE",
+          errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
           messageParameters = Map(
-            "child" -> child.toString,
+            "base" -> child.toString,
             "other" -> other.catalogString))
     }
   }

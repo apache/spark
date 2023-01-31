@@ -476,8 +476,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
           child = Literal.create("test string value", StringType),
           extraction = Literal.create("test_field", StringType),
           resolver = _ == _)),
-      errorClass = "INVALID_CHILD_FIELD_TYPE",
-      parameters = Map("child" -> "test string value", "other" -> "string")
+      errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
+      parameters = Map("base" -> "test string value", "other" -> "string")
     )
 
     checkError(
