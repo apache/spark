@@ -500,11 +500,11 @@ object ScalaReflection extends ScalaReflection {
     case JavaBeanEncoder(_, fields) =>
       val serializedFields = fields.map { f =>
         val fieldValue = Invoke(
-          input,
+          KnownNotNull(input),
           f.readMethod.get,
           externalDataTypeFor(f.enc),
-          propagateNull = !f.nullable,
-          returnNullable = !f.nullable)
+          propagateNull = f.nullable,
+          returnNullable = f.nullable)
         f.name -> serializerFor(f.enc, fieldValue)
       }
       createSerializerForObject(input, serializedFields)
