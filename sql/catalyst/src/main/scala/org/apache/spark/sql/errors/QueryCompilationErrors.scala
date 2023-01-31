@@ -157,9 +157,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def missingStaticPartitionColumn(staticName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "MISSING_STATIC_PARTITION_COLUMN",
-      messageParameters = Map("columnName" -> staticName))
+    SparkException.internalError(s"Unknown static partition column: $staticName.")
   }
 
   def staticPartitionInUserSpecifiedColumnsError(staticName: String): Throwable = {
