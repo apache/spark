@@ -590,7 +590,7 @@
     "message" : [
       "The join types <joinType1> and <joinType2> are incompatible."
     ],
-    "sqlState" : "42818"
+    "sqlState" : "42613"
   },
   "INCOMPLETE_TYPE_DEFINITION" : {
     "message" : [
