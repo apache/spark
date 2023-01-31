@@ -213,10 +213,60 @@ class FunctionsTestsMixin:
         sampled = df.stat.sampleBy("b", fractions={0: 0.5, 1: 0.5}, seed=0)
         self.assertTrue(35 <= sampled.count() <= 36)
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.sampleBy(10, fractions={0: 0.5, 1: 0.5})
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "col", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.sampleBy("b", fractions=[0.5, 0.5])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_DICT",
+            message_parameters={"arg_name": "fractions", "arg_type": "list"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.sampleBy("b", fractions={None: 0.5, 1: 0.5})
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+            message_parameters={
+                "arg_name": "fractions",
+                "arg_type": "dict",
+                "allowed_types": "float, int, str",
+                "return_type": "NoneType",
+            },
+        )
+
     def test_cov(self):
         df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
         cov = df.stat.cov("a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.cov(10, "b")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "col1", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.cov("a", True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "col2", "arg_type": "bool"},
+        )
 
     def test_crosstab(self):
         df = self.spark.createDataFrame([Row(a=i % 3, b=i % 2) for i in range(1, 7)])
