@@ -50,9 +50,9 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
     throw QueryCompilationErrors.decimalCannotGreaterThanPrecisionError(scale, precision)
   }
 
-  if (precision > DecimalType.MAX_PRECISION) {
-    throw QueryCompilationErrors.decimalOnlySupportPrecisionUptoError(
-      DecimalType.simpleString, DecimalType.MAX_PRECISION)
+  if (precision < DecimalType.MIN_PRECISION || precision > DecimalType.MAX_PRECISION) {
+    throw QueryCompilationErrors.invalidDecimalPrecisionError(
+      DecimalType.simpleString, DecimalType.MIN_PRECISION, DecimalType.MAX_PRECISION)
   }
 
   // default constructor for Java
@@ -128,6 +128,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 object DecimalType extends AbstractDataType {
   import scala.math.min
 
+  val MIN_PRECISION = 1
   val MAX_PRECISION = 38
   val MAX_SCALE = 38
   val DEFAULT_SCALE = 18

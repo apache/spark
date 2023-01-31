@@ -14837,3 +14837,67 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "cast(1 as decimal(20, 0)) <> cast('2017-12-11 09:30:00' as date)"
   } ]
 }
+
+
+-- !query
+CREATE TABLE test_decimal(c decimal(0, 0)) USING PARQUET
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "messageParameters" : {
+    "decimalType" : "decimal",
+    "maxPrecision" : "38",
+    "minPrecision" : "1"
+  }
+}
+
+
+-- !query
+SELECT cast(0 as decimal(0, 0))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "messageParameters" : {
+    "decimalType" : "decimal",
+    "maxPrecision" : "38",
+    "minPrecision" : "1"
+  }
+}
+
+
+-- !query
+SELECT cast(0.0 as decimal(0, 0))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "messageParameters" : {
+    "decimalType" : "decimal",
+    "maxPrecision" : "38",
+    "minPrecision" : "1"
+  }
+}
+
+
+-- !query
+SELECT cast(0 as decimal(1, 0))
+-- !query schema
+struct<CAST(0 AS DECIMAL(1,0)):decimal(1,0)>
+-- !query output
+0
+
+
+-- !query
+SELECT cast(0.0 as decimal(1, 0))
+-- !query schema
+struct<CAST(0.0 AS DECIMAL(1,0)):decimal(1,0)>
+-- !query output
+0

@@ -177,7 +177,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "_LEGACY_ERROR_TEMP_1229",
   "messageParameters" : {
     "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "minPrecision" : "1"
   }
 }
 
@@ -192,7 +193,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "_LEGACY_ERROR_TEMP_1229",
   "messageParameters" : {
     "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "minPrecision" : "1"
   }
 }
 
@@ -477,7 +479,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_0061",
   "messageParameters" : {
-    "msg" : "decimal can only support precision up to 38."
+    "msg" : "decimal can only support precision in range [1, 38]."
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -3585,7 +3585,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "_LEGACY_ERROR_TEMP_1229",
   "messageParameters" : {
     "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "minPrecision" : "1"
   }
 }
 

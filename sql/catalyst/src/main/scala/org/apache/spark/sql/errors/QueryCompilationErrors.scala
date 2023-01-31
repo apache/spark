@@ -2254,12 +2254,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "precision" -> precision.toString))
   }
 
-  def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
+  def invalidDecimalPrecisionError(
+      decimalType: String, minPrecision: Int, maxPrecision: Int): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1229",
       messageParameters = Map(
         "decimalType" -> decimalType,
-        "precision" -> precision.toString))
+        "minPrecision" -> minPrecision.toString,
+        "maxPrecision" -> maxPrecision.toString))
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {

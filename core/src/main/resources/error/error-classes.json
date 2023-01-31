@@ -3041,7 +3041,7 @@
   },
   "_LEGACY_ERROR_TEMP_1229" : {
     "message" : [
-      "<decimalType> can only support precision up to <precision>."
+      "<decimalType> can only support precision in range [<minPrecision>, <maxPrecision>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_1231" : {

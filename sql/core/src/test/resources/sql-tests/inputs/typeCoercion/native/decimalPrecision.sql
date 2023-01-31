@@ -1446,3 +1446,10 @@ SELECT cast(1 as decimal(3, 0))  <> cast('2017-12-11 09:30:00' as date) FROM t;
 SELECT cast(1 as decimal(5, 0))  <> cast('2017-12-11 09:30:00' as date) FROM t;
 SELECT cast(1 as decimal(10, 0)) <> cast('2017-12-11 09:30:00' as date) FROM t;
 SELECT cast(1 as decimal(20, 0)) <> cast('2017-12-11 09:30:00' as date) FROM t;
+
+
+CREATE TABLE test_decimal(c decimal(0, 0)) USING PARQUET;
+SELECT cast(0 as decimal(0, 0));
+SELECT cast(0.0 as decimal(0, 0));
+SELECT cast(0 as decimal(1, 0));
+SELECT cast(0.0 as decimal(1, 0));
