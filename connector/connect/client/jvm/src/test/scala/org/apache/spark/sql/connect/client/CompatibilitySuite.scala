@@ -23,6 +23,7 @@ import java.util.regex.Pattern
 import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.lib.MiMaLib
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.apache.spark.sql.connect.client.util.ClientIntegrationTest
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 
 /**
@@ -48,6 +49,7 @@ import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
  *   1. Run the test again: `sbt "testOnly
  *      org.apache.spark.sql.connect.client.CompatibilitySuite"`
  */
+@ClientIntegrationTest
 class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   private lazy val clientJar: File =
