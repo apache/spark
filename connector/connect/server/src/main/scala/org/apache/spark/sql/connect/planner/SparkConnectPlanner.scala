@@ -742,8 +742,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformWindowExpression(exp.getWindow)
       case proto.Expression.ExprTypeCase.EXTENSION =>
         transformExpressionPlugin(exp.getExtension)
-      case proto.Expression.ExprTypeCase.SCALAR_INLINE_USER_DEFINED_FUNCTION =>
-        transformScalarInlineUserDefinedFunction(exp.getScalarInlineUserDefinedFunction)
+      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
+        transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -826,10 +826,10 @@ class SparkConnectPlanner(val session: SparkSession) {
    * @return
    *   Expression.
    */
-  private def transformScalarInlineUserDefinedFunction(
-      fun: proto.ScalarInlineUserDefinedFunction): Expression = {
+  private def transformCommonInlineUserDefinedFunction(
+      fun: proto.CommonInlineUserDefinedFunction): Expression = {
     fun.getFunctionCase match {
-      case proto.ScalarInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         transformPythonUDF(fun)
       case _ =>
         throw InvalidPlanInput(
@@ -845,7 +845,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    * @return
    *   PythonUDF.
    */
-  private def transformPythonUDF(fun: proto.ScalarInlineUserDefinedFunction): PythonUDF = {
+  private def transformPythonUDF(fun: proto.CommonInlineUserDefinedFunction): PythonUDF = {
     val udf = fun.getPythonUdf
     PythonUDF(
       name = fun.getFunctionName,
