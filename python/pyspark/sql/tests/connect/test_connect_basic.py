@@ -706,6 +706,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
 
+    def test_create_dataframe_with_coercion(self):
+        data1 = [[1.33, 1], ["2.1", 1]]
+        data2 = [[True, 1], ["false", 1]]
+
+        for data in [data1, data2]:
+            cdf = self.connect.createDataFrame(data, ["a", "b"])
+            sdf = self.spark.createDataFrame(data, ["a", "b"])
+
+            self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
+
     def test_nested_type_create_from_rows(self):
         data1 = [Row(a=1, b=Row(c=2, d=Row(e=3, f=Row(g=4, h=Row(i=5)))))]
         # root
