@@ -443,6 +443,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
+    buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
+      .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
+        " It can preserve the output partitioning and ordering." +
+        " Negative value means disable this optimization.")
+      .internal()
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(100)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")

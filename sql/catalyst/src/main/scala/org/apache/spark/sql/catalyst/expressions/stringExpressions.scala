@@ -3024,3 +3024,27 @@ case class SplitPart (
       partNum = newChildren.apply(2))
   }
 }
+
+/**
+ * A internal function that converts the empty string to null for partition values.
+ * This function should be only used in V1Writes.
+ */
+case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+
+  override def nullable: Boolean = true
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      s"""if ($c.numBytes() == 0) {
+         |  ${ev.isNull} = true;
+         |  ${ev.value} = null;
+         |} else {
+         |  ${ev.value} = $c;
+         |}""".stripMargin
+    })
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+    copy(child = newChild)
+}
