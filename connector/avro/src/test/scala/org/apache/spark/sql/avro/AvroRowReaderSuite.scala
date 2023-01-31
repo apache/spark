@@ -18,11 +18,13 @@
 package org.apache.spark.sql.avro
 
 import java.io._
+import java.net.URI
 
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql._
@@ -60,8 +62,10 @@ class AvroRowReaderSuite
         case BatchScanExec(_, f: AvroScan, _, _, _, _, _) => f
       }
       val filePath = fileScan.get.fileIndex.inputFiles(0)
-      val fileSize = new File(filePath.toUri).length
-      val in = new FsInput(filePath.toPath, new Configuration())
+      val fileSize = new File(new URI(filePath)).length
+      // scalastyle:off pathfromuri
+      val in = new FsInput(new Path(new URI(filePath)), new Configuration())
+      // scalastyle:on pathfromuri
       val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
 
       val it = new Iterator[InternalRow] with AvroUtils.RowReader {
