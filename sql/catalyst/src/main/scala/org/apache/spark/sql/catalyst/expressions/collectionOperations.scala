@@ -4740,7 +4740,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val allocation = CodeGenerator.createArrayData(
         values, elementType, resLength, s"$prettyName failed.")
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
-        adjustedAllocIdx, i, true)
+        adjustedAllocIdx, i, first.dataType.asInstanceOf[ArrayType].containsNull)
 
       s"""
          |int $itemInsertionIndex = 0;
