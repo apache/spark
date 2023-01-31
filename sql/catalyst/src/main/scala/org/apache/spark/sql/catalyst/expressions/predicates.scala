@@ -811,7 +811,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(And)
       } else {
-        MultiCommutativeOp(operands, None)(this)
+        MultiCommutativeOp(operands, this.getClass, None)(this)
       }
     reorderResult
   }
@@ -912,7 +912,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(Or)
       } else {
-        MultiCommutativeOp(operands, None)(this)
+        MultiCommutativeOp(operands, this.getClass, None)(this)
       }
     reorderResult
   }

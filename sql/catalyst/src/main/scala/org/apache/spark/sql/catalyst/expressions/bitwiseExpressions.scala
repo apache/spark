@@ -69,7 +69,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(BitwiseAnd)
       } else {
-        MultiCommutativeOp(operands, None)(this)
+        MultiCommutativeOp(operands, this.getClass, None)(this)
       }
     reorderResult
   }
@@ -120,7 +120,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(BitwiseOr)
       } else {
-        MultiCommutativeOp(operands, None)(this)
+        MultiCommutativeOp(operands, this.getClass, None)(this)
       }
     reorderResult
   }
@@ -171,7 +171,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(BitwiseXor)
       } else {
-        MultiCommutativeOp(operands, None)(this)
+        MultiCommutativeOp(operands, this.getClass, None)(this)
       }
     reorderResult
   }

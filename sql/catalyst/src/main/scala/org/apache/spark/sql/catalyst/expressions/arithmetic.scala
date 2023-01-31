@@ -485,7 +485,7 @@ case class Add(
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(Add(_, _, evalMode))
       } else {
-        MultiCommutativeOp(operands, Some(evalMode))(this)
+        MultiCommutativeOp(operands, this.getClass, Some(evalMode))(this)
       }
     if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
       reorderResult
@@ -643,7 +643,7 @@ case class Multiply(
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(Multiply(_, _, evalMode))
       } else {
-        MultiCommutativeOp(operands, Some(evalMode))(this)
+        MultiCommutativeOp(operands, this.getClass, Some(evalMode))(this)
       }
     reorderResult
   }

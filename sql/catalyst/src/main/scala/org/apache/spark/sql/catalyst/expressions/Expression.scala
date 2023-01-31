@@ -1346,14 +1346,16 @@ trait CommutativeExpression extends Expression {
  * expressions:
  *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
  * @param operands A sequence of operands that produces a commutative expression tree.
+ * @param opCls The class of the root operator of the expression tree.
  * @param evalMode The optional expression evaluation mode.
  * @param originalRoot Root operator of the commutative expression tree before canonicalization.
  *                     This object reference is used to deduce the return dataType of Add and
  *                     Multiply operations when the input datatype is decimal.
  */
 case class MultiCommutativeOp(
-  operands: Seq[Expression],
-  evalMode: Option[EvalMode.Value])(originalRoot: Expression) extends Unevaluable {
+    operands: Seq[Expression],
+    opCls: Class[_],
+    evalMode: Option[EvalMode.Value])(originalRoot: Expression) extends Unevaluable {
   // Helper method to deduce the data type of a single operation.
   private def singleOpDataType(lType: DataType, rType: DataType): DataType = {
     originalRoot match {
@@ -1378,7 +1380,7 @@ case class MultiCommutativeOp(
    */
   override def dataType: DataType = {
     originalRoot match {
-      case Add(_, _, _) | Multiply(_, _, _) =>
+      case _: Add | _: Multiply =>
         operands.map(_.dataType).reduce((l, r) => singleOpDataType(l, r))
       case other => other.dataType
     }
