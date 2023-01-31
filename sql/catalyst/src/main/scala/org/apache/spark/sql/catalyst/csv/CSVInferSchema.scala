@@ -203,11 +203,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     // time-zone component and can be parsed with the timestamp formatter.
     // Otherwise, it is likely to be a timestamp with timezone.
     if (timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-      if (SQLConf.get.inferTimestampNTZInDataSources) {
-        TimestampNTZType
-      } else {
-        TimestampType
-      }
+      SQLConf.get.timestampTypeInSchemaInference
     } else {
       tryParseTimestamp(field)
     }
