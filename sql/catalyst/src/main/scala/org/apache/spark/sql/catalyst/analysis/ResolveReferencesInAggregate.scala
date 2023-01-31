@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GetStructField, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
@@ -46,7 +46,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REF
  * 5. Resolves the columns to outer references with the outer plan if we are resolving subquery
  *    expressions.
  */
-object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionHelper {
+object ResolveReferencesInAggregate extends SQLConfHelper
+  with ColumnResolutionHelper with AliasHelper {
   def apply(a: Aggregate): Aggregate = {
     val planForResolve = a.child match {
       // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
@@ -58,12 +59,6 @@ object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionH
 
     val resolvedGroupExprsNoOuter = a.groupingExpressions
       .map(resolveExpressionByPlanChildren(_, planForResolve, allowOuter = false))
-      // SPARK-31670: Resolve Struct field in groupByExpressions and aggregateExpressions
-      // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
-      // different ExprId. This cause aggregateExpressions can't be replaced by expanded
-      // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
-      // unnecessary alias of GetStructField here.
-      .map(trimTopLevelGetStructFieldAlias)
     val resolvedAggExprsNoOuter = a.aggregateExpressions.map(
       resolveExpressionByPlanChildren(_, planForResolve, allowOuter = false))
     val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsNoOuter)
@@ -95,7 +90,13 @@ object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionH
       resolvedGroupExprsNoOuter
     }
     a.copy(
-      groupingExpressions = resolvedGroupExprs,
+      // The aliases in grouping expressions are useless and will be removed at the end of analysis
+      // by the rule `CleanupAliases`. However, some rules need to find the grouping expressions
+      // from aggregate expressions during analysis. If we don't remove alias here, then these rules
+      // can't find the grouping expressions via `semanticEquals` and the analysis will fail.
+      // Example rules: ResolveGroupingAnalytics (See SPARK-31670 for more details) and
+      // ResolveLateralColumnAliasReference.
+      groupingExpressions = resolvedGroupExprs.map(trimAliases),
       aggregateExpressions = resolvedAggExprsWithOuter)
   }
 
@@ -149,17 +150,6 @@ object ResolveReferencesInAggregate extends SQLConfHelper with ColumnResolutionH
       None
     } else {
       Some(groupingExprs)
-    }
-  }
-
-  /**
-   * Trim groupByExpression's top-level GetStructField Alias. Since these expressions are not
-   * NamedExpression originally, we are safe to trim top-level GetStructField Alias.
-   */
-  private def trimTopLevelGetStructFieldAlias(e: Expression): Expression = {
-    e match {
-      case Alias(s: GetStructField, _) => s
-      case other => other
     }
   }
 

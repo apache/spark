@@ -113,6 +113,14 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY lca
+-- !query schema
+struct<lca:int,col:int>
+-- !query output
+1	2
+
+
+-- !query
 SELECT * FROM v2 WHERE EXISTS (SELECT a, b FROM v1 GROUP BY all)
 -- !query schema
 struct<x:int,y:int,all:int>

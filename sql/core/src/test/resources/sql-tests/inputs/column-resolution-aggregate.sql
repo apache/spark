@@ -25,6 +25,9 @@ SELECT a AS all, b FROM v1 GROUP BY all;
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY k, col;
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY all;
 
+-- GROUP BY alias still works if it does not directly reference lateral column alias.
+SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY lca;
+
 -- GROUP BY ALL has higher priority than outer reference. This query should run as `a` and `b` are
 -- in GROUP BY due to the GROUP BY ALL resolution.
 SELECT * FROM v2 WHERE EXISTS (SELECT a, b FROM v1 GROUP BY all);

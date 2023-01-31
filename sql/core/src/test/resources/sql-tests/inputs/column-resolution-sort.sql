@@ -5,7 +5,7 @@ CREATE TEMPORARY VIEW v1 AS VALUES (1, 2, 2), (2, 1, 1) AS t(a, b, k);
 CREATE TEMPORARY VIEW v2 AS VALUES (1, 2, 2), (2, 1, 1) AS t(a, b, all);
 
 -- Relation output columns have higher priority than missing reference.
--- Results will be [2, 1] if we order by the column `v1.b`.
+-- Query will fail if we order by the column `v1.b`, as it's not in GROUP BY.
 -- Actually results are [1, 2] as we order by `max(a) AS b`.
 SELECT max(a) AS b FROM v1 GROUP BY k ORDER BY b;
 
