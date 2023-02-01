@@ -23,7 +23,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -219,14 +218,14 @@ case class StreamingSymmetricHashJoinExec(
 
   override def shortName: String = "symmetricHashJoin"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     val watermarkUsedForStateCleanup =
       stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty
 
     // Latest watermark value is more than that used in this previous executed plan
     val watermarkHasChanged =
       eventTimeWatermarkForEviction.isDefined &&
-        newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+        newInputWatermark > eventTimeWatermarkForEviction.get
 
     watermarkUsedForStateCleanup && watermarkHasChanged
   }
@@ -557,7 +556,7 @@ case class StreamingSymmetricHashJoinExec(
         generateJoinedRow: (InternalRow, InternalRow) => JoinedRow)
       : Iterator[InternalRow] = {
 
-      val watermarkAttribute = inputAttributes.find(_.metadata.contains(delayKey))
+      val watermarkAttribute = WatermarkSupport.findEventTimeColumn(inputAttributes)
       val nonLateRows =
         WatermarkSupport.watermarkExpression(
           watermarkAttribute, eventTimeWatermarkForLateEvents) match {
@@ -699,4 +698,18 @@ case class StreamingSymmetricHashJoinExec(
     } else {
       Nil
     }
+
+  // This operator will evict based on the state watermark on both side of inputs; we would like
+  // to let users leverage both sides of event time column for output of join, so the watermark
+  // must be lower bound of both sides of event time column. The lower bound of event time column
+  // for each side is determined by state watermark, hence we take a minimum of (left state
+  // watermark, right state watermark, input watermark) to decide the output watermark.
+  override def produceWatermark(inputWatermarkMs: Long): Long = {
+    val (leftStateWatermark, rightStateWatermark) =
+      StreamingSymmetricHashJoinHelper.getStateWatermark(
+        left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs))
+
+    (Seq(leftStateWatermark, rightStateWatermark).filter(_.isDefined).map(_.get) ++
+      Seq(inputWatermarkMs)).min
+  }
 }

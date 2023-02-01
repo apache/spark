@@ -25,6 +25,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -95,6 +96,20 @@ trait StateStoreReader extends StatefulOperator {
 
 /** An operator that writes to a StateStore. */
 trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: SparkPlan =>
+
+  /**
+   * Produce the output watermark for given input watermark (ms).
+   *
+   * In most cases, this is same as the criteria of state eviction, as most stateful operators
+   * produce the output from two different kinds:
+   *
+   * 1. without buffering
+   * 2. with buffering (state)
+   *
+   * The state eviction happens when event time exceeds a "certain threshold of timestamp", which
+   * denotes a lower bound of event time values for output (output watermark).
+   */
+  def produceWatermark(inputWatermarkMs: Long): Long
 
   override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -199,9 +214,9 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
 
   /**
    * Should the MicroBatchExecution run another batch based on this stateful operator and the
-   * current updated metadata.
+   * new input watermark.
    */
-  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = false
+  def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = false
 }
 
 /** An operator that supports watermark. */
@@ -237,7 +252,7 @@ trait WatermarkSupport extends SparkPlan {
   /** Generate an expression that matches data older than the watermark */
   private def watermarkExpression(watermark: Option[Long]): Option[Expression] = {
     WatermarkSupport.watermarkExpression(
-      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey)), watermark)
+      WatermarkSupport.findEventTimeColumn(child.output), watermark)
   }
 
   /** Predicate based on keys that matches data older than the late event filtering watermark */
@@ -323,6 +338,21 @@ object WatermarkSupport {
           Literal(optionalWatermarkMs.get * 1000))
       }
     Some(evictionExpression)
+  }
+
+  def findEventTimeColumn(attrs: Seq[Attribute]): Option[Attribute] = {
+    val eventTimeCols = attrs.filter(_.metadata.contains(EventTimeWatermark.delayKey))
+    // There is a case projection leads the same column (same exprId) to appear more than one time.
+    // Allowing them does not hurt the correctness of state row eviction, hence let's start with
+    // allowing them.
+    val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
+    if (eventTimeColsSet.size > 1) {
+      throw new AnalysisException("More than one event time columns are available. Please " +
+        "ensure there is at most one event time column per stream. event time columns: " +
+        eventTimeCols.mkString("(", ",", ")"))
+    }
+    // With above check, even there are multiple columns here, all columns must be same.
+    eventTimeCols.headOption
   }
 }
 
@@ -545,14 +575,18 @@ case class StateStoreSaveExec(
 
   override def shortName: String = "stateStoreSave"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+      newInputWatermark > eventTimeWatermarkForEviction.get
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =
     copy(child = newChild)
+
+  // This operator will evict based on min input watermark and ensure it will be minimum of
+  // the event time value for the output so far (including output from eviction).
+  override def produceWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 }
 
 /**
@@ -744,10 +778,10 @@ case class SessionWindowStateStoreSaveExec(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+      newInputWatermark > eventTimeWatermarkForEviction.get
   }
 
   private def putToStore(iter: Iterator[InternalRow], store: StateStore): Unit = {
@@ -809,6 +843,10 @@ case class SessionWindowStateStoreSaveExec(
       newNumRowsUpdated = stateOpProgress.numRowsUpdated,
       newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
   }
+
+  // This operator will evict based on min input watermark and ensure it will be minimum of
+  // the event time value for the output so far (including output from eviction).
+  override def produceWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 }
 
 
@@ -893,13 +931,17 @@ case class StreamingDeduplicateExec(
 
   override def shortName: String = "dedupe"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     eventTimeWatermarkForEviction.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+      newInputWatermark > eventTimeWatermarkForEviction.get
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
+
+  // This operator will evict based on min input watermark and ensure it will be minimum of
+  // the event time value for the output so far (including output from eviction).
+  override def produceWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 }
 
 object StreamingDeduplicateExec {
