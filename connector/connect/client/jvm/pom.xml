@@ -140,6 +140,7 @@
               </includes>
             </relocation>
           </relocations>
+          <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->
           <transformers>
             <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
           </transformers>
