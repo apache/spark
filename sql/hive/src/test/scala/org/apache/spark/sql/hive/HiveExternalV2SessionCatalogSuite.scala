@@ -20,19 +20,12 @@ package org.apache.spark.sql.hive
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.execution.datasources.v2.{V2SessionCatalog, V2SessionCatalogTableBaseSuite}
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalogTableBaseSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
   class HiveExternalV2SessionCatalogTableSuite extends V2SessionCatalogTableBaseSuite
     with TestHiveSingleton {
-
-  override def newCatalog(): V2SessionCatalog = {
-    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
-    newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
-    newCatalog
-  }
 
   def excluded: Seq[String] = Seq(
     // Not supported in Hive catalog

@@ -159,15 +159,20 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     if(columnChanges.size > 0) {
       val schema = CatalogV2Util.applySchemaChanges(
-        catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
+        catalogTable.schema, columnChanges, catalogTable.provider, "ALTER TABLE")
 
-      catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
+      try {
+        catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
+      } catch {
+        case _: NoSuchTableException =>
+          throw QueryCompilationErrors.noSuchTableError(ident)
+      }
     }
 
     if(otherChanges.size > 0) {
-      val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
+      val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, otherChanges)
       val schema = CatalogV2Util.applySchemaChanges(
-        catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
+        catalogTable.schema, otherChanges, catalogTable.provider, "ALTER TABLE")
       val comment = properties.get(TableCatalog.PROP_COMMENT)
       val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
       val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
