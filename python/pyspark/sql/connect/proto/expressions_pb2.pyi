@@ -1100,6 +1100,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     DETERMINISTIC_FIELD_NUMBER: builtins.int
     ARGUMENTS_FIELD_NUMBER: builtins.int
     PYTHON_UDF_FIELD_NUMBER: builtins.int
+    SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
     deterministic: builtins.bool
@@ -1111,6 +1112,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         """(Optional) Function arguments. Empty arguments are allowed."""
     @property
     def python_udf(self) -> global___PythonUDF: ...
+    @property
+    def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
     def __init__(
         self,
         *,
@@ -1118,10 +1121,18 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         deterministic: builtins.bool = ...,
         arguments: collections.abc.Iterable[global___Expression] | None = ...,
         python_udf: global___PythonUDF | None = ...,
+        scalar_scala_udf: global___ScalarScalaUDF | None = ...,
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal["function", b"function", "python_udf", b"python_udf"],
+        field_name: typing_extensions.Literal[
+            "function",
+            b"function",
+            "python_udf",
+            b"python_udf",
+            "scalar_scala_udf",
+            b"scalar_scala_udf",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
@@ -1136,11 +1147,13 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"function_name",
             "python_udf",
             b"python_udf",
+            "scalar_scala_udf",
+            b"scalar_scala_udf",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["python_udf"] | None: ...
+    ) -> typing_extensions.Literal["python_udf", "scalar_scala_udf"] | None: ...
 
 global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
@@ -1171,3 +1184,52 @@ class PythonUDF(google.protobuf.message.Message):
     ) -> None: ...
 
 global___PythonUDF = PythonUDF
+
+class ScalarScalaUDF(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PAYLOAD_FIELD_NUMBER: builtins.int
+    INPUTTYPES_FIELD_NUMBER: builtins.int
+    OUTPUTTYPE_FIELD_NUMBER: builtins.int
+    NULLABLE_FIELD_NUMBER: builtins.int
+    payload: builtins.bytes
+    """(Required) Serialized JVM object containing UDF definition, input encoders and output encoder"""
+    @property
+    def inputTypes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.types_pb2.DataType
+    ]:
+        """(Optional) Input type(s) of the UDF"""
+    @property
+    def outputType(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Required) Output type of the UDF"""
+    nullable: builtins.bool
+    """(Required) True if the UDF can return null value"""
+    def __init__(
+        self,
+        *,
+        payload: builtins.bytes = ...,
+        inputTypes: collections.abc.Iterable[pyspark.sql.connect.proto.types_pb2.DataType]
+        | None = ...,
+        outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        nullable: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["outputType", b"outputType"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "inputTypes",
+            b"inputTypes",
+            "nullable",
+            b"nullable",
+            "outputType",
+            b"outputType",
+            "payload",
+            b"payload",
+        ],
+    ) -> None: ...
+
+global___ScalarScalaUDF = ScalarScalaUDF
