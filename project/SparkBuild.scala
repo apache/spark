@@ -851,6 +851,9 @@ object SparkConnectClient {
       )
     },
 
+    // Make sure the connect server assembly jar is available for testing.
+    test := ((Test / test) dependsOn (LocalProject("connect") / assembly)).value,
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
