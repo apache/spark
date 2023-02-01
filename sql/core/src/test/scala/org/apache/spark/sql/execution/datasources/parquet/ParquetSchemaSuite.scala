@@ -70,7 +70,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       caseSensitive = caseSensitive,
-      timestampNTZEnabled = timestampNTZEnabled)
+      inferTimestampNTZ = timestampNTZEnabled)
 
     test(s"sql <= parquet: $testName") {
       val actualParquetColumn = converter.convertParquetColumn(
@@ -2338,8 +2338,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
         caseSensitive,
-        useFieldId = false,
-        inferTimestampNTZ = true)
+        useFieldId = false)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2906,8 +2905,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
          MessageTypeParser.parseMessageType(parquetSchema),
           catalystSchema,
           caseSensitive = false,
-          useFieldId = false,
-          inferTimestampNTZ = false)
+          useFieldId = false)
       }
     }
 }
