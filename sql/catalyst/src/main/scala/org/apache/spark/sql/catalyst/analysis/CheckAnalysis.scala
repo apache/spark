@@ -238,7 +238,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
-        ResolveGroupByAll.checkAnalysis(operator)
+        ResolveReferencesInAggregate.checkUnresolvedGroupByAll(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -762,8 +762,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   private def getAllExpressions(plan: LogicalPlan): Seq[Expression] = {
     plan match {
-      // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
-      // feature. We should check errors in `aggregateExpressions` first.
+      // We only resolve `groupingExpressions` if `aggregateExpressions` is resolved first (See
+      // `ResolveReferencesInAggregate`). We should check errors in `aggregateExpressions` first.
       case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
       case _ => plan.expressions
     }
