@@ -186,11 +186,6 @@ private object MsSqlServerDialect extends JdbcDialect {
     if (limit > 0 ) s"TOP $limit" else ""
   }
 
-  override def getOffsetClause(offset: Integer): String = {
-    // MS SQL Server doesn't support offset clause.
-    ""
-  }
-
   override def classifyException(message: String, e: Throwable): AnalysisException = {
     e match {
       case sqlException: SQLException =>
