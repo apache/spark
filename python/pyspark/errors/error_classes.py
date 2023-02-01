@@ -39,34 +39,9 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
-  "NOT_INT" : {
-    "message" : [
-      "Argument `<arg_name>` should be an int, got <arg_type>."
-    ]
-  },
   "NOT_BOOL" : {
     "message" : [
       "Argument `<arg_name>` should be a bool, got <arg_type>."
-    ]
-  },
-  "NOT_COLUMN" : {
-    "message" : [
-      "Argument `<arg_name>` should be a Column, got <arg_type>."
-    ]
-  },
-  "NOT_DATAFRAME" : {
-    "message" : [
-      "Argument `<arg_name>` must be a DataFrame, got <arg_type>."
-    ]
-  },
-  "NOT_DICT" : {
-    "message" : [
-      "Argument `<arg_name>` should be a dict, got <arg_type>."
-    ]
-  },
-  "NOT_STR" : {
-    "message" : [
-      "Argument `<arg_name>` should be a str, got <arg_type>."
     ]
   },
   "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE" : {
@@ -87,6 +62,11 @@ ERROR_CLASSES_JSON = """
   "NOT_BOOL_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a bool or str, got <arg_type>."
+    ]
+  },
+  "NOT_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Column, got <arg_type>."
     ]
   },
   "NOT_COLUMN_OR_DATATYPE_OR_STR" : {
@@ -114,6 +94,16 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a Column or str, got <arg_type>."
     ]
   },
+  "NOT_DATAFRAME" : {
+    "message" : [
+      "Argument `<arg_name>` must be a DataFrame, got <arg_type>."
+    ]
+  },
+  "NOT_DICT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a dict, got <arg_type>."
+    ]
+  },
   "NOT_FLOAT_OR_INT" : {
     "message" : [
       "Argument `<arg_name>` should be a float or int, got <arg_type>."
@@ -124,6 +114,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_INT" : {
+    "message" : [
+      "Argument `<arg_name>` should be an int, got <arg_type>."
+    ]
+  },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
@@ -132,6 +127,11 @@ ERROR_CLASSES_JSON = """
   "NOT_LIST_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
+    ]
+  },
+  "NOT_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a str, got <arg_type>."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
