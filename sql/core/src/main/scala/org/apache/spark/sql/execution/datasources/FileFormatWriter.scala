@@ -155,10 +155,9 @@ object FileFormatWriter extends Logging {
     }
 
     // the sort order doesn't matter
-    // Use the output ordering from the original plan before adding the empty2null projection.
     val actualOrdering = writeFilesOpt.map(_.child)
       .getOrElse(materializeAdaptiveSparkPlan(plan))
-      .outputOrdering.map(_.child)
+      .outputOrdering
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)

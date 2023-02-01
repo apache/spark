@@ -355,10 +355,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2415",
+              errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
               messageParameters = Map(
-                "filter" -> f.condition.sql,
-                "type" -> f.condition.dataType.catalogString))
+                "sqlExpr" -> f.expressions.map(toSQLExpr).mkString(","),
+                "filter" -> toSQLExpr(f.condition),
+                "type" -> toSQLType(f.condition.dataType)))
 
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             j.failAnalysis(
@@ -723,11 +724,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
             val invalidExprSqls =
-              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(_.sql)
+              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
             other.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2441",
+              errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
-                "operator" -> other.nodeName,
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           // This should not happen, resolved Project or Aggregate should restore or resolve
@@ -868,7 +868,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (aggregates.isEmpty) {
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
+            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
           messageParameters = Map.empty)
       }
 

@@ -69,6 +69,7 @@ object Subquery {
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
@@ -130,7 +131,7 @@ object Project {
 
       case (ArrayType(et, containsNull), expected: ArrayType) =>
         if (containsNull & !expected.containsNull) {
-          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+          throw QueryCompilationErrors.notNullConstraintViolationArrayElementError(columnPath)
         }
         val param = NamedLambdaVariable("x", et, containsNull)
         val reconciledElement = reconcileColumnType(
@@ -140,7 +141,7 @@ object Project {
 
       case (MapType(kt, vt, valueContainsNull), expected: MapType) =>
         if (valueContainsNull & !expected.valueContainsNull) {
-          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+          throw QueryCompilationErrors.notNullConstraintViolationMapValueError(columnPath)
         }
         val keyParam = NamedLambdaVariable("key", kt, nullable = false)
         val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)

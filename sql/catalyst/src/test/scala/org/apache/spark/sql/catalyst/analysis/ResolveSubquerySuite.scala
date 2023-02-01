@@ -187,7 +187,11 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("lateral join with unsupported expressions") {
     val plan = lateralJoin(t1, t0.select(($"a" + $"b").as("c")),
       condition = Some(sum($"a") === sum($"c")))
-    assertAnalysisError(plan, Seq("Invalid expressions: [sum(a), sum(c)]"))
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      expectedMessageParameters = Map("invalidExprSqls" -> "\"sum(a)\", \"sum(c)\"")
+    )
   }
 
   test("SPARK-35618: lateral join with star expansion") {
