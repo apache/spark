@@ -96,7 +96,7 @@
           <relocations>
             <relocation>
               <pattern>io.grpc</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.grpc</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.grpc</shadedPattern>
               <includes>
                 <include>io.grpc.**</include>
               </includes>
