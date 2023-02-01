@@ -48,6 +48,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkConnectException,
     SparkConnectAnalysisException,
+    PySparkTypeError,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -116,9 +117,14 @@ class DataFrameTestsMixin:
         self.assertEqual(renamed_df2.columns, ["naam", "age"])
 
         # negative test for incorrect type
-        type_error_msg = "colsMap must be dict of existing column name and new column name."
-        with self.assertRaisesRegex(TypeError, type_error_msg):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.withColumnsRenamed(("name", "x"))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_DICT",
+            message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
+        )
 
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
@@ -131,9 +137,14 @@ class DataFrameTestsMixin:
 
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
 
-        type_error_msg = "Parameter 'subset' must be a list of columns"
-        with self.assertRaisesRegex(TypeError, type_error_msg):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates("name")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "str"},
+        )
 
     def test_dropna(self):
         schema = StructType(
@@ -209,6 +220,15 @@ class DataFrameTestsMixin:
             1,
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 50, None)], schema).dropna(subset=10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
     def test_fillna(self):
         schema = StructType(
             [
@@ -280,6 +300,24 @@ class DataFrameTestsMixin:
         row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
         self.assertEqual(row.a, True)
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna(["a", True])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "value", "arg_type": "list"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna(50, subset=10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
     def test_repartitionByRange_dataframe(self):
         schema = StructType(
             [
@@ -312,6 +350,15 @@ class DataFrameTestsMixin:
         df5 = df1.repartitionByRange(5, "name", "age")
         self.assertEqual(df5.rdd.first(), df2.rdd.first())
         self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df1.repartitionByRange([10], "name", "age")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+        )
 
     def test_replace(self):
         schema = StructType(
@@ -494,12 +541,23 @@ class DataFrameTestsMixin:
                 {"Alice": "Bob", 10: 20}
             ).first()
 
-        with self.assertRaisesRegex(
-            TypeError, "value argument is required when to_replace is not a dictionary."
-        ):
-            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(
-                ["Alice", "Bob"]
-            ).first()
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(["Alice", "Bob"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="ARGUMENT_REQUIRED",
+            message_parameters={"arg_name": "value", "condition": "`to_replace` is dict"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(lambda x: x + 1, 10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
+            message_parameters={"arg_name": "to_replace", "arg_type": "function"},
+        )
 
     def test_with_column_with_existing_name(self):
         keys = self.df.withColumn("key", self.df.key).select("key").collect()
@@ -1426,8 +1484,14 @@ class DataFrameTestsMixin:
 
     def test_same_semantics_error(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(TypeError, "should be of DataFrame.*int"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 self.spark.range(10).sameSemantics(1)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_A_STRING",
+                message_parameters={"arg_name": "other", "arg_type": "int"},
+            )
 
     def test_input_files(self):
         tpath = tempfile.mkdtemp()
@@ -1456,12 +1520,32 @@ class DataFrameTestsMixin:
         df.show(n=5, truncate="1", vertical=False)
         df.show(n=5, truncate=1.5, vertical=False)
 
-        with self.assertRaisesRegex(TypeError, "Parameter 'n'"):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(True)
-        with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_AN_INTEGER",
+            message_parameters={"arg_name": "n", "arg_type": "bool"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(vertical="foo")
-        with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_BOOLEAN",
+            message_parameters={"arg_name": "vertical", "arg_type": "str"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(truncate="foo")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_BOOLEAN",
+            message_parameters={"arg_name": "truncate", "arg_type": "str"},
+        )
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -1522,6 +1606,37 @@ class DataFrameTestsMixin:
             (AnalysisException, SparkConnectAnalysisException),
             "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
             lambda: df.to(schema5).count(),
+        )
+
+    def test_repartition(self):
+        df = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.repartition([10], "name", "age").rdd.getNumPartitions()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+        )
+
+    def test_colregex(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).colRegex(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "colName", "arg_type": "int"},
+        )
+
+    def test_where(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).where(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "condition", "arg_type": "int"},
         )
 
 

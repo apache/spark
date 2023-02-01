@@ -340,7 +340,8 @@ def _validate_and_transform_prediction_result(
         ):
             raise ValueError("Invalid shape for scalar prediction result.")
 
-        return pd.Series(np.squeeze(preds))  # type: ignore
+        output = np.squeeze(preds)  # type: ignore[arg-type]
+        return pd.Series(output).astype(output.dtype)
     else:
         raise ValueError("Unsupported return type")
 

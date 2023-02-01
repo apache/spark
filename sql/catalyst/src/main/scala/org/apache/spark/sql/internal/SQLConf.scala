@@ -443,6 +443,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
+    buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
+      .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
+        " It can preserve the output partitioning and ordering." +
+        " Negative value means disable this optimization.")
+      .internal()
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(100)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -3507,6 +3517,17 @@ object SQLConf {
       .checkValues(TimestampTypes.values.map(_.toString))
       .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
 
+  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
+    buildConf("spark.sql.inferTimestampNTZInDataSources.enabled")
+      .doc("When true, the TimestampNTZ type is the prior choice of the schema inference " +
+        "over built-in data sources. Otherwise, the inference result will be TimestampLTZ for " +
+        "backward compatibility. As a result, for JSON/CSV files and partition directories  " +
+        "written with TimestampNTZ columns, the inference results will still be of TimestampLTZ " +
+        "types.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
       "java.time.LocalDate classes of Java 8 API are used as external types for " +
@@ -4793,6 +4814,18 @@ class SQLConf extends Serializable with Logging {
 
     case "TIMESTAMP_NTZ" =>
       TimestampNTZType
+  }
+
+  def inferTimestampNTZInDataSources: Boolean = getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)
+
+  // Preferred timestamp type in schema reference when a column can be either Timestamp type or
+  // TimestampNTZ type.
+  def timestampTypeInSchemaInference: AtomicType = {
+    if (getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)) {
+      TimestampNTZType
+    } else {
+      TimestampType
+    }
   }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)

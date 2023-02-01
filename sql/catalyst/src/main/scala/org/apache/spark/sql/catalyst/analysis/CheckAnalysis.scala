@@ -724,11 +724,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
             val invalidExprSqls =
-              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(_.sql)
+              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
             other.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2441",
+              errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
-                "operator" -> other.nodeName,
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           // This should not happen, resolved Project or Aggregate should restore or resolve
@@ -869,7 +868,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (aggregates.isEmpty) {
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
+            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
           messageParameters = Map.empty)
       }
 
