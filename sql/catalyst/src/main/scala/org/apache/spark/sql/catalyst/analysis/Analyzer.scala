@@ -2183,8 +2183,15 @@ class Analyzer(override val catalogManager: CatalogManager)
     val aliasMap = mutable.HashMap.empty[String, Either[Alias, Int]]
 
     def resolve(e: Expression): Expression = {
-      e.transformWithPruning(
+      e.transformUpWithPruning(
         _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, LATERAL_COLUMN_ALIAS_REFERENCE)) {
+        case w: WindowExpression if w.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) =>
+          w.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+            case lcaRef: LateralColumnAliasReference =>
+              throw QueryCompilationErrors.lateralColumnAliasInWindowUnsupportedError(
+                lcaRef.nameParts, w)
+          }
+
         case u: UnresolvedAttribute =>
           // Lateral column alias does not have qualifiers. We always use the first name part to
           // look up lateral column aliases.

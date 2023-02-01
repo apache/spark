@@ -189,6 +189,15 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     )
   }
 
+  private def checkLCAUnsupportedInWindowErrorHelper(
+      query: String, lca: String, windowExprRegex: String): Unit = {
+    checkErrorMatchPVals(
+      exception = intercept[AnalysisException] {sql(query)},
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_WINDOW",
+      parameters = Map("lca" -> lca, "windowExpr" -> windowExprRegex)
+    )
+  }
+
   private def checkAnswerWhenOnAndExceptionWhenOff(
       query: String, expectedAnswerLCAOn: Seq[Row]): Unit = {
     withLCAOn { checkAnswer(sql(query), expectedAnswerLCAOn) }
@@ -601,33 +610,28 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(Row(9500), 9501) :: Row(Row(11000), 11001) :: Row(Row(12000), 12001) :: Nil)
 
     // test Window
-    checkAnswer(
-      sql("select named_struct('s', salary * 1.0) as foo, " +
-        s"sum(foo.s) over (partition by dept order by bonus) from $testTable"),
-      Row(Row(10000), 10000) :: Row(Row(12000), 12000) :: Row(Row(9000), 19000) ::
-        Row(Row(10000), 22000) :: Row(Row(12000), 12000) :: Nil)
-    checkAnswer(
-      sql("select named_struct('s', named_struct('b', sum(salary) * 1.0)) as foo, " +
-        s"rank() over (partition by foo.s.b order by avg(bonus)) from $testTable group by dept"),
-      Row(Row(Row(19000)), 1) ::  Row(Row(Row(22000)), 1) ::  Row(Row(Row(12000)), 1) :: Nil)
-    checkAnswer(
-      sql("select dept, array(array(1, 2), array(1, 2, 3), array(100)) as foo, " +
-        s"rank() over (partition by foo[2][0] order by dept) from $testTable where dept in (1, 6)"),
-      Row(1, Seq(Seq(1, 2), Seq(1, 2, 3), Seq(100)), 1) ::
-        Row(1, Seq(Seq(1, 2), Seq(1, 2, 3), Seq(100)), 1) ::
-        Row(6, Seq(Seq(1, 2), Seq(1, 2, 3), Seq(100)), 3) :: Nil)
-    checkAnswer(
-      sql("select dept, array(named_struct('a', 1), named_struct('a', 2)) as foo, " +
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select named_struct('s', salary * 1.0) as foo, " +
+        s"sum(foo.s) over (partition by dept order by bonus) from $testTable",
+      lca = "`foo`.`s`", windowExprRegex = "\"sum.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select named_struct('s', named_struct('b', sum(salary) * 1.0)) as foo, " +
+        s"rank() over (partition by foo.s.b order by avg(bonus)) from $testTable group by dept",
+      lca = "`foo`.`s`.`b`", windowExprRegex = "\"RANK.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select dept, array(array(1, 2), array(1, 2, 3), array(100)) as foo, " +
+        s"rank() over (partition by foo[2][0] order by dept) from $testTable where dept in (1, 6)",
+      lca = "`foo`", windowExprRegex = "\"RANK.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select dept, array(named_struct('a', 1), named_struct('a', 2)) as foo, " +
         s"sum(foo[0].a + 1) over (partition by min(bonus) order by dept) " +
-        s"from $testTable group by dept"),
-      Row(1, Seq(Row(1), Row(2)), 2) :: Row(2, Seq(Row(1), Row(2)), 2) ::
-        Row(6, Seq(Row(1), Row(2)), 4) :: Nil)
-    checkAnswer(
-      sql(s"SELECT dept, map('a', 1, 'b', 2) AS foo, foo['b'] AS bar, bar + 1, " +
+        s"from $testTable group by dept",
+      lca = "`foo`", windowExprRegex = "\"sum.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      s"SELECT dept, map('a', 1, 'b', 2) AS foo, foo['b'] AS bar, bar + 1, " +
         s"rank() over (partition by max(bonus) order by bar)" +
-        s"from $testTable group by dept"),
-      Row(1, Map("a" -> 1, "b" -> 2), 2, 3, 1) :: Row(2, Map("a" -> 1, "b" -> 2), 2, 3, 1) ::
-        Row(6, Map("a" -> 1, "b" -> 2), 2, 3, 1) :: Nil)
+        s"from $testTable group by dept",
+      lca = "`bar`", windowExprRegex = "\"RANK.*\"")
   }
 
   test("Lateral alias reference attribute further be used by upper plan") {
@@ -813,20 +817,6 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\"")
       )
     }
-
-    // non-aggregate and non-group-by expressions in Window
-    checkSameMissingAggregationError(
-      s"SELECT dept AS d, rank() over (partition by dept order by salary) as rank $groupBySeg",
-      s"SELECT dept AS d, rank() over (partition by d    order by salary) as rank $groupBySeg",
-      "\"salary\""
-    )
-    checkSameMissingAggregationError(
-      "SELECT avg(salary) AS avg, " +
-        s"sum(salary) over (partition by dept order by avg(salary)) $groupBySeg",
-      "SELECT avg(salary) AS avg, " +
-        s"sum(salary) over (partition by dept order by avg        ) $groupBySeg",
-      "\"salary\""
-    )
   }
 
   test("Leaf expression as aggregate expressions should be eligible to lift up") {
@@ -855,8 +845,9 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(1, 2) :: Row(1, 2) :: Row(1, 2) :: Nil)
 
     checkAnswer(
-      sql(s"select 1 as a, rank() over(partition by a order by a) from $testTable group by dept"),
-      Row(1, 1) :: Row(1, 1) :: Row(1, 1) :: Nil)
+      sql(s"select 1 as a, a, rank() over(partition by 1 order by 1) " +
+        s"from $testTable group by dept"),
+      Row(1, 1, 1) :: Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
   }
 
   test("Lateral alias basics - Window on Project") {
@@ -879,33 +870,26 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     )
 
     // non-window expressions as lca, used in window expressions
-    checkAnswer(
-      sql(
-        "select name, dept as d, rank() over " +
-          s"(partition by d order by salary) as rank from $testTable where dept in (1, 6)"),
-      Row("amy", 1, 2) :: Row("cathy", 1, 1) :: Row("jen", 6, 1) :: Nil)
-    checkAnswer(
-      sql(
-        "select name, dept as d, d * 1.0, salary as s, sum(salary) over " +
-          s"(partition by d order by s) from $testTable where dept in (1, 6)"),
-      Row("amy", 1, 1.0, 10000, 19000) :: Row("cathy", 1, 1.0, 9000, 9000) ::
-        Row("jen", 6, 6.0, 12000, 12000) :: Nil)
-    checkAnswer(
-      sql(
-        "select name, dept as d, d * 1.0, salary as s, sum(s) over " +
-          s"(partition by d order by s) from $testTable where dept in (1, 6)"),
-      Row("amy", 1, 1.0, 10000, 19000) :: Row("cathy", 1, 1.0, 9000, 9000) ::
-        Row("jen", 6, 6.0, 12000, 12000) :: Nil)
-    checkAnswer(
-      sql("select name, properties.joinYear as jy, min(jy) over " +
-        s"(partition by dept order by salary) from $testTable where dept in (2, 6)"),
-      Row("alex", 2017, 2017) :: Row("david", 2019, 2019) :: Row("jen", 2018, 2018) :: Nil
-    )
-    checkAnswer(
-      sql("select name, properties.joinYear as jy, sum(salary) over " +
-        s"(partition by dept order by jy) from $testTable where dept in (2, 6)"),
-      Row("alex", 2017, 12000) :: Row("david", 2019, 22000) :: Row("jen", 2018, 12000) :: Nil
-    )
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, dept as d, rank() over " +
+        s"(partition by d order by salary) as rank from $testTable where dept in (1, 6)",
+      lca = "`d`", windowExprRegex = "\"RANK.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, dept as d, d * 1.0, salary as s, sum(salary) over " +
+        s"(partition by d order by s) from $testTable where dept in (1, 6)",
+      lca = "`d`", windowExprRegex = "\"sum.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, dept as d, d * 1.0, salary as s, sum(s) over " +
+        s"(partition by d order by s) from $testTable where dept in (1, 6)",
+      lca = "`s`", windowExprRegex = "\"sum.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, properties.joinYear as jy, min(jy) over " +
+        s"(partition by dept order by salary) from $testTable where dept in (2, 6)",
+      lca = "`jy`", windowExprRegex = "\"min.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, properties.joinYear as jy, sum(salary) over " +
+        s"(partition by dept order by jy) from $testTable where dept in (2, 6)",
+      lca = "`jy`", windowExprRegex = "\"sum.*\"")
     // this is initially not supported
     checkError(
       exception = intercept[AnalysisException] {
@@ -931,43 +915,32 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row("alex", 2, 2, 2.0) :: Row("david", 2, 1, 1.0) :: Row("jen", 6, 1, 1.0) :: Nil)
 
     // window expressions as lca, used in window expressions
-    checkAnswer(
-      sql(
-        "select name, dept, rank() over (partition by dept order by salary) as rank, " +
-          "rank() over (partition by dept order by rank DESC) as new_rank " +
-          s"from $testTable"),
-      Row("amy", 1, 2, 1) :: Row("alex", 2, 2, 1) :: Row("cathy", 1, 1, 2) ::
-        Row("david", 2, 1, 2) :: Row("jen", 6, 1, 1) :: Nil)
-    checkAnswer(
-      sql(
-        "select name, dept, rank() over (partition by dept order by salary) as rank, " +
-          "rank() over (partition by rank order by salary) as new_rank " +
-          s"from $testTable"),
-      Row("amy", 1, 2, 1) :: Row("alex", 2, 2, 2) :: Row("cathy", 1, 1, 1) ::
-        Row("david", 2, 1, 2) :: Row("jen", 6, 1, 3) :: Nil)
-    checkAnswer(
-      sql(
-        "select name, dept, rank() over (partition by dept order by salary) as rank, " +
-          "sum(rank) over (partition by dept order by rank) as new_rank " +
-          s"from $testTable"),
-      Row("amy", 1, 2, 3) :: Row("alex", 2, 2, 3) :: Row("cathy", 1, 1, 1) ::
-        Row("david", 2, 1, 1) :: Row("jen", 6, 1, 1) :: Nil)
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, dept, rank() over (partition by dept order by salary) as rank, " +
+        "rank() over (partition by dept order by rank DESC) as new_rank " +
+        s"from $testTable",
+      lca = "`rank`", windowExprRegex = "\"RANK.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, dept, rank() over (partition by dept order by salary) as rank, " +
+        "rank() over (partition by rank order by salary) as new_rank " +
+        s"from $testTable",
+      lca = "`rank`", windowExprRegex = "\"RANK.*\"")
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name, dept, rank() over (partition by dept order by salary) as rank, " +
+        "sum(rank) over (partition by dept order by rank) as new_rank " +
+        s"from $testTable",
+      lca = "`rank`", windowExprRegex = "\"sum.*\"")
 
     // all together
-    checkAnswer(
-      sql(
-        "select name as n, n, dept as d, d * 1.5 as new_d, properties.joinYear as jy, " +
-          "rank() over (partition by new_d order by salary) as rank, " +
-          "rank + 1.0, " +
-          "min(salary) over (partition by rank order by new_d) as min, " +
-          "sum(rank) over (partition by min order by n) as sum, " +
-          "min(jy - 2017) over (partition by rank order by dept) " +
-          s"from $testTable"),
-      Row("amy", "amy", 1, 1.5, 2019, 2, 3.0, 10000, 4, 2) ::
-        Row("alex", "alex", 2, 3, 2017, 2, 3.0, 10000, 2, 0) ::
-        Row("cathy", "cathy", 1, 1.5, 2020, 1, 2.0, 9000, 1, 3) ::
-        Row("david", "david", 2, 3, 2019, 1, 2.0, 9000, 2, 2) ::
-        Row("jen", "jen", 6, 9, 2018, 1, 2.0, 9000, 3, 1) :: Nil)
+    checkLCAUnsupportedInWindowErrorHelper(
+      "select name as n, n, dept as d, d * 1.5 as new_d, properties.joinYear as jy, " +
+        "rank() over (partition by new_d order by salary) as rank, " +
+        "rank + 1.0, " +
+        "min(salary) over (partition by rank order by new_d) as min, " +
+        "sum(rank) over (partition by min order by n) as sum, " +
+        "min(jy - 2017) over (partition by rank order by dept) " +
+        s"from $testTable",
+      lca = "`new_d`", windowExprRegex = "\"RANK.*\"")
   }
 
   test("Lateral alias basics - Window on Aggregate") {
@@ -1015,67 +988,42 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         )
 
         // non-window expressions as lca, used in window expression
-        checkAnswer(
-          sql(
-            "select dept as d, rank() over (partition by d order by avg(salary)) as rank " +
-            s"from $testTable $whereSeg group by dept $havingSeg"
-          ),
-          Row(1, 1) :: Row(2, 1) :: Row(6, 1) :: Nil
-        )
-        checkAnswer(
-          sql(
-            "select dept as d, sum(salary) as s, avg(s) over (partition by d order by s) " +
-            s"from $testTable $whereSeg group by dept $havingSeg"
-          ),
-          Row(1, 19000, 19000) :: Row(2, 22000, 22000) :: Row(6, 12000, 12000) :: Nil
-        )
-        checkAnswer(
-          sql(
-            "select dept as d, sum(salary) as s, avg(s) over (partition by s order by d) " +
-            s"from $testTable $whereSeg group by dept $havingSeg"
-          ),
-          Row(1, 19000, 19000) :: Row(2, 22000, 22000) :: Row(6, 12000, 12000) :: Nil
-        )
-        checkAnswer(
-          sql(
-            "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
+        checkLCAUnsupportedInWindowErrorHelper(
+          "select dept as d, rank() over (partition by d order by avg(salary)) as rank " +
+            s"from $testTable $whereSeg group by dept $havingSeg",
+          lca = "`d`", windowExprRegex = "\"RANK.*\"")
+        checkLCAUnsupportedInWindowErrorHelper(
+          "select dept as d, sum(salary) as s, avg(s) over (partition by d order by s) " +
+            s"from $testTable $whereSeg group by dept $havingSeg",
+          lca = "`s`", windowExprRegex = "\"avg.*\"")
+        checkLCAUnsupportedInWindowErrorHelper(
+          "select dept as d, sum(salary) as s, avg(s) over (partition by s order by d) " +
+            s"from $testTable $whereSeg group by dept $havingSeg",
+          lca = "`s`", windowExprRegex = "\"avg.*\"")
+        checkLCAUnsupportedInWindowErrorHelper(
+          "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
             "sum(a) over (partition by jy order by d) " +
-            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"
-          ),
-          Row(1, 2019, 1000, 1000) :: Row(1, 2020, 1200, 1200) :: Row(2, 2017, 1200, 1200) ::
-          Row(2, 2019, 1300, 2300) :: Row(6, 2018, 1200, 1200) :: Nil
-        )
-        checkAnswer(
-          sql(
-            "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
+            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
+          lca = "`a`", windowExprRegex = "\"sum.*\"")
+        checkLCAUnsupportedInWindowErrorHelper(
+          "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
             "sum(a) over (partition by a order by jy) " +
-            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"
-          ),
-          Row(1, 2019, 1000, 1000) :: Row(1, 2020, 1200, 3600) :: Row(2, 2017, 1200, 1200) ::
-          Row(2, 2019, 1300, 1300) :: Row(6, 2018, 1200, 2400) :: Nil
-        )
+            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
+          lca = "`a`", windowExprRegex = "\"sum.*\"")
 
         // window expressions as lca, used in window expression
-        checkAnswer(
-          sql(
-            "select dept, properties.joinYear, " +
+        checkLCAUnsupportedInWindowErrorHelper(
+          "select dept, properties.joinYear, " +
             "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
             "sum(sum_avg) over (partition by dept order by sum_avg) " +
-            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"
-          ),
-          Row(1, 2019, 1000, 1000) :: Row(1, 2020, 1200, 2200) :: Row(2, 2017, 1200, 1200) ::
-          Row(2, 2019, 2300, 3500) :: Row(6, 2018, 1200, 1200) :: Nil
-        )
-        checkAnswer(
-          sql(
-            "select dept, properties.joinYear, " +
+            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
+          lca = "`sum_avg`", windowExprRegex = "\"sum.*\"")
+        checkLCAUnsupportedInWindowErrorHelper(
+          "select dept, properties.joinYear, " +
             "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
             "min(properties.joinYear) over (partition by sum_avg order by dept) " +
-            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"
-          ),
-          Row(1, 2019, 1000, 2019) :: Row(1, 2020, 1200, 2020) :: Row(2, 2017, 1200, 2017) ::
-          Row(2, 2019, 2300, 2019) :: Row(6, 2018, 1200, 2017) :: Nil
-        )
+            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
+          lca = "`sum_avg`", windowExprRegex = "\"min.*\"")
 
         // window expression as lca, used in non-window expression
         checkAnswer(
@@ -1110,26 +1058,6 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         "select dept as d, d, d * 1.5, d as d1, d1, properties.joinYear as jy, jy - 2017, " +
           "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg " +
           s"from $testTable group by dept, properties.joinYear $havingSuffix",
-        "select dept as d, rank() over (partition by d order by avg(salary)) as rank " +
-          s"from $testTable group by dept $havingSuffix",
-        "select dept as d, sum(salary) as s, avg(s) over (partition by d order by s) " +
-          s"from $testTable group by dept $havingSuffix",
-        "select dept as d, sum(salary) as s, avg(s) over (partition by s order by d) " +
-          s"from $testTable group by dept $havingSuffix",
-        "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
-          "sum(a) over (partition by jy order by d) " +
-          s"from $testTable group by dept, properties.joinYear $havingSuffix",
-        "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
-          "sum(a) over (partition by a order by jy) " +
-          s"from $testTable group by dept, properties.joinYear $havingSuffix",
-        "select dept, properties.joinYear, " +
-          "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
-          "sum(sum_avg) over (partition by dept order by sum_avg) " +
-          s"from $testTable group by dept, properties.joinYear $havingSuffix",
-        "select dept, properties.joinYear, " +
-          "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
-          "min(properties.joinYear) over (partition by sum_avg order by dept) " +
-          s"from $testTable group by dept, properties.joinYear $havingSuffix",
         "select dept, properties.joinYear, " +
           "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
           "sum_avg * 1.0 as sum_avg1, sum_avg1 + dept " +
@@ -1144,15 +1072,17 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   test("Lateral alias basics - Window negative tests") {
     // use aggregate function in project queries
     checkSameError(
-      s"select dept as d, rank() over (partition by dept order by avg(salary)) from $testTable",
-      s"select dept as d, rank() over (partition by d    order by avg(salary)) from $testTable",
+      s"select dept as d, dept, rank() over (partition by dept order by avg(salary)) " +
+        s"from $testTable",
+      s"select dept as d, d,    rank() over (partition by dept order by avg(salary)) " +
+        s"from $testTable",
       errorClass = "MISSING_GROUP_BY",
       errorParams = Map.empty
     )
     checkSameError(
-      "select salary as s, sum(sum(salary)) over (partition by dept order by salary) " +
+      "select salary as s, salary, sum(sum(salary)) over (partition by dept order by salary) " +
         s"from $testTable",
-      "select salary as s, sum(sum(s))      over (partition by dept order by s     ) " +
+      "select salary as s, s,      sum(sum(salary)) over (partition by dept order by salary) " +
         s"from $testTable",
       errorClass = "MISSING_GROUP_BY",
       errorParams = Map.empty
