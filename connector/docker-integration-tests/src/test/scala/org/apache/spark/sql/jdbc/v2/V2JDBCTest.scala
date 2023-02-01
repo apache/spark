@@ -40,7 +40,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   val namespaceOpt: Option[String] = None
 
-  private def catalogAndNamespace =
+  protected def catalogAndNamespace =
     namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
 
   // dialect specific update column type test
@@ -313,7 +313,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  private def limitPushed(df: DataFrame, limit: Int): Boolean = {
+  protected def limitPushed(df: DataFrame, limit: Int): Boolean = {
     df.queryExecution.optimizedPlan.collect {
       case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>

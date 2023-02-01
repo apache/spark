@@ -251,7 +251,7 @@ private[jdbc] class JDBCRDD(
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
 
-    val builder = dialect.getJdbcSQLBuilder(options)
+    val builder = dialect.getJdbcSQLQueryBuilder(options)
     val sqlText = builder
       .withColumns(columns)
       .withPredicates(predicates, part)

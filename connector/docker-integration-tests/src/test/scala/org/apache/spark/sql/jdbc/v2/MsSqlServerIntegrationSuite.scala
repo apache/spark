@@ -22,7 +22,8 @@ import java.sql.{Connection, SQLFeatureNotSupportedException}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.plans.logical.Sort
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -59,6 +60,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
+    .set("spark.sql.catalog.mssql.pushDownLimit", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -95,6 +97,38 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
+  }
+
+  test("simple scan with LIMIT") {
+    val df = sql(s"SELECT * FROM $catalogAndNamespace." +
+      s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1")
+    assert(limitPushed(df, 1))
+    val row = df.collect()
+    assert(row.length === 1)
+    assert(row(0).getInt(0) === 1)
+    assert(row(0).getString(1) === "amy")
+    assert(row(0).getDecimal(2) === new java.math.BigDecimal("10000.00"))
+    assert(row(0).getDouble(3) === 1000d)
+  }
+
+  private def checkSortRemoved(df: DataFrame): Unit = {
+    val sorts = df.queryExecution.optimizedPlan.collect {
+      case s: Sort => s
+    }
+    assert(sorts.isEmpty)
+  }
+
+  test("simple scan with top N") {
+    val df = sql(s"SELECT * FROM $catalogAndNamespace." +
+      s"${caseConvert("employee")} WHERE dept > 0 ORDER BY salary LIMIT 1")
+    assert(limitPushed(df, 1))
+    checkSortRemoved(df)
+    val row = df.collect()
+    assert(row.length === 1)
+    assert(row(0).getInt(0) === 1)
+    assert(row(0).getString(1) === "cathy")
+    assert(row(0).getDecimal(2) === new java.math.BigDecimal("9000.00"))
+    assert(row(0).getDouble(3) === 1200d)
   }
 
   testVarPop()

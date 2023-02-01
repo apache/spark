@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
  *
  * @since 3.4.0
  */
-class JdbcSQLBuilder(dialect: JdbcDialect, options: JDBCOptions) {
+class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
 
   /**
    * `columns`, but as a String suitable for injection into a SQL query.
@@ -63,14 +63,14 @@ class JdbcSQLBuilder(dialect: JdbcDialect, options: JDBCOptions) {
    */
   protected var tableSampleClause: String = ""
 
-  def withColumns(columns: Array[String]): JdbcSQLBuilder = {
+  def withColumns(columns: Array[String]): JdbcSQLQueryBuilder = {
     if (columns.nonEmpty) {
       columnList = columns.mkString(",")
     }
     this
   }
 
-  def withPredicates(predicates: Array[Predicate], part: JDBCPartition): JdbcSQLBuilder = {
+  def withPredicates(predicates: Array[Predicate], part: JDBCPartition): JdbcSQLQueryBuilder = {
     // `filters`, but as a WHERE clause suitable for injection into a SQL query.
     val filterWhereClause: String = {
       predicates.flatMap(dialect.compileExpression(_)).map(p => s"($p)").mkString(" AND ")
@@ -90,7 +90,7 @@ class JdbcSQLBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
-  def withGroupByColumns(groupByColumns: Option[Array[String]]): JdbcSQLBuilder = {
+  def withGroupByColumns(groupByColumns: Option[Array[String]]): JdbcSQLQueryBuilder = {
     if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
       // The GROUP BY columns should already be quoted by the caller side.
       groupByClause = s"GROUP BY ${groupByColumns.get.mkString(", ")}"
@@ -99,7 +99,7 @@ class JdbcSQLBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
-  def withSortOrders(sortOrders: Array[String]): JdbcSQLBuilder = {
+  def withSortOrders(sortOrders: Array[String]): JdbcSQLQueryBuilder = {
     if (sortOrders.nonEmpty) {
       orderByClause = s" ORDER BY ${sortOrders.mkString(", ")}"
     }
@@ -107,19 +107,19 @@ class JdbcSQLBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
-  def withLimit(limit: Int): JdbcSQLBuilder = {
+  def withLimit(limit: Int): JdbcSQLQueryBuilder = {
     limitClause = dialect.getLimitClause(limit)
 
     this
   }
 
-  def withOffset(offset: Int): JdbcSQLBuilder = {
+  def withOffset(offset: Int): JdbcSQLQueryBuilder = {
     offsetClause = dialect.getOffsetClause(offset)
 
     this
   }
 
-  def withTableSample(sample: Option[TableSampleInfo]): JdbcSQLBuilder = {
+  def withTableSample(sample: Option[TableSampleInfo]): JdbcSQLQueryBuilder = {
     if (sample.nonEmpty) {
       tableSampleClause = dialect.getTableSample(sample.get)
     }

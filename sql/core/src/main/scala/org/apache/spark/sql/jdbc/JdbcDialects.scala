@@ -554,7 +554,8 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * returns the SQL builder for the SELECT statement.
    */
-  def getJdbcSQLBuilder(options: JDBCOptions): JdbcSQLBuilder = new JdbcSQLBuilder(this, options)
+  def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new JdbcSQLQueryBuilder(this, options)
 
   def supportsTableSample: Boolean = false
 
