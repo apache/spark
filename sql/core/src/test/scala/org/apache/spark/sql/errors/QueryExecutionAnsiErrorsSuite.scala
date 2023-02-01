@@ -18,7 +18,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark._
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, NullIf, SubExprEvaluationRuntime}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.ByteType
@@ -177,6 +177,21 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         )
       }
     }
+  }
+
+  test("interpreted CheckOverflowInTableInsert with CaseWhen should throw an exception") {
+    val caseWhen = CaseWhen(
+      Seq((Literal(true), Cast(Literal.apply(12345678901234567890D), ByteType))), None)
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        CheckOverflowInTableInsert(caseWhen, "col").eval(null)
+      }.asInstanceOf[SparkThrowable],
+      errorClass = "CAST_OVERFLOW",
+      parameters = Map("value" -> "1.2345678901234567E19D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> ("\"TINYINT\""),
+        "ansiConfig" -> ansiConf)
+    )
   }
 
   test("SPARK-39981: interpreted CheckOverflowInTableInsert should throw an exception") {

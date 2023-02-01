@@ -1391,30 +1391,4 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(expr.sql == cast.sql)
     assert(expr.toString == cast.toString)
   }
-
-  test("SPARK-41991: CheckOverflowInTableInsert child must be Cast or ExpressionProxy of Cast") {
-    val runtime = new SubExprEvaluationRuntime(1)
-    val cast = Cast(Literal(1.0), IntegerType)
-    val expr = CheckOverflowInTableInsert(cast, "column_1")
-    val proxy = ExpressionProxy(Literal(1.0), 0, runtime)
-    checkError(
-      exception = intercept[SparkException] {
-        expr.withNewChildrenInternal(IndexedSeq(proxy))
-      },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map(
-        "message" -> "Child is not Cast or ExpressionProxy of Cast"
-      )
-    )
-
-    checkError(
-      exception = intercept[SparkException] {
-        expr.withNewChildrenInternal(IndexedSeq(Literal(1)))
-      },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map(
-        "message" -> "Child is not Cast or ExpressionProxy of Cast"
-      )
-    )
-  }
 }
