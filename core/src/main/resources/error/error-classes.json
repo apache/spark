@@ -1208,6 +1208,11 @@
     ],
     "sqlState" : "42K03"
   },
+  "REQUIRES_SINGLE_PART_NAMESPACE" : {
+    "message" : [
+      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+    ]
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the function <routineName> because it already exists.",
@@ -2512,11 +2517,6 @@
       "The streaming sources in a query do not have a common supported execution mode.",
       "Sources support micro-batch: <microBatchSources>.",
       "Sources support continuous: <continuousSources>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1117" : {
-    "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <ns>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1119" : {

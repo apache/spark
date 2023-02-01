@@ -1239,12 +1239,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new TableAlreadyExistsException(ident.asMultipartIdentifier)
   }
 
-  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+  def requiresSinglePartNamespaceError(namespace: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1117",
+      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(
         "sessionCatalog" -> CatalogManager.SESSION_CATALOG_NAME,
-        "ns" -> ns.mkString("[", ", ", "]")))
+        "namespace" -> namespace.mkString(".")))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {

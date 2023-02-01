@@ -2070,8 +2070,8 @@ class DataSourceV2SQLSuiteV1Filter
         // the session catalog, not the `global_temp` v2 catalog.
         sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1117",
-      parameters = Map("sessionCatalog" -> "spark_catalog", "ns" -> "[global_temp, ns1, ns2]"))
+      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> "global_temp.ns1.ns2"))
   }
 
   test("table name same as catalog can be used") {
@@ -2104,8 +2104,8 @@ class DataSourceV2SQLSuiteV1Filter
         def verify(sql: String): Unit = {
           checkError(
             exception = intercept[AnalysisException](spark.sql(sql)),
-            errorClass = "_LEGACY_ERROR_TEMP_1117",
-            parameters = Map("sessionCatalog" -> "spark_catalog", "ns" -> "[]"))
+            errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+            parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> ""))
         }
 
         verify(s"select * from $t")
