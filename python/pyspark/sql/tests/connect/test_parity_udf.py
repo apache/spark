@@ -33,132 +33,152 @@ from pyspark.sql.types import BooleanType
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Relies on mapPartitions().")
+    @unittest.skip("Spark Connect does not support mapPartitions() but the test depends on it.")
     def test_worker_original_stdin_closed(self):
         super().test_worker_original_stdin_closed()
 
-    @unittest.skip("Relies on registerFunction().")
-    def test_worker_original_stdin_closed(self):
-        super().test_worker_original_stdin_closed()
-
-    @unittest.skip("Relies on read fomr Hadoop RDD.")
+    @unittest.skip(
+        "Spark Connect does not support reading from Hadoop RDD but the test depends on it."
+    )
     def test_udf_with_input_file_name_for_hadooprdd(self):
         super().test_udf_with_input_file_name_for_hadooprdd()
 
-    @unittest.skip("Relies on accumulator")
+    @unittest.skip("Spark Connect does not support accumulator but the test depends on it.")
     def test_same_accumulator_in_udfs(self):
         super().test_same_accumulator_in_udfs()
 
-    @unittest.skip("Relies on spark.conf")
+    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
     def test_udf_with_column_vector(self):
         super().test_udf_with_column_vector()
 
-    @unittest.skip("Relies on spark.conf")
+    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
     def test_udf_timestamp_ntz(self):
         super().test_udf_timestamp_ntz()
 
-    @unittest.skip("Relies on broadcast")
+    @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
     def test_broadcast_in_udf(self):
         super().test_broadcast_in_udf()
 
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_chained_udf(self):
-        super().test_chained_udf()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_udf_without_arguments(self):
-        super().test_udf_without_arguments()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_multiple_udfs(self):
-        super().test_multiple_udfs()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_nondeterministic_udf2(self):
-        super().test_nondeterministic_udf2()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_single_udf_with_repeated_argument(self):
-        super().test_single_udf_with_repeated_argument()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_udf(self):
-        super().test_df()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_udf2(self):
-        super().test_df2()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_udf3(self):
-        super().test_df3()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_udf_registration_return_type_none(self):
-        super().test_udf_registration_return_type_none()
-
-    @unittest.skip("Relies on spark.catalog.registerFunction")
-    def test_udf_with_array_type(self):
-        super().test_udf_with_array_type()
-
-    @unittest.skip("Relies on sql_conf")
+    @unittest.skip("Spark Connect does not support sql_conf but the test depends on it.")
     def test_file_dsv2_with_udf_filter(self):
         super().test_file_dsv2_with_udf_filter()
 
-    @unittest.skip("Relies on spark.udf")
-    def test_non_existed_udaf(self):
-        super().test_non_existed_udaf()
-
-    @unittest.skip("Relies on spark.udf")
-    def test_non_existed_udf(self):
-        super().test_non_existed_udf()
-
-    @unittest.skip("Relies on spark.udf")
-    def test_udf_registration_returns_udf(self):
-        super().test_udf_registration_returns_udf()
-
-    @unittest.skip("Relies on cache()")
-    def test_udf_cache(self):
-        super().test_udf_cache()
-
-    @unittest.skip("Relies on UserDefinedFunction._judf_placeholder")
-    def test_udf_defers_judf_initialization(self):
-        super().test_udf_defers_judf_initialization()
-
-    @unittest.skip("Relies on left_outer join type.")
-    def test_udf_in_left_outer_join_condition(self):
-        super().test_udf_in_left_outer_join_condition()
-
-    @unittest.skip("Relies on left_outer join type.")
-    def test_udf_in_filter_on_top_of_outer_join(self):
-        super().test_udf_in_filter_on_top_of_outer_join()
-
-    @unittest.skip("Relies on sql_conf.")
+    @unittest.skip("Spark Connect does not support sql_conf but the test depends on it.")
     def test_udf_in_join_condition(self):
         super().test_udf_in_join_condition()
 
-    @unittest.skip("Relies on df._jdf")
+    @unittest.skip("Spark Connect does not support cache() but the test depends on it.")
+    def test_udf_cache(self):
+        super().test_udf_cache()
+
+    @unittest.skip("Requires JVM access.")
+    def test_udf_defers_judf_initialization(self):
+        super().test_udf_defers_judf_initialization()
+
+    @unittest.skip("Requires JVM access.")
     def test_nondeterministic_udf3(self):
         super().test_nondeterministic_udf3()
 
-    @unittest.skip("Relies on sc._jvm.org.apache.log4j")
+    @unittest.skip("Requires JVM access.")
     def test_nondeterministic_udf_in_aggregate(self):
         super().test_nondeterministic_udf_in_aggregate()
 
-    @unittest.skip("Relies on sc._jvm.org.apache.log4j")
+    @unittest.skip("Requires JVM access.")
     def test_udf_registration_return_type_not_none(self):
         super().test_udf_registration_return_type_not_none()
 
-    @unittest.skip("Parse array<double>")
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_worker_original_stdin_closed(self):
+        super().test_worker_original_stdin_closed()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_chained_udf(self):
+        super().test_chained_udf()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf_without_arguments(self):
+        super().test_udf_without_arguments()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_multiple_udfs(self):
+        super().test_multiple_udfs()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_nondeterministic_udf2(self):
+        super().test_nondeterministic_udf2()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_single_udf_with_repeated_argument(self):
+        super().test_single_udf_with_repeated_argument()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf(self):
+        super().test_df()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf2(self):
+        super().test_df2()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf3(self):
+        super().test_df3()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf_registration_return_type_none(self):
+        super().test_udf_registration_return_type_none()
+
+    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf_with_array_type(self):
+        super().test_udf_with_array_type()
+
+    # TODO(SPARK-42210): implement `spark.udf`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_non_existed_udaf(self):
+        super().test_non_existed_udaf()
+
+    # TODO(SPARK-42210): implement `spark.udf`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_non_existed_udf(self):
+        super().test_non_existed_udf()
+
+    # TODO(SPARK-42210): implement `spark.udf`
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf_registration_returns_udf(self):
+        super().test_udf_registration_returns_udf()
+
+    # TODO(SPARK-42267): support left_outer join type
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf_in_left_outer_join_condition(self):
+        super().test_udf_in_left_outer_join_condition()
+
+    # TODO(SPARK-42267): support left_outer join type
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_udf_in_filter_on_top_of_outer_join(self):
+        super().test_udf_in_filter_on_top_of_outer_join()
+
+    # TODO(SPARK-42269): support return type as a collection DataType in DDL strings
+    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_with_string_return_type(self):
         super().test_udf_with_string_return_type()
 
-    # spark.range(1).filter(udf(lambda x: x)("id") >= 0).createTempView("v")
-    @unittest.skip("SparkConnectGrpcException: requirement failed")
+    # TODO(SPARK-41279): fix DataFrame.createTempView
+    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_in_subquery(self):
         super().test_udf_in_subquery()
 
     def test_udf_not_supported_in_join_condition(self):
+        # The vanilla PySpark throws AnalysisException instead.
         # test python udf is not supported in join type except inner join.
         left = self.spark.createDataFrame([(1, 1, 1), (2, 2, 2)], ["a", "a1", "a2"])
         right = self.spark.createDataFrame([(1, 1, 1), (1, 3, 1)], ["b", "b1", "b2"])
