@@ -2534,7 +2534,7 @@ case class CheckOverflowInTableInsert(child: Expression, columnName: String)
             cast.child.dataType,
             cast.dataType,
             columnName)
-        case None => throe e
+        case None => throw e
       }
   }
 
