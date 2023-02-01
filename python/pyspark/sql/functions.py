@@ -7709,7 +7709,7 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     ...     ['data', 'pos', 'val']
     ... )
     >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val).alias('data')).collect()
-    [Row(data=['a', 'b', 'd', 'c']), Row(data=['c', 'd', 'b', 'a'])]
+    [Row(data=['a', 'd'. 'b', 'c']), Row(data=['c', 'd', 'b', 'a'])]
     """
     return _invoke_function_over_columns("array_insert", arr, pos, value)
 
