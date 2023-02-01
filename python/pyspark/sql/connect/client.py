@@ -49,6 +49,7 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
+from pyspark.sql.session import classproperty
 import pyspark.sql.types
 from pyspark import cloudpickle
 from pyspark.errors import (
@@ -109,7 +110,19 @@ class ChannelBuilder:
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
 
-    DEFAULT_PORT = 15002
+    @classproperty
+    def DEFAULT_PORT(cls) -> int:
+        if "SPARK_TESTING" in os.environ:
+            from pyspark.sql.session import SparkSession as PySparkSession
+
+            if PySparkSession._instantiatedSession is not None:
+
+                jvm = PySparkSession._instantiatedSession._jvm
+                return getattr(
+                    getattr(jvm.org.apache.spark.sql.connect.service, "SparkConnectService$"),
+                    "MODULE$",
+                ).localPort()
+        return 15002
 
     def __init__(self, url: str, channelOptions: Optional[List[Tuple[str, Any]]] = None) -> None:
         """

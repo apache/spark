@@ -226,6 +226,12 @@ object SparkConnectService {
 
   private var server: Server = _
 
+  // For testing purpose.
+  private[connect] lazy val localPort = {
+    assert(server != null)
+    server.getPort
+  }
+
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 

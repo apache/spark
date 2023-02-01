@@ -500,6 +500,10 @@ class SparkSession:
             # Configurations to be set if unset.
             default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
 
+            if "SPARK_TESTING" in os.environ:
+                # TODO: explain avaliable port.
+                overwrite_conf["spark.connect.grpc.binding.port"] = "0"
+
             def create_conf(**kwargs: Any) -> SparkConf:
                 conf = SparkConf(**kwargs)
                 for k, v in overwrite_conf.items():
