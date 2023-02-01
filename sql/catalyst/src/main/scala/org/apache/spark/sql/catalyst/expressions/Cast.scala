@@ -2545,7 +2545,7 @@ case class CheckOverflowInTableInsert(child: Expression, columnName: String)
     }
   }
 
-  def doGenCodeWithNewErrorMsg(tx: CodegenContext, ev: ExprCode, child: Cast): ExprCode = {
+  def doGenCodeWithNewErrorMsg(ctx: CodegenContext, ev: ExprCode, child: Cast): ExprCode = {
     val childGen = child.genCode(ctx)
     val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
     val fromDt =
