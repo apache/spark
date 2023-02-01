@@ -144,37 +144,4 @@
       </plugin>
     </plugins>
   </build>
-
-  <!-- To skip client integration test, use 'mvn clean package -DskipJvmClientITs=true' -->
-  <profiles>
-    <profile>
-      <id>integration-test</id>
-      <activation>
-        <property>
-          <name>skipJvmClientITs</name>
-          <value>true</value>
-        </property>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.scalatest</groupId>
-            <artifactId>scalatest-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>test</id>
-                <phase>test</phase>
-                <goals>
-                  <goal>test</goal>
-                </goals>
-                <configuration>
-                  <tagsToExclude>org.apache.spark.sql.connect.client.util.ClientIntegrationTest</tagsToExclude>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

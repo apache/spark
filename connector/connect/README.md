@@ -47,25 +47,3 @@ export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 The user-defined `protoc` and `protoc-gen-grpc-java` binary files can be produced in the user's compilation environment by source code compilation, 
 for compilation steps, please refer to [protobuf](https://github.com/protocolbuffers/protobuf) and [grpc-java](https://github.com/grpc/grpc-java).
 
-### Build and run Jvm client
-
-The Jvm client integration tests require the dependency to spark connect server, spark sql and a few other spark libraries.
-Thus a build step is required before running all tests.
-
-To run all client tests with SBT from the project root folder:
-
-```bash
-./build/sbt package
-./build/sbt "connect-client-jvm/test"
-```
-
-To run with maven:
-```bash
-mvn clean package -DskipTests
-mvn test -pl connector/connect/client/jvm
-```
-
-For maven users, if any problems to build before running tests, the client integration tests can be skipped using `-DskipJvmClientITs=true`. For example:
-```bash
-mvn test -pl connector/connect/client/jvm -DskipJvmClientITs=true
-```
