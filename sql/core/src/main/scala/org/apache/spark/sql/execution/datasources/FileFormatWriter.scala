@@ -206,13 +206,8 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
       orderingMatched: Boolean): Set[String] = {
-    val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
-    val empty2NullPlan = if (hasEmpty2Null) {
-      plan
-    } else {
-      val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
-      if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
-    }
+    val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
+    val empty2NullPlan = if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
 
     writeAndCommit(job, description, committer) {
       val (planToExecute, concurrentOutputWriterSpec) = if (orderingMatched) {
