@@ -67,31 +67,32 @@ object SparkConnectServerUtils {
 
   @volatile private var stopped = false
 
+  private var consoleOut: BufferedOutputStream = _
+  private val serverStopCommand = "q"
+
   private lazy val sparkConnect: Process = {
     debug("Starting the Spark Connect Server...")
     val jar = findSparkConnectJar
     val builder = Process(
-      new File(sparkHome, "bin/spark-shell").getCanonicalPath,
       Seq(
-        "--jars",
-        jar,
+        "bin/spark-submit",
         "--driver-class-path",
         jar,
         "--conf",
-        "spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin",
-        "--conf",
-        s"spark.connect.grpc.binding.port=$port"))
+        s"spark.connect.grpc.binding.port=$port",
+        "--class",
+        "org.apache.spark.sql.connect.SimpleSparkConnectService",
+        jar),
+      new File(sparkHome))
 
     val io = new ProcessIO(
-      // Hold the input channel to the spark console to keep the console open
-      in => new BufferedOutputStream(in),
-      // Only redirect output if debug to avoid channel interruption error on process termination.
-      out => if (isDebug) Source.fromInputStream(out).getLines.foreach(debug),
-      err => if (isDebug) Source.fromInputStream(err).getLines.foreach(debug))
+      in => consoleOut = new BufferedOutputStream(in),
+      out => Source.fromInputStream(out).getLines.foreach(debug),
+      err => Source.fromInputStream(err).getLines.foreach(debug))
     val process = builder.run(io)
 
     // Adding JVM shutdown hook
-    sys.addShutdownHook(kill())
+    sys.addShutdownHook(stop())
     process
   }
 
@@ -100,10 +101,19 @@ object SparkConnectServerUtils {
     sparkConnect
   }
 
-  def kill(): Int = {
+  def stop(): Int = {
     stopped = true
     debug("Stopping the Spark Connect Server...")
-    sparkConnect.destroy()
+    try {
+      consoleOut.write(serverStopCommand.getBytes)
+      consoleOut.flush()
+      consoleOut.close()
+    } catch {
+      case e: Throwable =>
+        debug(e)
+        sparkConnect.destroy()
+    }
+
     val code = sparkConnect.exitValue()
     debug(s"Spark Connect Server is stopped with exit code: $code")
     code
@@ -124,7 +134,8 @@ object SparkConnectServerUtils {
         f.getName.startsWith("spark-connect-assembly") && f.getName.endsWith(".jar")) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
-        f.getName.startsWith("spark-connect") && f.getName.endsWith(".jar"))
+        f.getName.startsWith("spark-connect") &&
+        f.getName.endsWith(s"${org.apache.spark.SPARK_VERSION}.jar"))
     }
     // It is possible we found more than one: one built by maven, and another by SBT
     assert(

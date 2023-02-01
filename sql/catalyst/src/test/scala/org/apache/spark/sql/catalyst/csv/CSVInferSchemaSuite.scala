@@ -252,6 +252,9 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
       assert(inferSchema.inferField(DateType, "2003/02/05") == StringType)
     }
+    withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
+      assert(inferSchema.inferField(DateType, "2003/02/05") == StringType)
+    }
     assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == StringType)
     assert(inferSchema.inferField(TimestampType, "2018_12_03") == StringType)
 

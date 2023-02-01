@@ -238,7 +238,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
-        ResolveGroupByAll.checkAnalysis(operator)
+        ResolveReferencesInAggregate.checkUnresolvedGroupByAll(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -355,10 +355,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2415",
+              errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
               messageParameters = Map(
-                "filter" -> f.condition.sql,
-                "type" -> f.condition.dataType.catalogString))
+                "sqlExpr" -> f.expressions.map(toSQLExpr).mkString(","),
+                "filter" -> toSQLExpr(f.condition),
+                "type" -> toSQLType(f.condition.dataType)))
 
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             j.failAnalysis(
@@ -730,11 +731,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
             val invalidExprSqls =
-              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(_.sql)
+              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
             other.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2441",
+              errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
-                "operator" -> other.nodeName,
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           // This should not happen, resolved Project or Aggregate should restore or resolve
@@ -781,8 +781,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   private def getAllExpressions(plan: LogicalPlan): Seq[Expression] = {
     plan match {
-      // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
-      // feature. We should check errors in `aggregateExpressions` first.
+      // We only resolve `groupingExpressions` if `aggregateExpressions` is resolved first (See
+      // `ResolveReferencesInAggregate`). We should check errors in `aggregateExpressions` first.
       case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
       case _ => plan.expressions
     }
@@ -887,7 +887,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (aggregates.isEmpty) {
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
+            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
           messageParameters = Map.empty)
       }
 

@@ -21,9 +21,12 @@ import os
 import unittest
 import shutil
 import tempfile
+from collections import defaultdict
 
+from pyspark.errors import PySparkTypeError
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession as PySparkSession, Row
+from pyspark.sql.connect.client import Retrying
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -704,6 +707,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_dataframe_with_coercion(self):
+        data1 = [[1.33, 1], ["2.1", 1]]
+        data2 = [[True, 1], ["false", 1]]
+
+        for data in [data1, data2]:
+            cdf = self.connect.createDataFrame(data, ["a", "b"])
+            sdf = self.spark.createDataFrame(data, ["a", "b"])
+
+            self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_nested_type_create_from_rows(self):
         data1 = [Row(a=1, b=Row(c=2, d=Row(e=3, f=Row(g=4, h=Row(i=5)))))]
@@ -1751,8 +1765,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
-        with self.assertRaisesRegex(TypeError, "key must be float, int, or string"):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.stat.sampleBy(cdf.key, fractions={0: 0.1, None: 0.2}, seed=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+            message_parameters={
+                "arg_name": "fractions",
+                "arg_type": "dict",
+                "allowed_types": "float, int, str",
+                "return_type": "NoneType",
+            },
+        )
 
         with self.assertRaises(SparkConnectException):
             cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 1.2}, seed=0).show()
@@ -2600,6 +2625,117 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         for f in ("jdbc",):
             with self.assertRaises(NotImplementedError):
                 getattr(df.write, f)()
+
+
+class ClientTests(unittest.TestCase):
+    def test_retry_error_handling(self):
+        # Helper class for wrapping the test.
+        class TestError(grpc.RpcError, Exception):
+            def __init__(self, code: grpc.StatusCode):
+                self._code = code
+
+            def code(self):
+                return self._code
+
+        def stub(retries, w, code):
+            w["attempts"] += 1
+            if w["attempts"] < retries:
+                w["raised"] += 1
+                raise TestError(code)
+
+        # Check that max_retries 1 is only one retry so two attempts.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=1,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(2, call_wrap["attempts"])
+        self.assertEqual(1, call_wrap["raised"])
+
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
+        # Exceed the retries.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: True,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+                initial_backoff=50,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertTrue(call_wrap["attempts"] < 5)
+        self.assertEqual(call_wrap["raised"], 3)
+
+        # Check that only specific exceptions are retried.
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
+        # Exceed the retries.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+                initial_backoff=50,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 3)
+
+        # Test that another error is always thrown.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=4,
+                backoff_multiplier=1,
+                initial_backoff=1,
+                max_backoff=10,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(call_wrap["attempts"], 1)
+        self.assertEqual(call_wrap["raised"], 1)
 
 
 class ChannelBuilderTests(unittest.TestCase):

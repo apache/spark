@@ -177,7 +177,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
-    <versions-maven-plugin.version>2.14.1</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.14.2</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -185,7 +185,7 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.14.1</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.14.1</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.8.4</snappy.version>
+    <snappy.version>1.1.9.1</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.22</commons-compress.version>
@@ -215,12 +215,12 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.7.0</tink.version>
-    <netty.version>4.1.86.Final</netty.version>
+    <netty.version>4.1.87.Final</netty.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>10.0.1</arrow.version>
+    <arrow.version>11.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>6.4.0</kubernetes-client.version>
@@ -791,7 +791,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>1.1</version>
+        <version>1.1.2</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
