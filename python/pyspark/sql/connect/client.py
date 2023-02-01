@@ -49,7 +49,6 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-from pyspark.sql.session import classproperty
 import pyspark.sql.types
 from pyspark import cloudpickle
 from pyspark.errors import (
@@ -110,16 +109,30 @@ class ChannelBuilder:
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
 
-    @classproperty
-    def DEFAULT_PORT(cls) -> int:
+    @staticmethod
+    def default_port() -> int:
         if "SPARK_TESTING" in os.environ:
             from pyspark.sql.session import SparkSession as PySparkSession
 
-            if PySparkSession._instantiatedSession is not None:
+            # In the case when Spark Connect uses the local mode, it starts the regular Spark
+            # session that starts Spark Connect server that sets `SparkSession._instantiatedSession`
+            # via SparkSession.__init__.
+            #
+            # We are getting the actual server port from the Spark session via Py4J to address
+            # the case when the server port is set to 0 (in which allocates an ephemeral port).
+            #
+            # This is only used in the test/development mode.
+            session = PySparkSession._instantiatedSession
 
-                jvm = PySparkSession._instantiatedSession._jvm
+            # 'spark.local.connect' is set when we use the local mode in Spark Connect.
+            if session is not None and session.conf.get("spark.local.connect", "0") == "1":
+
+                jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
-                    getattr(jvm.org.apache.spark.sql.connect.service, "SparkConnectService$"),
+                    getattr(
+                        jvm.org.apache.spark.sql.connect.service,  # type: ignore[union-attr]
+                        "SparkConnectService$",
+                    ),
                     "MODULE$",
                 ).localPort()
         return 15002
@@ -163,7 +176,7 @@ class ChannelBuilder:
         netloc = self.url.netloc.split(":")
         if len(netloc) == 1:
             self.host = netloc[0]
-            self.port = ChannelBuilder.DEFAULT_PORT
+            self.port = ChannelBuilder.default_port()
         elif len(netloc) == 2:
             self.host = netloc[0]
             self.port = int(netloc[1])

@@ -226,9 +226,11 @@ object SparkConnectService {
 
   private var server: Server = _
 
-  // For testing purpose.
+  // For testing purpose, it's package level private.
   private[connect] lazy val localPort = {
     assert(server != null)
+    // Return the actual local port being used. This can be different from the csonfigured port
+    // when the server binds to the port 0 as an example.
     server.getPort
   }
 

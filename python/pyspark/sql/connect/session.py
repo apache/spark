@@ -501,7 +501,8 @@ class SparkSession:
             default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
 
             if "SPARK_TESTING" in os.environ:
-                # TODO: explain avaliable port.
+                # For testing, we use 0 to use an ephemeral port to allow parallel testing.
+                # See also SPARK-42272.
                 overwrite_conf["spark.connect.grpc.binding.port"] = "0"
 
             def create_conf(**kwargs: Any) -> SparkConf:
