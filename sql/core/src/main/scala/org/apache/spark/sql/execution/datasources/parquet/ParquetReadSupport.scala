@@ -130,8 +130,8 @@ object ParquetReadSupport extends Logging {
       SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
     val useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get)
-    val timestampNTZEnabled = conf.getBoolean(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
-      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.defaultValue.get)
+    val inferTimestampNTZ = conf.getBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get)
     val ignoreMissingIds = conf.getBoolean(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key,
       SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.defaultValue.get)
 
@@ -152,7 +152,7 @@ object ParquetReadSupport extends Logging {
            |""".stripMargin)
     }
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
-      catalystRequestedSchema, caseSensitive, useFieldId, timestampNTZEnabled)
+      catalystRequestedSchema, caseSensitive, useFieldId, inferTimestampNTZ)
 
     // We pass two schema to ParquetRecordMaterializer:
     // - parquetRequestedSchema: the schema of the file data we want to read
@@ -195,9 +195,9 @@ object ParquetReadSupport extends Logging {
       catalystSchema: StructType,
       caseSensitive: Boolean,
       useFieldId: Boolean,
-      timestampNTZEnabled: Boolean): MessageType = {
+      inferTimestampNTZ: Boolean): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(
-      parquetSchema.asGroupType(), catalystSchema, caseSensitive, useFieldId, timestampNTZEnabled)
+      parquetSchema.asGroupType(), catalystSchema, caseSensitive, useFieldId, inferTimestampNTZ)
     if (clippedParquetFields.isEmpty) {
       ParquetSchemaConverter.EMPTY_MESSAGE
     } else {
@@ -415,11 +415,10 @@ object ParquetReadSupport extends Logging {
       structType: StructType,
       caseSensitive: Boolean,
       useFieldId: Boolean,
-      timestampNTZEnabled: Boolean): Seq[Type] = {
+      infterTimestampNTZ: Boolean): Seq[Type] = {
     val toParquet = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = false,
-      useFieldId = useFieldId,
-      timestampNTZEnabled = timestampNTZEnabled)
+      useFieldId = useFieldId)
     lazy val caseSensitiveParquetFieldMap =
         parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
     lazy val caseInsensitiveParquetFieldMap =
@@ -430,7 +429,7 @@ object ParquetReadSupport extends Logging {
     def matchCaseSensitiveField(f: StructField): Type = {
       caseSensitiveParquetFieldMap
           .get(f.name)
-          .map(clipParquetType(_, f.dataType, caseSensitive, useFieldId, timestampNTZEnabled))
+          .map(clipParquetType(_, f.dataType, caseSensitive, useFieldId, infterTimestampNTZ))
           .getOrElse(toParquet.convertField(f))
     }
 
@@ -446,7 +445,7 @@ object ParquetReadSupport extends Logging {
                 f.name, parquetTypesString)
             } else {
               clipParquetType(
-                parquetTypes.head, f.dataType, caseSensitive, useFieldId, timestampNTZEnabled)
+                parquetTypes.head, f.dataType, caseSensitive, useFieldId, infterTimestampNTZ)
             }
           }.getOrElse(toParquet.convertField(f))
     }
@@ -463,7 +462,7 @@ object ParquetReadSupport extends Logging {
               fieldId, parquetTypesString)
           } else {
             clipParquetType(
-              parquetTypes.head, f.dataType, caseSensitive, useFieldId, timestampNTZEnabled)
+              parquetTypes.head, f.dataType, caseSensitive, useFieldId, infterTimestampNTZ)
           }
         }.getOrElse {
           // When there is no ID match, we use a fake name to avoid a name match by accident

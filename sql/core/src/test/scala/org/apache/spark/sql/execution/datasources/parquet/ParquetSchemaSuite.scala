@@ -100,8 +100,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       timestampNTZEnabled: Boolean = true): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
-      outputTimestampType = outputTimestampType,
-      timestampNTZEnabled = timestampNTZEnabled)
+      outputTimestampType = outputTimestampType)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -2340,7 +2339,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         catalystSchema,
         caseSensitive,
         useFieldId = false,
-        timestampNTZEnabled = true)
+        inferTimestampNTZ = true)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2908,7 +2907,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           catalystSchema,
           caseSensitive = false,
           useFieldId = false,
-          timestampNTZEnabled = false)
+          inferTimestampNTZ = false)
       }
     }
 }

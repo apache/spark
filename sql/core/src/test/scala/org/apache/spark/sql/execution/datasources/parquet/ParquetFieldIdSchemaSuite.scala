@@ -48,7 +48,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         catalystSchema,
         caseSensitive = caseSensitive,
         useFieldId = useFieldId,
-        timestampNTZEnabled = timestampNTZEnabled)
+        inferTimestampNTZ = timestampNTZEnabled)
 
       // each fake name should be uniquely generated
       val fakeColumnNames = actual.getPaths.asScala.flatten.filter(_.startsWith(FAKE_COLUMN_NAME))

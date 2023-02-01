@@ -1129,13 +1129,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PARQUET_TIMESTAMP_NTZ_ENABLED =
+  val PARQUET_INFER_TIMESTAMP_NTZ_ENABLED =
     buildConf("spark.sql.parquet.timestampNTZ.enabled")
-      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
-        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
-        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
-        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
-        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
+      .doc("When enabled, Parquet timestamp columns with annotation isAdjustedToUTC = false " +
+        "are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet " +
+        "timestamp columns are inferred as TIMESTAMP_LTZ types.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -4943,7 +4941,7 @@ class SQLConf extends Serializable with Logging {
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
-  def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
+  def parquetInferTimestampNTZEnabled: Boolean = getConf(PARQUET_INFER_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
