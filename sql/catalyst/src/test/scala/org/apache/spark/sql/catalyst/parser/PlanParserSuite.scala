@@ -643,7 +643,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql1),
       errorClass = "INCOMPATIBLE_JOIN_TYPES",
-      parameters = Map("joinType1" -> "\"NATURAL\"", "joinType2" -> "\"CROSS\""),
+      parameters = Map("joinType1" -> "NATURAL", "joinType2" -> "CROSS"),
       sqlState = "42613",
       context = ExpectedContext(
         fragment = "natural cross join b",

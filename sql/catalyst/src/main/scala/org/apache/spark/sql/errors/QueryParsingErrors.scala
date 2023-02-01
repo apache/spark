@@ -163,8 +163,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INCOMPATIBLE_JOIN_TYPES",
       messageParameters = Map(
-        "joinType1" -> toSQLType(joinType1),
-        "joinType2" -> toSQLType(joinType2)),
+        "joinType1" -> joinType1.toUpperCase,
+        "joinType2" -> joinType2.toUpperCase),
       ctx = ctx)
   }
 

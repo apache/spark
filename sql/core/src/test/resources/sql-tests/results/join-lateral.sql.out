@@ -182,8 +182,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
   "sqlState" : "42613",
   "messageParameters" : {
-    "joinType1" : "\"LATERAL\"",
-    "joinType2" : "\"NATURAL\""
+    "joinType1" : "LATERAL",
+    "joinType2" : "NATURAL"
   },
   "queryContext" : [ {
     "objectType" : "",
