@@ -622,7 +622,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         // AggregateExpression should be computed on the unmodified value of its argument
         // expressions, so we should not replace any references to grouping expression
         // inside it.
-        case e: AggregateExpression =>
+        case e if AggregateExpression.isAggregate(e) =>
           aggsBuffer += e
           e
         case e if isPartOfAggregation(e) => e
@@ -2092,7 +2092,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           val attrCandidates = getAttrCandidates()
           val matched = attrCandidates.filter(a => resolver(a.name, colName))
           if (matched.length != expectedNumCandidates) {
-            throw QueryCompilationErrors.incompatibleViewSchemaChange(
+            throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
               viewName, colName, expectedNumCandidates, matched, viewDDL)
           }
           matched(ordinal)
