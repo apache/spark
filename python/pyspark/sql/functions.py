@@ -7682,8 +7682,9 @@ def array_distinct(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName") -> Column:
     """
-    Collection function: adds an item into a given array at a specified position. A position
-    specified beyond the size of the current array (plus additional element)
+    Collection function: adds an item into a given array at a specified array index.
+    Array indices start at 1 (or from the end if the index is negative).
+    Index specified beyond the size of the current array (plus additional element)
     is extended with 'null' elements.
 
     .. versionadded:: 3.4.0
@@ -7693,7 +7694,7 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     arr : :class:`~pyspark.sql.Column` or str
         name of column containing an array
     pos : :class:`~pyspark.sql.Column` or str
-        name of Numeric type column indicating position of insertion (starting index 1)
+        name of Numeric type column indicating position of insertion (starting at index 1, negative position is a start from the back of the array)
     value : :class:`~pyspark.sql.Column` or str
         name of column containing values for insertion into array
 
