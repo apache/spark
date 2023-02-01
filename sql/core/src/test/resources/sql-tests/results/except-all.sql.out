@@ -141,12 +141,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"ARRAY<INT>\"",
-    "dt2" : "\"INT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"ARRAY<INT>\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "EXCEPT ALL",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",

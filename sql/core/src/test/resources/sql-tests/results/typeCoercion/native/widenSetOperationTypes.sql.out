@@ -88,12 +88,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"TINYINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -114,12 +114,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"TINYINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -140,12 +140,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"TINYINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -166,12 +166,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"TINYINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -264,12 +264,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"SMALLINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -290,12 +290,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"SMALLINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -316,12 +316,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"SMALLINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -342,12 +342,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"SMALLINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -440,12 +440,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"INT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -466,12 +466,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"INT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -492,12 +492,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"INT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -518,12 +518,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"INT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -616,12 +616,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"BIGINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -642,12 +642,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"BIGINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -668,12 +668,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"BIGINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -694,12 +694,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"BIGINT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -792,12 +792,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"FLOAT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -818,12 +818,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"FLOAT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -844,12 +844,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"FLOAT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -870,12 +870,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"FLOAT\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -968,12 +968,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"DOUBLE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -994,12 +994,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"DOUBLE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1020,12 +1020,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"DOUBLE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1046,12 +1046,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"DOUBLE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1144,12 +1144,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"DECIMAL(10,0)\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1170,12 +1170,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"DECIMAL(10,0)\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1196,12 +1196,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"DECIMAL(10,0)\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1222,12 +1222,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"DECIMAL(10,0)\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1320,12 +1320,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"STRING\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"STRING\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1346,12 +1346,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"STRING\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"STRING\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1390,12 +1390,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TINYINT\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1416,12 +1416,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"SMALLINT\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1442,12 +1442,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"INT\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1468,12 +1468,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BIGINT\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1494,12 +1494,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"FLOAT\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1520,12 +1520,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DOUBLE\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1546,12 +1546,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DECIMAL(10,0)\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1572,12 +1572,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"STRING\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1607,12 +1607,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1633,12 +1633,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1659,12 +1659,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"BINARY\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1685,12 +1685,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TINYINT\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1711,12 +1711,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"SMALLINT\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1737,12 +1737,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"INT\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1763,12 +1763,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BIGINT\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1789,12 +1789,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"FLOAT\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1815,12 +1815,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DOUBLE\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1841,12 +1841,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DECIMAL(10,0)\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1867,12 +1867,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"STRING\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1893,12 +1893,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1927,12 +1927,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TIMESTAMP\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1953,12 +1953,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DATE\"",
-    "dt2" : "\"BOOLEAN\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1979,12 +1979,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TINYINT\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2005,12 +2005,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"SMALLINT\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2031,12 +2031,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"INT\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2057,12 +2057,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BIGINT\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2083,12 +2083,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"FLOAT\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2109,12 +2109,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DOUBLE\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2135,12 +2135,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DECIMAL(10,0)\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2170,12 +2170,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2196,12 +2196,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"TIMESTAMP\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2240,12 +2240,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"TINYINT\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2266,12 +2266,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"SMALLINT\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2292,12 +2292,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"INT\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2318,12 +2318,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BIGINT\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2344,12 +2344,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"FLOAT\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2370,12 +2370,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DOUBLE\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2396,12 +2396,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"DECIMAL(10,0)\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2431,12 +2431,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BINARY\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2457,12 +2457,12 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "\"BOOLEAN\"",
-    "dt2" : "\"DATE\"",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -2704,13 +2704,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         },
         errorClass = "INCOMPATIBLE_COLUMN_TYPE",
         parameters = Map(
+          "tableOrdinalNumber" -> "second",
+          "columnOrdinalNumber" -> "first",
+          "dataType2" -> "\"STRUCT<A:INT>\"",
           "operator" -> "EXCEPT",
-          "dt1" -> "\"STRUCT<A:INT>\"",
-          "dt2" -> "\"STRUCT<A:INT>\"",
           "hint" -> "",
-          "ci" -> "first",
-          "ti" -> "second"
-        ),
+          "dataType1" -> "\"STRUCT<A:INT>\""),
         context = ExpectedContext(
           fragment = "SELECT struct(1 a) EXCEPT (SELECT struct(2 A))",
           start = 0,

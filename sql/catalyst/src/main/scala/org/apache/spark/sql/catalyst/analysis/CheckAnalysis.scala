@@ -573,10 +573,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     errorClass = "INCOMPATIBLE_COLUMN_TYPE",
                     messageParameters = Map(
                       "operator" -> toSQLStmt(operator.nodeName),
-                      "ci" -> ordinalNumber(ci),
-                      "ti" -> ordinalNumber(ti + 1),
-                      "dt1" -> toSQLType(dt1.catalogString),
-                      "dt2" -> toSQLType(dt2.catalogString),
+                      "columnOrdinalNumber" -> ordinalNumber(ci),
+                      "tableOrdinalNumber" -> ordinalNumber(ti + 1),
+                      "dataType1" -> toSQLType(dt1.catalogString),
+                      "dataType2" -> toSQLType(dt2.catalogString),
                       "hint" -> extraHintForAnsiTypeCoercionPlan(operator)))
                 }
               }
