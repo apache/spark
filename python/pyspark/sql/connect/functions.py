@@ -2458,7 +2458,6 @@ def pandas_udf(*args: Any, **kwargs: Any) -> None:
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession

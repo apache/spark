@@ -575,7 +575,6 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
