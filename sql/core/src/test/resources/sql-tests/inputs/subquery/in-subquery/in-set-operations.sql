@@ -470,7 +470,7 @@ HAVING   t1b NOT IN
                 FROM   t3)
 ORDER BY t1c DESC NULLS LAST, t1i;
 
--- Correlation under set ops under IN - unsupported
+-- Correlated set ops inside IN - unsupported
 
 SELECT *
 FROM   t1

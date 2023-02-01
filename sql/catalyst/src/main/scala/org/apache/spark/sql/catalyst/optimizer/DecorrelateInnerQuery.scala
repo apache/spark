@@ -255,6 +255,20 @@ object DecorrelateInnerQuery extends PredicateHelper {
   /**
    * Rewrites a domain join cond so that it can be pushed to the right side of a
    * union/intersect/except operator.
+   *
+   * Example: Take a query like:
+   * select * from t0 join lateral (
+   *   select a from t1 where b < t0.x
+   *   union all
+   *   select b from t2 where c < t0.y)
+   *
+   * We have outer table with attributes [x#1, y#2] and after introducing DomainJoins the subquery
+   * is a Union where the left side has output [a#3, x#4, y#5] with DomainJoin [x#4, y#5]
+   * and the right side has output [b#6, x#7, y#8] with DomainJoin [x#7, y#8].
+   * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, because the output of a set op
+   * uses the attribute names from the left side. For the left side,
+   * those remain unchanged, while for the right side they are remapped to
+   * x#7 <=> x#1 and y#8 <=> y#2.
    */
   def pushDomainConditionsThroughSetOperation(
       conditions: Seq[Expression],
@@ -263,7 +277,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // The output attributes are always equal to the left child's output
     assert(setOp.output.size == child.output.size)
     val map = AttributeMap(setOp.output.zip(child.output))
-    conditions.map {
+    conditions.collect {
       // The left hand side is the domain attribute used in the inner query and the right hand side
       // is the attribute from the outer query. (See comment above in buildDomainAttrMap.)
       // We need to remap the attribute names used in the inner query (left hand side) to account
@@ -276,8 +290,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
       // between, which could change the attributes involved (e.g. CollapseProject).
       case EqualNullSafe(left: Attribute, right: Expression) =>
         EqualNullSafe(map.getOrElse(left, left), right)
-      case EqualTo(left: Attribute, right: Expression) =>
-        EqualTo(map.getOrElse(left, left), right)
     }
   }
 
@@ -287,22 +299,47 @@ object DecorrelateInnerQuery extends PredicateHelper {
    *
    * To rewrite the domain join on the right side, we need to remap the attributes in the domain
    * join cond, using the mapping between left and right sides in the semi/anti join cond.
-  */
+   *
+   * After DecorrelateInnerQuery, the domain join conds reference the output names of the
+   * INTERSECT/EXCEPT, which come from the left side. When rewriting the DomainJoin in the
+   * right child, we need to remap the domain attribute names to account for the different
+   * names in the left vs right child, similar to pushDomainConditionsThroughSetOperation.
+   * But after the rewrite to semi/anti join is performed, we instead need to do the remapping
+   * based on the semi/anti join cond which contains equi-joins between the left and right
+   * outputs.
+   *
+   * The domain conds will be like leftInner <=> outer, and the semi/anti join cond will be like
+   * leftInner <=> rightInner. We add additional domain conds rightInner <=> outer which are used
+   * to rewrite the right-side DomainJoin.
+   *
+   * Example: Take a query like:
+   * select * from t0 join lateral (
+   *   select a from t1 where b < x
+   *   intersect distinct
+   *   select b from t2 where c < y)
+   *
+   * Step 1:
+   * We have outer table with attributes [x#1, y#2] and after introducing DomainJoins the subquery
+   * is a Intersect where the left side has output [a#3, x#4, y#5] with DomainJoin [x#4, y#5]
+   * and the right side has output [b#6, x#7, y#8] with DomainJoin [x#7, y#8].
+   * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, because the output of a set op
+   * uses the attribute names from the left side.
+   *
+   * Step 2:
+   * ReplaceIntersectWithSemiJoin runs and transforms the Intersect to
+   * Join LeftSemi, (((a#3 <=> b#6) AND (x#4 <=> x#7)) AND (y#5 <=> y#8))
+   * with equi-joins between the left and right outputs.
+   *
+   * Step 3:
+   * We arrive at this function, which uses the semijoin condition to construct the domain join
+   * cond remapping for the right side: x#7 <=> x#1 and y#8 <=> y#2. These are appended to the
+   * original domain join cond.
+   */
   def pushDomainConditionsThroughSemiAntiJoin(
       domainJoinConditions: Seq[Expression],
       join: Join
   ) : Seq[Expression] = {
-    // After DecorrelateInnerQuery, the domain join conds reference the output names of the
-    // INTERSECT/EXCEPT, which come from the left side. When rewriting the DomainJoin in the
-    // right child, we need to remap the domain attribute names to account for the different
-    // names in the left vs right child, similar to pushDomainConditionsThroughSetOperation.
-    // But after the rewrite to semi/anti join is performed, we instead need to do the remapping
-    // based on the semi/anti join cond which contains equi-joins between the left and right
-    // outputs.
-    //
-    // The domain conds will be like leftInner <=> outer, and the semi/anti join cond will be like
-    // leftInner <=> rightInner. We add additional domain conds rightInner <=> outer which are used
-    // to rewrite the right-side DomainJoin.
+
     if (join.condition.isDefined
       && SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED)) {
       val transitiveConds = splitConjunctivePredicates(join.condition.get).collect {
@@ -311,9 +348,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
             case EqualNullSafe(domainInner: Attribute, domainOuter: Expression)
               if domainInner.semanticEquals(joinLeft) =>
               EqualNullSafe(joinRight, domainOuter)
-            case EqualTo(domainInner: Attribute, domainOuter: Expression)
-              if domainInner.semanticEquals(joinLeft) =>
-              EqualTo(joinRight, domainOuter)
           }
       }.flatten
       domainJoinConditions ++ transitiveConds
@@ -384,11 +418,14 @@ object DecorrelateInnerQuery extends PredicateHelper {
           s"Unable to rewrite domain join with conditions: $conditions\n$d.")
       }
     case s @ (_ : Union | _: SetOperation) =>
+      // Remap the domain attributes for the children of the set op - see comments on the function.
       s.mapChildren { child =>
         rewriteDomainJoins(outerPlan, child,
           pushDomainConditionsThroughSetOperation(conditions, s, child))
       }
     case j: Join if j.joinType == LeftSemi || j.joinType == LeftAnti =>
+      // For the INTERSECT/EXCEPT DISTINCT case, the set op is rewritten to a semi/anti join and we
+      // need to remap the domain attributes for the right child - see comments on the function.
       j.mapChildren { child =>
         rewriteDomainJoins(outerPlan, child,
           pushDomainConditionsThroughSemiAntiJoin(conditions, j))
