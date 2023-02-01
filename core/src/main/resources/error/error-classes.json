@@ -581,6 +581,35 @@
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
   },
+  "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
+    "message" : [
+      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
+      "Please try to re-create the view by running: <suggestion>."
+    ]
+  },
+  "INCOMPLETE_TYPE_DEFINITION" : {
+    "message" : [
+      "Incomplete complex type:"
+    ],
+    "subClass" : {
+      "ARRAY" : {
+        "message" : [
+          "The definition of \"ARRAY\" type is incomplete. You must provide an element type. For example: \"ARRAY<elementType>\"."
+        ]
+      },
+      "MAP" : {
+        "message" : [
+          "The definition of \"MAP\" type is incomplete. You must provide a key type and a value type. For example: \"MAP<TIMESTAMP, INT>\"."
+        ]
+      },
+      "STRUCT" : {
+        "message" : [
+          "The definition of \"STRUCT\" type is incomplete. You must provide at least one field type. For example: \"STRUCT<Field1: INT>\"."
+        ]
+      }
+    },
+    "sqlState" : "42K01"
+  },
   "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
     "message" : [
       "You may get a different result due to the upgrading to"
@@ -2771,17 +2800,6 @@
   "_LEGACY_ERROR_TEMP_1175" : {
     "message" : [
       "Unsupported data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1176" : {
-    "message" : [
-      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
-      "Please try to re-create the view by running: <viewDDL>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1177" : {
-    "message" : [
-      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1178" : {
