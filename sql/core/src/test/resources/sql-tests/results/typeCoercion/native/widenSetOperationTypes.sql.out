@@ -87,6 +87,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -113,6 +114,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -139,6 +141,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -165,6 +168,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -263,6 +267,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -289,6 +294,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -315,6 +321,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -341,6 +348,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -439,6 +447,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -465,6 +474,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -491,6 +501,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -517,6 +528,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -615,6 +627,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -641,6 +654,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -667,6 +681,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -693,6 +708,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -791,6 +807,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -817,6 +834,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -843,6 +861,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -869,6 +888,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -967,6 +987,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -993,6 +1014,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -1019,6 +1041,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -1045,6 +1068,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -1143,6 +1167,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -1169,6 +1194,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -1195,6 +1221,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -1221,6 +1248,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -1319,6 +1347,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -1345,6 +1374,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -1389,6 +1419,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TINYINT\"",
@@ -1415,6 +1446,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"SMALLINT\"",
@@ -1441,6 +1473,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"INT\"",
@@ -1467,6 +1500,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BIGINT\"",
@@ -1493,6 +1527,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"FLOAT\"",
@@ -1519,6 +1554,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DOUBLE\"",
@@ -1545,6 +1581,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DECIMAL(10,0)\"",
@@ -1571,6 +1608,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"STRING\"",
@@ -1606,6 +1644,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -1632,6 +1671,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -1658,6 +1698,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -1684,6 +1725,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TINYINT\"",
@@ -1710,6 +1752,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"SMALLINT\"",
@@ -1736,6 +1779,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"INT\"",
@@ -1762,6 +1806,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BIGINT\"",
@@ -1788,6 +1833,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"FLOAT\"",
@@ -1814,6 +1860,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DOUBLE\"",
@@ -1840,6 +1887,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DECIMAL(10,0)\"",
@@ -1866,6 +1914,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"STRING\"",
@@ -1892,6 +1941,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -1926,6 +1976,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TIMESTAMP\"",
@@ -1952,6 +2003,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DATE\"",
@@ -1978,6 +2030,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TINYINT\"",
@@ -2004,6 +2057,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"SMALLINT\"",
@@ -2030,6 +2084,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"INT\"",
@@ -2056,6 +2111,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BIGINT\"",
@@ -2082,6 +2138,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"FLOAT\"",
@@ -2108,6 +2165,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DOUBLE\"",
@@ -2134,6 +2192,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DECIMAL(10,0)\"",
@@ -2169,6 +2228,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -2195,6 +2255,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",
@@ -2239,6 +2300,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"TINYINT\"",
@@ -2265,6 +2327,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"SMALLINT\"",
@@ -2291,6 +2354,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"INT\"",
@@ -2317,6 +2381,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BIGINT\"",
@@ -2343,6 +2408,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"FLOAT\"",
@@ -2369,6 +2435,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DOUBLE\"",
@@ -2395,6 +2462,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"DECIMAL(10,0)\"",
@@ -2430,6 +2498,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BINARY\"",
@@ -2456,6 +2525,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"BOOLEAN\"",

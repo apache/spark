@@ -140,6 +140,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
     "dataType1" : "\"ARRAY<INT>\"",
