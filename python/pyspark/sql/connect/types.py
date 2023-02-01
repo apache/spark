@@ -201,7 +201,7 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         json_value = {}
         if schema.udt.HasField("python_class"):
             json_value["pyClass"] = schema.udt.python_class
-        if schema.udt.HasField("python_class"):
+        if schema.udt.HasField("serialized_python_class"):
             json_value["serializedClass"] = schema.udt.serialized_python_class
         return UserDefinedType.fromJson(json_value)
     else:
