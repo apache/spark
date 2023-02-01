@@ -105,7 +105,7 @@
           <artifactSet>
             <includes>
               <include>com.google.guava:*</include>
-              <include>io.grpc:*:</include>
+              <include>io.grpc:*</include>
               <include>com.google.protobuf:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
@@ -114,6 +114,9 @@
             <relocation>
               <pattern>io.grpc</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.grpc</shadedPattern>
+              <includes>
+                <include>io.grpc:*</include>
+              </includes>
             </relocation>
             <relocation>
               <pattern>com.google.protobuf</pattern>
