@@ -1642,3 +1642,147 @@ DROP VIEW IF EXISTS fmtTable
 struct<>
 -- !query output
 
+
+
+-- !query
+select luhn_check('4111111111111111')
+-- !query schema
+struct<luhn_check(4111111111111111):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('5500000000000004')
+-- !query schema
+struct<luhn_check(5500000000000004):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('340000000000009')
+-- !query schema
+struct<luhn_check(340000000000009):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('6011000000000004')
+-- !query schema
+struct<luhn_check(6011000000000004):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('6011000000000005')
+-- !query schema
+struct<luhn_check(6011000000000005):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('378282246310006')
+-- !query schema
+struct<luhn_check(378282246310006):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('0')
+-- !query schema
+struct<luhn_check(0):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('4111111111111111    ')
+-- !query schema
+struct<luhn_check(4111111111111111    ):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('4111111 111111111')
+-- !query schema
+struct<luhn_check(4111111 111111111):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(' 4111111111111111')
+-- !query schema
+struct<luhn_check( 4111111111111111):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('')
+-- !query schema
+struct<luhn_check():boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('  ')
+-- !query schema
+struct<luhn_check(  ):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('510B105105105106')
+-- !query schema
+struct<luhn_check(510B105105105106):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('ABCDED')
+-- !query schema
+struct<luhn_check(ABCDED):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(null)
+-- !query schema
+struct<luhn_check(NULL):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select luhn_check(6011111111111117)
+-- !query schema
+struct<luhn_check(6011111111111117):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check(6011111111111118)
+-- !query schema
+struct<luhn_check(6011111111111118):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(123.456)
+-- !query schema
+struct<luhn_check(123.456):boolean>
+-- !query output
+false
