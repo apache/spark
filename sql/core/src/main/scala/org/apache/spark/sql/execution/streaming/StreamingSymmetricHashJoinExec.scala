@@ -219,14 +219,14 @@ case class StreamingSymmetricHashJoinExec(
 
   override def shortName: String = "symmetricHashJoin"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     val watermarkUsedForStateCleanup =
       stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty
 
     // Latest watermark value is more than that used in this previous executed plan
     val watermarkHasChanged =
       eventTimeWatermarkForEviction.isDefined &&
-        newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+        newInputWatermark > eventTimeWatermarkForEviction.get
 
     watermarkUsedForStateCleanup && watermarkHasChanged
   }
@@ -699,4 +699,13 @@ case class StreamingSymmetricHashJoinExec(
     } else {
       Nil
     }
+
+  override def produceWatermark(minInputWatermarkMs: Long): Long = {
+    val (leftStateWatermark, rightStateWatermark) =
+      StreamingSymmetricHashJoinHelper.getStateWatermark(
+        left.output, right.output, leftKeys, rightKeys, condition.full, Some(minInputWatermarkMs))
+
+    (Seq(leftStateWatermark, rightStateWatermark).filter(_.isDefined).map(_.get) ++
+      Seq(minInputWatermarkMs)).min
+  }
 }
