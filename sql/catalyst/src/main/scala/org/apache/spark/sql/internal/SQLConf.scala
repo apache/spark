@@ -1130,10 +1130,13 @@ object SQLConf {
       .createWithDefault(false)
 
   val PARQUET_INFER_TIMESTAMP_NTZ_ENABLED =
-    buildConf("spark.sql.parquet.timestampNTZ.enabled")
+    buildConf("spark.sql.parquet.inferTimestampNTZ.enabled")
       .doc("When enabled, Parquet timestamp columns with annotation isAdjustedToUTC = false " +
         "are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet " +
-        "timestamp columns are inferred as TIMESTAMP_LTZ types.")
+        "timestamp columns are inferred as TIMESTAMP_LTZ types. Note that Spark writes the " +
+        "output schema into Parquet's footer metadata on file writing and leverages it on file " +
+        "reading. Thus this configuration only affects the schema inference on Parquet files " +
+        "which are not written by Spark.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
