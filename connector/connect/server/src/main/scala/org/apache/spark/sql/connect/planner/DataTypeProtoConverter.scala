@@ -119,9 +119,9 @@ object DataTypeProtoConverter {
   }
 
   private def toCatalystUDT(t: proto.DataType.UDT): UserDefinedType[_] = {
-    if (t.getType != "udf") {
+    if (t.getType != "udt") {
       throw InvalidPlanInput(
-        s"""UserDefinedType requires the 'type' field to be 'udf', but got '${t.getType}'.""")
+        s"""UserDefinedType requires the 'type' field to be 'udt', but got '${t.getType}'.""")
     }
 
     if (t.hasJvmClass) {
