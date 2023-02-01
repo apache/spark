@@ -584,7 +584,8 @@
   "INCOMPATIBLE_COLUMN_TYPE" : {
     "message" : [
       "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
-    ]
+    ],
+    "sqlState" : "42825"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
