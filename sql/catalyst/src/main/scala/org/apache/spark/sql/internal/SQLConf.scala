@@ -2131,6 +2131,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SORT_MERGE_JOIN_BATCH_SIZE =
+    buildConf("spark.sql.codegen.join.sortMergeJoinBatchSize")
+      .internal()
+      .doc("The buffered side batch size in SortMergeJoin")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(65535)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
