@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import org.antlr.v4.runtime.ParserRuleContext
 
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -163,8 +165,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INCOMPATIBLE_JOIN_TYPES",
       messageParameters = Map(
-        "joinType1" -> joinType1.toUpperCase,
-        "joinType2" -> joinType2.toUpperCase),
+        "joinType1" -> joinType1.toUpperCase(Locale.ROOT),
+        "joinType2" -> joinType2.toUpperCase(Locale.ROOT)),
       ctx = ctx)
   }
 
