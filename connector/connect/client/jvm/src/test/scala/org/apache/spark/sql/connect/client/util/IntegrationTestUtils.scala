@@ -60,7 +60,8 @@ object IntegrationTestUtils {
         f.getName.startsWith(sbtName) && f.getName.endsWith(".jar")) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
-        f.getName.startsWith(mvnName) && f.getName.endsWith(".jar"))
+        f.getName.startsWith(mvnName) &&
+        f.getName.endsWith(s"${org.apache.spark.SPARK_VERSION}.jar"))
     }
     // It is possible we found more than one: one built by maven, and another by SBT
     assert(jars.nonEmpty, s"Failed to find the jar inside folder: ${targetDir.getCanonicalPath}")
