@@ -581,6 +581,11 @@
     ],
     "sqlState" : "42818"
   },
+  "INCOMPATIBLE_COLUMN_TYPE" : {
+    "message" : [
+      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>."
+    ]
+  },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
@@ -5219,11 +5224,6 @@
   "_LEGACY_ERROR_TEMP_2428" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2430" : {
-    "message" : [
-      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2431" : {

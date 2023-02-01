@@ -2702,11 +2702,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2430",
+        errorClass = "INCOMPATIBLE_COLUMN_TYPE",
         parameters = Map(
           "operator" -> "EXCEPT",
-          "dt1" -> "struct<A:int>",
-          "dt2" -> "struct<a:int>",
+          "dt1" -> "\"STRUCT<A:INT>\"",
+          "dt2" -> "\"STRUCT<A:INT>\"",
           "hint" -> "",
           "ci" -> "first",
           "ti" -> "second"

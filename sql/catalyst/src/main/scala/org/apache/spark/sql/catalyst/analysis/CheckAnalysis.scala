@@ -570,13 +570,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 // SPARK-18058: we shall not care about the nullability of columns
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   e.failAnalysis(
-                    errorClass = "_LEGACY_ERROR_TEMP_2430",
+                    errorClass = "INCOMPATIBLE_COLUMN_TYPE",
                     messageParameters = Map(
                       "operator" -> toSQLStmt(operator.nodeName),
                       "ci" -> ordinalNumber(ci),
                       "ti" -> ordinalNumber(ti + 1),
-                      "dt1" -> dt1.catalogString,
-                      "dt2" -> dt2.catalogString,
+                      "dt1" -> toSQLType(dt1.catalogString),
+                      "dt2" -> toSQLType(dt2.catalogString),
                       "hint" -> extraHintForAnsiTypeCoercionPlan(operator)))
                 }
               }
