@@ -137,8 +137,8 @@ abstract class PartitioningAwareFileIndex(
   }
 
   /** Returns the list of files that will be read when scanning this relation. */
-  override def inputFiles: Array[SparkPath] =
-    allFiles().map(SparkPath.fromFileStatus).toArray
+  override def inputFiles: Array[String] =
+    allFiles().map(fs => SparkPath.fromFileStatus(fs).urlEncoded).toArray
 
   override def sizeInBytes: Long = allFiles().map(_.getLen).sum
 
