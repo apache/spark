@@ -460,7 +460,6 @@ class ParquetToSparkSchemaConverter(
  * @param outputTimestampType which parquet timestamp type to use when writing.
  * @param useFieldId whether we should include write field id to Parquet schema. Set this to false
  *        via `spark.sql.parquet.fieldId.write.enabled = false` to disable writing field ids.
- * @param timestampNTZEnabled whether TIMESTAMP_NTZ type support is enabled.
  */
 class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,

@@ -39,8 +39,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
       catalystSchema: StructType,
       expectedSchema: String,
       caseSensitive: Boolean = true,
-      useFieldId: Boolean = true,
-      timestampNTZEnabled: Boolean = true): Unit = {
+      useFieldId: Boolean = true): Unit = {
     test(s"Clipping with field id - $testName") {
       val fileSchema = MessageTypeParser.parseMessageType(parquetSchema)
       val actual = ParquetReadSupport.clipParquetSchema(
