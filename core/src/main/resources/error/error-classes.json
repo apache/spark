@@ -1532,6 +1532,11 @@
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
         ]
       },
+      "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
+        "message" : [
+          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
+        ]
+      },
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
