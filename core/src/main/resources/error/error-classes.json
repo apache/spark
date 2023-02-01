@@ -19,7 +19,7 @@
   },
   "AMBIGUOUS_REFERENCE_TO_FIELDS" : {
     "message" : [
-      "Ambiguous reference to fields <fields>."
+      "Ambiguous reference to the field <field>. It appears <count> times in the schema."
     ],
     "sqlState" : "42000"
   },
@@ -746,7 +746,7 @@
   },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
-      "Can't extract value from <base>: need a complex type [struct, array, map] but got <other>."
+      "Can't extract a value from <base>. Need a complex type [struct, array, map] but got <other>."
     ],
     "sqlState" : "42000"
   },
@@ -758,7 +758,7 @@
   },
   "INVALID_EXTRACT_FIELD_TYPE" : {
     "message" : [
-      "Field name should be String Literal, but it's <extraction>."
+      "Field name should be a non-null string literal, but it's <extraction>."
     ],
     "sqlState" : "42000"
   },

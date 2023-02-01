@@ -1118,13 +1118,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       case StructType(_) =>
         new AnalysisException(
           errorClass = "INVALID_EXTRACT_FIELD_TYPE",
-          messageParameters = Map("extraction" -> extraction.toString))
+          messageParameters = Map("extraction" -> toSQLExpr(extraction)))
       case other =>
         new AnalysisException(
           errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
           messageParameters = Map(
-            "base" -> child.toString,
-            "other" -> other.catalogString))
+            "base" -> toSQLExpr(child),
+            "other" -> toSQLType(other)))
     }
   }
 
@@ -2102,10 +2102,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "fields" -> fields.map(f => toSQLId(f.name)).mkString(", ")))
   }
 
-  def ambiguousReferenceToFieldsError(fields: String): Throwable = {
+  def ambiguousReferenceToFieldsError(field: String, numberOfAppearance: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
-      messageParameters = Map("fields" -> fields))
+      messageParameters = Map("field" -> toSQLId(field), "count" -> numberOfAppearance.toString))
   }
 
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {

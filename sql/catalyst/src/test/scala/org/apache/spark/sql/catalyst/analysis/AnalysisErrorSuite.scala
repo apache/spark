@@ -372,13 +372,13 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "ambiguous field",
     nestedRelation.select($"top.duplicateField"),
-    "Ambiguous reference to fields" :: "duplicateField" :: Nil,
+    "Ambiguous reference to the field" :: "duplicateField" :: "2" :: Nil,
     caseSensitive = false)
 
   errorTest(
     "ambiguous field due to case insensitivity",
     nestedRelation.select($"top.differentCase"),
-    "Ambiguous reference to fields" :: "differentCase" :: "differentcase" :: Nil,
+    "Ambiguous reference to the field" :: "differentCase" :: "2" :: Nil,
     caseSensitive = false)
 
   errorClassTest(

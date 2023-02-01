@@ -47,7 +47,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
     val exception = intercept[AnalysisException] {
       sql("SELECT a[0].b from nested").queryExecution.analyzed
     }
-    assert(exception.getMessage.contains("Ambiguous reference to fields"))
+    assert(exception.getMessage.contains("Ambiguous reference to the field `b`"))
   }
 
   createQueryTest("table.attr",

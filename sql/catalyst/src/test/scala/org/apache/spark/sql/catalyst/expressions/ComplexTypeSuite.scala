@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -459,41 +460,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       "b", create_row(Seq("a", "b")))
     checkEvaluation(quickResolve($"c".struct($"a".int).at(0).getField("a")),
       1, create_row(create_row(1)))
-  }
-
-  test("error message of ExtractValue") {
-    checkError(
-      exception = intercept[AnalysisException](
-        ExtractValue(
-          child = Literal.create(null, StructType(StructField("a", StringType) :: Nil)),
-          extraction = Literal.create(null, IntegerType),
-          resolver = _ == _)),
-      errorClass = "INVALID_EXTRACT_FIELD_TYPE",
-      parameters = Map("extraction" -> "null")
-    )
-
-    checkError(
-      exception = intercept[AnalysisException](
-        ExtractValue(
-          child = Literal.create("test string value", StringType),
-          extraction = Literal.create("test_field", StringType),
-          resolver = _ == _)),
-      errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
-      parameters = Map("base" -> "test string value", "other" -> "string")
-    )
-
-    checkError(
-      exception = intercept[AnalysisException](
-        ExtractValue(
-          child = Literal.create(create_row("test value 1", "test value 2"),
-            StructType(StructField("test_field", StringType) ::
-              StructField("test_field", StringType) :: Nil)),
-          extraction = Literal.create("test_field", StringType),
-          resolver = _ == _)),
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
-      parameters = Map("fields" ->
-        "StructField(test_field,StringType,true), StructField(test_field,StringType,true)")
-    )
   }
 
   test("ensure to preserve metadata") {

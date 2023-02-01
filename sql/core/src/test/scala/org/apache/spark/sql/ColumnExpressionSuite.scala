@@ -1097,7 +1097,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             nullable = false))))
 
       structLevel2.withColumn("a", $"a".withField("a.b", lit(2)))
-    }.getMessage should include("Ambiguous reference to fields")
+    }.getMessage should include("Ambiguous reference to the field `a`")
   }
 
   test("withField should add field with no name") {
@@ -1650,7 +1650,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     intercept[AnalysisException] {
       sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
         .select($"struct_col".withField("a.c", lit(3)))
-    }.getMessage should include("Ambiguous reference to fields")
+    }.getMessage should include("Ambiguous reference to the field `a`")
 
     checkAnswer(
       sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
@@ -1872,7 +1872,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             nullable = false))))
 
       structLevel2.withColumn("a", $"a".dropFields("a.b"))
-    }.getMessage should include("Ambiguous reference to fields")
+    }.getMessage should include("Ambiguous reference to the field `a`")
   }
 
   test("dropFields should drop field in struct") {
@@ -2211,7 +2211,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     intercept[AnalysisException] {
       sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
         .select($"struct_col".dropFields("a.c"))
-    }.getMessage should include("Ambiguous reference to fields")
+    }.getMessage should include("Ambiguous reference to the field `a`")
 
     checkAnswer(
       sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2, 'c', 3)) struct_col")

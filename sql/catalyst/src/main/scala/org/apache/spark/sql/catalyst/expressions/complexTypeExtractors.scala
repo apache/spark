@@ -82,8 +82,8 @@ object ExtractValue {
     if (ordinal == -1) {
       throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields)
     } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(
-        fields.filter(checkField).mkString(", "))
+      val numberOfAppearance = fields.count(checkField)
+      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(fieldName, numberOfAppearance)
     } else {
       ordinal
     }
