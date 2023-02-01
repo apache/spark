@@ -932,7 +932,7 @@ class Expression(google.protobuf.message.Message):
     UNRESOLVED_EXTRACT_VALUE_FIELD_NUMBER: builtins.int
     UPDATE_FIELDS_FIELD_NUMBER: builtins.int
     UNRESOLVED_NAMED_LAMBDA_VARIABLE_FIELD_NUMBER: builtins.int
-    SCALAR_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
+    COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -965,7 +965,7 @@ class Expression(google.protobuf.message.Message):
         self,
     ) -> global___Expression.UnresolvedNamedLambdaVariable: ...
     @property
-    def scalar_inline_user_defined_function(self) -> global___ScalarInlineUserDefinedFunction: ...
+    def common_inline_user_defined_function(self) -> global___CommonInlineUserDefinedFunction: ...
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
@@ -989,7 +989,7 @@ class Expression(google.protobuf.message.Message):
         update_fields: global___Expression.UpdateFields | None = ...,
         unresolved_named_lambda_variable: global___Expression.UnresolvedNamedLambdaVariable
         | None = ...,
-        scalar_inline_user_defined_function: global___ScalarInlineUserDefinedFunction | None = ...,
+        common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -999,6 +999,8 @@ class Expression(google.protobuf.message.Message):
             b"alias",
             "cast",
             b"cast",
+            "common_inline_user_defined_function",
+            b"common_inline_user_defined_function",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1009,8 +1011,6 @@ class Expression(google.protobuf.message.Message):
             b"lambda_function",
             "literal",
             b"literal",
-            "scalar_inline_user_defined_function",
-            b"scalar_inline_user_defined_function",
             "sort_order",
             b"sort_order",
             "unresolved_attribute",
@@ -1038,6 +1038,8 @@ class Expression(google.protobuf.message.Message):
             b"alias",
             "cast",
             b"cast",
+            "common_inline_user_defined_function",
+            b"common_inline_user_defined_function",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1048,8 +1050,6 @@ class Expression(google.protobuf.message.Message):
             b"lambda_function",
             "literal",
             b"literal",
-            "scalar_inline_user_defined_function",
-            b"scalar_inline_user_defined_function",
             "sort_order",
             b"sort_order",
             "unresolved_attribute",
@@ -1087,13 +1087,13 @@ class Expression(google.protobuf.message.Message):
         "unresolved_extract_value",
         "update_fields",
         "unresolved_named_lambda_variable",
-        "scalar_inline_user_defined_function",
+        "common_inline_user_defined_function",
         "extension",
     ] | None: ...
 
 global___Expression = Expression
 
-class ScalarInlineUserDefinedFunction(google.protobuf.message.Message):
+class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
@@ -1142,7 +1142,7 @@ class ScalarInlineUserDefinedFunction(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["function", b"function"]
     ) -> typing_extensions.Literal["python_udf"] | None: ...
 
-global___ScalarInlineUserDefinedFunction = ScalarInlineUserDefinedFunction
+global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
 class PythonUDF(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

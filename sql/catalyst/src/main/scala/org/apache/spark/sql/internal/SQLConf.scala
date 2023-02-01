@@ -443,6 +443,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
+    buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
+      .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
+        " It can preserve the output partitioning and ordering." +
+        " Negative value means disable this optimization.")
+      .internal()
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(100)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -3511,8 +3521,9 @@ object SQLConf {
     buildConf("spark.sql.inferTimestampNTZInDataSources.enabled")
       .doc("When true, the TimestampNTZ type is the prior choice of the schema inference " +
         "over built-in data sources. Otherwise, the inference result will be TimestampLTZ for " +
-        "backward compatibility. As a result, for JSON/CSV files written with TimestampNTZ " +
-        "columns, the inference results will still be of TimestampLTZ types.")
+        "backward compatibility. As a result, for JSON/CSV files and partition directories  " +
+        "written with TimestampNTZ columns, the inference results will still be of TimestampLTZ " +
+        "types.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -4806,6 +4817,16 @@ class SQLConf extends Serializable with Logging {
   }
 
   def inferTimestampNTZInDataSources: Boolean = getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)
+
+  // Preferred timestamp type in schema reference when a column can be either Timestamp type or
+  // TimestampNTZ type.
+  def timestampTypeInSchemaInference: AtomicType = {
+    if (getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)) {
+      TimestampNTZType
+    } else {
+      TimestampType
+    }
+  }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
