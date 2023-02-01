@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOpti
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType, TimestampNTZType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType}
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -1443,7 +1443,6 @@ object HiveExternalCatalog {
 
   private[spark] def isHiveCompatibleDataType(dt: DataType): Boolean = dt match {
     case _: AnsiIntervalType => false
-    case _: TimestampNTZType => false
     case s: StructType => s.forall(f => isHiveCompatibleDataType(f.dataType))
     case a: ArrayType => isHiveCompatibleDataType(a.elementType)
     case m: MapType =>

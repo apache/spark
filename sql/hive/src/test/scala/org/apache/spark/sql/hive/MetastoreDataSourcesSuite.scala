@@ -1449,7 +1449,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         "interval year to month, interval hour, interval month, " +
         "struct<a:int,b:interval hour to second>, " +
         "array<interval year>, map<int,interval day>, " +
-        "map<interval minute to second,string>, timestamp_ntz. " +
+        "map<interval minute to second,string>. " +
         s"Persisting data source table `$SESSION_CATALOG_NAME`.`default`.`t` into Hive " +
         "metastore in Spark SQL specific format, which is NOT compatible with Hive."
       val actualMessages = logAppender.loggingEvents
