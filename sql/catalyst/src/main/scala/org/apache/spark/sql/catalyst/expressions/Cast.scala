@@ -2519,8 +2519,8 @@ case class CheckOverflowInTableInsert(child: Expression, columnName: String)
   private def getCast: Option[Cast] = child match {
     case c: Cast =>
       Some(c)
-    case ExpressionProxy(c, _, _) =>
-      Some(c.asInstanceOf[Cast])
+    case ExpressionProxy(c: Cast, _, _) =>
+      Some(c)
     case _ => None
   }
 
@@ -2540,12 +2540,12 @@ case class CheckOverflowInTableInsert(child: Expression, columnName: String)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     getCast match {
-      case Some(child) => doGenCodeWithNewErrorMsg(ctx, ev, child)
+      case Some(child) => doGenCodeWithBetterErrorMsg(ctx, ev, child)
       case None => child.genCode(ctx)
     }
   }
 
-  def doGenCodeWithNewErrorMsg(ctx: CodegenContext, ev: ExprCode, child: Cast): ExprCode = {
+  def doGenCodeWithBetterErrorMsg(ctx: CodegenContext, ev: ExprCode, child: Cast): ExprCode = {
     val childGen = child.genCode(ctx)
     val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
     val fromDt =
