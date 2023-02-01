@@ -7693,7 +7693,7 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     arr : :class:`~pyspark.sql.Column` or str
         name of column containing an array
     pos : :class:`~pyspark.sql.Column` or str
-        name of Numeric type column indicating position of insertion (starting index 0)
+        name of Numeric type column indicating position of insertion (starting index 1)
     value : :class:`~pyspark.sql.Column` or str
         name of column containing values for insertion into array
 

@@ -4602,10 +4602,10 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 0)",
+  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1)",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3, 4), 4, 5);
+      > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
        [1,2,3,4,5]
       > SELECT _FUNC_(array(5, 3, 2, 1), -3, 4);
        [5,4,3,2,1]
@@ -4671,7 +4671,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     var posInt = pos.asInstanceOf[Int]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
-    val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements() - 1)
+    val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
 
     if (newPosExtendsArrayLeft) {
       // special case- if the new position is negative but larger than the current array size
@@ -4698,6 +4698,8 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     } else {
       if (posInt < 0) {
         posInt = posInt + baseArr.numElements()
+      } else if (posInt > 0) {
+        posInt = posInt - 1
       }
 
       val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
@@ -4747,7 +4749,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |int $adjustedAllocIdx = 0;
          |boolean $insertedItemIsNull = ${itemExpr.isNull};
          |
-         |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements() - 1)) {
+         |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
          |
          |  $resLength = java.lang.Math.abs($pos) + 1;
          |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
@@ -4769,9 +4771,11 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |  ${ev.value} = $values;
          |} else {
          |
-         |  $itemInsertionIndex = $pos;
+         |  $itemInsertionIndex = 0;
          |  if ($pos < 0) {
-         |    $itemInsertionIndex = $itemInsertionIndex + $arr.numElements();
+         |    $itemInsertionIndex = $pos + $arr.numElements();
+         |  } else if ($pos > 0) {
+         |    $itemInsertionIndex = $pos - 1;
          |  }
          |
          |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
