@@ -50,7 +50,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * maxNumOverlapping <- ceil(windowDuration / slideDuration)
    * for (i <- 0 until maxNumOverlapping)
    *   lastStart <- timestamp - (timestamp - startTime) % slideDuration
-   *   lastStartAdjusted = (timestamp < startTime) ? lastStart - slideDuration : lastStart
+   *   lastStartAdjusted <- (timestamp < startTime) ? lastStart - slideDuration : lastStart
    *   windowStart <- lastStartAdjusted - i * slideDuration
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
