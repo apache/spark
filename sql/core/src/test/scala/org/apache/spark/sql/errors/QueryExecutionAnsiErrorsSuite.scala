@@ -179,7 +179,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
     }
   }
 
-  test("interpreted CheckOverflowInTableInsert with CaseWhen should throw an exception") {
+  test("SPARK-42286: CheckOverflowInTableInsert with CaseWhen should throw an exception") {
     val caseWhen = CaseWhen(
       Seq((Literal(true), Cast(Literal.apply(12345678901234567890D), ByteType))), None)
     checkError(
@@ -192,6 +192,26 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "targetType" -> ("\"TINYINT\""),
         "ansiConfig" -> ansiConf)
     )
+  }
+
+  test("SPARK-42286: End-to-end query with Case When throwing CAST_OVERFLOW exception") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (x double) USING parquet")
+      sql("insert into t1 values (1.2345678901234567E19D)")
+      sql("CREATE TABLE t2 (x tinyint) USING parquet")
+      val insertCmd = "insert into t2 select 0 - (case when x = 1.2345678901234567E19D " +
+        "then 1.2345678901234567E19D else x end) from t1 where x = 1.2345678901234567E19D;"
+      checkError(
+        exception = intercept[SparkException] {
+          sql(insertCmd).collect()
+        }.getCause.getCause.asInstanceOf[SparkThrowable],
+        errorClass = "CAST_OVERFLOW",
+        parameters = Map("value" -> "-1.2345678901234567E19D",
+          "sourceType" -> "\"DOUBLE\"",
+          "targetType" -> "\"TINYINT\"",
+          "ansiConfig" -> ansiConf),
+        sqlState = "22003")
+    }
   }
 
   test("SPARK-39981: interpreted CheckOverflowInTableInsert should throw an exception") {
