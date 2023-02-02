@@ -411,40 +411,37 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   test("simple scan with LIMIT") {
-    val df = sql(s"SELECT * FROM $catalogAndNamespace." +
+    val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
       s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1")
     assert(limitPushed(df, 1))
     val rows = df.collect()
     assert(rows.length === 1)
-    assert(rows(0).getInt(0) === 1)
-    assert(rows(0).getString(1) === "amy")
-    assert(rows(0).getDecimal(2) === new java.math.BigDecimal("10000.00"))
-    assert(rows(0).getDouble(3) === 1000d)
+    assert(rows(0).getString(0) === "amy")
+    assert(rows(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+    assert(rows(0).getDouble(2) === 1000d)
   }
 
   test("simple scan with top N") {
     Seq(NullOrdering.values()).flatten.foreach { nullOrdering =>
-      val df1 = sql(s"SELECT * FROM $catalogAndNamespace." +
+      val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 ORDER BY salary $nullOrdering LIMIT 1")
       assert(limitPushed(df1, 1))
       checkSortRemoved(df1)
       val rows1 = df1.collect()
       assert(rows1.length === 1)
-      assert(rows1(0).getInt(0) === 1)
-      assert(rows1(0).getString(1) === "cathy")
-      assert(rows1(0).getDecimal(2) === new java.math.BigDecimal("9000.00"))
-      assert(rows1(0).getDouble(3) === 1200d)
+      assert(rows1(0).getString(0) === "cathy")
+      assert(rows1(0).getDecimal(1) === new java.math.BigDecimal("9000.00"))
+      assert(rows1(0).getDouble(2) === 1200d)
 
-      val df2 = sql(s"SELECT * FROM $catalogAndNamespace." +
+      val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 ORDER BY bonus DESC $nullOrdering LIMIT 1")
       assert(limitPushed(df2, 1))
       checkSortRemoved(df2)
       val rows2 = df2.collect()
       assert(rows2.length === 1)
-      assert(rows2(0).getInt(0) === 2)
-      assert(rows2(0).getString(1) === "david")
-      assert(rows2(0).getDecimal(2) === new java.math.BigDecimal("10000.00"))
-      assert(rows2(0).getDouble(3) === 1300d)
+      assert(rows2(0).getString(0) === "david")
+      assert(rows2(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+      assert(rows2(0).getDouble(2) === 1300d)
     }
   }
 

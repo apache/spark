@@ -176,28 +176,24 @@ private case object OracleDialect extends JdbcDialect {
   }
 
   override def getLimitClause(limit: Integer): String = {
-    if (limit > 0 ) s"rownum <= $limit" else ""
+    // Oracle doesn't support LIMIT clause.
+    // We can use rownum <= n to limit the number of rows in the result set.
+    if (limit > 0 ) s"WHERE rownum <= $limit" else ""
   }
 
   class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
     extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
-      // Oracle doesn't support LIMIT clause.
-      // We can use rownum <= n to limit the number of rows in the result set.
+      // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
+      val selectStmt = s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s" $whereClause $groupByClause $orderByClause"
       if (limit > 0) {
         val limitClause = dialect.getLimitClause(limit)
-        if (whereClause.isEmpty) {
-          whereClause = s"WHERE $limitClause"
-        } else {
-          whereClause += s"AND $limitClause"
-        }
+        options.prepareQuery + s"SELECT tab.* FROM ($selectStmt) tab $limitClause"
+      } else {
+        options.prepareQuery + selectStmt
       }
-
-      // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
-      options.prepareQuery +
-        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
-        s" $whereClause $groupByClause $orderByClause"
     }
   }
 
