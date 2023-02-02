@@ -122,7 +122,13 @@ class FileScanRDD(
         // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
         // to avoid performance overhead.
         context.killTaskIfInterrupted()
-        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+        (currentIterator != null &&  (
+          try {
+            currentIterator.hasNext
+          } catch {
+            case e: Throwable =>
+              throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.toString)
+          }) || nextIterator())
       }
 
       ///////////////////////////
