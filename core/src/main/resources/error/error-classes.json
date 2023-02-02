@@ -1522,11 +1522,6 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
-      "JDBC_TRANSACTION" : {
-        "message" : [
-          "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
-        ]
-      },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
         "message" : [
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
@@ -1565,6 +1560,11 @@
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
+        ]
+      },
+      "MULTI_ACTION_ALTER" : {
+        "message" : [
+          "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
         ]
       },
       "NATURAL_CROSS_JOIN" : {
