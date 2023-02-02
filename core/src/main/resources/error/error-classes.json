@@ -1543,7 +1543,7 @@
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
-        "message": [
+        "message" : [
           "Referencing a lateral column alias <lca> in window expression <windowExpr>."
         ]
       },
