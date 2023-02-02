@@ -317,6 +317,12 @@ class IncrementalExecution(
             eventTimeWatermarkForEviction = inputWatermark(currentBatchId, m.stateInfo.get)
           )
 
+        case m: FlatMapGroupsInPandasWithStateExec if m.stateInfo.isDefined =>
+          m.copy(
+            eventTimeWatermarkForLateEvents = inputWatermark(currentBatchId - 1, m.stateInfo.get),
+            eventTimeWatermarkForEviction = inputWatermark(currentBatchId, m.stateInfo.get)
+          )
+
         case j: StreamingSymmetricHashJoinExec =>
           val inputWatermarkForLateEvents = inputWatermark(currentBatchId - 1, j.stateInfo.get)
           val inputWatermarkForEviction = inputWatermark(currentBatchId, j.stateInfo.get)

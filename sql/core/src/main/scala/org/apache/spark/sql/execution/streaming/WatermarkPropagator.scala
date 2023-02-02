@@ -157,7 +157,9 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
 
   override def getInputWatermark(batchId: Long, stateOpId: Long): Long = {
     assert(isInitialized(batchId), s"Watermark for batch ID $batchId is not yet set!")
-    batchIdToWatermark(batchId)
+    // In current Spark's logic, event time watermark cannot go down to negative. So even there is
+    // no input watermark for operator, the final input watermark for operator should be 0L.
+    Math.max(batchIdToWatermark(batchId), 0L)
   }
 
   // FIXME: evict up to the batch ID?
