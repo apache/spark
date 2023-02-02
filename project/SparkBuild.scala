@@ -867,9 +867,10 @@ object SparkConnectClient {
       val cp = (assembly / fullClasspath).value
       cp filter { v =>
         val name = v.data.getName
-        !name.startsWith("spark-connect-common") && !name.startsWith("grpc-") &&
-          !name.startsWith("protobuf-java") && !name.startsWith("failureaccess-") &&
-          !name.startsWith("listenablefuture-") && !name.startsWith("guava-")
+        !name.startsWith("spark-connect-client-jvm") && !name.startsWith("spark-connect-common") &&
+          !name.startsWith("grpc-") && !name.startsWith("protobuf-java") &&
+          !name.startsWith("failureaccess-") && !name.startsWith("listenablefuture-") &&
+          !name.startsWith("guava-")
       }
     },
 
