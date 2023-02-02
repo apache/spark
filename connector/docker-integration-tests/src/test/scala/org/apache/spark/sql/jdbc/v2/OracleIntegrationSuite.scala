@@ -76,6 +76,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.oracle.pushDownAggregate", "true")
+    .set("spark.sql.catalog.oracle.pushDownLimit", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
