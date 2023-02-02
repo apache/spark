@@ -26,7 +26,7 @@ from pyspark.sql.pandas.utils import (
 )
 
 
-def check_dependencies(mod_name, file_name):
+def check_dependencies(mod_name: str, file_name: str) -> None:
     if mod_name == "__main__":
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
