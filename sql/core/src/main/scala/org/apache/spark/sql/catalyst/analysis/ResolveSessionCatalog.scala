@@ -109,10 +109,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         Seq(ident.catalog.get, ident.database.get, ident.table),
         "RENAME COLUMN")
 
-    case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
-      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-        Seq(ident.catalog.get, ident.database.get, ident.table),
-        "DROP COLUMN")
+    case DropColumns(ResolvedV1TableIdentifier(ident), cols, _) =>
+      AlterTableDropColumnsCommand(ident, cols)
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident, props, isView = false)

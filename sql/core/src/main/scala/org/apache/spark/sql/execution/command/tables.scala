@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, F
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{FieldName, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -299,6 +299,35 @@ case class AlterTableAddColumnsCommand(
   }
 }
 
+/**
+ * A command that drops columns from a table
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   ALTER TABLE table_identifier
+ *   DROP { COLUMN | COLUMNS } [ ( ] col_name [ , ... ] [ ) ];
+ * }}}
+*/
+case class AlterTableDropColumnsCommand(
+    table: TableIdentifier,
+    colsToDrop: Seq[FieldName]) extends LeafRunnableCommand {
+  
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+
+
+    CommandUtils.uncacheTableOrView(sparkSession, table.quotedString)
+    catalog.refreshTable(table)
+
+    val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
+
+    val droppedColumns = colsToDrop.map(_.name.mkString(".")).toSet
+    val newSchema = existingSchema.filter(field => !droppedColumns.contains(field.name))
+    catalog.alterTableDataSchema(table, StructType(newSchema))
+
+    Seq.empty[Row]
+  }
+}
 
 /**
  * A command that loads data into a Hive table.
