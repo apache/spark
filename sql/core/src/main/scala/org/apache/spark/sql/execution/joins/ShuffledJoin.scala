@@ -27,21 +27,17 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Dist
  */
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
-  def isStoragePartitionedJoin: Boolean
 
   override def nodeName: String = {
-    val name = if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
-    if (isStoragePartitionedJoin) name + " (spj=true)" else name
+    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
   }
 
   override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (isSkewJoin || isStoragePartitionedJoin) {
-      // 1. We re-arrange the shuffle partitions to deal with skew join, and the new children
+    if (isSkewJoin) {
+      // We re-arrange the shuffle partitions to deal with skew join, and the new children
       // partitioning doesn't satisfy `HashClusteredDistribution`.
-      // 2. When storage-partitioned join is active, we don't want to run `EnsureRequirements` to
-      // check shuffle specs again.
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
     } else {
       ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil

@@ -43,8 +43,7 @@ case class SortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false,
-    isStoragePartitionedJoin: Boolean = false) extends ShuffledJoin {
+    isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),

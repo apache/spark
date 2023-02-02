@@ -117,7 +117,6 @@ case class AdaptiveSparkPlanExec(
       EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
     Seq(
       RemoveRedundantProjects,
-      OptimizeStoragePartitionedJoin,
       ensureRequirements,
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
