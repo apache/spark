@@ -1336,7 +1336,7 @@ class WriteOperation(LogicalPlan):
         self.mode: Optional[str] = None
         self.sort_cols: List[str] = []
         self.partitioning_cols: List[str] = []
-        self.options: dict[str, Optional[str]] = {}
+        self.options: Dict[str, Optional[str]] = {}
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
 

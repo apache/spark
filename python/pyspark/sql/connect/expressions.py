@@ -132,7 +132,7 @@ class CaseWhen(Expression):
 
 
 class ColumnAlias(Expression):
-    def __init__(self, parent: Expression, alias: list[str], metadata: Any):
+    def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
 
         self._alias = alias
         self._metadata = metadata
