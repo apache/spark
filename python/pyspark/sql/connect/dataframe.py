@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import (
     Any,
@@ -1672,56 +1675,48 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.dataframe
 
     os.chdir(os.environ["SPARK_HOME"])
 
-    if should_test_connect:
-        import pyspark.sql.connect.dataframe
+    globs = pyspark.sql.connect.dataframe.__dict__.copy()
+    # Spark Connect does not support RDD but the tests depend on them.
+    del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
+    del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+    del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
-        globs = pyspark.sql.connect.dataframe.__dict__.copy()
-        # Spark Connect does not support RDD but the tests depend on them.
-        del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
+    # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
+    del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
+    del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
 
-        # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
-        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
+    # TODO(SPARK-41823): ambiguous column names
+    del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
+    del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
-        # TODO(SPARK-41823): ambiguous column names
-        del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
+    # TODO(SPARK-41625): Support Structured Streaming
+    del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
 
-        # TODO(SPARK-41625): Support Structured Streaming
-        del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
+    # TODO(SPARK-41818): Support saveAsTable
+    del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
 
-        # TODO(SPARK-41818): Support saveAsTable
-        del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.dataframe tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
 
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.dataframe tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.dataframe,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.dataframe,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
+    globs["spark"].stop()
 
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.dataframe doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
