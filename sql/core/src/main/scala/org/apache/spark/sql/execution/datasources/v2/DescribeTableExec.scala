@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.IdentityTransform
@@ -68,6 +69,16 @@ case class DescribeTableExec(
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")
     rows += toCatalystRow("Table Properties", properties, "")
+
+    // If any columns have default values, append them to the result.
+    if (table.schema.fields.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+      rows += emptyRow()
+      rows += toCatalystRow("# Column Default Values", "", "")
+      table.schema.foreach { column =>
+        column.getCurrentDefaultValue().map(
+          rows += toCatalystRow(column.name, column.dataType.simpleString, _))
+      }
+    }
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
