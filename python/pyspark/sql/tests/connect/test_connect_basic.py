@@ -25,7 +25,6 @@ from collections import defaultdict
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession as PySparkSession, Row
-from pyspark.sql.connect.client import Retrying
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -46,6 +45,7 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,
+    connect_requirement_message,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.errors import (
@@ -67,6 +67,7 @@ if should_test_connect:
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
+    from pyspark.sql.connect.client import Retrying
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -2689,6 +2690,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 getattr(df.write, f)()
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
     def test_retry_error_handling(self):
         # Helper class for wrapping the test.
@@ -2800,6 +2802,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(call_wrap["raised"], 1)
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(unittest.TestCase):
     def test_invalid_connection_strings(self):
         invalid = [
