@@ -696,8 +696,8 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNSUPPORTED_FEATURE.JDBC_TRANSACTION: the target JDBC server does not support " +
-    "transactions and can only support ALTER TABLE with a single action") {
+  test("UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER: The target JDBC server hosting table " +
+    "does not support ALTER TABLE with multiple actions.") {
     withTempDir { tempDir =>
       val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
       Utils.classForName("org.h2.Driver")
@@ -751,8 +751,8 @@ class QueryExecutionErrorsSuite
 
         checkError(
           exception = e.getCause.asInstanceOf[SparkSQLFeatureNotSupportedException],
-          errorClass = "UNSUPPORTED_FEATURE.JDBC_TRANSACTION",
-          parameters = Map.empty)
+          errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
+          parameters = Map("tableName" -> "\"test\".\"people\""))
 
         JdbcDialects.unregisterDialect(testH2DialectUnsupportedJdbcTransaction)
       }
