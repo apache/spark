@@ -752,7 +752,7 @@ jobs:
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl connector/connect/common -Pscala-$SCALA_VERSION
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl connector/connect/server -Pscala-$SCALA_VERSION
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl connector/connect/client/jvm -Pscala-$SCALA_VERSION
-          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} clean test -pl connector/connect/client/jvm-e2e-tests -Pscala-$SCALA_VERSION -Pconnect-client-tests
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} clean test -pl connector/connect/client/jvm-e2e-tests -Pscala-$SCALA_VERSION
           rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
