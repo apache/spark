@@ -861,8 +861,9 @@ object SparkConnectClient {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // assembly will include `spark-connect-common-*.jar`, `grpc-*.jar`,`protobuf-java*.jar`,
-    // `failureaccess-*.jar`, `listenablefuture-*.jar` and `guava-*.jar`.
+    // assembly will include `spark-connect-client-jvm-*.jar`, `spark-connect-common-*.jar`,
+    // `grpc-*.jar`, `protobuf-java*.jar`, `failureaccess-*.jar`, `listenablefuture-*.jar`
+    // and `guava-*.jar`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       cp filter { v =>
