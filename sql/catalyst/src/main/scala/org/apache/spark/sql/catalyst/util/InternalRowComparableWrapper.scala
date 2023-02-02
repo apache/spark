@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
- * Wraps the [[InternalRow]] with the corresponding [[DataType]] to make it can be compared with
+ * Wraps the [[InternalRow]] with the corresponding [[DataType]] to make it comparable with
  * the values in [[InternalRow]].
  * It uses Spark's internal murmur hash to compute hash code from an row, and uses [[RowOrdering]]
  * to perform equality checks.
@@ -55,8 +55,9 @@ class InternalRowComparableWrapper(val row: InternalRow, val dataTypes: Seq[Data
 
 object InternalRowComparableWrapper {
 
-  def apply(partition: InputPartition,
-            partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
+  def apply(
+    partition: InputPartition,
+    partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
     if (!partition.isInstanceOf[HasPartitionKey]) {
       throw new SparkException("partition row should implement `HasPartitionKey`")
     }
@@ -64,19 +65,22 @@ object InternalRowComparableWrapper {
       partition.asInstanceOf[HasPartitionKey].partitionKey(), partitionExpression.map(_.dataType))
   }
 
-  def apply(partitionRow: InternalRow,
-            partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
+  def apply(
+    partitionRow: InternalRow,
+    partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
     new InternalRowComparableWrapper(partitionRow, partitionExpression.map(_.dataType))
   }
 
-  def mergePartitions(leftPartition: KeyGroupedPartitioning, rightPartition: KeyGroupedPartitioning,
-                      partitionExpression: Seq[Expression]): Seq[InternalRow] = {
+  def mergePartitions(
+    leftPartitioning: KeyGroupedPartitioning,
+    rightPartitioning: KeyGroupedPartitioning,
+    partitionExpression: Seq[Expression]): Seq[InternalRow] = {
     val partitionDataTypes = partitionExpression.map(_.dataType)
     val partitionsSet = new mutable.HashSet[InternalRowComparableWrapper]
-    leftPartition.partitionValues
+    leftPartitioning.partitionValues
       .map(new InternalRowComparableWrapper(_, partitionDataTypes))
       .foreach(partition => partitionsSet.add(partition))
-    rightPartition.partitionValues
+    rightPartitioning.partitionValues
       .map(new InternalRowComparableWrapper(_, partitionDataTypes))
       .foreach(partition => partitionsSet.add(partition))
     partitionsSet.map(_.row).toSeq

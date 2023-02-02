@@ -124,24 +124,30 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
       inputPartitions: Seq[InputPartition]): Option[Seq[(InternalRow, Seq[InputPartition])]] = {
     if (!SQLConf.get.v2BucketingEnabled) return None
     keyGroupedPartitioning.flatMap { expressions =>
-      if (inputPartitions.isEmpty || inputPartitions.count(!_.isInstanceOf[HasPartitionKey]) > 0) {
-        // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
-        return None
-      }
-      val groupedPartitions = inputPartitions
-        .map(p => (InternalRowComparableWrapper(p, expressions), p))
-        .groupBy(_._1).toSeq
-        .map {
-          case (key, s) => (key.row, s.map(_._2))
-        }
+      val results = inputPartitions.takeWhile {
+        case _: HasPartitionKey => true
+        case _ => false
+      }.map(p => (p.asInstanceOf[HasPartitionKey].partitionKey(), p))
 
-      // also sort the input partitions according to their partition key order. This ensures
-      // a canonical order from both sides of a bucketed join, for example.
-      val partitionDataTypes = expressions.map(_.dataType)
-      val keyOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
-        RowOrdering.createNaturalAscendingOrdering(partitionDataTypes).on(_._1)
+      if (results.length != inputPartitions.length || inputPartitions.isEmpty) {
+        // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
+        None
+      } else {
+        val groupedPartitions = inputPartitions
+          .map(p => (InternalRowComparableWrapper(p, expressions), p))
+          .groupBy(_._1).toSeq
+          .map {
+            case (key, s) => (key.row, s.map(_._2))
+          }
+
+        // also sort the input partitions according to their partition key order. This ensures
+        // a canonical order from both sides of a bucketed join, for example.
+        val partitionDataTypes = expressions.map(_.dataType)
+        val partitionOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
+          RowOrdering.createNaturalAscendingOrdering(partitionDataTypes).on(_._1)
+        }
+        Some(groupedPartitions.sorted(partitionOrdering))
       }
-      Some(groupedPartitions.sorted(keyOrdering))
     }
   }
 

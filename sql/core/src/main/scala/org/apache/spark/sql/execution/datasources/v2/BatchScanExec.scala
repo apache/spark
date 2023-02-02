@@ -79,23 +79,23 @@ case class BatchScanExec(
                 "during runtime filtering: not all partitions implement HasPartitionKey after " +
                 "filtering")
           }
-          val newPartitionKeys = newPartitions
+          val newPartitionValues = newPartitions
             .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
-          val oldPartitionKeys = p.partitionValues
+          val oldPartitionValues = p.partitionValues
             .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
-          // We require the new number of partition keys to be equal or less than the old number
-          // of partition keys here. In the case of less than, empty partitions will be added for
-          // those missing keys that are not present in the new input partitions.
-          if (oldPartitionKeys.size < newPartitionKeys.size) {
+          // We require the new number of partition values to be equal or less than the old number
+          // of partition values here. In the case of less than, empty partitions will be added for
+          // those missing values that are not present in the new input partitions.
+          if (oldPartitionValues.size < newPartitionValues.size) {
             throw new SparkException("During runtime filtering, data source must either report " +
-                "the same number of partition keys, or a subset of partition keys from the " +
-                s"original. Before: ${oldPartitionKeys.size} partition keys. " +
-                s"After: ${newPartitionKeys.size} partition keys")
+                "the same number of partition values, or a subset of partition values from the " +
+                s"original. Before: ${oldPartitionValues.size} partition values. " +
+                s"After: ${newPartitionValues.size} partition values")
           }
 
-          if (!newPartitionKeys.forall(oldPartitionKeys.contains)) {
+          if (!newPartitionValues.forall(oldPartitionValues.contains)) {
             throw new SparkException("During runtime filtering, data source must not report new " +
-                "partition keys that are not present in the original partitioning.")
+                "partition values that are not present in the original partitioning.")
           }
 
           groupPartitions(newPartitions).get.map(_._2)
