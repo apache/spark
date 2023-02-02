@@ -50,7 +50,7 @@ private[spark] class YarnAllocatorNodeHealthTracker(
     failureTracker: FailureTracker)
   extends Logging {
 
-  private val excludeOnFailureTimeoutMillis = HealthTracker.getExludeOnFailureTimeout(sparkConf)
+  private val excludeOnFailureTimeoutMillis = HealthTracker.getExcludeOnFailureTimeout(sparkConf)
 
   private val launchExcludeOnFailureEnabled =
     sparkConf.get(YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED)
