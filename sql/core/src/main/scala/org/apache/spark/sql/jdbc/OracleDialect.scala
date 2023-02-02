@@ -184,8 +184,8 @@ private case object OracleDialect extends JdbcDialect {
   class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
     extends JdbcSQLQueryBuilder(dialect, options) {
 
+    // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
     override def build(): String = {
-      // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
       val selectStmt = s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause"
       if (limit > 0) {
