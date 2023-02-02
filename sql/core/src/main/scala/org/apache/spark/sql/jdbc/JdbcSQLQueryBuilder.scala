@@ -22,7 +22,11 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 
 /**
- * The builder to generate jdbc sql query.
+ * The builder to build a single SELECT query.
+ *
+ * Note: All the `withXXX` methods will be invoked at most once. The invocation order does not
+ * matter, as all these clauses follow the natural SQL order: sample the table first, then filter,
+ * then group by, then sort, then offset, then limit.
  *
  * @since 3.4.0
  */
@@ -49,14 +53,14 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   protected var orderByClause: String = ""
 
   /**
-   * A LIMIT clause representing pushed-down limit.
+   * A LIMIT value representing pushed-down limit.
    */
-  protected var limitClause: String = ""
+  protected var limit: Int = -1
 
   /**
-   * A OFFSET clause representing pushed-down offset.
+   * A OFFSET value representing pushed-down offset.
    */
-  protected var offsetClause: String = ""
+  protected var offset: Int = -1
 
   /**
    * A table sample clause representing pushed-down table sample.
@@ -108,13 +112,13 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   }
 
   def withLimit(limit: Int): JdbcSQLQueryBuilder = {
-    limitClause = dialect.getLimitClause(limit)
+    this.limit = limit
 
     this
   }
 
   def withOffset(offset: Int): JdbcSQLQueryBuilder = {
-    offsetClause = dialect.getOffsetClause(offset)
+    this.offset = offset
 
     this
   }
@@ -128,6 +132,9 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   }
 
   def build(): String = {
+    val limitClause = dialect.getLimitClause(limit)
+    val offsetClause = dialect.getOffsetClause(offset)
+
     options.prepareQuery +
       s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
       s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"

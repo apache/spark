@@ -538,21 +538,21 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
-   * returns the LIMIT clause for the SELECT statement
+   * Returns the LIMIT clause for the SELECT statement
    */
   def getLimitClause(limit: Integer): String = {
     if (limit > 0 ) s"LIMIT $limit" else ""
   }
 
   /**
-   * returns the OFFSET clause for the SELECT statement
+   * Returns the OFFSET clause for the SELECT statement
    */
   def getOffsetClause(offset: Integer): String = {
     if (offset > 0 ) s"OFFSET $offset" else ""
   }
 
   /**
-   * returns the SQL builder for the SELECT statement.
+   * Returns the SQL builder for the SELECT statement.
    */
   def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new JdbcSQLQueryBuilder(this, options)

@@ -41,7 +41,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   val namespaceOpt: Option[String] = None
 
-  protected def catalogAndNamespace =
+  private def catalogAndNamespace =
     namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
 
   // dialect specific update column type test

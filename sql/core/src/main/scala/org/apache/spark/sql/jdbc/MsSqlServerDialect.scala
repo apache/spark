@@ -199,7 +199,10 @@ private object MsSqlServerDialect extends JdbcDialect {
 
   class MsSqlServerSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
     extends JdbcSQLQueryBuilder(dialect, options) {
+
     override def build(): String = {
+      val limitClause = dialect.getLimitClause(limit)
+
       options.prepareQuery +
         s"SELECT $limitClause $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause"
