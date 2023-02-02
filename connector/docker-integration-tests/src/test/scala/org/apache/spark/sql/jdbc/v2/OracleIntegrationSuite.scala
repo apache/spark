@@ -82,7 +82,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
-      "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
+      "CREATE TABLE employee (dept NUMBER(32, 0), name VARCHAR2(32), salary NUMBER(20, 2)," +
         " bonus BINARY_DOUBLE)").executeUpdate()
   }
 
