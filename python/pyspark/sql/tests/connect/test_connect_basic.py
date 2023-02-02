@@ -39,6 +39,7 @@ from pyspark.sql.types import (
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,
+    connect_requirement_message,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.errors import (
@@ -2627,7 +2628,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 getattr(df.write, f)()
 
 
-class ClientTests(ReusedConnectTestCase):
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ClientTests(unittest.TestCase):
     def test_retry_error_handling(self):
         # Helper class for wrapping the test.
         class TestError(grpc.RpcError, Exception):
@@ -2738,7 +2740,8 @@ class ClientTests(ReusedConnectTestCase):
         self.assertEqual(call_wrap["raised"], 1)
 
 
-class ChannelBuilderTests(ReusedConnectTestCase):
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ChannelBuilderTests(unittest.TestCase):
     def test_invalid_connection_strings(self):
         invalid = [
             "scc://host:12",
