@@ -856,7 +856,7 @@ object SparkConnectClient {
 
     (assembly / test) := { },
 
-    (assembly / logLevel) := Level.Debug,
+    (assembly / logLevel) := Level.Info,
 
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
