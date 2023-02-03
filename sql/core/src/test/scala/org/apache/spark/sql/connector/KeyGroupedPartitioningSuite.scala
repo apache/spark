@@ -783,13 +783,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
         s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
         s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 15.0, cast('2020-01-02' as timestamp)), " +
         s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
     val purchases_partitions = Array(identity("item_id"))
     createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
-        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-01' as timestamp)), " +
         s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
         s"(4, 25.0, cast('2020-02-01' as timestamp)), " +
         s"(5, 30.0, cast('2023-01-01' as timestamp))")
@@ -797,14 +797,16 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     // In a left-outer join, and when the left side has larger stats, partially clustered
     // distribution should kick in and pick the right hand side to replicate partitions.
     Seq(true, false).foreach { pushDownValues =>
-      Seq(("true", 6), ("false", 5)).foreach {
+      Seq(("true", 7), ("false", 5)).foreach {
         case (enable, expected) =>
           withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
             val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
                 s"FROM testcat.ns.$items i LEFT JOIN testcat.ns.$purchases p " +
-                "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+                "ON i.id = p.item_id AND i.arrive_time = p.time " +
+                "ORDER BY id, purchase_price, sale_price")
 
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
             if (pushDownValues) {
@@ -818,7 +820,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
             }
             checkAnswer(df, Seq(
               Row(1, "aa", 40.0, null), Row(1, "aa", 41.0, null),
-              Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(3, "cc", 15.5, 20.0)))
+              Row(2, "bb", 10.0, 20.0), Row(2, "bb", 15.0, null), Row(3, "cc", 15.5, 20.0)))
           }
       }
     }
@@ -836,8 +838,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val purchases_partitions = Array(identity("item_id"))
     createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
-        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-01' as timestamp)), " +
         s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
         s"(4, 25.0, cast('2020-02-01' as timestamp)), " +
         s"(5, 30.0, cast('2023-01-01' as timestamp))")
@@ -849,11 +852,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Seq(("true", 5), ("false", 5)).foreach {
         case (enable, expected) =>
           withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
             val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
                 s"FROM testcat.ns.$items i RIGHT JOIN testcat.ns.$purchases p " +
-                "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+                "ON i.id = p.item_id AND i.arrive_time = p.time " +
+                "ORDER BY id, purchase_price, sale_price")
 
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
             if (pushDownValues) {
@@ -868,6 +873,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
             }
             checkAnswer(df, Seq(
               Row(null, null, null, 25.0), Row(null, null, null, 30.0),
+              Row(1, "aa", 40.0, 45.0),
               Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(3, "cc", 15.5, 20.0)))
           }
       }
@@ -881,26 +887,29 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
         s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
         s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
-        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        s"(3, 'cc', 15.5, cast('2020-01-01' as timestamp))")
 
     val purchases_partitions = Array(identity("item_id"))
     createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
-        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
-        s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
-        s"(4, 25.0, cast('2020-02-01' as timestamp)), " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-02' as timestamp)), " +
+        s"(3, 20.0, cast('2020-01-01' as timestamp)), " +
+        s"(4, 25.0, cast('2020-01-01' as timestamp)), " +
         s"(5, 30.0, cast('2023-01-01' as timestamp))")
 
     Seq(true, false).foreach { pushDownValues =>
       Seq(("true", 5), ("false", 5)).foreach {
         case (enable, expected) =>
           withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
             val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
                 s"FROM testcat.ns.$items i FULL OUTER JOIN testcat.ns.$purchases p " +
-                "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+                "ON i.id = p.item_id AND i.arrive_time = p.time " +
+                "ORDER BY id, purchase_price, sale_price")
 
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
             if (pushDownValues) {
@@ -914,9 +923,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
                 "should contain shuffle when not pushing down partition values")
             }
             checkAnswer(df, Seq(
-              Row(null, null, null, 25.0), Row(null, null, null, 30.0),
-              Row(1, "aa", 40.0, null), Row(1, "aa", 41.0, null),
-              Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(3, "cc", 15.5, 20.0)))
+              Row(null, null, null, 20.0), Row(null, null, null, 25.0), Row(null, null, null, 30.0),
+              Row(1, "aa", 40.0, 45.0), Row(1, "aa", 41.0, null),
+              Row(2, "bb", 10.0, 15.0), Row(3, "cc", 15.5, 20.0)))
           }
       }
     }
@@ -996,8 +1005,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(6, 50.0, cast('2023-02-01' as timestamp)), " +
         s"(6, 50.0, cast('2023-02-01' as timestamp))")
 
-    Seq(true).foreach { pushDownValues =>
-      Seq(("true", 15)).foreach {
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(("true", 15), ("false", 6)).foreach {
         case (enable, expected) =>
           withSQLConf(
               SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -1014,16 +1023,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
                 s"testcat.ns.$purchases p, testcat.ns.$items i WHERE " +
                 s"p.item_id = i.id AND p.price < 45.0")
 
+            checkAnswer(df, Seq(Row(213.5)))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
             if (pushDownValues) {
-              checkAnswer(df, Seq(Row(213.5)))
-              val shuffles = collectShuffles(df.queryExecution.executedPlan)
               assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
               val scans = collectScans(df.queryExecution.executedPlan)
               assert(scans.forall(_.inputRDD.partitions.length == expected))
             } else {
-              // number of unique partition key changed after dynamic filtering
-              val e = intercept[Exception](df.collect())
-              assert(e.getMessage.contains("number of unique partition keys"))
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
             }
           }
       }
