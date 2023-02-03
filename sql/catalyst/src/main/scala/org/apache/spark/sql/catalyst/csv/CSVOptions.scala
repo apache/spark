@@ -224,7 +224,7 @@ class CSVOptions(
 
   val isCommentSet = this.comment != '\u0000'
 
-  val defaultUnicodeNullAsWrittenComment =
+  val legacyDefaultUnicodeNullAsWrittenComment =
     SQLConf.get.getConf(SQLConf.LEGACY_DEFAULT_UNICODE_NULL_AS_WRITTEN_COMMENT)
 
   val samplingRatio =
@@ -286,7 +286,7 @@ class CSVOptions(
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     if (isCommentSet) {
       format.setComment(comment)
-    } else if (defaultUnicodeNullAsWrittenComment) {
+    } else if (legacyDefaultUnicodeNullAsWrittenComment) {
       format.setComment('\u0000')
     }
     lineSeparatorInWrite.foreach(format.setLineSeparator)
