@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.{ClosureCleaner, Utils}
+import org.apache.spark.utilClosureCleaner
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -492,7 +492,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "Any",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 

@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.Utils
 
 class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -586,7 +585,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> toSQLId("sentences"),
         "expectedNum" -> "[1, 2, 3]",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         fragment = "sentences()",

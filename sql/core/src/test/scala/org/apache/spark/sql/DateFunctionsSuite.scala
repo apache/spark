@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -31,7 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
 
 class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -60,7 +59,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`curdate`",
         "expectedNum" -> "0",
         "actualNum" -> "1",
-        "docroot" -> Utils.DOC_ROOT_DIR
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext("", "", 7, 16, "CURDATE(1)")
     )

@@ -28,7 +28,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{AccumulatorSuite, SparkException}
+import org.apache.spark.{SPARK_DOC_ROOT, AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -55,7 +55,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.ResetSystemProperties
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
@@ -2647,7 +2647,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
         "actualNum" -> "3",
-        "docroot" -> Utils.DOC_ROOT_DIR
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         start = 7,

@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter
 
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
@@ -46,7 +46,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.sql.util.QueryExecutionListener
-import org.apache.spark.util.Utils
 
 private case class FunctionResult(f1: String, f2: String)
 private case class LocalDateInstantType(date: LocalDate, instant: Instant)
@@ -111,7 +110,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         "functionName" -> toSQLId("substr"),
         "expectedNum" -> "[2, 3]",
         "actualNum" -> "4",
-        "docroot" -> Utils.DOC_ROOT_DIR
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         fragment = "substr('abcd', 2, 3, 4)",
@@ -132,7 +131,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",
         "actualNum" -> "3",
-        "docroot" -> Utils.DOC_ROOT_DIR
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         fragment = "foo(2, 3, 4)",

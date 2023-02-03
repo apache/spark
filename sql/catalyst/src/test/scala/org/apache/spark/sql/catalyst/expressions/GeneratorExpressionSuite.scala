@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkTuple(actual: Expression, expected: Seq[InternalRow]): Unit = {
@@ -88,7 +87,7 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -99,7 +98,7 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
     assert(Stack(Seq(Literal(1), Literal(1), Literal(1.0))).checkInputDataTypes().isSuccess)
     assert(Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes() ==

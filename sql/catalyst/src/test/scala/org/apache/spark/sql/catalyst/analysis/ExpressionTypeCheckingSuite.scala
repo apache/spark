@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with QueryErrorsBase {
 
@@ -475,7 +474,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "functionName" -> toSQLId(coalesce.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR))
+        "docroot" -> SPARK_DOC_ROOT))
 
     val murmur3Hash = new Murmur3Hash(Nil)
     checkError(
@@ -487,7 +486,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "functionName" -> toSQLId(murmur3Hash.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR))
+        "docroot" -> SPARK_DOC_ROOT))
 
     val xxHash64 = new XxHash64(Nil)
     checkError(
@@ -499,7 +498,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "functionName" -> toSQLId(xxHash64.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR))
+        "docroot" -> SPARK_DOC_ROOT))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -535,7 +534,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",
         "actualNum" -> "3",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = analysisException(CreateNamedStruct(Seq(1, "a", "b", 2.0))),
@@ -568,7 +567,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
         "actualNum" -> "3",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = analysisException(CreateMap(Seq(Literal(1),
@@ -697,7 +696,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
           "functionName" -> toSQLId(expr1.prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> "1",
-          "docroot" -> Utils.DOC_ROOT_DIR)
+          "docroot" -> SPARK_DOC_ROOT)
       )
 
       val expr2 = operator(Seq($"intField", $"stringField"))

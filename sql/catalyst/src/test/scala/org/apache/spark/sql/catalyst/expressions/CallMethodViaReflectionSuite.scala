@@ -19,13 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /** A static class for testing purpose. */
 object ReflectStaticClass {
@@ -108,7 +107,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -119,7 +118,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
     assert(CallMethodViaReflection(
       Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==

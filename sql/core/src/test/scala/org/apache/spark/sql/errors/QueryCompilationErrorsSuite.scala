@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.errors
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -24,7 +25,6 @@ import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, st
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
-import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
 
@@ -678,7 +678,7 @@ class QueryCompilationErrorsSuite
         "functionName" -> "`cast`",
         "expectedNum" -> "0",
         "actualNum" -> "1",
-        "docroot" -> Utils.DOC_ROOT_DIR),
+        "docroot" -> SPARK_DOC_ROOT),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }

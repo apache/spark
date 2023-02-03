@@ -25,11 +25,11 @@ import java.util.{Date, Locale}
 
 import com.google.common.cache.CacheBuilder
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
-import org.apache.spark.util.Utils
 
 trait DateTimeFormatterHelper {
   private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
@@ -186,12 +186,12 @@ trait DateTimeFormatterHelper {
         case _: Throwable => throw e
       }
       throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(
-        pattern, e, Utils.DOC_ROOT_DIR)
+        pattern, e, SPARK_DOC_ROOT)
   }
 
   protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
     case e: IllegalArgumentException =>
-      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e, Utils.DOC_ROOT_DIR)
+      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e, SPARK_DOC_ROOT)
   }
 }
 

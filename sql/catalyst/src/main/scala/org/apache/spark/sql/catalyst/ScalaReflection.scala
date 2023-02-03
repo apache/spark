@@ -27,6 +27,7 @@ import scala.util.{Failure, Success}
 
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
@@ -40,7 +41,6 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -893,7 +893,7 @@ object ScalaReflection extends ScalaReflection {
         }
         ProductEncoder(ClassTag(getClassFromType(t)), params)
       case _ =>
-        throw QueryExecutionErrors.cannotFindEncoderForTypeError(tpe.toString, Utils.DOC_ROOT_DIR)
+        throw QueryExecutionErrors.cannotFindEncoderForTypeError(tpe.toString, SPARK_DOC_ROOT)
     }
   }
 }

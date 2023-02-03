@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.encoders
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
-import org.apache.spark.util.Utils
 
 class NonEncodable(i: Int)
 
@@ -59,7 +58,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -68,7 +67,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -77,7 +76,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -86,7 +85,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -95,7 +94,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 

@@ -24,7 +24,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
@@ -36,7 +36,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
@@ -4905,7 +4904,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> toSQLId("zip_with"),
         "expectedNum" -> "3",
         "actualNum" -> "4",
-        "docroot" -> Utils.DOC_ROOT_DIR),
+        "docroot" -> SPARK_DOC_ROOT),
       context = ExpectedContext(
         fragment = "zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)",
         start = 0,
@@ -5005,7 +5004,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5018,7 +5017,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5031,7 +5030,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5044,7 +5043,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5057,7 +5056,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5070,7 +5069,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5083,7 +5082,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5096,7 +5095,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5109,7 +5108,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5122,7 +5121,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> Utils.DOC_ROOT_DIR)
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 
