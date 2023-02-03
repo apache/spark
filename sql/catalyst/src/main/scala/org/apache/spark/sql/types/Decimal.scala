@@ -397,30 +397,42 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
-        val pow10diff = POW_10(diff)
-        // % and / always round to 0
-        val droppedDigits = longVal % pow10diff
-        longVal /= pow10diff
-        roundMode match {
-          case ROUND_FLOOR =>
-            if (droppedDigits < 0) {
-              longVal += -1L
-            }
-          case ROUND_CEILING =>
-            if (droppedDigits > 0) {
-              longVal += 1L
-            }
-          case ROUND_HALF_UP =>
-            if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
-            }
-          case ROUND_HALF_EVEN =>
-            val doubled = math.abs(droppedDigits) * 2
-            if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
-            }
-          case _ =>
-            throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+        // If diff is greater than max number of digits we store in Long, then
+        // value becomes 0. Otherwise we calculate new value dividing by power of 10.
+        // In both cases we apply rounding after that.
+        if (diff > MAX_LONG_DIGITS) {
+          longVal = roundMode match {
+            case ROUND_FLOOR => if (longVal < 0) -1L else 0L
+            case ROUND_CEILING => if (longVal > 0) 1L else 0L
+            case ROUND_HALF_UP | ROUND_HALF_EVEN => 0L
+            case _ => sys.error(s"Not supported rounding mode: $roundMode")
+          }
+        } else {
+          val pow10diff = POW_10(diff)
+          // % and / always round to 0
+          val droppedDigits = longVal % pow10diff
+          longVal /= pow10diff
+          roundMode match {
+            case ROUND_FLOOR =>
+              if (droppedDigits < 0) {
+                longVal += -1L
+              }
+            case ROUND_CEILING =>
+              if (droppedDigits > 0) {
+                longVal += 1L
+              }
+            case ROUND_HALF_UP =>
+              if (math.abs(droppedDigits) * 2 >= pow10diff) {
+                longVal += (if (droppedDigits < 0) -1L else 1L)
+              }
+            case ROUND_HALF_EVEN =>
+              val doubled = math.abs(droppedDigits) * 2
+              if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
+                longVal += (if (droppedDigits < 0) -1L else 1L)
+              }
+            case _ =>
+              throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+          }
         }
       } else if (scale > _scale) {
         // We might be able to multiply longVal by a power of 10 and not overflow, but if not,
