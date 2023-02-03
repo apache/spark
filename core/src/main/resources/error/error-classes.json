@@ -70,6 +70,13 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_MODIFY_CONFIG" : {
+    "message" : [
+      "Cannot modify the value of a Spark config: <key>.",
+      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'."
+    ],
+    "sqlState" : "46110"
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal."
@@ -3481,12 +3488,6 @@
   "_LEGACY_ERROR_TEMP_1325" : {
     "message" : [
       "Cannot modify the value of a static config: <key>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1326" : {
-    "message" : [
-      "Cannot modify the value of a Spark config: <key>.",
-      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1327" : {

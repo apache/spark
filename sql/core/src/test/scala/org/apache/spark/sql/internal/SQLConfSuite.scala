@@ -204,9 +204,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sql("RESET spark.app.id")
     assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
     // spark core conf w/ entry registered
-    val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
-    val str_match = "Cannot modify the value of a Spark config: spark.executor.cores"
-    assert(e1.getMessage.contains(str_match))
+    checkError(
+      exception = intercept[AnalysisException](sql("RESET spark.executor.cores")),
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      parameters = Map("key" -> "\"spark.executor.cores\"")
+    )
 
     // user defined settings
     sql("SET spark.abc=xyz")
