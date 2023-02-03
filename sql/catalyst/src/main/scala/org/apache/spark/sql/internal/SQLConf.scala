@@ -4131,6 +4131,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_DEFAULT_UNICODE_NULL_AS_WRITTEN_COMMENT =
+    buildConf("spark.sql.legacy.csv.defaultUnicodeNullAsWrittenComment")
+      .internal()
+      .doc("When set to false, written comment character passed to `CsvFormat` is not set in " +
+        "CSV data source. If set to true, it restores the legacy behavior that written comment " +
+        "passed to `CsvFormat` will be set as '\u0000'.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *

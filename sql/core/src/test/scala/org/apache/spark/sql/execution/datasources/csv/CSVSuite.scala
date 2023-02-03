@@ -3101,6 +3101,24 @@ abstract class CSVSuite
     }
   }
 
+  test("Add a legacy spark.sql.legacy.csv.defaultUnicodeNullAsWrittenComment") {
+    Seq("true", "false").foreach { confVal =>
+      withSQLConf(SQLConf.LEGACY_DEFAULT_UNICODE_NULL_AS_WRITTEN_COMMENT.key -> confVal) {
+        withTempPath { path =>
+          Seq(("#abc", 1))
+            .toDF("value", "id")
+            .write
+            .csv(path.getCanonicalPath)
+          if (confVal == "false") {
+            checkAnswer(spark.read.text(path.getCanonicalPath), Row("\"#abc\",1"))
+          } else {
+            checkAnswer(spark.read.text(path.getCanonicalPath), Row("#abc,1"))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-40667: validate CSV Options") {
     assert(CSVOptions.getAllOptions.size == 38)
     // Please add validation on any new CSV options here
