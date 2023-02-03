@@ -49,20 +49,20 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * The windows are calculated as below:
    * maxNumOverlapping <- ceil(windowDuration / slideDuration)
    * for (i <- 0 until maxNumOverlapping)
-   *   lastStart <- timestamp - (timestamp - startTime) % slideDuration
-   *   lastStartAdjusted <- (timestamp < startTime) ? lastStart - slideDuration : lastStart
-   *   windowStart <- lastStartAdjusted - i * slideDuration
+   *   remainder <- (timestamp - startTime) % slideDuration
+   *   lastStart <- timestamp - ((remainder < 0) ? remainder + slideDuration : remainder)
+   *   windowStart <- lastStart - i * slideDuration
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
    *
-   * Rationale of lastStartAdjusted:
+   * Example calculation:
    * For simplicity assume windowDuration = slideDuration.
    * | x x x x x x x x x x x x | x x x x x x x x x x x x | x x x x x x x x x x x x |
    * |                         |----l1 ----|---- l2 -----|
    *                        lastStart   timestamp   lastStartWrong
-   * Normally when timestamp > startTime, then l1 = (timestamp - startTime) % slideDuration,
-   * and lastStart = timeStamp - l1
-   * However, when timestamp < startTime, the result of (timestamp - startTime) % slideDuration is
+   * Normally when timestamp > startTime (or equally remainder > 0), we get
+   * l1 = remainder = (timestamp - startTime) % slideDuration, lastStart = timeStamp - remainder
+   * However, when timestamp < startTime (or equally remainder < 0), the value of remainder is
    * -l2 (note the negative sign), and lastStart is then at the position of lastStartWrong.
    * So we need to subtract a slideDuration.
    *
@@ -115,10 +115,10 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         def getWindow(i: Int, dataType: DataType): Expression = {
           val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
-          val lastStart = timestamp - (timestamp - window.startTime) % window.slideDuration
-          val lastStartAdjusted = CaseWhen(Seq((LessThan(timestamp, window.startTime),
-            lastStart - window.slideDuration)), Some(lastStart))
-          val windowStart = lastStartAdjusted - i * window.slideDuration
+          val remainder = (timestamp - window.startTime) % window.slideDuration
+          val lastStart = timestamp - CaseWhen(Seq((LessThan(remainder, 0),
+            remainder + window.slideDuration)), Some(remainder))
+          val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 
           // We make sure value fields are nullable since the dataType of TimeWindow defines them
