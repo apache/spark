@@ -4535,7 +4535,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
     TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
   }
-  
+
   override def visitDropLogicalView(ctx: DropLogicalViewContext): AnyRef = withOrigin(ctx) {
     DropView(
       createUnresolvedView(
