@@ -161,7 +161,8 @@ case class EnsureRequirements(
           children.length == 2 && childrenIndexes.length == 2 && {
         val left = children.head
         val right = children(1)
-        val newChildren = isKeyGroupCompatible(parent.get, left, right, requiredChildDistributions)
+        val newChildren = checkKeyGroupCompatible(
+          parent.get, left, right, requiredChildDistributions)
         if (newChildren.isDefined) {
           children = newChildren.get
         }
@@ -340,24 +341,24 @@ case class EnsureRequirements(
    * Checks whether two children, `left` and `right`, of a join operator have compatible
    * `KeyGroupedPartitioning`, and can benefit from storage-partitioned join.
    *
-   * Returns the new children if the check is successful, otherwise `None`.
+   * Returns the updated new children if the check is successful, otherwise `None`.
    */
-  private def isKeyGroupCompatible(
+  private def checkKeyGroupCompatible(
       parent: SparkPlan,
       left: SparkPlan,
       right: SparkPlan,
       requiredChildDistribution: Seq[Distribution]): Option[Seq[SparkPlan]] = {
     parent match {
       case smj: SortMergeJoinExec =>
-        isKeyGroupCompatible(left, right, smj.joinType, requiredChildDistribution)
+        checkKeyGroupCompatible(left, right, smj.joinType, requiredChildDistribution)
       case sj: ShuffledHashJoinExec =>
-        isKeyGroupCompatible(left, right, sj.joinType, requiredChildDistribution)
+        checkKeyGroupCompatible(left, right, sj.joinType, requiredChildDistribution)
       case _ =>
         None
     }
   }
 
-  private def isKeyGroupCompatible(
+  private def checkKeyGroupCompatible(
       left: SparkPlan,
       right: SparkPlan,
       joinType: JoinType,
@@ -559,6 +560,7 @@ case class EnsureRequirements(
       case p: KeyGroupedPartitioning => check(p)
       case PartitioningCollection(partitionings) =>
         val specs = partitionings.map(p => createKeyGroupedShuffleSpec(p, distribution))
+        assert(specs.forall(_.isEmpty) || specs.forall(_.isDefined))
         specs.head
       case _ => None
     }
