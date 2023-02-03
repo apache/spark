@@ -1480,7 +1480,8 @@
   "UNSUPPORTED_EXPR_FOR_WINDOW" : {
     "message" : [
       "Expression <sqlExpr> not supported within a window function."
-    ]
+    ],
+    "sqlState" : "42P20"
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
