@@ -3101,7 +3101,8 @@ abstract class CSVSuite
     }
   }
 
-  test("Add a legacy spark.sql.legacy.csv.defaultUnicodeNullAsWrittenComment") {
+  test("SPARK-42335: Add a legacy config for restoring written comment option " +
+    "behavior in CSV dataSource") {
     Seq("true", "false").foreach { confVal =>
       withSQLConf(SQLConf.LEGACY_DEFAULT_UNICODE_NULL_AS_WRITTEN_COMMENT.key -> confVal) {
         withTempPath { path =>
