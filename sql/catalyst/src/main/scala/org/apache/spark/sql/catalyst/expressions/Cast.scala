@@ -21,7 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -2511,40 +2511,41 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
  */
 case class CheckOverflowInTableInsert(child: Expression, columnName: String)
     extends UnaryExpression {
-  checkChild(child)
-
-  private def checkChild(child: Expression): Unit = child match {
-    case _: Cast =>
-    case ExpressionProxy(c, _, _) if c.isInstanceOf[Cast] =>
-    case _ =>
-      throw SparkException.internalError("Child is not Cast or ExpressionProxy of Cast")
-  }
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
-    checkChild(newChild)
     copy(child = newChild)
   }
 
-  private def getCast: Cast = child match {
+  private def getCast: Option[Cast] = child match {
     case c: Cast =>
-      c
-    case ExpressionProxy(c, _, _) =>
-      c.asInstanceOf[Cast]
+      Some(c)
+    case ExpressionProxy(c: Cast, _, _) =>
+      Some(c)
+    case _ => None
   }
 
   override def eval(input: InternalRow): Any = try {
     child.eval(input)
   } catch {
     case e: SparkArithmeticException =>
-      val cast = getCast
-      throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
-        cast.child.dataType,
-        cast.dataType,
-        columnName)
+      getCast match {
+        case Some(cast) =>
+          throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
+            cast.child.dataType,
+            cast.dataType,
+            columnName)
+        case None => throw e
+      }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val child = getCast
+    getCast match {
+      case Some(child) => doGenCodeWithBetterErrorMsg(ctx, ev, child)
+      case None => child.genCode(ctx)
+    }
+  }
+
+  def doGenCodeWithBetterErrorMsg(ctx: CodegenContext, ev: ExprCode, child: Cast): ExprCode = {
     val childGen = child.genCode(ctx)
     val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
     val fromDt =
