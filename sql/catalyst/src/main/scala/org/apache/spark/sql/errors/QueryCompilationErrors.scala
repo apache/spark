@@ -1393,7 +1393,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataSchemaNotSpecifiedError(format: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1129",
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
       messageParameters = Map("format" -> format))
   }
 
