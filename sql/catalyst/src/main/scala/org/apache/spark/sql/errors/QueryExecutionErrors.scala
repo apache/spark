@@ -1039,10 +1039,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("n" -> n.toString(), "jdbcNumPartitions" -> jdbcNumPartitions))
   }
 
-  def transactionUnsupportedByJdbcServerError(): Throwable = {
+  def multiActionAlterError(tableName: String): Throwable = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "UNSUPPORTED_FEATURE.JDBC_TRANSACTION",
-      messageParameters = Map.empty[String, String])
+      errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): SparkUnsupportedOperationException = {

@@ -21,7 +21,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.SparkResult
 
-class Dataset(val session: SparkSession, private[sql] val plan: proto.Plan) {
+class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan: proto.Plan)
+    extends Serializable {
 
   /**
    * Selects a set of column based expressions.
@@ -33,7 +34,7 @@ class Dataset(val session: SparkSession, private[sql] val plan: proto.Plan) {
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): Dataset = session.newDataset { builder =>
+  def select(cols: Column*): DataFrame = session.newDataset { builder =>
     builder.getProjectBuilder
       .setInput(plan.getRoot)
       .addAllExpressions(cols.map(_.expr).asJava)
@@ -50,7 +51,7 @@ class Dataset(val session: SparkSession, private[sql] val plan: proto.Plan) {
    * @group typedrel
    * @since 3.4.0
    */
-  def filter(condition: Column): Dataset = session.newDataset { builder =>
+  def filter(condition: Column): Dataset[T] = session.newDataset { builder =>
     builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
   }
 
@@ -62,7 +63,7 @@ class Dataset(val session: SparkSession, private[sql] val plan: proto.Plan) {
    * @group typedrel
    * @since 3.4.0
    */
-  def limit(n: Int): Dataset = session.newDataset { builder =>
+  def limit(n: Int): Dataset[T] = session.newDataset { builder =>
     builder.getLimitBuilder
       .setInput(plan.getRoot)
       .setLimit(n)

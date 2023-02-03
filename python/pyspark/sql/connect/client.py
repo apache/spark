@@ -14,6 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+__all__ = [
+    "ChannelBuilder",
+    "SparkConnectClient",
+]
+
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 import logging
 import os
 import random
@@ -839,9 +848,3 @@ class Retrying:
                 time.sleep(backoff / 1000.0)
 
             yield AttemptManager(self._can_retry, retry_state)
-
-
-__all__ = [
-    "ChannelBuilder",
-    "SparkConnectClient",
-]

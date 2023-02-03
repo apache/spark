@@ -33,6 +33,7 @@
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
     <guava.version>31.0.1-jre</guava.version>
+    <mima.version>1.1.0</mima.version>
   </properties>
 
   <dependencies>
@@ -90,6 +91,13 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Use mima to perform the compatibility check -->
+    <dependency>
+      <groupId>com.typesafe</groupId>
+      <artifactId>mima-core_${scala.binary.version}</artifactId>
+      <version>${mima.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

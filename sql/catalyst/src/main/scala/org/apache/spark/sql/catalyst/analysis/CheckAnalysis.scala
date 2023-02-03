@@ -422,6 +422,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   errorClass = "_LEGACY_ERROR_TEMP_2423",
                   messageParameters = Map("sqlExpr" -> s.sql))
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
+              // There should be no Window in Aggregate - this case will fail later check anyway.
+              // Perform this check for special case of lateral column alias, when the window
+              // expression is not eligible to propagate to upper plan because it is not valid,
+              // containing non-group-by or non-aggregate-expressions.
+              case WindowExpression(function, spec) =>
+                function.children.foreach(checkValidAggregateExpression)
+                checkValidAggregateExpression(spec)
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
@@ -739,6 +746,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case lcaRef: LateralColumnAliasReference =>
                 throw SparkException.internalError("Resolved Aggregate should not contain " +
                   s"any LateralColumnAliasReference.\nDebugging information: plan: $agg",
+                  context = lcaRef.origin.getQueryContext,
+                  summary = lcaRef.origin.context.summary)
+            })
+
+          case w @ Window(pList, _, _, _)
+            if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) && w.resolved =>
+            pList.foreach(_.transformDownWithPruning(
+              _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+              case lcaRef: LateralColumnAliasReference =>
+                throw SparkException.internalError(
+                  s"Referencing lateral column alias ${toSQLId(lcaRef.nameParts)} is not " +
+                    s"supported in this Window query case yet. \nDebugging information: plan: $w",
                   context = lcaRef.origin.getQueryContext,
                   summary = lcaRef.origin.context.summary)
             })

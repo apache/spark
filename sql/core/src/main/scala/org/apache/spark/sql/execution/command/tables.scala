@@ -648,13 +648,8 @@ case class DescribeTableCommand(
       }
 
       // If any columns have default values, append them to the result.
-      if (metadata.schema.fields.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
-        append(result, "", "", "")
-        append(result, "# Column Default Values", "", "")
-        metadata.schema.foreach { column =>
-          column.getCurrentDefaultValue().map(
-            append(result, column.name, column.dataType.simpleString, _))
-        }
+      ResolveDefaultColumns.getDescribeMetadata(metadata.schema).foreach { row =>
+        append(result, row._1, row._2, row._3)
       }
     }
 
