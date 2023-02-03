@@ -2086,11 +2086,6 @@
       "Try moving this class out of its parent class."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1003" : {
-    "message" : [
-      "Couldn't find the reference column for <after> at <parentName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1004" : {
     "message" : [
       "Window specification <windowName> is not defined in the WINDOW clause."
