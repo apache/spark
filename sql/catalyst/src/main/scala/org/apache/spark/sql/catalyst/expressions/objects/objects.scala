@@ -1927,7 +1927,8 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
       (value: Any) => {
         value.getClass.isArray ||
           value.isInstanceOf[scala.collection.Seq[_]] ||
-          value.isInstanceOf[Set[_]]
+          value.isInstanceOf[Set[_]] ||
+          value.isInstanceOf[java.util.List[_]]
       }
     case _: DateType =>
       (value: Any) => {
@@ -1968,7 +1969,10 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
           classOf[scala.math.BigDecimal],
           classOf[Decimal]))
       case _: ArrayType =>
-        val check = genCheckTypes(Seq(classOf[scala.collection.Seq[_]], classOf[Set[_]]))
+        val check = genCheckTypes(Seq(
+          classOf[scala.collection.Seq[_]],
+          classOf[Set[_]],
+          classOf[java.util.List[_]]))
         s"$obj.getClass().isArray() || $check"
       case _: DateType =>
         genCheckTypes(Seq(classOf[java.sql.Date], classOf[java.time.LocalDate]))

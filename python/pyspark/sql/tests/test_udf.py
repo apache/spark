@@ -43,11 +43,9 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_
 from pyspark.testing.utils import QuietTest
 
 
-class BaseUDFTests(object):
+class BaseUDFTestsMixin(object):
     def test_udf_with_callable(self):
-        d = [Row(number=i, squared=i**2) for i in range(10)]
-        rdd = self.sc.parallelize(d)
-        data = self.spark.createDataFrame(rdd)
+        data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
 
         class PlusFour:
             def __call__(self, col):
@@ -60,9 +58,7 @@ class BaseUDFTests(object):
         self.assertEqual(res.agg({"plus_four": "sum"}).collect()[0][0], 85)
 
     def test_udf_with_partial_function(self):
-        d = [Row(number=i, squared=i**2) for i in range(10)]
-        rdd = self.sc.parallelize(d)
-        data = self.spark.createDataFrame(rdd)
+        data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
 
         def some_func(col, param):
             if col is not None:
@@ -283,9 +279,12 @@ class BaseUDFTests(object):
 
     def test_udf_with_array_type(self):
         with self.tempView("test"):
-            d = [Row(l=list(range(3)), d={"key": list(range(5))})]
-            rdd = self.sc.parallelize(d)
-            self.spark.createDataFrame(rdd).createOrReplaceTempView("test")
+            self.spark.createDataFrame(
+                [
+                    ([0, 1, 2], {"key": [0, 1, 2, 3, 4]}),
+                ],
+                ["l", "d"],
+            ).createOrReplaceTempView("test")
             self.spark.catalog.registerFunction(
                 "copylist", lambda l: list(l), ArrayType(IntegerType())
             )
@@ -728,8 +727,9 @@ class BaseUDFTests(object):
         f = udf(lambda x: x, "long")
         with self.tempView("v"):
             self.spark.range(1).filter(f("id") >= 0).createTempView("v")
-            sql = self.spark.sql
-            result = sql("select i from values(0L) as data(i) where i in (select id from v)")
+            result = self.spark.sql(
+                "select i from values(0L) as data(i) where i in (select id from v)"
+            )
             self.assertEqual(result.collect(), [Row(i=0)])
 
     def test_udf_globals_not_overwritten(self):
@@ -822,10 +822,10 @@ class BaseUDFTests(object):
         )
 
 
-class UDFTests(BaseUDFTests, ReusedSQLTestCase):
+class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(BaseUDFTests, cls).setUpClass()
+        super(BaseUDFTestsMixin, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
 

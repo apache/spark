@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -264,6 +264,36 @@ object ScalaReflection extends ScalaReflection {
         Option(clsTag.runtimeClass),
         walkedTypePath)
 
+    case MapEncoder(tag, keyEncoder, valueEncoder, _)
+        if classOf[java.util.Map[_, _]].isAssignableFrom(tag.runtimeClass) =>
+      // TODO (hvanhovell) this is can be improved.
+      val newTypePath = walkedTypePath.recordMap(
+        keyEncoder.clsTag.runtimeClass.getName,
+        valueEncoder.clsTag.runtimeClass.getName)
+
+      val keyData =
+        Invoke(
+          UnresolvedMapObjects(
+            p => deserializerFor(keyEncoder, p, newTypePath),
+            MapKeys(path)),
+          "array",
+          ObjectType(classOf[Array[Any]]))
+
+      val valueData =
+        Invoke(
+          UnresolvedMapObjects(
+            p => deserializerFor(valueEncoder, p, newTypePath),
+            MapValues(path)),
+          "array",
+          ObjectType(classOf[Array[Any]]))
+
+      StaticInvoke(
+        ArrayBasedMapData.getClass,
+        ObjectType(classOf[java.util.Map[_, _]]),
+        "toJavaMap",
+        keyData :: valueData :: Nil,
+        returnNullable = false)
+
     case MapEncoder(tag, keyEncoder, valueEncoder, _) =>
       val newTypePath = walkedTypePath.recordMap(
         keyEncoder.clsTag.runtimeClass.getName,
@@ -312,6 +342,26 @@ object ScalaReflection extends ScalaReflection {
       exprs.If(IsNull(path),
         exprs.Literal.create(null, externalDataTypeFor(enc)),
         CreateExternalRow(convertedFields, enc.schema))
+
+    case JavaBeanEncoder(tag, fields) =>
+      val setters = fields.map { f =>
+        val newTypePath = walkedTypePath.recordField(
+          f.enc.clsTag.runtimeClass.getName,
+          f.name)
+        val setter = expressionWithNullSafety(
+          deserializerFor(
+            f.enc,
+            addToPath(path, f.name, f.enc.dataType, newTypePath),
+            newTypePath),
+          nullable = f.nullable,
+          newTypePath)
+        f.writeMethod.get -> setter
+      }
+
+      val cls = tag.runtimeClass
+      val newInstance = NewInstance(cls, Nil, ObjectType(cls), propagateNull = false)
+      val result = InitializeJavaBean(newInstance, setters.toMap)
+      exprs.If(IsNull(path), exprs.Literal.create(null, ObjectType(cls)), result)
   }
 
   private def deserializeArray(
@@ -444,6 +494,18 @@ object ScalaReflection extends ScalaReflection {
           AssertNotNull(fieldValue)
         }
         field.name -> convertedField
+      }
+      createSerializerForObject(input, serializedFields)
+
+    case JavaBeanEncoder(_, fields) =>
+      val serializedFields = fields.map { f =>
+        val fieldValue = Invoke(
+          KnownNotNull(input),
+          f.readMethod.get,
+          externalDataTypeFor(f.enc),
+          propagateNull = f.nullable,
+          returnNullable = f.nullable)
+        f.name -> serializerFor(f.enc, fieldValue)
       }
       createSerializerForObject(input, serializedFields)
   }
