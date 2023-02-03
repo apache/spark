@@ -955,30 +955,65 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val r4 = Except(firstTable, secondTable, isAll = false)
     val r5 = Intersect(firstTable, secondTable, isAll = false)
 
-    assertAnalysisError(r1,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
+    assertAnalysisErrorClass(
+      r1,
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r2,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The third column of the second table is timestamp type which is not compatible " +
-        "with int at the same column of the first table"))
+    assertAnalysisErrorClass(
+      r2,
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "third",
+        "dataType2" -> "\"INT\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r3,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The 4th column of the second table is timestamp type which is not compatible " +
-        "with float at the same column of the first table"))
+    assertAnalysisErrorClass(
+      r3,
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "4th",
+        "dataType2" -> "\"FLOAT\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r4,
-      Seq("Except can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
+    assertAnalysisErrorClass(
+      r4,
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "EXCEPT",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r5,
-      Seq("Intersect can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
+    assertAnalysisErrorClass(
+      r5,
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "INTERSECT",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
