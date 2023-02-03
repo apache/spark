@@ -1211,7 +1211,8 @@
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
       "<sessionCatalog> requires a single-part namespace, but got <namespace>."
-    ]
+    ],
+    "sqlState" : "42K05"
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
