@@ -34,6 +34,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
@@ -2608,11 +2609,12 @@ abstract class JsonSuite
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
       .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-    val errMessage = intercept[SparkException] {
-      df.collect()
-    }.getMessage
-    assert(errMessage.contains(
-      s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+    val e = intercept[SparkException] {df.collect()}
+    checkError(
+      exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "FAILED_PARSE_EMPTY_STRING",
+      parameters = Map("dataType" -> s"${toSQLType(dataType)}")
+    )
   }
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {

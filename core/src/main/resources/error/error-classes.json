@@ -511,6 +511,12 @@
     ],
     "sqlState" : "38000"
   },
+  "FAILED_PARSE_EMPTY_STRING" : {
+    "message" : [
+      "Failed to parse an empty string for data type <dataType>."
+    ],
+    "sqlState" : "42P18"
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists."
@@ -4222,11 +4228,6 @@
   "_LEGACY_ERROR_TEMP_2134" : {
     "message" : [
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2135" : {
-    "message" : [
-      "Failed to parse an empty string for data type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2138" : {
