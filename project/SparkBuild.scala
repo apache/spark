@@ -853,7 +853,7 @@ object SparkConnectClient {
     },
 
     buildTestDeps := {
-      (LocalProject("sql") / Compile /Keys.`package`).value
+      (LocalProject("sql") / Compile / Keys.`package`).value
       (LocalProject("connect") / assembly).value
       (LocalProject("connect-client-jvm") / assembly).value
     },
