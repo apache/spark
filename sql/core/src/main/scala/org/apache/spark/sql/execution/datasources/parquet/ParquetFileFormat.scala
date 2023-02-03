@@ -466,7 +466,7 @@ object ParquetFileFormat extends Logging {
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
         assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-        inferTimestampNTZ = inferTimestampNTZ)
+        inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles)

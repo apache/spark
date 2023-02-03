@@ -74,7 +74,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       caseSensitive = caseSensitive,
-      inferTimestampNTZ = inferTimestampNTZ)
+      inferTimestampNTZ = inferTimestampNTZ,
       nanosAsLong = nanosAsLong)
 
     test(s"sql <= parquet: $testName") {
@@ -1036,7 +1036,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       val errMsg = e.getCause.getMessage
       assert(errMsg.startsWith("Parquet column cannot be converted in file"))
       val file = errMsg.substring("Parquet column cannot be converted in file ".length,
-        errMsg.indexOf(". "))
+        errMsg.indexOf(". "))inferTimestampNTZ
       val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
