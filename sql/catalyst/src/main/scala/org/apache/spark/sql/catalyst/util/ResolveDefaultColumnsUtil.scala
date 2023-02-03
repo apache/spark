@@ -281,7 +281,7 @@ object ResolveDefaultColumns {
         }
       }
     }
-    rows
+    rows.toSeq
   }
 
   /**
