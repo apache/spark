@@ -19,21 +19,22 @@ package org.apache.spark.internal.io.cloud
 
 import java.io.IOException
 import java.util.{Date, UUID}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
-import scala.util.Try
 
-import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.{Path, StreamCapabilities}
+import org.apache.hadoop.fs.statistics.IOStatisticsLogging.ioStatisticsToPrettyString
 import org.apache.hadoop.fs.statistics.IOStatisticsSnapshot
+import org.apache.hadoop.fs.statistics.IOStatisticsSupport.{retrieveIOStatistics, snapshotIOStatistics}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec, SparkHadoopWriterUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.THEAD_COUNT_DEFAULT
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Spark Commit protocol for Path Output Committers.
@@ -86,6 +87,9 @@ class PathOutputCommitProtocol(
   /** The destination path. This is serializable in Hadoop 3. */
   private[cloud] val destPath: Path = new Path(destination)
 
+  /**
+   * Thread pool size for dynamic partitioning promotion?
+   */
   private var threadCount = THEAD_COUNT_DEFAULT
 
   /**
@@ -94,7 +98,7 @@ class PathOutputCommitProtocol(
    *
    * The mapping is from the temp output path to the final desired output path of the file.
    */
-  @transient private var addedAbsPathFiles: mutable.Map[String, String] = null
+  @transient private var addedAbsPathFiles: mutable.Map[Path, Path] = null
 
   /**
    * Tracks partitions with default path that have new files written into them by this task,
@@ -126,16 +130,20 @@ class PathOutputCommitProtocol(
     logTrace(s"Setting up committer for path $destination")
     committer = PathOutputCommitterFactory.createCommitter(destPath, context)
 
+    // read in configuration information
+    val conf = context.getConfiguration
+    threadCount = conf.getInt(THREAD_COUNT, THEAD_COUNT_DEFAULT)
+
     // Special feature to force out the FileOutputCommitter, so as to guarantee
     // that the binding is working properly.
-    val rejectFileOutput = context.getConfiguration
+    val rejectFileOutput = conf
       .getBoolean(REJECT_FILE_OUTPUT, REJECT_FILE_OUTPUT_DEFVAL)
     if (rejectFileOutput && committer.isInstanceOf[FileOutputCommitter]) {
       // the output format returned a file output format committer, which
       // is exactly what we do not want. So switch back to the factory.
       val factory = PathOutputCommitterFactory.getCommitterFactory(
         destPath,
-        context.getConfiguration)
+        conf)
       logTrace(s"Using committer factory $factory")
       committer = factory.createOutputCommitter(destPath, context)
     }
@@ -161,7 +169,7 @@ class PathOutputCommitProtocol(
             s"Committer $committer has declared compatibility with dynamic partition overwrite")
         } else {
           logWarning(s"Committer $committer has incomplete support for" +
-            " dynamic partition overwrite.")
+            " dynamic partition overwrite. It may be slow.")
         }
       }
     }
@@ -276,16 +284,15 @@ class PathOutputCommitProtocol(
         s" in dynamic partitioned overwrite query writing to $stagingDir")
     }
     val filename = getFilename(taskContext, spec)
-    val absOutputPath = new Path(absoluteDir, filename).toString
+    val absOutputPath = new Path(absoluteDir, filename)
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
     // In principle we could include hash(absoluteDir) instead but this is simpler.
     val tmpOutputPath = new Path(stagingDir,
-      UUID.randomUUID().toString() + "-" + filename).toString
+      UUID.randomUUID().toString() + "-" + filename)
 
     addedAbsPathFiles(tmpOutputPath) = absOutputPath
-    val temp = super.newTaskTempFileAbsPath(taskContext, absoluteDir, spec)
-    logTrace(s"Creating temporary file $temp for absolute dir $target")
-    tmpOutputPath
+    logTrace(s"Creating temporary file $tmpOutputPath for absolute dir $target")
+    tmpOutputPath.toString
   }
 
   protected def getFilename(taskContext: TaskAttemptContext,
@@ -321,59 +328,118 @@ class PathOutputCommitProtocol(
 
   override def commitJob(jobContext: JobContext,
       taskCommits: Seq[TaskCommitMessage]): Unit = {
+    // commit the job through the instantiated committer.
     committer.commitJob(jobContext)
 
-    val (allAbsPathFiles, allPartitionPaths) =
-      taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])])
-        .unzip
+    // extract the commit information from the messages
+    val commitMessages = taskCommits.map(_.obj.asInstanceOf[TaskCommitInfo])
+
+    val allAbsPathFiles = commitMessages.map(_.addedAbsPathFiles)
+    val allPartitionPaths = commitMessages.map(_.partitionPaths)
+
+    // merge the IOStatistics
+    val iostatsSnapshot = new IOStatisticsSnapshot()
+    commitMessages.foreach(m => iostatsSnapshot.aggregate(m.iostatistics))
+    val anyStatCollected = commitMessages.foldLeft(false)((f, m) =>
+      iostatsSnapshot.aggregate(m.iostatistics) || f)
+    if (anyStatCollected) {
+      // print out the received statistics
+      logInfo(s"IOStatistics were collected from tasks ${ioStatisticsToPrettyString(iostatsSnapshot)}")
+    }
+
     val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
 
-    val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
-    logDebug(s"Committing files staged for absolute locations $filesToMove")
-    val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
-    if (dynamicPartitionOverwrite) {
-      logDebug(
-        s"Clean up absolute partition directories for overwriting: $absParentPaths")
-      absParentPaths.foreach(fs.delete(_, true))
-    }
-    logDebug(s"Create absolute parent directories: $absParentPaths")
-    absParentPaths.foreach(fs.mkdirs)
-    for ((src, dst) <- filesToMove) {
-      if (!fs.rename(new Path(src), new Path(dst))) {
-        throw new IOException(
-          s"Failed to rename $src to $dst when committing files staged for " +
-            s"absolute locations")
+    val filesToMove = allAbsPathFiles.foldLeft(Map[Path, Path]())(_ ++ _)
+    if (filesToMove.nonEmpty) {
+      logDebug(s"Committing files staged for absolute locations $filesToMove")
+      val absParentPaths: Set[Path] = filesToMove.values.map(_.getParent).toSet
+      // absolute paths: log then prepare, which includes deletion
+      // on dynamic partitioning
+      logInfo(s"Create preparing absolute parent directories: $absParentPaths")
+      ThreadUtils.parmap(absParentPaths.toSeq, "job-commit-abs", threadCount) {
+        parent: Path =>
+          if (dynamicPartitionOverwrite) {
+            fs.delete(parent, true)
+          }
+          fs.mkdirs(parent)
+      }
+      // now the file renaming with an atomic boolean to stop the work on a failure
+      logInfo(s"renaming ${filesToMove.size} files to absolute paths")
+      val stop = new AtomicBoolean(false)
+      val outcomes = ThreadUtils
+        .parmap(filesToMove.toSeq, "job-commit-abs-rename", threadCount) { t =>
+          if (!stop.get()) {
+            val src = t._1
+            val dst = t._2
+            // rename/2's error reporting mimics that of the java.io.File API: mostly useless
+            if (!fs.rename(src, dst)) {
+              // stop all other work
+              stop.set(true)
+              // report a failure
+              throw new IOException(
+                s"Failed to rename $src to $dst when committing files staged for " +
+                  s"absolute locations")
+            }
+            true
+          } else {
+            false
+          }
+        }
+      if (!outcomes.forall(b => b)) {
+        // an exception should have been raised here already
+        throw new IOException("Failed to copy absolute files")
       }
     }
 
+    // directory rename in dynamic overwrite.
+    // this can be O(1) (HDFS), slow O(1) (ABFS), O(files) (GCS) or O(data) (S3)
+    // As well as parallelizing the operation for speed, error handling should
+    // fail fast on the first failure, rather than continue with other directory renames
+
+    val stopOverwrite = new AtomicBoolean(false)
     if (dynamicPartitionOverwrite) {
       val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
-      logDebug(
-        s"Clean up default partition directories for overwriting: $partitionPaths")
-      for (part <- partitionPaths) {
-        val finalPartPath = new Path(path, part)
-        if (!fs.delete(finalPartPath, true) &&
-          !fs.exists(finalPartPath.getParent)) {
-          // According to the official hadoop FileSystem API spec, delete op should assume
-          // the destination is no longer present regardless of return value, thus we do not
-          // need to double check if finalPartPath exists before rename.
-          // Also in our case, based on the spec, delete returns false only when finalPartPath
-          // does not exist. When this happens, we need to take action if parent of finalPartPath
-          // also does not exist(e.g. the scenario described on SPARK-23815), because
-          // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
-          // a parent that exists, otherwise we may get unexpected result on the rename.
-          fs.mkdirs(finalPartPath.getParent)
-        }
-        val stagingPartPath = new Path(stagingDir, part)
-        if (!fs.rename(stagingPartPath, finalPartPath)) {
-          throw new IOException(
-            s"Failed to rename $stagingPartPath to $finalPartPath when " +
-              s"committing files staged for overwriting dynamic partitions")
+      logInfo(s"Overwriting ${partitionPaths.size} partition directories")
+      logDebug(s"Paths: $partitionPaths")
+      ThreadUtils.parmap(partitionPaths.toSeq, "job-commit-partitions", threadCount) { part =>
+        if (stopOverwrite.get()) {
+          false
+        } else {
+          try {
+            val finalPartPath = new Path(path, part)
+            if (!fs.delete(finalPartPath, true) &&
+              !fs.exists(finalPartPath.getParent)) {
+              // According to the official hadoop FileSystem API spec, delete op should assume
+              // the destination is no longer present regardless of return value, thus we do not
+              // need to double check if finalPartPath exists before rename.
+              // Also in our case, based on the spec, delete returns false only when finalPartPath
+              // does not exist. When this happens, we need to take action if parent of finalPartPath
+              // also does not exist(e.g. the scenario described on SPARK-23815), because
+              // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
+              // a parent that exists, otherwise we may get unexpected result on the rename.
+              fs.mkdirs(finalPartPath.getParent)
+            }
+            val stagingPartPath = new Path(stagingDir, part)
+            if (!fs.rename(stagingPartPath, finalPartPath)) {
+              throw new IOException(
+                s"Failed to rename $stagingPartPath to $finalPartPath when " +
+                  s"committing files staged for overwriting dynamic partitions")
+            }
+          } catch {
+                // failure in any of the filesystem operations
+            case e: Exception =>
+              stopOverwrite.set(true)
+              throw e;
+          }
+          true
         }
       }
     }
 
     fs.delete(stagingDir, true)
+
+    // the job is now complete.
+    // TODO: save iostats *somewhere* if configured to do so.
   }
 
   /**
@@ -402,10 +468,15 @@ class PathOutputCommitProtocol(
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
-    addedAbsPathFiles = mutable.Map[String, String]()
+    addedAbsPathFiles = mutable.Map[Path, Path]()
     partitionPaths = mutable.Set[String]()
   }
 
+  /**
+   * Commit a task.
+   * @param taskContext task attempt
+   * @return a commit message containing a `TaskCommitInfo` instance
+   */
   override def commitTask(
       taskContext: TaskAttemptContext): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
@@ -413,7 +484,18 @@ class PathOutputCommitProtocol(
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId,
       attemptId.getTaskID.getId)
-    new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
+    val committerStats = retrieveIOStatistics(committer)
+    val snapshot = if (committerStats != null) {
+      // committer is publishing IOStats, collect to aggregate
+      snapshotIOStatistics(committerStats)
+    } else {
+      null
+    }
+
+    new TaskCommitMessage(TaskCommitInfo(
+      addedAbsPathFiles.toMap,
+      partitionPaths.toSet,
+      snapshot))
   }
 
   /**
@@ -433,8 +515,7 @@ class PathOutputCommitProtocol(
     }
     // best effort cleanup of other staged files
     try {
-      for ((src, _) <- addedAbsPathFiles) {
-        val tmp = new Path(src)
+      for ((tmp, _) <- addedAbsPathFiles) {
         tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
       }
     } catch {
@@ -444,20 +525,21 @@ class PathOutputCommitProtocol(
     }
   }
 
-  /**
-   * Payload of the task commit message
-   * @param addedAbsPathFiles map of staging to absolute files
-   * @param partitionPaths set of partition directories written to in dynamic overwrite
-   * @param iostatistics any IOStatistics collected.
-   */
-  private[cloud] class TaskCommitInfo(
-      addedAbsPathFiles: Map[String, String],
-      partitionPaths: Set[String],
-      iostatistics: IOStatisticsSnapshot) extends Serializable
 
 }
 
 
+/**
+ * Payload of the task commit message
+ *
+ * @param addedAbsPathFiles map of staging to absolute files
+ * @param partitionPaths set of partition directories written to in dynamic overwrite
+ * @param iostatistics any IOStatistics collected.
+ */
+private[cloud] case class TaskCommitInfo(
+    addedAbsPathFiles: Map[Path, Path],
+    partitionPaths: Set[String],
+    iostatistics: IOStatisticsSnapshot) extends Serializable
 
 object PathOutputCommitProtocol {
 
@@ -471,7 +553,7 @@ object PathOutputCommitProtocol {
    * to a new committer.
    */
   val REJECT_FILE_OUTPUT = "pathoutputcommit.reject.fileoutput"
-  val THREAD_COUNT = "pathoutputcommit.reject.fileoutput"
+  val THREAD_COUNT = "pathoutputcommit.thread.count"
   val THEAD_COUNT_DEFAULT = 8
 
   /**
