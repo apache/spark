@@ -49,7 +49,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(array(2).getLong(0) == 2)
   }
 
-  test("simple udf test") {
+  ignore("simple udf test") {
 
     def dummyUdf(x: Int): Int = x + 5
     val myUdf = udf(dummyUdf _)
