@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class ClientE2ETestSuite extends RemoteSparkSession {
@@ -46,6 +47,19 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(array(0).getLong(0) == 0)
     assert(array(1).getLong(0) == 1)
     assert(array(2).getLong(0) == 2)
+  }
+
+  test("simple udf test") {
+
+    def dummyUdf(x: Int): Int = x + 5
+    val myUdf = udf(dummyUdf _)
+    val df = spark.range(5).select(myUdf(Column("id")))
+
+    val result = df.collectResult()
+    assert(result.length == 5)
+    result.toArray.zipWithIndex.foreach { case (v, idx) =>
+      assert(v.getInt(0) == idx + 5)
+    }
   }
 
   // TODO test large result when we can create table or view

@@ -529,6 +529,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_types",
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
+        "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_pandas_udf",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -747,6 +749,7 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.indexes.test_datetime",
         "pyspark.pandas.tests.test_dataframe",
         "pyspark.pandas.tests.test_groupby",
+        "pyspark.pandas.tests.test_groupby_slow",
         "pyspark.pandas.tests.test_indexing",
         "pyspark.pandas.tests.test_ops_on_diff_frames",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",

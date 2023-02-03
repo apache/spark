@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
 
+check_dependencies(__name__, __file__)
 
 from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Any
@@ -602,52 +604,41 @@ class DataFrameWriter(OptionUtils):
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.readwriter
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.readwriter.__dict__.copy()
 
-    if should_test_connect:
-        import pyspark.sql.connect.readwriter
+    # TODO(SPARK-41817): Support reading with schema
+    del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
+    del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
+    del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
+    del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
 
-        globs = pyspark.sql.connect.readwriter.__dict__.copy()
+    # TODO(SPARK-41818): Support saveAsTable
+    del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
+    del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
 
-        # TODO(SPARK-41817): Support reading with schema
-        del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.readwriter tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
 
-        # TODO(SPARK-41818): Support saveAsTable
-        del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.readwriter,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.readwriter tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.readwriter,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.readwriter doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

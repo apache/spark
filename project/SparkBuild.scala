@@ -851,6 +851,9 @@ object SparkConnectClient {
       )
     },
 
+    // Make sure the connect server assembly jar is available for testing.
+    test := ((Test / test) dependsOn (LocalProject("connect") / assembly)).value,
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -870,6 +873,7 @@ object SparkConnectClient {
     },
 
     (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.grpc.@0").inAll,
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
       ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
       ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.client.guava.@1").inAll,

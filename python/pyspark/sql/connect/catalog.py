@@ -14,12 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 from typing import Any, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
 from pyspark.sql.types import StructType
-from pyspark.sql.connect import DataFrame
+from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.catalog import (
     Catalog as PySparkCatalog,
     CatalogMetadata,
@@ -323,47 +327,34 @@ Catalog.__doc__ = PySparkCatalog.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.catalog
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.catalog.__dict__.copy()
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
+    )
 
-    if should_test_connect:
-        import pyspark.sql.connect.catalog
+    # TODO(SPARK-41612): Support Catalog.isCached
+    # TODO(SPARK-41600): Support Catalog.cacheTable
+    del pyspark.sql.connect.catalog.Catalog.clearCache.__doc__
+    del pyspark.sql.connect.catalog.Catalog.refreshTable.__doc__
+    del pyspark.sql.connect.catalog.Catalog.refreshByPath.__doc__
+    del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
 
-        globs = pyspark.sql.connect.catalog.__dict__.copy()
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.catalog tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.catalog,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
+    globs["spark"].stop()
 
-        # TODO(SPARK-41612): Support Catalog.isCached
-        # TODO(SPARK-41600): Support Catalog.cacheTable
-        del pyspark.sql.connect.catalog.Catalog.clearCache.__doc__
-        del pyspark.sql.connect.catalog.Catalog.refreshTable.__doc__
-        del pyspark.sql.connect.catalog.Catalog.refreshByPath.__doc__
-        del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
-
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.catalog,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.catalog doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
