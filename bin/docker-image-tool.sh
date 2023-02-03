@@ -233,7 +233,6 @@ Commands:
 
 Options:
   -f file               (Optional) Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
-                        For Java 17, use `-f kubernetes/dockerfiles/spark/Dockerfile.java17`
   -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
                         Skips building PySpark docker image if not specified.
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
@@ -262,24 +261,20 @@ Examples:
     $0 -m -t testing build
 
   - Build PySpark docker image
-    $0 -r docker.io/myrepo -t v2.3.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+    $0 -r docker.io/myrepo -t v3.4.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
 
-  - Build and push image with tag "v2.3.0" to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v2.3.0 build
-    $0 -r docker.io/myrepo -t v2.3.0 push
+  - Build and push image with tag "v3.4.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v3.4.0 build
+    $0 -r docker.io/myrepo -t v3.4.0 push
 
-  - Build and push Java11-based image with tag "v3.0.0" to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v3.0.0 -b java_image_tag=11-jre-focal build
-    $0 -r docker.io/myrepo -t v3.0.0 push
+  - Build and push Java11-based image with tag "v3.4.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v3.4.0 -b java_image_tag=11-jre build
+    $0 -r docker.io/myrepo -t v3.4.0 push
 
-  - Build and push Java11-based image for multiple archs to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v3.0.0 -X -b java_image_tag=11-jre-focal build
+  - Build and push image for multiple archs to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v3.4.0 -X build
     # Note: buildx, which does cross building, needs to do the push during build
     # So there is no separate push step with -X
-
-  - Build and push Java17-based image with tag "v3.3.0" to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v3.3.0 -f kubernetes/dockerfiles/spark/Dockerfile.java17 build
-    $0 -r docker.io/myrepo -t v3.3.0 push
 
 EOF
 }

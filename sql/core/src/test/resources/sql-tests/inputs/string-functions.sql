@@ -126,6 +126,8 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.');
 
 -- contains
 SELECT CONTAINS(null, 'Spark');
@@ -225,3 +227,33 @@ select to_binary(null, cast(null as string));
 -- invalid format
 select to_binary('abc', 1);
 select to_binary('abc', 'invalidFormat');
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat');
+SELECT to_binary('abc', fmtField) FROM fmtTable;
+-- Clean up
+DROP VIEW IF EXISTS fmtTable;
+-- luhn_check
+-- basic cases
+select luhn_check('4111111111111111');
+select luhn_check('5500000000000004');
+select luhn_check('340000000000009');
+select luhn_check('6011000000000004');
+select luhn_check('6011000000000005');
+select luhn_check('378282246310006');
+select luhn_check('0');
+-- spaces in the beginning/middle/end
+select luhn_check('4111111111111111    ');
+select luhn_check('4111111 111111111');
+select luhn_check(' 4111111111111111');
+-- space
+select luhn_check('');
+select luhn_check('  ');
+-- non-digits
+select luhn_check('510B105105105106');
+select luhn_check('ABCDED');
+-- null
+select luhn_check(null);
+-- non string (test implicit cast)
+select luhn_check(6011111111111117);
+select luhn_check(6011111111111118);
+select luhn_check(123.456);
+

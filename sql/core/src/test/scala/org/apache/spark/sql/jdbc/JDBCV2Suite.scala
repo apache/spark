@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
@@ -2549,14 +2549,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
       checkAggregateRemoved(df)
       checkAnswer(df, Row(1) :: Nil)
-      val e1 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e1.getMessage.contains("Undefined function: h2.test.my_avg2"))
-      val e2 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`h2`.`test`.`my_avg2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+        context = ExpectedContext(
+          fragment = "h2.test.my_avg2(id)",
+          start = 7,
+          stop = 25))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`h2`.`my_avg2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+        context = ExpectedContext(
+          fragment = "h2.my_avg2(id)",
+          start = 7,
+          stop = 20))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect)
@@ -2628,6 +2644,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(indexes1.isEmpty)
 
     sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+    checkError(
+      exception = intercept[IndexAlreadyExistsException] {
+        sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+      },
+      errorClass = "INDEX_ALREADY_EXISTS",
+      parameters = Map(
+        "indexName" -> "people_index",
+        "tableName" -> "test.people"
+      )
+    )
     assert(jdbcTable.indexExists("people_index"))
     val indexes2 = jdbcTable.listIndexes()
     assert(!indexes2.isEmpty)
@@ -2636,6 +2662,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(tableIndex.indexName() == "people_index")
 
     sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+    checkError(
+      exception = intercept[NoSuchIndexException] {
+        sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+      },
+      errorClass = "INDEX_NOT_FOUND",
+      parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
+    )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
     assert(indexes3.isEmpty)

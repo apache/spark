@@ -113,7 +113,7 @@ private[libsvm] class LibSVMFileFormat
     val attrGroup = new AttributeGroup(name = "features", numAttributes = numFeatures)
     val featuresField = attrGroup.toStructField(extraMetadata)
 
-    Some(StructType(labelField :: featuresField :: Nil))
+    Some(StructType(Array(labelField, featuresField)))
   }
 
   override def prepareWrite(

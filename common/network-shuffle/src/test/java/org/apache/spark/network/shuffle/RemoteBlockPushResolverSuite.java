@@ -17,6 +17,9 @@
 
 package org.apache.spark.network.shuffle;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -28,9 +31,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
@@ -50,12 +56,14 @@ import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver.MergeShuffleFile;
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver.PushMergeMetrics;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -139,6 +147,7 @@ public class RemoteBlockPushResolverSuite {
     validateMergeStatuses(statuses, new int[] {0}, new long[] {9});
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4, 5}, new int[][]{{0}, {1}});
+    verifyMetrics(9, 0, 0, 0, 0, 0, 0);
   }
 
   @Test
@@ -155,6 +164,7 @@ public class RemoteBlockPushResolverSuite {
     validateMergeStatuses(statuses, new int[] {0}, new long[] {13});
     MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, meta, new int[]{5, 5, 3}, new int[][]{{0, 1}, {2}, {3}});
+    verifyMetrics(13, 0, 0, 0, 0, 0, 0);
   }
 
   @Test
@@ -184,6 +194,10 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 1, 0, 0));
     // This should be deferred
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
+    verifyMetrics(2, 0, 0, 3, 1, 0, 0);
+    assertEquals("cached bytes", 3L,
+      ((Counter) pushResolver.getMetrics().getMetrics()
+        .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
     // stream 1 now completes
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
@@ -193,6 +207,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4, 6}, new int[][]{{0}, {1}});
+    verifyMetrics(10, 0, 0, 0, 0, 0, 0);
   }
 
   @Test
@@ -207,14 +222,19 @@ public class RemoteBlockPushResolverSuite {
     // This should be deferred
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
+    verifyMetrics(2, 0, 0, 6, 2, 0, 0);
+    assertEquals("cached bytes", 6L,
+      ((Counter) pushResolver.getMetrics().getMetrics()
+        .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
     // stream 1 now completes
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
-    // stream 2 now completes completes
+    // stream 2 now completes
     stream2.onComplete(stream2.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4, 6}, new int[][]{{0}, {1}});
+    verifyMetrics(10, 0, 0, 0, 0, 0, 0);
   }
 
   @Test
@@ -235,6 +255,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+    verifyMetrics(4, 0, 1, 0, 0, 0, 4);
   }
 
   @Test
@@ -257,6 +278,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+    verifyMetrics(4, 0, 0, 0, 0, 0, 4);
   }
 
   @Test
@@ -269,6 +291,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     assertEquals("num-chunks", 0, blockMeta.getNumChunks());
+    verifyMetrics(4, 0, 0, 0, 0, 0, 4);
   }
 
   @Test
@@ -283,6 +306,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     assertEquals("num-chunks", 0, blockMeta.getNumChunks());
+    verifyMetrics(9, 0, 0, 0, 0, 0, 9);
   }
 
   @Test
@@ -298,6 +322,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
+    verifyMetrics(9, 0, 0, 0, 0, 0, 9);
   }
 
   @Test
@@ -325,6 +350,7 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(errorCode.failureBlockId, stream1.getID());
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
+    verifyMetrics(9, 0, 1, 0, 0, 0, 4);
   }
 
   @Test
@@ -359,6 +385,7 @@ public class RemoteBlockPushResolverSuite {
     FileSegmentManagedBuffer mb =
       (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(TEST_APP, 0, 0, 0, 0);
     assertArrayEquals(expectedBytes, mb.nioByteBuffer().array());
+    verifyMetrics(14, 0, 0, 0, 0, 0, 10);
   }
 
   @Test
@@ -398,6 +425,9 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 2, 0, 0));
     // This should be deferred
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[5]));
+    assertEquals("cached bytes", 5L,
+      ((Counter) pushResolver.getMetrics().getMetrics()
+        .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
     // Since this stream didn't get any opportunity it will throw couldn't find opportunity error
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream3.onComplete(stream3.getID()));
@@ -413,6 +443,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[] {4}, new int[][] {{0}});
+    verifyMetrics(4, 1, 0, 0, 0, 0, 0);
   }
 
   @Test
@@ -1035,6 +1066,8 @@ public class RemoteBlockPushResolverSuite {
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
+    // Trigger onFailure so that the stale bytes would be added into ignoredBytes
+    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
     assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
@@ -1045,6 +1078,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 2));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+    verifyMetrics(6, 0, 0, 0, 0, 2, 4);
   }
 
   @Test
@@ -1062,6 +1096,8 @@ public class RemoteBlockPushResolverSuite {
     // stream 1 push should be rejected as it is from an older shuffleMergeId
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream1.onComplete(stream1.getID()));
+    // Trigger onFailure so that the stale bytes would be added into ignoredBytes
+    stream1.onFailure(stream1.getID(), new RuntimeException("Forced Failure"));
     BlockPushReturnCode errorCode =
       (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
     assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
@@ -1079,6 +1115,7 @@ public class RemoteBlockPushResolverSuite {
 
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+    verifyMetrics(6, 0, 0, 0, 0, 2, 4);
   }
 
   @Test
@@ -1146,11 +1183,14 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testCleanupOlderShuffleMergeId() throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
+    List<RemoteBlockPushResolver.AppAttemptShuffleMergeId> removedIds =
+            new CopyOnWriteArrayList<>();
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void closeAndDeleteOutdatedPartitions(
           AppAttemptShuffleMergeId appAttemptShuffleMergeId,
           Map<Integer, AppShufflePartitionInfo> partitions) {
+        removedIds.add(appAttemptShuffleMergeId);
         super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
         closed.release();
       }
@@ -1167,6 +1207,10 @@ public class RemoteBlockPushResolverSuite {
     RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
       pushResolver.validateAndGetAppShuffleInfo(testApp);
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    // For the previous merge id
+    assertEquals(1, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     assertFalse("Data files on the disk should be cleaned up",
       appShuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
     assertFalse("Meta files on the disk should be cleaned up",
@@ -1186,6 +1230,9 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 3, 0, 0, 0));
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    assertEquals(2, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[2]));
     stream3.onComplete(stream3.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 3));
@@ -1196,6 +1243,9 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 4, 0, 0, 0));
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    assertEquals(3, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     // Do not finalize shuffleMergeId 4 can happen during stage cancellation.
     stream4.onData(stream4.getID(), ByteBuffer.wrap(new byte[2]));
     stream4.onComplete(stream4.getID());
@@ -1204,6 +1254,10 @@ public class RemoteBlockPushResolverSuite {
     // but no blocks pushed for that shuffleMergeId
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 5));
     closed.acquire();
+    assertEquals(1, removedIds.size());
+    // For the previous merge id - here the cleanup is from finalizeShuffleMerge
+    assertEquals(4, removedIds.iterator().next().shuffleMergeId);
+    removedIds.clear();
     assertFalse("MergedBlock meta file for shuffle 0 and shuffleMergeId 4 should be cleaned"
       + " up", appShuffleInfo.getMergedShuffleMetaFile(0, 4, 0).exists());
     assertFalse("MergedBlock index file for shuffle 0 and shuffleMergeId 4 should be cleaned"
@@ -1316,6 +1370,121 @@ public class RemoteBlockPushResolverSuite {
       RemoteBlockPushResolver.AppAttemptShuffleMergeId.class));
   }
 
+  @Test
+  public void testRemoveShuffleMerge() throws IOException, InterruptedException {
+    Semaphore closed = new Semaphore(0);
+    String testApp = "testRemoveShuffleMerge";
+    RemoteBlockPushResolver pushResolver = new RemoteBlockPushResolver(conf, null) {
+      @Override
+      void closeAndDeleteOutdatedPartitions(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          Map<Integer, AppShufflePartitionInfo> partitions) {
+        super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
+        closed.release();
+      }
+
+      @Override
+      void deleteMergedFiles(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          AppShuffleInfo appShuffleInfo,
+          int[] reduceIds,
+          boolean deleteFromDB) {
+        super.deleteMergedFiles(appAttemptShuffleMergeId, appShuffleInfo, reduceIds, deleteFromDB);
+        closed.release();
+      }
+    };
+    pushResolver.registerExecutor(testApp, new ExecutorShuffleInfo(
+        prepareLocalDirs(localDirs, MERGE_DIRECTORY), 1, MERGE_DIRECTORY_META));
+    RemoteBlockPushResolver.AppShuffleInfo shuffleInfo =
+        pushResolver.validateAndGetAppShuffleInfo(testApp);
+
+    // 1. Check whether the data is cleaned up when merged shuffle is finalized
+    // 1.1 Cleaned up the merged files when msg.shuffleMergeId is current shuffleMergeId
+    StreamCallbackWithID streamCallback0 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    streamCallback0.onData(streamCallback0.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback0.onComplete(streamCallback0.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
+    assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertFalse(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+
+    // 1.2 Cleaned up the merged files when msg.shuffleMergeId is DELETE_ALL_MERGED_SHUFFLE
+    StreamCallbackWithID streamCallback1 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 1, 1, 0, 0, 0));
+    streamCallback1.onData(streamCallback1.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback1.onComplete(streamCallback1.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 1, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(1, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(1, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(1, 1, 0).exists());
+    pushResolver.removeShuffleMerge(new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 1,
+        RemoteBlockPushResolver.DELETE_ALL_MERGED_SHUFFLE));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(1, 1, 0).exists());
+    assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertFalse(shuffleInfo.getMergedShuffleDataFile(1, 1, 0).exists());
+
+    // 1.3 Cleaned up the merged files when msg.shuffleMergeId < current shuffleMergeId
+    StreamCallbackWithID streamCallback2 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 2, 1, 0, 0, 0));
+    streamCallback2.onData(streamCallback2.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback2.onComplete(streamCallback2.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 2, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(2, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(2, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(2, 1, 0).exists());
+
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> pushResolver.removeShuffleMerge(
+            new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 2, 0)));
+    assertEquals("Asked to remove old shuffle merged data for application " + testApp +
+        " shuffleId 2 shuffleMergeId 0, but current shuffleMergeId 1 ", e.getMessage());
+
+    // 1.4 Cleaned up the merged files when msg.shuffleMergeId > current shuffleMergeId
+    StreamCallbackWithID streamCallback3 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 3, 1, 0, 0, 0));
+    streamCallback3.onData(streamCallback3.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback3.onComplete(streamCallback3.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 3, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(3, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(3, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(3, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 3, 2));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(3, 1, 0).exists());
+    assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(3, 1, 0)).exists());
+    assertFalse(shuffleInfo.getMergedShuffleDataFile(3, 1, 0).exists());
+
+    // 2. Check whether the data is cleaned up when merged shuffle is not finalized.
+    StreamCallbackWithID streamCallback4 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 4, 1, 0, 0, 0));
+    streamCallback4.onData(streamCallback4.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback4.onComplete(streamCallback4.getID());
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(4, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 4, 1));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(4, 1, 0).exists());
+
+    // 3. Check whether the data is cleaned up when higher shuffleMergeId finalize request comes
+    StreamCallbackWithID streamCallback5 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 5, 1, 0, 0, 0));
+    streamCallback5.onData(streamCallback5.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback5.onComplete(streamCallback5.getID());
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(5, 1, 0).exists());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 5, 2));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(5, 1, 0).exists());
+  }
+
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
@@ -1413,6 +1582,33 @@ public class RemoteBlockPushResolverSuite {
       stream.onData(stream.getID(), block.buffer);
       stream.onComplete(stream.getID());
     }
+  }
+
+  private void verifyMetrics(
+      long expectedPushBytesWritten,
+      long expectedNoOpportunityResponses,
+      long expectedTooLateResponses,
+      long expectedDeferredBlocksBytes,
+      long expectedDeferredBlocks,
+      long expectedStaleBlockPushes,
+      long expectedIgnoredBlocksBytes) {
+    Map<String, Metric> metrics = pushResolver.getMetrics().getMetrics();
+    Meter writtenBytes = (Meter) metrics.get(PushMergeMetrics.BLOCK_BYTES_WRITTEN_METRIC);
+    assertEquals("bytes written", expectedPushBytesWritten, writtenBytes.getCount());
+    Meter collidedBlocks = (Meter) metrics.get(PushMergeMetrics.BLOCK_APPEND_COLLISIONS_METRIC);
+    assertEquals("could not find opportunity responses", expectedNoOpportunityResponses,
+      collidedBlocks.getCount());
+    Meter tooLateBlocks = (Meter) metrics.get(PushMergeMetrics.LATE_BLOCK_PUSHES_METRIC);
+    assertEquals("too late responses", expectedTooLateResponses, tooLateBlocks.getCount());
+    Counter cachedBytes = (Counter) metrics.get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC);
+    assertEquals("cached block bytes", expectedDeferredBlocksBytes,
+      cachedBytes.getCount());
+    Meter deferredBlocks = (Meter) metrics.get(PushMergeMetrics.DEFERRED_BLOCKS_METRIC);
+    assertEquals("deferred blocks", expectedDeferredBlocks, deferredBlocks.getCount());
+    Meter staleBlockPushes = (Meter) metrics.get(PushMergeMetrics.STALE_BLOCK_PUSHES_METRIC);
+    assertEquals("stale block pushes", expectedStaleBlockPushes, staleBlockPushes.getCount());
+    Meter ignoredBlockBytes = (Meter) metrics.get(PushMergeMetrics.IGNORED_BLOCK_BYTES_METRIC);
+    assertEquals("ignored block bytes", expectedIgnoredBlocksBytes, ignoredBlockBytes.getCount());
   }
 
   private static class PushBlock {

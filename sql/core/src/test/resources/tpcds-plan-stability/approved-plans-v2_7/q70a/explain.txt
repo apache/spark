@@ -170,23 +170,23 @@ Input [2]: [s_state#13, sum#16]
 Keys [1]: [s_state#13]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#10))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#10))#17]
-Results [3]: [s_state#13, s_state#13, MakeDecimal(sum(UnscaledValue(ss_net_profit#10))#17,17,2) AS _w2#18]
+Results [3]: [s_state#13, MakeDecimal(sum(UnscaledValue(ss_net_profit#10))#17,17,2) AS _w0#18, s_state#13]
 
 (25) Sort [codegen id : 5]
-Input [3]: [s_state#13, s_state#13, _w2#18]
-Arguments: [s_state#13 ASC NULLS FIRST, _w2#18 DESC NULLS LAST], false, 0
+Input [3]: [s_state#13, _w0#18, s_state#13]
+Arguments: [s_state#13 ASC NULLS FIRST, _w0#18 DESC NULLS LAST], false, 0
 
 (26) Window
-Input [3]: [s_state#13, s_state#13, _w2#18]
-Arguments: [rank(_w2#18) windowspecdefinition(s_state#13, _w2#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#19], [s_state#13], [_w2#18 DESC NULLS LAST]
+Input [3]: [s_state#13, _w0#18, s_state#13]
+Arguments: [rank(_w0#18) windowspecdefinition(s_state#13, _w0#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#19], [s_state#13], [_w0#18 DESC NULLS LAST]
 
 (27) Filter [codegen id : 6]
-Input [4]: [s_state#13, s_state#13, _w2#18, ranking#19]
+Input [4]: [s_state#13, _w0#18, s_state#13, ranking#19]
 Condition : (ranking#19 <= 5)
 
 (28) Project [codegen id : 6]
 Output [1]: [s_state#13]
-Input [4]: [s_state#13, s_state#13, _w2#18, ranking#19]
+Input [4]: [s_state#13, _w0#18, s_state#13, ranking#19]
 
 (29) BroadcastExchange
 Input [1]: [s_state#13]

@@ -395,12 +395,9 @@ case class JsonTuple(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 2) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 1",
-          "actualNum" -> children.length.toString))
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
@@ -611,7 +608,7 @@ case class JsonToStructs(
         ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
         (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
       case other =>
-        (StructType(StructField("value", other) :: Nil), other)
+        (StructType(Array(StructField("value", other))), other)
     }
 
     val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)

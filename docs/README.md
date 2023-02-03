@@ -61,7 +61,7 @@ See also https://issues.apache.org/jira/browse/SPARK-35375.
 -->
 Run the following command from $SPARK_HOME:
 ```sh
-$ sudo pip install -r dev/requirements.txt
+$ sudo pip install --upgrade -r dev/requirements.txt
 ```
 
 ### R API Documentation (Optional)

@@ -107,8 +107,7 @@ private[sql] object PartitioningUtils {
       normalizedFiled.name -> normalizedVal
     }
 
-    SchemaUtils.checkColumnNameDuplication(
-      normalizedPartSpec.map(_._1), "in the partition schema", resolver)
+    SchemaUtils.checkColumnNameDuplication(normalizedPartSpec.map(_._1), resolver)
 
     normalizedPartSpec.toMap
   }

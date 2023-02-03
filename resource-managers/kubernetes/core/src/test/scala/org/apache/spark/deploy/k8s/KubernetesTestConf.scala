@@ -47,6 +47,7 @@ object KubernetesTestConf {
       labels: Map[String, String] = Map.empty,
       environment: Map[String, String] = Map.empty,
       annotations: Map[String, String] = Map.empty,
+      serviceLabels: Map[String, String] = Map.empty,
       serviceAnnotations: Map[String, String] = Map.empty,
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
@@ -60,6 +61,7 @@ object KubernetesTestConf {
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_LABEL_PREFIX, labels)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ENV_PREFIX, environment)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ANNOTATION_PREFIX, annotations)
+    setPrefixedConfigs(conf, KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX, serviceLabels)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX, serviceAnnotations)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRETS_PREFIX, secretNamesToMountPaths)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)

@@ -375,7 +375,16 @@ class ApproximatePercentileSuite extends SparkFunSuite {
           AttributeReference("a", DoubleType)(),
           percentageExpression = percentageExpression,
           accuracyExpression = Literal(100))
-        assert(wrongPercentage.checkInputDataTypes().isFailure)
+        assert(wrongPercentage.checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "2",
+              "requiredType" -> "(\"DOUBLE\" or \"ARRAY<DOUBLE>\")",
+              "inputSql" -> toSQLExpr(percentageExpression),
+              "inputType" -> "\"ARRAY<VOID>\"")
+          )
+        )
     }
   }
 
@@ -386,7 +395,17 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         AttributeReference("a", DoubleType)(),
         percentageExpression = Literal(0.5),
         accuracyExpression = Literal(acc))
-      assert(wrongPercentage.checkInputDataTypes().isFailure)
+      assert(wrongPercentage.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "3",
+            "requiredType" -> "\"INTEGRAL\"",
+            "inputSql" -> toSQLExpr(Literal(acc)),
+            "inputType" -> toSQLType(Literal(acc).dataType)
+          )
+        )
+      )
     }
   }
 

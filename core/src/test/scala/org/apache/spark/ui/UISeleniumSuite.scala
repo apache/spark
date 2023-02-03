@@ -26,6 +26,7 @@ import scala.xml.Node
 
 import com.gargoylesoftware.css.parser.CSSParseException
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
+import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.{By, WebDriver}
@@ -815,6 +816,39 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
           goToUi(sc, "/stages/stage/?id=0&attempt=0")
           assert(findAll(className("expand-task-assignment-timeline")).nonEmpty === timelineEnabled)
         }
+      }
+    }
+  }
+
+  test("SPARK-41365: Stage page can be accessed if URI was encoded twice") {
+    withSpark(newSparkContext()) { sc =>
+      val rdd = sc.parallelize(0 to 10, 10).repartition(10)
+      rdd.count()
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        val encodeParams = new MultivaluedStringMap
+        encodeParams.add("order%255B0%255D%255Bcolumn%255D", "Locality%2520Level")
+        encodeParams.add("order%255B0%255D%255Bcolumn%255D", "Executor%2520ID")
+        encodeParams.add("search%255Bvalue%255D", null)
+        val decodeParams = UIUtils.decodeURLParameter(encodeParams)
+        // assert no change in order
+        assert(decodeParams.getFirst("order[0][column]").equals("Locality Level"))
+        assert(decodeParams.get("order[0][column]").size() == 2)
+        assert(decodeParams.getFirst("search[value]").equals(""))
+
+        val decodeQuery = "draw=2&order[0][column]=4&order[0][dir]=asc&start=0&length=20" +
+          "&search[value]=&search[regex]=false&numTasks=10&columnIndexToSort=4" +
+          "&columnNameToSort=Locality Level"
+        val encodeOnceQuery = "draw=2&order%5B0%5D%5Bcolumn%5D=4&start=0&length=20" +
+          "&search%5Bvalue%5D=&search%5Bregex%5D=false&numTasks=10&columnIndexToSort=4" +
+          "&columnNameToSort=Locality%20Level"
+        val encodeTwiceQuery = "draw=2&order%255B0%255D%255Bcolumn%255D=4&start=0&length=20" +
+          "&search%255Bvalue%255D=&search%255Bregex%255D=false&numTasks=10&columnIndexToSort=4" +
+          "&columnNameToSort=Locality%2520Level"
+        val encodeOnceRes = Utils.tryWithResource(Source.fromURL(
+          apiUrl(sc.ui.get, "stages/0/0/taskTable?" + encodeOnceQuery)))(_.mkString)
+        val encodeTwiceRes = Utils.tryWithResource(Source.fromURL(
+          apiUrl(sc.ui.get, "stages/0/0/taskTable?" + encodeTwiceQuery)))(_.mkString)
+        assert(encodeOnceRes.equals(encodeTwiceRes))
       }
     }
   }

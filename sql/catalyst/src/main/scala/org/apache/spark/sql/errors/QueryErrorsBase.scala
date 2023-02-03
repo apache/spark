@@ -92,12 +92,20 @@ private[sql] trait QueryErrorsBase {
     quoteByDefault(conf)
   }
 
+  def toSQLConfVal(conf: String): String = {
+    quoteByDefault(conf)
+  }
+
   def toDSOption(option: String): String = {
     quoteByDefault(option)
   }
 
   def toSQLExpr(e: Expression): String = {
     quoteByDefault(toPrettySQL(e))
+  }
+
+  def toSQLSchema(schema: String): String = {
+    quoteByDefault(schema)
   }
 
   def getSummary(sqlContext: SQLQueryContext): String = {

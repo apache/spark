@@ -60,10 +60,10 @@ class PandasOnSparkFrameMethods:
 
     def attach_id_column(self, id_type: str, column: Name) -> "DataFrame":
         """
-        Attach a column to be used as identifier of rows similar to the default index.
+        Attach a column to be used as an identifier of rows similar to the default index.
 
         See also `Default Index type
-        <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/options.html#default-index-type>`_.
 
         Parameters
         ----------
@@ -73,9 +73,9 @@ class PandasOnSparkFrameMethods:
             - 'sequence' : a sequence that increases one by one.
 
               .. note:: this uses Spark's Window without specifying partition specification.
-                  This leads to move all data into single partition in single machine and
+                  This leads to moving all data into a single partition in a single machine and
                   could cause serious performance degradation.
-                  Avoid this method against very large dataset.
+                  Avoid this method with very large datasets.
 
             - 'distributed-sequence' : a sequence that increases one by one,
               by group-by and group-map approach in a distributed manner.
@@ -204,9 +204,9 @@ class PandasOnSparkFrameMethods:
         DataFrame given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -438,9 +438,9 @@ class PandasOnSparkFrameMethods:
         each input and output should be the same.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -777,9 +777,9 @@ class PandasOnSparkSeriesMethods:
         The pandas Series given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input series. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input series. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -937,7 +937,7 @@ class PandasOnSparkSeriesMethods:
 
         def pandas_concat(*series: pd.Series) -> pd.DataFrame:
             # The input can only be a DataFrame for struct from Spark 3.0.
-            # This works around to make the input as a frame. See SPARK-27240
+            # This works around makeing the input as a frame. See SPARK-27240
             pdf = pd.concat(series, axis=1)
             pdf.columns = columns
             return pdf

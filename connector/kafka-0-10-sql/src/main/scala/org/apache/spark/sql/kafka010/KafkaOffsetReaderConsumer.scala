@@ -291,7 +291,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
 
       tp -> offset
-    }.toMap
+    }
   }
 
   private def fetchSpecificOffsets0(

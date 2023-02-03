@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -132,17 +132,21 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     assert(e3.getMessage.contains("schema"))
   }
 
-  test("fallback writes should only analyze plan once") {
+  test("SPARK-41437: fallback writes should only analyze/optimize plan once") {
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     try {
       val session = SparkSession.builder()
         .master("local[1]")
         .withExtensions(_.injectPostHocResolutionRule(_ => OnlyOnceRule))
+        .withExtensions(_.injectOptimizerRule(_ => OnlyOnceOptimizerRule))
+        .config(OPTIMIZER_MAX_ITERATIONS.key, "1")
         .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
         .getOrCreate()
       val df = session.createDataFrame(Seq((1, "x"), (2, "y"), (3, "z")))
       df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+      val df2 = session.createDataFrame(Seq((4, "a"), (5, "b"), (6, "c")))
+      df2.writeTo("test").append()
     } finally {
       SparkSession.setActiveSession(spark)
       SparkSession.setDefaultSession(spark)
@@ -433,5 +437,18 @@ object OnlyOnceRule extends Rule[LogicalPlan] {
       plan
     }
 
+  }
+}
+
+// A rule that fails if the input query of a V2WriteCommand is optimized twice
+object OnlyOnceOptimizerRule extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transform {
+      case l: LocalRelation =>
+        // The test inserts 3 rows with local data and sets OPTIMIZER_MAX_ITERATIONS to 1. This rule
+        // is supposed to be run only once.
+        assert(l.data.length >= 2, "Input query shouldn't be optimized again")
+        l.copy(data = l.data.drop(1))
+    }
   }
 }

@@ -215,7 +215,7 @@ private[streaming] class ReceiverSupervisorImpl(
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
 
   private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
-    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
+    logDebug(s"Cleaning up blocks older than $cleanupThreshTime")
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
   }
 }

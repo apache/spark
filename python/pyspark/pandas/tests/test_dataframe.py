@@ -90,6 +90,13 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pd.DataFrame(pser), ps.DataFrame(psser))
 
+        # check ps.DataFrame(ps.Series) with `columns`
+        self.assert_eq(pd.DataFrame(pser, columns=["x"]), ps.DataFrame(psser, columns=["x"]))
+        self.assert_eq(pd.DataFrame(pser, columns=("x",)), ps.DataFrame(psser, columns=("x",)))
+        self.assert_eq(
+            pd.DataFrame(pser, columns={"x": None}), ps.DataFrame(psser, columns={"x": None})
+        )
+
         # check psdf[pd.Index]
         pdf, psdf = self.df_pair
         column_mask = pdf.columns.isin(["a", "b"])
@@ -6091,10 +6098,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf._to_pandas()
         pobj = psobj._to_pandas()
-        # Regression in pandas 1.5.0 when other is Series and method is "pearson" or "spearman"
+        # There was a regression in pandas 1.5.0
+        # when other is Series and method is "pearson" or "spearman", and fixed in pandas 1.5.1
+        # Therefore, we only test the pandas 1.5.0 in different way.
         # See https://github.com/pandas-dev/pandas/issues/48826 for the reported issue,
         # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
+        if LooseVersion(pd.__version__) == LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
             methods = ["kendall"]
         else:
             methods = ["pearson", "spearman", "kendall"]
@@ -7072,6 +7081,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.cov(), psdf.cov())
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) < LooseVersion("1.3.0"),
+        "pandas support `Styler.to_latex` since 1.3.0",
+    )
     def test_style(self):
         # Currently, the `style` function returns a pandas object `Styler` as it is,
         # processing only the number of rows declared in `compute.max_rows`.
@@ -7100,7 +7113,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

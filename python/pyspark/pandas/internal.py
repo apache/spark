@@ -249,7 +249,7 @@ class InternalFrame:
     |                3|  4|  8| 12| 16| 20|
     +-----------------+---+---+---+---+---+
 
-    In order to fill this gap, the current metadata is used by mapping Spark's internal column
+    To fill this gap, the current metadata is used by mapping Spark's internal column
     to pandas-on-Spark's index. See the method below:
 
     * `spark_frame` represents the internal Spark DataFrame
@@ -316,7 +316,7 @@ class InternalFrame:
     2  3  7  11  15  19
     3  4  8  12  16  20
 
-    In case that index is set to one of the existing column as below:
+    In case that index is set to one of the existing columns as below:
 
     >>> psdf1 = psdf.set_index("A")
     >>> psdf1  # doctest: +NORMALIZE_WHITESPACE

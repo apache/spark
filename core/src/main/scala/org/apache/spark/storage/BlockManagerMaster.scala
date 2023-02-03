@@ -74,11 +74,25 @@ class BlockManagerMaster(
       localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
-      storageEndpoint: RpcEndpointRef): BlockManagerId = {
+      storageEndpoint: RpcEndpointRef,
+      isReRegister: Boolean = false): BlockManagerId = {
     logInfo(s"Registering BlockManager $id")
     val updatedId = driverEndpoint.askSync[BlockManagerId](
-      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint))
-    logInfo(s"Registered BlockManager $updatedId")
+      RegisterBlockManager(
+        id,
+        localDirs,
+        maxOnHeapMemSize,
+        maxOffHeapMemSize,
+        storageEndpoint,
+        isReRegister
+      )
+    )
+    if (updatedId.executorId == BlockManagerId.INVALID_EXECUTOR_ID) {
+      assert(isReRegister, "Got invalid executor id from non re-register case")
+      logInfo(s"Re-register BlockManager $id failed")
+    } else {
+      logInfo(s"Registered BlockManager $updatedId")
+    }
     updatedId
   }
 

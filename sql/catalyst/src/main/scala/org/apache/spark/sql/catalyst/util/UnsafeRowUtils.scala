@@ -113,4 +113,30 @@ object UnsafeRowUtils {
     val size = offsetAndSize.toInt
     (offset, size)
   }
+
+  /**
+   * Returns a Boolean indicating whether one should avoid calling
+   * UnsafeRow.setNullAt for a field of the given data type.
+   * Fields of type DecimalType (with precision
+   * greater than Decimal.MAX_LONG_DIGITS) and CalendarIntervalType use
+   * pointers into the variable length region, and those pointers should
+   * never get zeroed out (setNullAt will zero out those pointers) because UnsafeRow
+   * may do in-place update for these 2 types even though they are not primitive.
+   *
+   * When avoidSetNullAt returns true, callers should not use
+   * UnsafeRow#setNullAt for fields of that data type, but instead pass
+   * a null value to the appropriate set method, e.g.:
+   *
+   *   row.setDecimal(ordinal, null, precision)
+   *
+   * Even though only UnsafeRow has this limitation, it's safe to extend this rule
+   * to all subclasses of InternalRow, since you don't always know the concrete type
+   * of the row you are dealing with, and all subclasses of InternalRow will
+   * handle a null value appropriately.
+   */
+  def avoidSetNullAt(dt: DataType): Boolean = dt match {
+    case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS => true
+    case CalendarIntervalType => true
+    case _ => false
+  }
 }

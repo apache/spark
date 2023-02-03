@@ -34,7 +34,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
+import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
   TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
@@ -324,11 +324,24 @@ private[spark] class KubernetesClusterSchedulerBackend(
           super.receiveAndReply(context)))
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
-      // Don't do anything besides disabling the executor - allow the Kubernetes API events to
-      // drive the rest of the lifecycle decisions
-      // TODO what if we disconnect from a networking issue? Probably want to mark the executor
-      // to be deleted eventually.
-      addressToExecutorId.get(rpcAddress).foreach(disableExecutor)
+      val execId = addressToExecutorId.get(rpcAddress)
+      execId match {
+        case Some(id) =>
+          executorsPendingDecommission.get(id) match {
+            case Some(host) =>
+              // We don't pass through the host because by convention the
+              // host is only populated if the entire host is going away
+              // and we don't know if that's the case or just one container.
+              removeExecutor(id, ExecutorDecommission(None))
+            case _ =>
+              // Don't do anything besides disabling the executor - allow the K8s API events to
+              // drive the rest of the lifecycle decisions.
+              // If it's disconnected due to network issues eventually heartbeat will clear it up.
+              disableExecutor(id)
+          }
+        case _ =>
+          logInfo(s"No executor found for ${rpcAddress}")
+      }
     }
   }
 

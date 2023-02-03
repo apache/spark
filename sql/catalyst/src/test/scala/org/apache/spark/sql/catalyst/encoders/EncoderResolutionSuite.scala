@@ -94,8 +94,8 @@ class EncoderResolutionSuite extends PlanTest {
         "details" -> (
           s"""
           |The type path of the target object is:
-          |- array element class: "scala.Long"
-          |- field (class: "scala.Array", name: "arr")
+          |- array element class: "long"
+          |- field (class: "[J", name: "arr")
           |- root class: "org.apache.spark.sql.catalyst.encoders.PrimitiveArrayClass"
           |You can either add an explicit cast to the input data or choose a higher precision type
           """.stripMargin.trim + " of the field in the target object")))
@@ -130,8 +130,10 @@ class EncoderResolutionSuite extends PlanTest {
   test("the real type is not compatible with encoder schema: array element type") {
     val encoder = ExpressionEncoder[ArrayClass]
     val attrs = Seq($"arr".array(new StructType().add("c", "int")))
-    assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-      "No such struct field a in c.")
+    checkError(
+      exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`a`", "fields" -> "`c`"))
   }
 
   test("the real type is not compatible with encoder schema: nested array element type") {
@@ -150,8 +152,8 @@ class EncoderResolutionSuite extends PlanTest {
         .add("arr", ArrayType(new StructType().add("c", "int")))))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "_LEGACY_ERROR_TEMP_1208",
-        parameters = Map("fieldName" -> "a", "fields" -> "c"))
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`a`", "fields" -> "`c`"))
     }
   }
 
@@ -252,7 +254,7 @@ class EncoderResolutionSuite extends PlanTest {
         "details" -> (
           s"""
           |The type path of the target object is:
-          |- field (class: "scala.Int", name: "b")
+          |- field (class: "int", name: "b")
           |- root class: "org.apache.spark.sql.catalyst.encoders.StringIntClass"
           |You can either add an explicit cast to the input data or choose a higher precision type
           """.stripMargin.trim + " of the field in the target object")))
@@ -269,7 +271,7 @@ class EncoderResolutionSuite extends PlanTest {
         "details" -> (
           s"""
           |The type path of the target object is:
-          |- field (class: "scala.Long", name: "b")
+          |- field (class: "long", name: "b")
           |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")
           |- root class: "org.apache.spark.sql.catalyst.encoders.ComplexClass"
           |You can either add an explicit cast to the input data or choose a higher precision type

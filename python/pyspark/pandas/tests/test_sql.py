@@ -16,7 +16,7 @@
 #
 
 from pyspark import pandas as ps
-from pyspark.sql.utils import ParseException
+from pyspark.errors import ParseException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_sql import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

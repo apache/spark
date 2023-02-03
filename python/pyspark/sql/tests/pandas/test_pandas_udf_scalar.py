@@ -49,7 +49,7 @@ from pyspark.sql.types import (
     DateType,
     BinaryType,
 )
-from pyspark.sql.utils import AnalysisException
+from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
@@ -676,15 +676,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             res = df.select(f(col("id"), col("id")))
             self.assertEqual(df.collect(), res.collect())
 
-    def test_vectorized_udf_unsupported_types(self):
-        with QuietTest(self.sc):
-            for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-                with self.assertRaisesRegex(
-                    NotImplementedError,
-                    "Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType",
-                ):
-                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
-
     def test_vectorized_udf_dates(self):
         schema = StructType().add("idx", LongType()).add("date", DateType())
         data = [
@@ -990,6 +981,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(Exception, "reached finally block"):
                 self.spark.range(1).select(test_close(col("id"))).collect()
 
+    @unittest.skip("LimitPushDown should push limits through Python UDFs so this won't occur")
     def test_scalar_iter_udf_close_early(self):
         tmp_dir = tempfile.mkdtemp()
         try:
@@ -1333,7 +1325,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_udf_scalar import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -376,4 +376,21 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
       .queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].inputPlan
       .collect({case agg: BaseAggregateExec => agg}).size == 2)
   }
+
+  test("Test numBitsExpression") {
+    def checkNumBits(estimatedNumItems: Long, numBits: Long): Unit = {
+      val agg = new BloomFilterAggregate(Literal(1L), estimatedNumItems)
+      assert(agg.numBitsExpression === Literal(numBits))
+    }
+
+    checkNumBits(conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS) * 100,
+      conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
+    checkNumBits(conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS) + 10, 29193836)
+    checkNumBits(conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS), 29193763)
+    checkNumBits(2000000, 17482271)
+    checkNumBits(1000000, 10183830)
+    checkNumBits(10000, 197688)
+    checkNumBits(100, 2935)
+    checkNumBits(1, 38)
+  }
 }

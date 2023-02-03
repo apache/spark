@@ -57,7 +57,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
     parseMode match {
       case PermissiveMode =>
-        Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
+        Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
       case DropMalformedMode =>
         None
       case FailFastMode =>
@@ -152,7 +152,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
           decimalTry.get
         } else if (options.inferTimestamp &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-          SQLConf.get.timestampType
+          SQLConf.get.timestampTypeInSchemaInference
         } else if (options.inferTimestamp &&
             timestampFormatter.parseOptional(field).isDefined) {
           TimestampType

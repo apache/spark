@@ -626,13 +626,14 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
-    runCliWithin(2.minute)(
+    runCliWithin(5.minute)(
       // Only unclosed comment.
       "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
       // Unclosed nested bracketed comment.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
       // Unclosed comment with query.
-      "/* Here is a unclosed bracketed comment SELECT 1;"-> "Unclosed bracketed comment",
+      "/* Here is a unclosed bracketed comment SELECT 1;"->
+        "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
       // Whole comment.
       "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
     )
@@ -640,7 +641,7 @@ class CliSuite extends SparkFunSuite {
 
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
-      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'(line 1, pos 7)")
+      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'.(line 1, pos 7)")
   }
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {

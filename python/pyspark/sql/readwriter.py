@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
 
-__all__ = ["DataFrameReader", "DataFrameWriter"]
+__all__ = ["DataFrameReader", "DataFrameWriter", "DataFrameWriterV2"]
 
 PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
@@ -60,6 +60,9 @@ class DataFrameReader(OptionUtils):
     to access this.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, spark: "SparkSession"):
@@ -76,6 +79,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -84,7 +90,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.format('json')
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 
@@ -115,6 +121,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         schema : :class:`pyspark.sql.types.StructType` or str
@@ -124,7 +133,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.schema("col0 INT, col1 DOUBLE")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the schema with reading a CSV file.
 
@@ -153,6 +162,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.5.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         key : str
@@ -165,7 +177,7 @@ class DataFrameReader(OptionUtils):
         >>> from pyspark.sql import SparkSession
         >>> spark = SparkSession.builder.master("local").getOrCreate()
         >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' with reading a CSV file.
 
@@ -193,6 +205,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         **options : dict
@@ -201,7 +216,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
 
@@ -237,6 +252,9 @@ class DataFrameReader(OptionUtils):
         """Loads data from a data source and returns it as a :class:`DataFrame`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -329,6 +347,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str, list or :class:`RDD`
@@ -343,7 +364,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -420,6 +441,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -454,6 +478,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         paths : str
@@ -463,7 +490,7 @@ class DataFrameReader(OptionUtils):
         **options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -525,6 +552,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.6.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         paths : str or list
@@ -535,7 +565,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -618,6 +648,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str or list
@@ -632,7 +665,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -731,6 +764,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.5.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str or list
@@ -740,7 +776,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -835,7 +871,7 @@ class DataFrameReader(OptionUtils):
         column : str, optional
             alias of ``partitionColumn`` option. Refer to ``partitionColumn`` in
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
         predicates : list, optional
             a list of expressions suitable for inclusion in WHERE clauses;
             each one defines one partition of the :class:`DataFrame`
@@ -849,7 +885,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -896,7 +932,10 @@ class DataFrameWriter(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, df: "DataFrame"):
@@ -921,6 +960,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Examples
         --------
         Raise an error when writing to an existing path.
@@ -929,10 +971,10 @@ class DataFrameWriter(OptionUtils):
         >>> with tempfile.TemporaryDirectory() as d:
         ...     spark.createDataFrame(
         ...         [{"age": 80, "name": "Xinrong Meng"}]
-        ...     ).write.mode("error").format("parquet").save(d)
+        ...     ).write.mode("error").format("parquet").save(d) # doctest: +SKIP
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        ...AnalysisException: ...
 
         Write a Parquet file back with various options, and read it back.
 
@@ -972,6 +1014,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -980,7 +1025,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.format('parquet')
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Write a DataFrame into a Parquet file and read it back.
 
@@ -1004,9 +1049,12 @@ class DataFrameWriter(OptionUtils):
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriter":
         """
-        Adds a output option for the underlying data source.
+        Adds an output option for the underlying data source.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1018,7 +1066,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' with writing a CSV file.
 
@@ -1046,23 +1094,31 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         **options : dict
-            The dictionary of string keys and prmitive-type values.
+            The dictionary of string keys and primitive-type values.
 
         Examples
         --------
         >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
 
+        >>> from pyspark.sql.types import StructType,StructField, StringType, IntegerType
+        >>> schema = StructType([
+        ...     StructField("age",IntegerType(),True),
+        ...     StructField("name",StringType(),True),
+        ... ])
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a DataFrame into a CSV file with 'nullValue' option set to 'Hyukjin Kwon',
         ...     # and 'header' option set to `True`.
-        ...     df = spark.createDataFrame([(100, "Hyukjin Kwon")], ["age", "name"])
+        ...     df = spark.createDataFrame([(100, None)], schema=schema)
         ...     df.write.options(nullValue="Hyukjin Kwon", header=True).mode(
         ...         "overwrite").format("csv").save(d)
         ...
@@ -1093,6 +1149,9 @@ class DataFrameWriter(OptionUtils):
         to Hive's partitioning scheme.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1151,6 +1210,9 @@ class DataFrameWriter(OptionUtils):
         but with a different bucket hash function and is not compatible with Hive's bucketing.
 
         .. versionadded:: 2.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1220,6 +1282,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col : str, tuple or list
@@ -1280,6 +1345,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str, optional
@@ -1335,6 +1403,9 @@ class DataFrameWriter(OptionUtils):
         schema of the table.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1397,11 +1468,14 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Notes
         -----
         When `mode` is `Append`, if there is an existing table, we will use the format and
         options of the existing table. The column order in the schema of the :class:`DataFrame`
-        doesn't need to be same as that of the existing table. Unlike
+        doesn't need to be the same as that of the existing table. Unlike
         :meth:`DataFrameWriter.insertInto`, :meth:`DataFrameWriter.saveAsTable` will use the
         column names to find the correct column positions.
 
@@ -1462,6 +1536,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1480,7 +1557,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1525,6 +1602,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1545,7 +1625,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1582,6 +1662,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.6.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1592,7 +1675,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1649,6 +1732,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1667,7 +1753,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1722,6 +1808,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.5.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1742,7 +1831,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1804,7 +1893,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 

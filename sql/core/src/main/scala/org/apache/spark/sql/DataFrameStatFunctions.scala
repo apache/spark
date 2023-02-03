@@ -181,8 +181,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
-   * The number of distinct values for each column should be less than 1e4. At most 1e6 non-zero
-   * pair frequencies will be returned.
    * The first column of each row will be the distinct values of `col1` and the column names will
    * be the distinct values of `col2`. The name of the first column will be `col1_col2`. Counts
    * will be returned as `Long`s. Pairs that have no occurrences will have zero as their counts.

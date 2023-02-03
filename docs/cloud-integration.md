@@ -306,10 +306,10 @@ directory listing information from the task committers to the job committer.
 These manifests can be written atomically, without relying on atomic directory rename,
 something GCS lacks.
 
-The job commmitter reads these manifests and will rename files from the task output
+The job committer reads these manifests and will rename files from the task output
 directories directly into the destination directory, in parallel, with optional
 rate limiting to avoid throttling IO.
-This deliviers performance and scalability on the object stores.
+This delivers performance and scalability on the object stores.
 
 It is not critical for job correctness to use this with Azure storage; the
 classic FileOutputCommitter is safe there -however this new committer scales

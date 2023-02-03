@@ -246,7 +246,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
-    val plan = UnresolvedFunc(ident, "Catalog.makeFunction", false, None)
+    val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction", false, None)
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case f: ResolvedPersistentFunc =>
         val className = f.func match {
@@ -274,7 +274,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           className = className,
           isTemporary = true)
 
-      case _ => throw QueryCompilationErrors.noSuchFunctionError(ident, plan)
+      case _ =>
+        val catalogPath = (currentCatalog +:
+          sparkSession.sessionState.catalogManager.currentNamespace).mkString(".")
+        throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq(catalogPath), plan.origin)
     }
   }
 

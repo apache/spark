@@ -47,8 +47,6 @@ object StringUtils extends Logging {
     val in = pattern.iterator
     val out = new StringBuilder()
 
-    def fail(message: String) = throw QueryCompilationErrors.invalidPatternError(pattern, message)
-
     while (in.hasNext) {
       in.next match {
         case c1 if c1 == escapeChar && in.hasNext =>
@@ -56,9 +54,11 @@ object StringUtils extends Logging {
           c match {
             case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
-            case _ => fail(s"the escape character is not allowed to precede '$c'")
+            case _ => throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
+              pattern, Character.toString(c))
           }
-        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
+        case c if c == escapeChar =>
+          throw QueryCompilationErrors.escapeCharacterAtTheEndError(pattern)
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))

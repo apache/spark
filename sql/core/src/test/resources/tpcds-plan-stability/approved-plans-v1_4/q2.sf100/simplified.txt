@@ -31,7 +31,7 @@ WholeStageCodegen (13)
                                     WholeStageCodegen (3)
                                       Filter [d_date_sk,d_week_seq]
                                         Subquery #1
-                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 362, 2896, 0, 0),bloomFilter,buf]
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 362, 9656, 0, 0),bloomFilter,buf]
                                             Exchange #4
                                               ObjectHashAggregate [d_week_seq] [buf,buf]
                                                 WholeStageCodegen (1)
@@ -80,7 +80,7 @@ WholeStageCodegen (13)
                                           WholeStageCodegen (8)
                                             Filter [d_date_sk,d_week_seq]
                                               Subquery #2
-                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 362, 2896, 0, 0),bloomFilter,buf]
+                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 362, 9656, 0, 0),bloomFilter,buf]
                                                   Exchange #9
                                                     ObjectHashAggregate [d_week_seq] [buf,buf]
                                                       WholeStageCodegen (1)

@@ -23,12 +23,17 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Expressions
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.datasources.PreprocessTableCreation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
 
-class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTest {
+class V2CommandsCaseSensitivitySuite
+  extends SharedSparkSession
+  with AnalysisTest
+  with QueryErrorsBase {
+
   import CreateTablePartitioningValidationSuite._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -155,8 +160,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: add column resolution - positional") {
     Seq("ID", "iD").foreach { ref =>
-      alterTableTest(
-        AddColumns(
+      val alter = AddColumns(
           table,
           Seq(QualifiedColType(
             None,
@@ -165,15 +169,21 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             true,
             None,
             Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
-            None))),
-        Seq("reference column", ref)
-      )
+            None)))
+      Seq(true, false).foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          assertAnalysisErrorClass(
+            inputPlan = alter,
+            expectedErrorClass = "FIELD_NOT_FOUND",
+            expectedMessageParameters = Map("fieldName" -> "`f`", "fields" -> "id, data, point")
+          )
+        }
+      }
     }
   }
 
   test("AlterTable: add column resolution - column position referencing new column") {
-    alterTableTest(
-      AddColumns(
+    val alter = AddColumns(
         table,
         Seq(QualifiedColType(
           None,
@@ -190,15 +200,21 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           true,
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("X"))),
-          None))),
-      Seq("Couldn't find the reference column for AFTER X at root")
-    )
+          None)))
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        assertAnalysisErrorClass(
+          inputPlan = alter,
+          expectedErrorClass = "FIELD_NOT_FOUND",
+          expectedMessageParameters = Map("fieldName" -> "`y`", "fields" -> "id, data, point, x")
+        )
+      }
+    }
   }
 
   test("AlterTable: add column resolution - nested positional") {
     Seq("X", "Y").foreach { ref =>
-      alterTableTest(
-        AddColumns(
+      val alter = AddColumns(
           table,
           Seq(QualifiedColType(
             Some(UnresolvedFieldName(Seq("point"))),
@@ -207,15 +223,21 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             true,
             None,
             Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
-            None))),
-        Seq("reference column", ref)
-      )
+            None)))
+      Seq(true, false).foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          assertAnalysisErrorClass(
+            inputPlan = alter,
+            expectedErrorClass = "FIELD_NOT_FOUND",
+            expectedMessageParameters = Map("fieldName" -> "`z`", "fields" -> "x, y")
+          )
+        }
+      }
     }
   }
 
   test("AlterTable: add column resolution - column position referencing new nested column") {
-    alterTableTest(
-      AddColumns(
+    val alter = AddColumns(
         table,
         Seq(QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
@@ -232,13 +254,20 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           true,
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))),
-          None))),
-      Seq("Couldn't find the reference column for AFTER Z at point")
-    )
+          None)))
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        assertAnalysisErrorClass(
+          inputPlan = alter,
+          expectedErrorClass = "FIELD_NOT_FOUND",
+          expectedMessageParameters = Map("fieldName" -> "`zz`", "fields" -> "x, y, z")
+        )
+      }
+    }
   }
 
   test("SPARK-36372: Adding duplicate columns should not be allowed") {
-    alterTableTest(
+    assertAnalysisErrorClass(
       AddColumns(
         table,
         Seq(QualifiedColType(
@@ -257,8 +286,9 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           None,
           None,
           None))),
-      Seq("Found duplicate column(s) in the user specified columns: `point.z`"),
-      expectErrorOnCaseSensitive = false)
+      "COLUMN_ALREADY_EXISTS",
+      Map("columnName" -> toSQLId("point.z")),
+      caseSensitive = false)
   }
 
   test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
@@ -341,13 +371,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   }
 
   test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
-    alterTableTest(
+    assertAnalysisErrorClass(
       ReplaceColumns(
         table,
         Seq(QualifiedColType(None, "f", LongType, true, None, None, None),
           QualifiedColType(None, "F", LongType, true, None, None, None))),
-      Seq("Found duplicate column(s) in the user specified columns: `f`"),
-      expectErrorOnCaseSensitive = false)
+      "COLUMN_ALREADY_EXISTS",
+      Map("columnName" -> toSQLId("f")),
+      caseSensitive = false)
   }
 
   private def alterTableTest(

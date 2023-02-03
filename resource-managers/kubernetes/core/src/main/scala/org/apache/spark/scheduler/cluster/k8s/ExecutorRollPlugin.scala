@@ -128,6 +128,10 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
         listWithoutDriver.sortBy(getPeakMetrics(_, "JVMHeapMemory")).reverse
       case ExecutorRollPolicy.PEAK_JVM_OFFHEAP_MEMORY =>
         listWithoutDriver.sortBy(getPeakMetrics(_, "JVMOffHeapMemory")).reverse
+      case ExecutorRollPolicy.TOTAL_SHUFFLE_WRITE =>
+        listWithoutDriver.sortBy(_.totalShuffleWrite).reverse
+      case ExecutorRollPolicy.DISK_USED =>
+        listWithoutDriver.sortBy(_.diskUsed).reverse
       case ExecutorRollPolicy.OUTLIER =>
         // If there is no outlier we fallback to TOTAL_DURATION policy.
         outliersFromMultipleDimensions(listWithoutDriver) ++
@@ -142,7 +146,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
    * We build multiple outlier lists and concat in the following importance order to find
    * outliers in various perspective:
    *   AVERAGE_DURATION > TOTAL_DURATION > TOTAL_GC_TIME > FAILED_TASKS >
-   *     PEAK_JVM_ONHEAP_MEMORY > PEAK_JVM_OFFHEAP_MEMORY
+   *     PEAK_JVM_ONHEAP_MEMORY > PEAK_JVM_OFFHEAP_MEMORY > TOTAL_SHUFFLE_WRITE > DISK_USED
    * Since we will choose only first item, the duplication is okay.
    */
   private def outliersFromMultipleDimensions(listWithoutDriver: Seq[v1.ExecutorSummary]) =
@@ -151,7 +155,9 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       outliers(listWithoutDriver, e => e.totalGCTime) ++
       outliers(listWithoutDriver, e => e.failedTasks) ++
       outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMHeapMemory")) ++
-      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory"))
+      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory")) ++
+      outliers(listWithoutDriver, e => e.totalShuffleWrite) ++
+      outliers(listWithoutDriver, e => e.diskUsed)
 
   /**
    * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is

@@ -94,7 +94,7 @@ Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth
 
 [`FPGrowth`](api/python/reference/api/pyspark.mllib.fpm.FPGrowth.html) implements the
 FP-growth algorithm.
-It takes an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
+It takes an `RDD` of transactions, where each transaction is a `List` of items of a generic type.
 Calling `FPGrowth.train` with transactions returns an
 [`FPGrowthModel`](api/python/reference/api/pyspark.mllib.fpm.FPGrowthModel.html)
 that stores the frequent itemsets with their frequencies.

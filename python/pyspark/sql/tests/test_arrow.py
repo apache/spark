@@ -188,8 +188,10 @@ class ArrowTests(ReusedSQLTestCase):
         return (
             [np.array([1, 2]).astype(t) for t in int_dtypes]
             + [np.array([0.1, 0.2]).astype(t) for t in float_dtypes]
-            + [np.array([[1, 2], [3, 4]]).astype(t) for t in int_dtypes]
-            + [np.array([[0.1, 0.2], [0.3, 0.4]]).astype(t) for t in float_dtypes]
+            + [np.array([[1], [2]]).astype(t) for t in int_dtypes]
+            + [np.array([[0.1], [0.2]]).astype(t) for t in float_dtypes]
+            + [np.array([[1, 1, 1], [2, 2, 2]]).astype(t) for t in int_dtypes]
+            + [np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]).astype(t) for t in float_dtypes]
         )
 
     def test_toPandas_fallback_enabled(self):
@@ -510,9 +512,11 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_ndarray(self):
         dtypes = ["tinyint", "smallint", "int", "bigint", "float", "double"]
-        expected_dtypes = [[("value", t)] for t in dtypes] + [
-            [("_1", t), ("_2", t)] for t in dtypes
-        ]
+        expected_dtypes = (
+            [[("value", t)] for t in dtypes]
+            + [[("value", t)] for t in dtypes]
+            + [[("_1", t), ("_2", t), ("_3", t)] for t in dtypes]
+        )
         arrs = self.create_np_arrs
 
         for arr, dtypes in zip(arrs, expected_dtypes):

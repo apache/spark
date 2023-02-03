@@ -23,7 +23,7 @@ import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.functions.{col, lit, struct}
+import org.apache.spark.sql.functions.{col, lit, struct, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
@@ -138,18 +138,58 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(dfx.stat.freqItems(Array("table1.num", "table2.num")).collect()(0).length == 2)
 
     // this should throw "Reference 'num' is ambiguous"
-    intercept[AnalysisException] {
-      dfx.stat.freqItems(Array("num"))
-    }
-    intercept[AnalysisException] {
-      dfx.stat.approxQuantile("num", Array(0.1), 0.0)
-    }
-    intercept[AnalysisException] {
-      dfx.stat.cov("num", "num")
-    }
-    intercept[AnalysisException] {
-      dfx.stat.corr("num", "num")
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.freqItems(Array("num"))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.approxQuantile("num", Array(0.1), 0.0)
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.cov("num", "num")
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfx.stat.corr("num", "num")
+      },
+      errorClass = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`num`",
+        "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
+      )
+    )
+  }
+
+  test("SPARK-40933 test cov & corr with null values and empty dataset") {
+    val df1 = spark.range(0, 10)
+      .withColumn("value", when(col("id") % 3 === 0, col("id")))
+    assert(math.abs(df1.stat.cov("id", "value") - 5.0) < 1e-12)
+    assert(math.abs(df1.stat.corr("id", "value") - 0.5120915564991891) < 1e-12)
+
+    // empty dataframe
+    val df2 = df1.where(col("id") < 0)
+    assert(df2.stat.cov("id", "value") === 0)
+    assert(df2.stat.corr("id", "value").isNaN)
   }
 
   test("covariance") {

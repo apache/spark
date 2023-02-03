@@ -2,45 +2,45 @@
 Dataset Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 back-to-back map long:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                               10975          10998          32          9.1         109.8       1.0X
-DataFrame                                          1716           1824         152         58.3          17.2       6.4X
-Dataset                                            2423           2552         184         41.3          24.2       4.5X
+RDD                                               11190          11293         145          8.9         111.9       1.0X
+DataFrame                                          1736           1816         112         57.6          17.4       6.4X
+Dataset                                            2567           2579          16         38.9          25.7       4.4X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 back-to-back map:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                               13244          13280          51          7.6         132.4       1.0X
-DataFrame                                          3900           3925          36         25.6          39.0       3.4X
-Dataset                                           14076          14197         171          7.1         140.8       0.9X
+RDD                                               13353          13367          19          7.5         133.5       1.0X
+DataFrame                                          4046           4053          10         24.7          40.5       3.3X
+Dataset                                           14414          14480          93          6.9         144.1       0.9X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 back-to-back filter Long:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                2606           2673          96         38.4          26.1       1.0X
-DataFrame                                          1080           1298         308         92.6          10.8       2.4X
-Dataset                                            2490           2575         121         40.2          24.9       1.0X
+RDD                                                2579           2639          84         38.8          25.8       1.0X
+DataFrame                                          1014           1036          31         98.6          10.1       2.5X
+Dataset                                            2498           2507          13         40.0          25.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 back-to-back filter:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                3522           3538          22         28.4          35.2       1.0X
-DataFrame                                           168            211          24        594.4           1.7      20.9X
-Dataset                                            3940           4041         144         25.4          39.4       0.9X
+RDD                                                3547           3557          14         28.2          35.5       1.0X
+DataFrame                                           161            194          22        622.7           1.6      22.1X
+Dataset                                            4029           4085          79         24.8          40.3       0.9X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 aggregate:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD sum                                            3131           3151          29         31.9          31.3       1.0X
-DataFrame sum                                        75             88          12       1335.0           0.7      41.8X
-Dataset sum using Aggregator                       3186           3200          21         31.4          31.9       1.0X
-Dataset complex Aggregator                         7857           7999         200         12.7          78.6       0.4X
+RDD sum                                            3333           3344          16         30.0          33.3       1.0X
+DataFrame sum                                        59             77          12       1708.6           0.6      56.9X
+Dataset sum using Aggregator                       3257           3279          31         30.7          32.6       1.0X
+Dataset complex Aggregator                         7984           8053          97         12.5          79.8       0.4X
 
 

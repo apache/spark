@@ -1,0 +1,18 @@
+
+È
+basicmessage.proto$org.apache.spark.sql.protobuf.protosnestedenum.proto"Ü
+BasicMessage
+id (Rid!
+string_value (	RstringValue
+int32_value (R
+int32Value
+int64_value (R
+int64Value!
+double_value (RdoubleValue
+float_value (R
+floatValue
+
+bool_value (R	boolValue
+bytes_value (R
+bytesValueS
+rnested_enum	 (20.org.apache.spark.sql.protobuf.protos.NestedEnumRrnestedEnumBBBasicMessageProtobproto3

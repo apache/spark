@@ -28,6 +28,7 @@ only_commits:
   files:
     - appveyor.yml
     - dev/appveyor-install-dependencies.ps1
+    - build/spark-build-info.ps1
     - R/
     - sql/core/src/main/scala/org/apache/spark/sql/api/r/
     - core/src/main/scala/org/apache/spark/api/r/

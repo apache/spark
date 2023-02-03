@@ -48,7 +48,7 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
     }
     val client = new DefaultVolcanoClient
     val template = kubernetesConf.getOption(POD_GROUP_TEMPLATE_FILE_KEY)
-    val pg = template.map(client.podGroups.load(_).get).getOrElse(new PodGroup())
+    val pg = template.map(client.podGroups.load(_).item).getOrElse(new PodGroup())
     var metadata = pg.getMetadata
     if (metadata == null) metadata = new ObjectMeta
     metadata.setName(podGroupName)

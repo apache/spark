@@ -342,16 +342,21 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
         s"(3, 19.5, cast('2020-02-01' as timestamp))")
 
-    val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
-        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
-        "ON i.id = p.item_id AND i.arrive_time = p.time ORDER BY id, purchase_price, sale_price")
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+            "ON i.id = p.item_id AND i.arrive_time = p.time " +
+            "ORDER BY id, purchase_price, sale_price")
 
-    val shuffles = collectShuffles(df.queryExecution.executedPlan)
-    assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-    checkAnswer(df,
-      Seq(Row(1, "aa", 40.0, 42.0), Row(1, "aa", 41.0, 44.0), Row(1, "aa", 41.0, 45.0),
-        Row(2, "bb", 10.0, 11.0), Row(2, "bb", 10.5, 11.0), Row(3, "cc", 15.5, 19.5))
-    )
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+        checkAnswer(df,
+          Seq(Row(1, "aa", 40.0, 42.0), Row(1, "aa", 41.0, 44.0), Row(1, "aa", 41.0, 45.0),
+            Row(2, "bb", 10.0, 11.0), Row(2, "bb", 10.5, 11.0), Row(3, "cc", 15.5, 19.5))
+        )
+      }
+    }
   }
 
   test("partitioned join: join with two partition keys and unsorted partitions") {
@@ -373,16 +378,21 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
         s"(3, 19.5, cast('2020-02-01' as timestamp))")
 
-    val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
-        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
-        "ON i.id = p.item_id AND i.arrive_time = p.time ORDER BY id, purchase_price, sale_price")
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+            "ON i.id = p.item_id AND i.arrive_time = p.time " +
+            "ORDER BY id, purchase_price, sale_price")
 
-    val shuffles = collectShuffles(df.queryExecution.executedPlan)
-    assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-    checkAnswer(df,
-      Seq(Row(1, "aa", 40.0, 42.0), Row(1, "aa", 41.0, 44.0), Row(1, "aa", 41.0, 45.0),
-        Row(2, "bb", 10.0, 11.0), Row(2, "bb", 10.5, 11.0), Row(3, "cc", 15.5, 19.5))
-    )
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+        checkAnswer(df,
+          Seq(Row(1, "aa", 40.0, 42.0), Row(1, "aa", 41.0, 44.0), Row(1, "aa", 41.0, 45.0),
+            Row(2, "bb", 10.0, 11.0), Row(2, "bb", 10.5, 11.0), Row(3, "cc", 15.5, 19.5))
+        )
+      }
+    }
   }
 
   test("partitioned join: join with two partition keys and different # of partition keys") {
@@ -400,12 +410,130 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
         s"(2, 11.0, cast('2020-01-01' as timestamp))")
 
-    val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
-        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
-        "ON i.id = p.item_id AND i.arrive_time = p.time ORDER BY id, purchase_price, sale_price")
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+            "ON i.id = p.item_id AND i.arrive_time = p.time " +
+            "ORDER BY id, purchase_price, sale_price")
 
-    val shuffles = collectShuffles(df.queryExecution.executedPlan)
-    assert(shuffles.nonEmpty, "should add shuffle when partition keys mismatch")
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df,
+          Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 11.0)))
+      }
+    }
+  }
+
+  test("SPARK-41413: partitioned join: partition values from one side are subset of those from " +
+      "the other side") {
+    val items_partitions = Array(bucket(4, "id"))
+    createTable(items, items_schema, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(4, "item_id"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+            "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-41413: partitioned join: partition values from both sides overlaps") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, items_schema, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(4, 30.0, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+            "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-41413: partitioned join: non-overlapping partition values from both sides") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, items_schema, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(5, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(6, 30.0, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+            "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df, Seq.empty)
+      }
+    }
   }
 
   test("data source partitioning + dynamic partition filtering") {
@@ -433,18 +561,23 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
           s"(3, 19.5, cast('2020-02-01' as timestamp))")
 
-      // number of unique partitions changed after dynamic filtering - should throw exception
-      var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
-          s"i.id = p.item_id AND i.price > 40.0")
-      val e = intercept[Exception](df.collect())
-      assert(e.getMessage.contains("number of unique partition values"))
+      Seq(true, false).foreach { pushDownValues =>
+        withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+          // number of unique partitions changed after dynamic filtering - the gap should be filled
+          // with empty partitions and the job should still succeed
+          var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p " +
+              "WHERE i.id = p.item_id AND i.price > 40.0")
+          checkAnswer(df, Seq(Row(131)))
 
-      // dynamic filtering doesn't change partitioning so storage-partitioned join should kick in
-      df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
-          s"i.id = p.item_id AND i.price >= 10.0")
-      val shuffles = collectShuffles(df.queryExecution.executedPlan)
-      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-      checkAnswer(df, Seq(Row(303.5)))
+          // dynamic filtering doesn't change partitioning so storage-partitioned join should kick
+          // in
+          df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p " +
+              "WHERE i.id = p.item_id AND i.price >= 10.0")
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          checkAnswer(df, Seq(Row(303.5)))
+        }
+      }
     }
   }
 }

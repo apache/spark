@@ -34,6 +34,9 @@ SELECT a + b, COUNT(b) FROM testData GROUP BY a + b;
 SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1;
 SELECT a + 1 + 1, COUNT(b) FROM testData GROUP BY a + 1;
 
+-- struct() in group by
+SELECT count(1) FROM testData GROUP BY struct(a + 0.1 AS aa);
+
 -- Aggregate with nulls.
 SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a)
 FROM testData;

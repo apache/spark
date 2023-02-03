@@ -38,9 +38,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
   extends LeafRunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("key", StringType, nullable = false) ::
-        StructField("value", StringType, nullable = false) :: Nil)
+    val schema = StructType(Array(
+      StructField("key", StringType, nullable = false),
+        StructField("value", StringType, nullable = false)))
     schema.toAttributes
   }
 
@@ -125,11 +125,11 @@ case class SetCommand(kv: Option[(String, Option[String])])
               Option(version).getOrElse("<unknown>"))
         }
       }
-      val schema = StructType(
-        StructField("key", StringType, nullable = false) ::
-          StructField("value", StringType, nullable = false) ::
-          StructField("meaning", StringType, nullable = false) ::
-          StructField("Since version", StringType, nullable = false) :: Nil)
+      val schema = StructType(Array(
+        StructField("key", StringType, nullable = false),
+          StructField("value", StringType, nullable = false),
+          StructField("meaning", StringType, nullable = false),
+          StructField("Since version", StringType, nullable = false)))
       (schema.toAttributes, runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.

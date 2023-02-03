@@ -274,7 +274,7 @@ public class TransportClient implements Closeable {
           copy.flip();
           result.set(copy);
         } catch (Throwable t) {
-          logger.warn("Error in responding PRC callback", t);
+          logger.warn("Error in responding RPC callback", t);
           result.setException(t);
         }
       }

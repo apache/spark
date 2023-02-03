@@ -4711,7 +4711,20 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('-34,338,492.654,878', '99G999G999D999G999')' due to data type mismatch: Thousands separators (, or G) may not appear after the decimal point in the number format: '99G999G999D999G999'; line 1 pos 27
+{
+  "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "format" : "'99G999G999D999G999'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 81,
+    "fragment" : "to_number('-34,338,492.654,878', '99G999G999D999G999')"
+  } ]
+}
 
 
 -- !query
@@ -4760,7 +4773,20 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('123,000', '999G')' due to data type mismatch: Thousands separators (, or G) must have digits in between them in the number format: '999G'; line 1 pos 27
+{
+  "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "format" : "'999G'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 54,
+    "fragment" : "to_number('123,000','999G')"
+  } ]
+}
 
 
 -- !query

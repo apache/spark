@@ -136,8 +136,16 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   unsupported("struct<x: int")
 
   test("Do not print empty parentheses for no params") {
-    assert(intercept("unknown").getMessage.contains("unknown is not supported"))
-    assert(intercept("unknown(1,2,3)").getMessage.contains("unknown(1,2,3) is not supported"))
+    checkError(
+      exception = intercept("unknown"),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"UNKNOWN\"")
+    )
+    checkError(
+      exception = intercept("unknown(1,2,3)"),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"UNKNOWN(1,2,3)\"")
+    )
   }
 
   test("Set default timestamp type") {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactor
  */
 class MicroBatchWrite(epochId: Long, val writeSupport: StreamingWrite) extends BatchWrite {
   override def toString: String = {
-    s"MicroBathWrite[epoch: $epochId, writer: $writeSupport]"
+    s"MicroBatchWrite[epoch: $epochId, writer: $writeSupport]"
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {

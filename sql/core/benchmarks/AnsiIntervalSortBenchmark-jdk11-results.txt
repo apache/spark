@@ -1,28 +1,28 @@
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 year month interval one column:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------
-year month interval one column enable radix           45436          45838         397          2.2         454.4       1.0X
-year month interval one column disable radix          59657          61507        1782          1.7         596.6       0.8X
+year month interval one column enable radix           30642          30957         422          3.3         306.4       1.0X
+year month interval one column disable radix          43682          44026         438          2.3         436.8       0.7X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 year month interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-year month interval two columns enable radix           56565          57474         803          1.8         565.7       1.0X
-year month interval two columns disable radix          57246          58482        2118          1.7         572.5       1.0X
+year month interval two columns enable radix           46291          46401         138          2.2         462.9       1.0X
+year month interval two columns disable radix          46129          46467         335          2.2         461.3       1.0X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 day time interval one columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-day time interval one columns enable radix           44925          45687         721          2.2         449.3       1.0X
-day time interval one columns disable radix          62944          63133         210          1.6         629.4       0.7X
+day time interval one columns enable radix           32840          33215         595          3.0         328.4       1.0X
+day time interval one columns disable radix          49661          49827         222          2.0         496.6       0.7X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 day time interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-day time interval two columns enable radix           67016          67153         126          1.5         670.2       1.0X
-day time interval two columns disable radix          67192          67276          87          1.5         671.9       1.0X
+day time interval two columns enable radix           52665          52952         264          1.9         526.7       1.0X
+day time interval two columns disable radix          52627          52699          83          1.9         526.3       1.0X
 

@@ -29,6 +29,9 @@ import org.apache.spark.sql.types.StructType
 private[hive] trait RawHiveTable {
   def rawTable: Object
   def toCatalogTable: CatalogTable
+
+  /** Get hive table properties. */
+  def hiveTableProps(): Map[String, String]
 }
 
 /**
@@ -126,6 +129,9 @@ private[hive] trait HiveClient {
    * moving across different database.
    */
   def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
+
+  /** Alter a table properties */
+  def alterTableProps(rawHiveTable: RawHiveTable, newProps: Map[String, String]): Unit
 
   /**
    * Updates the given table with a new data schema and table properties, and keep everything else

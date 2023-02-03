@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, CreateNamedStruct, Expression, GetStructField, IsNotNull, Literal, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.TIME_WINDOW
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SESSION_WINDOW, TIME_WINDOW, WINDOW_TIME}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{CalendarIntervalType, DataType, LongType, Metadata, MetadataBuilder, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -187,7 +187,8 @@ object SessionWindowing extends Rule[LogicalPlan] {
    * This also adds a marker to the session column so that downstream can easily find the column
    * on session window.
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(SESSION_WINDOW), ruleId) {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val sessionExpressions =
@@ -286,59 +287,66 @@ object SessionWindowing extends Rule[LogicalPlan] {
  * The correct representative event time of a window is ``window.end - 1``.
  * */
 object ResolveWindowTime extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(WINDOW_TIME), ruleId) {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val windowTimeExpressions =
         p.expressions.flatMap(_.collect { case w: WindowTime => w }).toSet
 
-      if (windowTimeExpressions.size == 1 &&
-        windowTimeExpressions.head.windowColumn.resolved &&
-        windowTimeExpressions.head.checkInputDataTypes().isSuccess) {
+      val allWindowTimeExprsResolved = windowTimeExpressions.forall { w =>
+        w.windowColumn.resolved && w.checkInputDataTypes().isSuccess
+      }
 
-        val windowTime = windowTimeExpressions.head
+      if (windowTimeExpressions.nonEmpty && allWindowTimeExprsResolved) {
+        val windowTimeToAttrAndNewColumn = windowTimeExpressions.map { windowTime =>
+          val metadata = windowTime.windowColumn match {
+            case a: Attribute => a.metadata
+            case _ => Metadata.empty
+          }
 
-        val metadata = windowTime.windowColumn match {
-          case a: Attribute => a.metadata
-          case _ => Metadata.empty
-        }
+          if (!metadata.contains(TimeWindow.marker) &&
+            !metadata.contains(SessionWindow.marker)) {
+            // FIXME: error framework?
+            throw new AnalysisException(
+              "The input is not a correct window column: $windowTime", plan = Some(p))
+          }
 
-        if (!metadata.contains(TimeWindow.marker) &&
-          !metadata.contains(SessionWindow.marker)) {
-          // FIXME: error framework?
-          throw new AnalysisException(
-            "The input is not a correct window column: $windowTime", plan = Some(p))
-        }
+          val newMetadata = new MetadataBuilder()
+            .withMetadata(metadata)
+            .remove(TimeWindow.marker)
+            .remove(SessionWindow.marker)
+            .build()
 
-        val newMetadata = new MetadataBuilder()
-          .withMetadata(metadata)
-          .remove(TimeWindow.marker)
-          .remove(SessionWindow.marker)
-          .build()
+          val colName = windowTime.sql
 
-        val attr = AttributeReference(
-          "window_time", windowTime.dataType, metadata = newMetadata)()
+          val attr = AttributeReference(colName, windowTime.dataType, metadata = newMetadata)()
 
-        // NOTE: "window.end" is "exclusive" upper bound of window, so if we use this value as
-        // it is, it is going to be bound to the different window even if we apply the same window
-        // spec. Decrease 1 microsecond from window.end to let the window_time be bound to the
-        // correct window range.
-        val subtractExpr =
-        PreciseTimestampConversion(
-          Subtract(PreciseTimestampConversion(
-            GetStructField(windowTime.windowColumn, 1),
-            windowTime.dataType, LongType), Literal(1L)),
-          LongType,
-          windowTime.dataType)
+          // NOTE: "window.end" is "exclusive" upper bound of window, so if we use this value as
+          // it is, it is going to be bound to the different window even if we apply the same window
+          // spec. Decrease 1 microsecond from window.end to let the window_time be bound to the
+          // correct window range.
+          val subtractExpr =
+          PreciseTimestampConversion(
+            Subtract(PreciseTimestampConversion(
+              GetStructField(windowTime.windowColumn, 1),
+              windowTime.dataType, LongType), Literal(1L)),
+            LongType,
+            windowTime.dataType)
 
-        val newColumn = Alias(subtractExpr, "window_time")(
-          exprId = attr.exprId, explicitMetadata = Some(newMetadata))
+          val newColumn = Alias(subtractExpr, colName)(
+            exprId = attr.exprId, explicitMetadata = Some(newMetadata))
+
+          windowTime -> (attr, newColumn)
+        }.toMap
 
         val replacedPlan = p transformExpressions {
-          case w: WindowTime => attr
+          case w: WindowTime => windowTimeToAttrAndNewColumn(w)._1
         }
 
-        replacedPlan.withNewChildren(Project(newColumn +: child.output, child) :: Nil)
+        val newColumnsToAdd = windowTimeToAttrAndNewColumn.values.map(_._2)
+        replacedPlan.withNewChildren(
+          Project(newColumnsToAdd ++: child.output, child) :: Nil)
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }

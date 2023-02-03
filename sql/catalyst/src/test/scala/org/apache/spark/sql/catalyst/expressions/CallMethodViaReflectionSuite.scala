@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -97,10 +98,36 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
   }
 
   test("input type checking") {
-    assert(CallMethodViaReflection(Seq.empty).checkInputDataTypes().isFailure)
-    assert(CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes().isFailure)
+    checkError(
+      exception = intercept[AnalysisException] {
+        CallMethodViaReflection(Seq.empty).checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`reflect`",
+        "expectedNum" -> "> 1",
+        "actualNum" -> "0")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`reflect`",
+        "expectedNum" -> "> 1",
+        "actualNum" -> "1")
+    )
     assert(CallMethodViaReflection(
-      Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes().isFailure)
+      Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "method",
+          "inputType" -> "\"STRING\"",
+          "inputExpr" -> "\"1\"")
+      )
+    )
     assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
   }
 

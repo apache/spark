@@ -599,23 +599,37 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
     ).toDF("time")
 
-    val e = intercept[AnalysisException] {
-      df
-        .withColumn("time2", expr("time - INTERVAL 5 minutes"))
-        .select(
-          window($"time", "10 seconds").as("window1"),
-          window($"time2", "10 seconds").as("window2")
-        )
-        .select(
-          $"window1.end".cast("string"),
-          window_time($"window1").cast("string"),
-          $"window2.end".cast("string"),
-          window_time($"window2").cast("string")
-        )
-    }
-    assert(e.getMessage.contains(
-      "Multiple time/session window expressions would result in a cartesian product of rows, " +
-        "therefore they are currently not supported"))
+    val df2 = df
+      .withColumn("time2", expr("time - INTERVAL 15 minutes"))
+      .select(window($"time", "10 seconds").as("window1"), $"time2")
+      .select($"window1", window($"time2", "10 seconds").as("window2"))
+
+    checkAnswer(
+      df2.select(
+        $"window1.end".cast("string"),
+        window_time($"window1").cast("string"),
+        $"window2.end".cast("string"),
+        window_time($"window2").cast("string")),
+      Seq(
+        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999",
+            "2016-03-27 19:23:20", "2016-03-27 19:23:19.999999"),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999",
+            "2016-03-27 19:24:30", "2016-03-27 19:24:29.999999"))
+    )
+
+    // check column names
+    val df3 = df2
+      .select(
+        window_time($"window1").cast("string"),
+        window_time($"window2").cast("string"),
+        window_time($"window2").as("wt2_aliased").cast("string")
+      )
+
+    val schema = df3.schema
+
+    assert(schema.fields.exists(_.name == "window_time(window1)"))
+    assert(schema.fields.exists(_.name == "window_time(window2)"))
+    assert(schema.fields.exists(_.name == "wt2_aliased"))
   }
 
   test("window_time function on agg output") {
@@ -636,5 +650,32 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
       )
     )
+  }
+
+  test("window_time in SQL") {
+    withTempView("tmpView") {
+      val df = Seq(
+        ("2016-03-27 19:38:19", 1), ("2016-03-27 19:39:25", 2)
+      ).toDF("time", "value")
+      df.createOrReplaceTempView("tmpView")
+      checkAnswer(
+        spark.sql(
+          s"""
+             |select
+             |  CAST(window.start AS string), CAST(window.end AS string),
+             |  CAST(window_time(window) AS string), counts
+             |from
+             |(
+             |  select window, count(*) AS counts from tmpView
+             |  group by window(time, "10 seconds")
+             |  order by window.start
+             |)
+             |""".stripMargin),
+        Seq(
+          Row("2016-03-27 19:38:10", "2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", 1),
+          Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
+        )
+      )
+    }
   }
 }

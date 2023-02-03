@@ -5,7 +5,15 @@ select concat_ws()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: concat_ws requires at least one argument.; line 1 pos 7
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`concat_ws`"
+  }
+}
 
 
 -- !query
@@ -14,7 +22,15 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: format_string() should take at least 1 argument; line 1 pos 7
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`format_string`"
+  }
+}
 
 
 -- !query
@@ -81,7 +97,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -122,7 +138,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -234,7 +250,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO"
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "sqlState" : "22003"
 }
 
 
@@ -486,7 +503,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_length'",
@@ -511,7 +528,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_length'",
@@ -791,11 +808,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "2",
-    "name" : "decode"
+    "actualNum" : "0",
+    "expectedNum" : "2",
+    "functionName" : "`decode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -814,11 +832,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "actualNumber" : "1",
-    "expectedInfo" : "2",
-    "name" : "decode"
+    "actualNum" : "1",
+    "expectedNum" : "2",
+    "functionName" : "`decode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -876,6 +895,22 @@ select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattl
 struct<decode(6, 1, Southlake, 2, San Francisco, 3, New Jersey, 4, Seattle):string>
 -- !query output
 NULL
+
+
+-- !query
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks')
+-- !query schema
+struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks):string>
+-- !query output
+SQL
+
+
+-- !query
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.')
+-- !query schema
+struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks, NULL, .):string>
+-- !query output
+SQL
 
 
 -- !query
@@ -1246,6 +1281,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "' ab cdef= = '",
@@ -1273,6 +1309,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'a'",
@@ -1290,6 +1327,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'a?'",
@@ -1307,6 +1345,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'abcde'",
@@ -1324,6 +1363,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'abcd='",
@@ -1341,6 +1381,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'a==='",
@@ -1358,6 +1399,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "'ab==f'",
@@ -1464,6 +1506,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
     "str" : "'GG'",
@@ -1481,6 +1524,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
     "str" : "'01 AF'",
@@ -1506,6 +1550,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
     "str" : "' ab cdef= = '",
@@ -1523,6 +1568,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
     "str" : "' ab cdef= = '",
@@ -1579,7 +1625,24 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputName" : "fmt",
+    "inputValue" : "'1'",
+    "requireType" : "case-insensitive \"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, 1)\"",
+    "validValues" : "'hex', 'utf-8', 'utf8', or 'base64'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "to_binary('abc', 1)"
+  } ]
+}
 
 
 -- !query
@@ -1589,11 +1652,205 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1101",
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "argName" : "format",
-    "endingMsg" : " The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.",
-    "funcName" : "to_binary",
-    "invalidValue" : "invalidformat"
-  }
+    "inputName" : "fmt",
+    "inputValue" : "'invalidformat'",
+    "requireType" : "case-insensitive \"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, invalidFormat)\"",
+    "validValues" : "'hex', 'utf-8', 'utf8', or 'base64'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "to_binary('abc', 'invalidFormat')"
+  } ]
 }
+
+
+-- !query
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT to_binary('abc', fmtField) FROM fmtTable
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"fmtField\"",
+    "inputName" : "fmt",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, fmtField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "to_binary('abc', fmtField)"
+  } ]
+}
+
+
+-- !query
+DROP VIEW IF EXISTS fmtTable
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select luhn_check('4111111111111111')
+-- !query schema
+struct<luhn_check(4111111111111111):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('5500000000000004')
+-- !query schema
+struct<luhn_check(5500000000000004):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('340000000000009')
+-- !query schema
+struct<luhn_check(340000000000009):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('6011000000000004')
+-- !query schema
+struct<luhn_check(6011000000000004):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('6011000000000005')
+-- !query schema
+struct<luhn_check(6011000000000005):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('378282246310006')
+-- !query schema
+struct<luhn_check(378282246310006):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('0')
+-- !query schema
+struct<luhn_check(0):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('4111111111111111    ')
+-- !query schema
+struct<luhn_check(4111111111111111    ):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('4111111 111111111')
+-- !query schema
+struct<luhn_check(4111111 111111111):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(' 4111111111111111')
+-- !query schema
+struct<luhn_check( 4111111111111111):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('')
+-- !query schema
+struct<luhn_check():boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('  ')
+-- !query schema
+struct<luhn_check(  ):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('510B105105105106')
+-- !query schema
+struct<luhn_check(510B105105105106):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('ABCDED')
+-- !query schema
+struct<luhn_check(ABCDED):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(null)
+-- !query schema
+struct<luhn_check(NULL):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select luhn_check(6011111111111117)
+-- !query schema
+struct<luhn_check(6011111111111117):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check(6011111111111118)
+-- !query schema
+struct<luhn_check(6011111111111118):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(123.456)
+-- !query schema
+struct<luhn_check(123.456):boolean>
+-- !query output
+false

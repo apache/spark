@@ -68,11 +68,17 @@ class SparkException(
 }
 
 object SparkException {
-  def internalError(msg: String): SparkException = {
+  def internalError(msg: String, context: Array[QueryContext], summary: String): SparkException = {
     new SparkException(
       errorClass = "INTERNAL_ERROR",
       messageParameters = Map("message" -> msg),
-      cause = null)
+      cause = null,
+      context,
+      summary)
+  }
+
+  def internalError(msg: String): SparkException = {
+    internalError(msg, context = Array.empty[QueryContext], summary = "")
   }
 
   def internalError(msg: String, cause: Throwable): SparkException = {
@@ -258,9 +264,10 @@ private[spark] class SparkIllegalArgumentException(
     errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext] = Array.empty,
-    summary: String = "")
+    summary: String = "",
+    cause: Throwable = null)
   extends IllegalArgumentException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters, summary))
+    SparkThrowableHelper.getMessage(errorClass, messageParameters, summary), cause)
   with SparkThrowable {
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
