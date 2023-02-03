@@ -866,15 +866,13 @@ object SparkConnectClient {
     // `listenablefuture-*.jar` and `guava-*.jar`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      val excluded = cp filterNot { v =>
+      cp filterNot { v =>
         val name = v.data.getName
         name.startsWith("spark-connect-client-jvm") || name.startsWith("spark-connect-common") ||
           name.startsWith("grpc-") || name.startsWith("protobuf-java") ||
           name.startsWith("failureaccess-") || name.startsWith("listenablefuture-") ||
           name.startsWith("guava-") || name.startsWith("perfmark-api-")
       }
-      (cp -- excluded).foreach(j => println(s"include jar: ${j.data.getName}"))
-      excluded
     },
 
     (assembly / assemblyShadeRules) := Seq(
