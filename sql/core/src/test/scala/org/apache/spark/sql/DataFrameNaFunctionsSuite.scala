@@ -534,7 +534,11 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val exception = intercept[AnalysisException] {
       df.na.replace("aa", Map( "n/a" -> "unknown"))
     }
-    assert(exception.getMessage.equals("Cannot resolve column name \"aa\" among (Col.1, Col.2)"))
+    checkError(
+      exception = exception,
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`aa`", "proposal" -> "`Col`.`1`, `Col`.`2`")
+    )
   }
 
   test("SPARK-34649: replace value of a nested column") {
