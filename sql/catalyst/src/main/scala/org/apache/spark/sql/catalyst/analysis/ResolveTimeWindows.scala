@@ -55,17 +55,6 @@ object TimeWindowing extends Rule[LogicalPlan] {
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
    *
-   * Example calculation:
-   * For simplicity assume windowDuration = slideDuration.
-   * | x x x x x x x x x x x x | x x x x x x x x x x x x | x x x x x x x x x x x x |
-   * |                         |----l1 ----|---- l2 -----|
-   *                        lastStart   timestamp   lastStartWrong
-   * Normally when timestamp > startTime (or equally remainder > 0), we get
-   * l1 = remainder = (timestamp - startTime) % slideDuration, lastStart = timeStamp - remainder
-   * However, when timestamp < startTime (or equally remainder < 0), the value of remainder is
-   * -l2 (note the negative sign), and lastStart is then at the position of lastStartWrong.
-   * So we need to subtract a slideDuration.
-   *
    * This behaves as follows for the given parameters for the time: 12:05. The valid windows are
    * marked with a +, and invalid ones are marked with a x. The invalid ones are filtered using the
    * Filter operator.
