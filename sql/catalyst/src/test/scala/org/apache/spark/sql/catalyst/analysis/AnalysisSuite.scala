@@ -949,14 +949,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       AttributeReference("c", IntegerType)(),
       AttributeReference("d", TimestampType)())
 
-    val r1 = Union(firstTable, secondTable)
-    val r2 = Union(firstTable, thirdTable)
-    val r3 = Union(firstTable, fourthTable)
-    val r4 = Except(firstTable, secondTable, isAll = false)
-    val r5 = Intersect(firstTable, secondTable, isAll = false)
-
     assertAnalysisErrorClass(
-      r1,
+      Union(firstTable, secondTable),
       expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
@@ -968,7 +962,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     assertAnalysisErrorClass(
-      r2,
+      Union(firstTable, thirdTable),
       expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
@@ -980,7 +974,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     assertAnalysisErrorClass(
-      r3,
+      Union(firstTable, fourthTable),
       expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
@@ -992,7 +986,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     assertAnalysisErrorClass(
-      r4,
+      Except(firstTable, secondTable, isAll = false),
       expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
@@ -1004,7 +998,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     assertAnalysisErrorClass(
-      r5,
+      Intersect(firstTable, secondTable, isAll = false),
       expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",

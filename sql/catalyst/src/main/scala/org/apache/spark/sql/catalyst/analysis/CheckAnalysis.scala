@@ -575,8 +575,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                       "operator" -> toSQLStmt(operator.nodeName),
                       "columnOrdinalNumber" -> ordinalNumber(ci),
                       "tableOrdinalNumber" -> ordinalNumber(ti + 1),
-                      "dataType1" -> toSQLType(dt1.catalogString),
-                      "dataType2" -> toSQLType(dt2.catalogString),
+                      "dataType1" -> toSQLType(dt1),
+                      "dataType2" -> toSQLType(dt2),
                       "hint" -> extraHintForAnsiTypeCoercionPlan(operator)))
                 }
               }
