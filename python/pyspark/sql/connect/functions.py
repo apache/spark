@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 import inspect
 import warnings
@@ -2455,56 +2458,45 @@ def pandas_udf(*args: Any, **kwargs: Any) -> None:
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.functions
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.functions.__dict__.copy()
 
-    if should_test_connect:
-        import pyspark.sql.connect.functions
+    # Spark Connect does not support Spark Context but the test depends on that.
+    del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
-        globs = pyspark.sql.connect.functions.__dict__.copy()
+    # TODO(SPARK-41834): implement Dataframe.conf
+    del pyspark.sql.connect.functions.from_unixtime.__doc__
+    del pyspark.sql.connect.functions.timestamp_seconds.__doc__
+    del pyspark.sql.connect.functions.unix_timestamp.__doc__
 
-        # Spark Connect does not support Spark Context but the test depends on that.
-        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
+    # TODO(SPARK-41812): Proper column names after join
+    del pyspark.sql.connect.functions.count_distinct.__doc__
 
-        # TODO(SPARK-41834): implement Dataframe.conf
-        del pyspark.sql.connect.functions.from_unixtime.__doc__
-        del pyspark.sql.connect.functions.timestamp_seconds.__doc__
-        del pyspark.sql.connect.functions.unix_timestamp.__doc__
+    # TODO(SPARK-41843): Implement SparkSession.udf
+    del pyspark.sql.connect.functions.call_udf.__doc__
 
-        # TODO(SPARK-41812): Proper column names after join
-        del pyspark.sql.connect.functions.count_distinct.__doc__
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.functions tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
 
-        # TODO(SPARK-41843): Implement SparkSession.udf
-        del pyspark.sql.connect.functions.call_udf.__doc__
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.functions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.functions tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.functions,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.functions doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

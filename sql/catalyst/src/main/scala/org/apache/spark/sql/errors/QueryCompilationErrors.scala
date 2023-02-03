@@ -3436,6 +3436,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
+  def lateralColumnAliasInWindowUnsupportedError(
+      lcaNameParts: Seq[String], windowExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_WINDOW",
+      messageParameters = Map(
+        "lca" -> toSQLId(lcaNameParts),
+        "windowExpr" -> toSQLExpr(windowExpr)
+      )
+    )
+  }
+
+  def lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
+      lcaNameParts: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING",
+      messageParameters = Map(
+        "lca" -> toSQLId(lcaNameParts)
+      )
+    )
+  }
+
   def dataTypeOperationUnsupportedError(): Throwable = {
     SparkException.internalError(
       "The operation `dataType` is not supported.")

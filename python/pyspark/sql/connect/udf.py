@@ -17,6 +17,10 @@
 """
 User-defined function related classes and functions
 """
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 import functools
 from typing import Callable, Any, TYPE_CHECKING, Optional
 

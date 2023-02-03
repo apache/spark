@@ -16,9 +16,12 @@
  */
 package org.apache.spark.sql
 
+import java.io.Closeable
+
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.connect.proto
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.Cleaner
 
@@ -43,7 +46,9 @@ import org.apache.spark.sql.connect.client.util.Cleaner
  * }}}
  */
 class SparkSession(private val client: SparkConnectClient, private val cleaner: Cleaner)
-    extends AutoCloseable {
+    extends Serializable
+    with Closeable
+    with Logging {
 
   private[this] val allocator = new RootAllocator()
 
@@ -53,7 +58,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def sql(query: String): Dataset = newDataset { builder =>
+  def sql(query: String): DataFrame = newDataset { builder =>
     builder.setSql(proto.SQL.newBuilder().setQuery(query))
   }
 
@@ -63,7 +68,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(end: Long): Dataset = range(0, end)
+  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -71,7 +76,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long): Dataset = {
+  def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1)
   }
 
@@ -81,7 +86,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long): Dataset = {
+  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, None)
   }
 
@@ -91,11 +96,15 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset = {
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     range(start, end, step, Option(numPartitions))
   }
 
-  private def range(start: Long, end: Long, step: Long, numPartitions: Option[Int]): Dataset = {
+  private def range(
+      start: Long,
+      end: Long,
+      step: Long,
+      numPartitions: Option[Int]): Dataset[java.lang.Long] = {
     newDataset { builder =>
       val rangeBuilder = builder.getRangeBuilder
         .setStart(start)
@@ -105,11 +114,11 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     }
   }
 
-  private[sql] def newDataset(f: proto.Relation.Builder => Unit): Dataset = {
+  private[sql] def newDataset[T](f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    new Dataset(this, plan)
+    new Dataset[T](this, plan)
   }
 
   private[sql] def analyze(plan: proto.Plan): proto.AnalyzePlanResponse =
@@ -130,7 +139,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
-object SparkSession {
+object SparkSession extends Logging {
   def builder(): Builder = new Builder()
 
   private lazy val cleaner = {
@@ -139,7 +148,7 @@ object SparkSession {
     cleaner
   }
 
-  class Builder() {
+  class Builder() extends Logging {
     private var _client = SparkConnectClient.builder().build()
 
     def client(client: SparkConnectClient): Builder = {

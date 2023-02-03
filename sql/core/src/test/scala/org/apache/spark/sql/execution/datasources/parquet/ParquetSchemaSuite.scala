@@ -63,14 +63,14 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       caseSensitive: Boolean = false,
-      timestampNTZEnabled: Boolean = true,
+      inferTimestampNTZ: Boolean = true,
       sparkReadSchema: Option[StructType] = None,
       expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       caseSensitive = caseSensitive,
-      timestampNTZEnabled = timestampNTZEnabled)
+      inferTimestampNTZ = inferTimestampNTZ)
 
     test(s"sql <= parquet: $testName") {
       val actualParquetColumn = converter.convertParquetColumn(
@@ -97,11 +97,10 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
         SQLConf.ParquetOutputTimestampType.INT96,
-      timestampNTZEnabled: Boolean = true): Unit = {
+      inferTimestampNTZ: Boolean = true): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
-      outputTimestampType = outputTimestampType,
-      timestampNTZEnabled = timestampNTZEnabled)
+      outputTimestampType = outputTimestampType)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -2261,7 +2260,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         """.stripMargin,
       binaryAsString = true,
       int96AsTimestamp = int96AsTimestamp,
-      timestampNTZEnabled = true)
+      inferTimestampNTZ = true)
   }
 
   testCatalystToParquet(
@@ -2286,14 +2285,14 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
       """.stripMargin,
     writeLegacyParquetFormat = false,
-    timestampNTZEnabled = true)
+    inferTimestampNTZ = true)
 
-  for (timestampNTZEnabled <- Seq(true, false)) {
-    val dataType = if (timestampNTZEnabled) TimestampNTZType else TimestampType
+  for (inferTimestampNTZ <- Seq(true, false)) {
+    val dataType = if (inferTimestampNTZ) TimestampNTZType else TimestampType
 
     testParquetToCatalyst(
       "TimestampNTZ Parquet to Spark conversion for complex types, " +
-        s"timestampNTZEnabled: $timestampNTZEnabled",
+        s"inferTimestampNTZ: $inferTimestampNTZ",
       StructType(
         Seq(
           StructField("f1", dataType),
@@ -2315,7 +2314,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         """.stripMargin,
       binaryAsString = true,
       int96AsTimestamp = false,
-      timestampNTZEnabled = timestampNTZEnabled)
+      inferTimestampNTZ = inferTimestampNTZ)
   }
 
   private def testSchemaClipping(
@@ -2339,8 +2338,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
         caseSensitive,
-        useFieldId = false,
-        timestampNTZEnabled = true)
+        useFieldId = false)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2907,8 +2905,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
          MessageTypeParser.parseMessageType(parquetSchema),
           catalystSchema,
           caseSensitive = false,
-          useFieldId = false,
-          timestampNTZEnabled = false)
+          useFieldId = false)
       }
     }
 }

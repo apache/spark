@@ -22,6 +22,7 @@ import scala.collection.convert.ImplicitConversions._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * This object offers methods to convert to/from connect proto to catalyst types.
@@ -61,6 +62,9 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.ARRAY => toCatalystArrayType(t.getArray)
       case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
       case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
+
+      case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
+
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.getKindCase} to catalyst types.")
     }
@@ -112,6 +116,31 @@ object DataTypeProtoConverter {
 
   private def toCatalystMapType(t: proto.DataType.Map): MapType = {
     MapType(toCatalystType(t.getKeyType), toCatalystType(t.getValueType), t.getValueContainsNull)
+  }
+
+  private def toCatalystUDT(t: proto.DataType.UDT): UserDefinedType[_] = {
+    if (t.getType != "udt") {
+      throw InvalidPlanInput(
+        s"""UserDefinedType requires the 'type' field to be 'udt', but got '${t.getType}'.""")
+    }
+
+    if (t.hasJvmClass) {
+      Utils
+        .classForName[UserDefinedType[_]](t.getJvmClass)
+        .getConstructor()
+        .newInstance()
+    } else {
+      if (!t.hasPythonClass || !t.hasSerializedPythonClass || !t.hasSqlType) {
+        throw InvalidPlanInput(
+          "PythonUserDefinedType requires all the three fields: " +
+            "python_class, serialized_python_class and sql_type.")
+      }
+
+      new PythonUserDefinedType(
+        sqlType = toCatalystType(t.getSqlType),
+        pyUDT = t.getPythonClass,
+        serializedPyClass = t.getSerializedPythonClass)
+    }
   }
 
   def toConnectProtoType(t: DataType): proto.DataType = {
@@ -295,6 +324,36 @@ object DataTypeProtoConverter {
               .setValueType(toConnectProtoType(valueType))
               .setValueContainsNull(valueContainsNull)
               .build())
+          .build()
+
+      case pyudt: PythonUserDefinedType =>
+        // Python UDT
+        proto.DataType
+          .newBuilder()
+          .setUdt(
+            proto.DataType.UDT
+              .newBuilder()
+              .setType("udt")
+              .setPythonClass(pyudt.pyUDT)
+              .setSqlType(toConnectProtoType(pyudt.sqlType))
+              .build())
+          .build()
+
+      case udt: UserDefinedType[_] =>
+        // Scala/Java UDT
+        val builder = proto.DataType.UDT.newBuilder()
+        builder
+          .setType("udt")
+          .setJvmClass(udt.getClass.getName)
+          .setSqlType(toConnectProtoType(udt.sqlType))
+
+        if (udt.pyUDT != null) {
+          builder.setPythonClass(udt.pyUDT)
+        }
+
+        proto.DataType
+          .newBuilder()
+          .setUdt(builder.build())
           .build()
 
       case _ =>

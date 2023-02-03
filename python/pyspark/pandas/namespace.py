@@ -3338,7 +3338,7 @@ def merge_asof(
 
     if by:
         if left_by or right_by:
-            raise ValueError('Can only pass argument "on" OR "left_by" and "right_by".')
+            raise ValueError('Can only pass argument "by" OR "left_by" and "right_by".')
         left_join_on_names = list(map(left._internal.spark_column_name_for, to_list(by)))
         right_join_on_names = list(map(right._internal.spark_column_name_for, to_list(by)))
     else:

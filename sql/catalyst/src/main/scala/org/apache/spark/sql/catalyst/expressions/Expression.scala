@@ -1298,8 +1298,9 @@ trait ComplexTypeMergingExpression extends Expression {
       "The collection of input data types must not be empty.")
     require(
       TypeCoercion.haveSameType(inputTypesForMerging),
-      "All input types must be the same except nullable, containsNull, valueContainsNull flags." +
-        s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
+      "All input types must be the same except nullable, containsNull, valueContainsNull flags. " +
+        s"The expression is: $this. " +
+        s"The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}.")
   }
 
   private lazy val internalDataType: DataType = {
