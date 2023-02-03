@@ -1477,6 +1477,11 @@
       "Invalid expressions: [<invalidExprSqls>]"
     ]
   },
+  "UNSUPPORTED_EXPR_FOR_WINDOW" : {
+    "message" : [
+      "Expression <sqlExpr> not supported within a window function."
+    ]
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"
@@ -5159,11 +5164,6 @@
   "_LEGACY_ERROR_TEMP_2411" : {
     "message" : [
       "Cannot specify order by or frame for '<aggFunc>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2412" : {
-    "message" : [
-      "Expression '<sqlExpr>' not supported within a window function."
     ]
   },
   "_LEGACY_ERROR_TEMP_2413" : {
