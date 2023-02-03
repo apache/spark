@@ -79,7 +79,9 @@ class SparkOptimizer(
       // The eval-python node may be between Project/Filter and the scan node, which breaks
       // column pruning and filter push-down. Here we rerun the related optimizer rules.
       ColumnPruning,
+      LimitPushDown,
       PushPredicateThroughNonJoin,
+      PushProjectionThroughLimit,
       RemoveNoopOperators) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
