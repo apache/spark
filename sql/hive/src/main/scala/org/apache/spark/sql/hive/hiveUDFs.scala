@@ -49,7 +49,6 @@ private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression
   with HiveInspectors
-  with CodegenFallback
   with Logging
   with UserDefinedExpression {
 
@@ -61,7 +60,7 @@ private[hive] case class HiveSimpleUDF(
   lazy val function = funcWrapper.createFunction[UDF]()
 
   @transient
-  private lazy val method =
+  protected lazy val method =
     function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
 
   @transient
@@ -77,22 +76,22 @@ private[hive] case class HiveSimpleUDF(
 
   // Create parameter converters
   @transient
-  private lazy val conversionHelper = new ConversionHelper(method, arguments)
+  protected lazy val conversionHelper = new ConversionHelper(method, arguments)
 
   override lazy val dataType = javaTypeToDataType(method.getGenericReturnType)
 
   @transient
-  private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
+  protected lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
 
   @transient
   lazy val unwrapper = unwrapperFor(ObjectInspectorFactory.getReflectionObjectInspector(
     method.getGenericReturnType, ObjectInspectorOptions.JAVA))
 
   @transient
-  private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
+  protected lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
 
   @transient
-  private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
+  protected lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
@@ -102,6 +101,65 @@ private[hive] case class HiveSimpleUDF(
       function,
       conversionHelper.convertIfNecessary(inputs : _*): _*)
     unwrapper(ret)
+  }
+
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refTerm = ctx.addReferenceObj("this", this)
+    val evals = children.map(_.genCode(ctx))
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+
+    val initInputs =
+      s"""
+         |Object[] inputs = new Object[${evals.size}];
+         |""".stripMargin
+
+    val setInputs = evals.zipWithIndex.map {
+      case (eval, i) =>
+        s"""
+           |if (${eval.isNull}) {
+           |  inputs[$i] = null;
+           |} else {
+           |  inputs[$i] = ${eval.value};
+           |}
+           |""".stripMargin
+    }
+
+    val inputsWrap = {
+      s"""
+         |Object[] inputsWrap = $refTerm.wrap(inputs, $refTerm.wrappers(), $refTerm.cached(),
+         |  $refTerm.inputDataTypes());
+         |""".stripMargin
+    }
+
+    ev.copy(code =
+      code"""
+        |${evals.map(_.code).mkString("\n")}
+        |$initInputs
+        |${setInputs.mkString("\n")}
+        |$inputsWrap
+        |$resultType $resultTerm = null;
+        |boolean ${ev.isNull} = false;
+        |try {
+        |  $resultTerm = ($resultType) $refTerm.unwrapper().apply(
+        |    org.apache.hadoop.hive.ql.exec.FunctionRegistry.invoke(
+        |      $refTerm.method(),
+        |      $refTerm.function(),
+        |      $refTerm.conversionHelper().convertIfNecessary(inputsWrap)));
+        |  ${ev.isNull} = $resultTerm == null;
+        |} catch (Throwable e) {
+        |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
+        |    "${funcWrapper.functionClassName}",
+        |    "${children.map(_.dataType.catalogString).mkString(", ")}",
+        |    "${dataType.catalogString}",
+        |    e);
+        |}
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |if (!${ev.isNull}) {
+        |  ${ev.value} = $resultTerm;
+        |}
+        |""".stripMargin
+    )
   }
 
   override def toString: String = {
@@ -194,6 +252,7 @@ private[hive] case class HiveGenericUDF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refTerm = ctx.addReferenceObj("this", this)
     val childrenEvals = children.map(_.genCode(ctx))

@@ -817,6 +817,14 @@ private[hive] trait HiveInspectors {
     cache
   }
 
+  def wrap(
+    row: Array[Any],
+    wrappers: Array[(Any) => Any],
+    cache: Array[AnyRef],
+    dataTypes: Array[DataType]): Array[AnyRef] = {
+    wrap(row.toSeq, wrappers, cache, dataTypes)
+  }
+
   /**
    * @param dataType Catalyst data type
    * @return Hive java object inspector (recursively), not the Writable ObjectInspector
