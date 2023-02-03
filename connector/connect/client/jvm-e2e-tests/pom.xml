@@ -54,6 +54,13 @@
             <version>${scala.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- Use mima to perform the compatibility check -->
+        <dependency>
+            <groupId>com.typesafe</groupId>
+            <artifactId>mima-core_${scala.binary.version}</artifactId>
+            <version>${mima.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
