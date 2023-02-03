@@ -108,27 +108,29 @@ private[hive] case class HiveSimpleUDF(
     val evals = children.map(_.genCode(ctx))
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
+    val inputsTerm = ctx.freshName("inputs")
+    val inputsWrapTerm = ctx.freshName("inputsWrap")
 
     val initInputs =
       s"""
-         |Object[] inputs = new Object[${evals.size}];
+         |Object[] $inputsTerm = new Object[${evals.size}];
          |""".stripMargin
 
     val setInputs = evals.zipWithIndex.map {
       case (eval, i) =>
         s"""
            |if (${eval.isNull}) {
-           |  inputs[$i] = null;
+           |  $inputsTerm[$i] = null;
            |} else {
-           |  inputs[$i] = ${eval.value};
+           |  $inputsTerm[$i] = ${eval.value};
            |}
            |""".stripMargin
     }
 
     val inputsWrap = {
       s"""
-         |Object[] inputsWrap = $refTerm.wrap(inputs, $refTerm.wrappers(), $refTerm.cached(),
-         |  $refTerm.inputDataTypes());
+         |Object[] $inputsWrapTerm = $refTerm.wrap($inputsTerm, $refTerm.wrappers(),
+         |  $refTerm.cached(), $refTerm.inputDataTypes());
          |""".stripMargin
     }
 
@@ -145,7 +147,7 @@ private[hive] case class HiveSimpleUDF(
         |    org.apache.hadoop.hive.ql.exec.FunctionRegistry.invoke(
         |      $refTerm.method(),
         |      $refTerm.function(),
-        |      $refTerm.conversionHelper().convertIfNecessary(inputsWrap)));
+        |      $refTerm.conversionHelper().convertIfNecessary($inputsWrapTerm)));
         |  ${ev.isNull} = $resultTerm == null;
         |} catch (Throwable e) {
         |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
