@@ -29,6 +29,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.{CAPABILITY_DYNAMIC_PARTITIONING, OUTPUTCOMMITTER_FACTORY_SCHEME, REJECT_FILE_OUTPUT}
+import org.apache.spark.sql.internal.SQLConf
 
 class CommitterBindingSuite extends SparkFunSuite {
 
@@ -238,6 +239,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     // attempt to create files in directories above the job
     // dir, which in dynamic partitioning will result in the delete
     // of the parent dir, hence loss of the job.
+    /// for safety, this is forbidden.
     List("/dir1", "/dir1/dir2", "/dir1/dir2/dir3", "", "/").foreach { d =>
       intercept[IllegalArgumentException] {
         committer.newTaskTempFileAbsPath(tContext, d, ".ext")
@@ -336,9 +338,32 @@ class CommitterBindingSuite extends SparkFunSuite {
    * @param scheme filesystem scheme.
    */
   def bindToFileOutputCommitterFactory(conf: Configuration, scheme: String): Unit = {
+
     conf.set(OUTPUTCOMMITTER_FACTORY_SCHEME + "." + scheme,
-      "org.apache.hadoop.mapreduce.lib.output.FileOutputCommitterFactory")
+      CommitterBindingSuite.FILE_OUTPUT_COMMITTER_FACTORY)
   }
 
 }
+
+/**
+ * Constants for the suite and related test suites
+ */
+private[cloud] object CommitterBindingSuite {
+  val FILE_OUTPUT_COMMITTER_FACTORY: String = "org.apache.hadoop.mapreduce.lib.output.FileOutputCommitterFactory"
+
+
+  val PATH_OUTPUT_COMMITTER_NAME: String = "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
+
+
+  val BINDING_PARQUET_OUTPUT_COMMITTER_CLASS: String =
+    "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter"
+
+  val COMMITTER_OPTIONS: Map[String, String] = Map(
+    SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> BINDING_PARQUET_OUTPUT_COMMITTER_CLASS,
+    SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key -> PATH_OUTPUT_COMMITTER_NAME,
+  )
+
+}
+
+
 

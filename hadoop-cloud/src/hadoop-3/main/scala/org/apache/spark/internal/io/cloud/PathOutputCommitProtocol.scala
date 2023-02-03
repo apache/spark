@@ -90,7 +90,12 @@ class PathOutputCommitProtocol(
   /**
    * Thread pool size for dynamic partitioning promotion?
    */
-  private var threadCount = THEAD_COUNT_DEFAULT
+  private var threadCount = THEAD_COUNT_DEFVAL
+
+  /**
+   * Report dir, if configured.
+   */
+  private var reportDir: Option[Path] = None
 
   /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
@@ -132,7 +137,9 @@ class PathOutputCommitProtocol(
 
     // read in configuration information
     val conf = context.getConfiguration
-    threadCount = conf.getInt(THREAD_COUNT, THEAD_COUNT_DEFAULT)
+    threadCount = conf.getInt(THREAD_COUNT, THEAD_COUNT_DEFVAL)
+
+    reportDir = Option(conf.get(REPORT_DIR, null)).map(p => new Path(p))
 
     // Special feature to force out the FileOutputCommitter, so as to guarantee
     // that the binding is working properly.
@@ -347,7 +354,8 @@ class PathOutputCommitProtocol(
       logInfo(s"IOStatistics were collected from tasks ${ioStatisticsToPrettyString(iostatsSnapshot)}")
     }
 
-    val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+    val jobConf = jobContext.getConfiguration
+    val fs = stagingDir.getFileSystem(jobConf)
 
     val filesToMove = allAbsPathFiles.foldLeft(Map[Path, Path]())(_ ++ _)
     if (filesToMove.nonEmpty) {
@@ -439,7 +447,19 @@ class PathOutputCommitProtocol(
     fs.delete(stagingDir, true)
 
     // the job is now complete.
-    // TODO: save iostats *somewhere* if configured to do so.
+    // now save iostats if configured to do so.
+    // even if no stats are collected, the existence of this file is evidence
+    // a job went through the committer.
+    iostatsSnapshot.aggregate(retrieveIOStatistics(committer))
+    reportDir.foreach { dir =>
+      val reportPath = new Path(dir, jobId)
+      logInfo(s"Saving statistics report to ${reportPath}")
+      IOStatisticsSnapshot.serializer().save(
+        reportPath.getFileSystem(jobConf),
+        reportPath,
+        iostatsSnapshot,
+         true)
+    }
   }
 
   /**
@@ -553,13 +573,25 @@ object PathOutputCommitProtocol {
    * to a new committer.
    */
   val REJECT_FILE_OUTPUT = "pathoutputcommit.reject.fileoutput"
-  val THREAD_COUNT = "pathoutputcommit.thread.count"
-  val THEAD_COUNT_DEFAULT = 8
 
   /**
    * Default behavior: accept the file output.
    */
   val REJECT_FILE_OUTPUT_DEFVAL = false
+
+  /**
+   * How many threads to use during parallel file/directory operations.
+   * Relevant during dynamic partition writes and if files were ever
+   * written to absolute locations.
+   * On normal INSERT operations thread pools will not be created.
+   */
+  val THREAD_COUNT = "pathoutputcommit.thread.count"
+  val THEAD_COUNT_DEFVAL = 8
+
+  /**
+   * Option for a directory for json IOStatistic reports.
+   */
+  val REPORT_DIR = "pathoutputcommit.report.dir"
 
   /**
    * Stream Capabilities probe for spark dynamic partitioning compatibility.
