@@ -23,6 +23,7 @@ import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -1935,13 +1936,26 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName).save()
 
-    val res = spark.read.format("jdbc")
-      .option("inferTimestampNTZType", "true")
+    val readDf = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName)
-      .load()
 
-    checkAnswer(res, Seq(Row(null)))
+    Seq(true, false).foreach { inferTimestampNTZ =>
+      val tsType = if (inferTimestampNTZ) {
+        TimestampNTZType
+      } else {
+        TimestampType
+      }
+      val res = readDf.option("inferTimestampNTZType", inferTimestampNTZ).load()
+      checkAnswer(res, Seq(Row(null)))
+      assert(res.schema.fields.head.dataType == tsType)
+      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+        val res2 = readDf.load()
+        checkAnswer(res2, Seq(Row(null)))
+        assert(res2.schema.fields.head.dataType == tsType)
+      }
+    }
+
   }
 
   test("SPARK-39339: TimestampNTZType with different local time zones") {
@@ -1961,16 +1975,23 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
             .option("url", urlWithUserAndPass)
             .option("dbtable", tableName)
             .save()
+          val zoneId = DateTimeTestUtils.outstandingZoneIds(
+          Random.nextInt(DateTimeTestUtils.outstandingZoneIds.length))
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            // Infer TimestmapNTZ column with data source option
+            val res = spark.read.format("jdbc")
+              .option("inferTimestampNTZType", "true")
+              .option("url", urlWithUserAndPass)
+              .option("dbtable", tableName)
+              .load()
+            checkAnswer(res, df)
 
-          DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-              val res = spark.read.format("jdbc")
-                .option("inferTimestampNTZType", "true")
+            withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
+              val res2 = spark.read.format("jdbc")
                 .option("url", urlWithUserAndPass)
                 .option("dbtable", tableName)
                 .load()
-
-              checkAnswer(res, df)
+              checkAnswer(res2, df)
             }
           }
         }
