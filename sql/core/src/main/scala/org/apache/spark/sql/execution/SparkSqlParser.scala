@@ -540,11 +540,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
         .getOrElse(Map.empty)
       val tableIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier
-      if (tableIdentifier.database.isDefined) {
-        // Temporary view names should NOT contain database prefix like "database.table"
-        throw QueryParsingErrors
-          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get, ctx)
-      }
 
       CreateViewCommand(
         tableIdentifier,
@@ -577,11 +572,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
         .getOrElse(Map.empty)
       val tableIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier
-      if (tableIdentifier.database.isDefined) {
-        // Temporary view names should NOT contain database prefix like "database.table"
-        throw QueryParsingErrors
-          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get, ctx)
-      }
 
       CreateViewCommand(
         tableIdentifier,
