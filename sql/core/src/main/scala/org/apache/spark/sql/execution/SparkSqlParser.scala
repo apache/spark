@@ -522,6 +522,80 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  override def visitCreateLogicalView(ctx: CreateLogicalViewContext): LogicalPlan =
+    withOrigin(ctx) {
+      if (!ctx.identifierList.isEmpty) {
+        operationNotAllowed("CREATE LOGICAL VIEW ... PARTITIONED ON", ctx)
+      }
+
+      checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+      checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+      checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+      val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+        icl.identifierComment.asScala.map { ic =>
+          ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+        }
+      }
+      val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
+        .getOrElse(Map.empty)
+      val tableIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier
+      if (tableIdentifier.database.isDefined) {
+        // Temporary view names should NOT contain database prefix like "database.table"
+        throw QueryParsingErrors
+          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get, ctx)
+      }
+
+      CreateViewCommand(
+        tableIdentifier,
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        Option(source(ctx.query)),
+        plan(ctx.query),
+        false,
+        false,
+        GlobalTempView)
+
+    }
+
+  override def visitReplaceLogicalView(ctx: ReplaceLogicalViewContext): LogicalPlan =
+    withOrigin(ctx) {
+      if (!ctx.identifierList.isEmpty) {
+        operationNotAllowed("REPLACE LOGICAL VIEW ... PARTITIONED ON", ctx)
+      }
+
+      checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+      checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+      checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+      val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+        icl.identifierComment.asScala.map { ic =>
+          ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+        }
+      }
+      val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
+        .getOrElse(Map.empty)
+      val tableIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier
+      if (tableIdentifier.database.isDefined) {
+        // Temporary view names should NOT contain database prefix like "database.table"
+        throw QueryParsingErrors
+          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get, ctx)
+      }
+
+      CreateViewCommand(
+        tableIdentifier,
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        Option(source(ctx.query)),
+        plan(ctx.query),
+        false,
+        true,
+        GlobalTempView)
+
+    }
+
   /**
    * Create a [[CreateFunctionCommand]].
    *

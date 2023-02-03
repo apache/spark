@@ -146,6 +146,7 @@ statement
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
+    | DROP LOGICAL VIEW (IF EXISTS)? multipartIdentifier               #dropLogicalView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? multipartIdentifier
         identifierCommentList?
@@ -153,6 +154,18 @@ statement
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
+    | CREATE LOGICAL VIEW multipartIdentifier
+                identifierCommentList?
+                (commentSpec |
+                 (PARTITIONED ON identifierList) |
+                 (TBLPROPERTIES propertyList))*
+                AS query                                               #createLogicalView
+    | REPLACE LOGICAL VIEW multipartIdentifier
+                identifierCommentList?
+                (commentSpec |
+                  (PARTITIONED ON identifierList) |
+                  (TBLPROPERTIES propertyList))*
+                AS query                                               #replaceLogicalView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
