@@ -74,7 +74,7 @@ class BlockManagerId private (
     out.writeInt(port_)
     out.writeBoolean(topologyInfo_.isDefined)
     // we only write topologyInfo if we have it
-    topologyInfo.foreach(out.writeUTF(_))
+    topologyInfo.foreach(out.writeUTF)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -84,9 +84,6 @@ class BlockManagerId private (
     val isTopologyInfoAvailable = in.readBoolean()
     topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
   }
-
-  @throws(classOf[IOException])
-  private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
   override def toString: String = s"BlockManagerId($executorId, $host, $port, $topologyInfo)"
 
