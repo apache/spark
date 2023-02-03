@@ -96,12 +96,12 @@ object ResolveReferencesInAggregate extends SQLConfHelper
       // can't find the grouping expressions via `semanticEquals` and the analysis will fail.
       // Example rules: ResolveGroupingAnalytics (See SPARK-31670 for more details) and
       // ResolveLateralColumnAliasReference.
-      groupingExpressions = resolvedGroupExprs.map { a =>
+      groupingExpressions = resolvedGroupExprs.map { e =>
         // Only trim the alias if the expression is resolved, as the alias may be needed to resolve
         // the expression, such as `NamePlaceHolder` in `CreateNamedStruct`.
         // Note: this rule will be invoked even if the Aggregate is fully resolved. So alias in
         //       GROUP BY will be removed eventually, by following iterations.
-        if (a.resolved) trimAliases(a) else a
+        if (e.resolved) trimAliases(e) else e
       },
       aggregateExpressions = resolvedAggExprsWithOuter)
   }
