@@ -106,6 +106,7 @@
             <includes>
               <include>com.google.guava:*</include>
               <include>io.grpc:*</include>
+              <include>io.perfmark:perfmark-api</include>
               <include>com.google.protobuf:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
@@ -116,6 +117,13 @@
               <shadedPattern>${spark.shade.packageName}.connect.client.grpc</shadedPattern>
               <includes>
                 <include>io.grpc.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>io.perfmark</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.io_perfmark</shadedPattern>
+              <includes>
+                <include>io.perfmark.**</include>
               </includes>
             </relocation>
             <relocation>

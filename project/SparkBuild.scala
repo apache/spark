@@ -861,22 +861,25 @@ object SparkConnectClient {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // assembly will include `spark-connect-client-jvm-*.jar`, `spark-connect-common-*.jar`,
-    // `grpc-*.jar`, `protobuf-java*.jar`, `failureaccess-*.jar`, `listenablefuture-*.jar`
-    // and `guava-*.jar`.
+    // assembly jar will include `spark-connect-client-jvm-*.jar`, `spark-connect-common-*.jar`,
+    // `grpc-*.jar`, `perfmark-api-*.jar`, `protobuf-java*.jar`, `failureaccess-*.jar`,
+    // `listenablefuture-*.jar` and `guava-*.jar`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      cp filter { v =>
+      val excluded = cp filterNot { v =>
         val name = v.data.getName
-        !name.startsWith("spark-connect-client-jvm") && !name.startsWith("spark-connect-common") &&
-          !name.startsWith("grpc-") && !name.startsWith("protobuf-java") &&
-          !name.startsWith("failureaccess-") && !name.startsWith("listenablefuture-") &&
-          !name.startsWith("guava-")
+        name.startsWith("spark-connect-client-jvm") || name.startsWith("spark-connect-common") ||
+          name.startsWith("grpc-") || name.startsWith("protobuf-java") ||
+          name.startsWith("failureaccess-") || name.startsWith("listenablefuture-") ||
+          name.startsWith("guava-") || name.startsWith("perfmark-api-")
       }
+      (cp -- excluded).foreach(j => println(s"include jar: ${j.data.getName}"))
+      excluded
     },
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.grpc.@0").inAll,
+      ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io_perfmark.@1").inAll,
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
       ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
       ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
