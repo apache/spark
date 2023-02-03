@@ -172,12 +172,13 @@ select 1234567890123456789012345678901234567890
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "precision" : "40"
   }
 }
 
@@ -187,12 +188,13 @@ select 1234567890123456789012345678901234567890.0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "precision" : "41"
   }
 }
 
@@ -473,19 +475,14 @@ select 1.20E-38BD
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0061",
+  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "msg" : "decimal can only support precision up to 38."
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 17,
-    "fragment" : "1.20E-38BD"
-  } ]
+    "maxPrecision" : "38",
+    "precision" : "40"
+  }
 }
 
 
