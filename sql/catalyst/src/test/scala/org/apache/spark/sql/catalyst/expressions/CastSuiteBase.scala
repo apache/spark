@@ -1285,5 +1285,26 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             "to restore the behavior before Spark 3.0."))
         }
     }
+
+    dayTimeIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
+    }
+
+    yearMonthIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
+    }
+  }
+
+  test("SPARK-39865: toString() and sql() methods of CheckOverflowInTableInsert") {
+    val cast = Cast(Literal(1.0), IntegerType)
+    val expr = CheckOverflowInTableInsert(cast, "column_1")
+    assert(expr.sql == cast.sql)
+    assert(expr.toString == cast.toString)
   }
 }
