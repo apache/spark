@@ -81,7 +81,7 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
         # PySpark libraries.
         os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
 
-        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark sesion.
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
         cls.spark = PySparkSession._instantiatedSession
         assert cls.spark is not None
 
@@ -103,10 +103,13 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
     @classmethod
     def tearDownClass(cls):
-        cls.spark_connect_clean_up_test_data()
-        cls.spark = cls.connect  # Stopping Spark Connect closes the session in JVM at the server.
-        super(SparkConnectSQLTestCase, cls).setUpClass()
-        del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
+        try:
+            cls.spark_connect_clean_up_test_data()
+            # Stopping Spark Connect closes the session in JVM at the server.
+            cls.spark = cls.connect
+            del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
+        finally:
+            super(SparkConnectSQLTestCase, cls).tearDownClass()
 
     @classmethod
     def spark_connect_load_test_data(cls):
