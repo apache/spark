@@ -1036,7 +1036,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       val errMsg = e.getCause.getMessage
       assert(errMsg.startsWith("Parquet column cannot be converted in file"))
       val file = errMsg.substring("Parquet column cannot be converted in file ".length,
-        errMsg.indexOf(". "))inferTimestampNTZ
+        errMsg.indexOf(". "))
       val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
