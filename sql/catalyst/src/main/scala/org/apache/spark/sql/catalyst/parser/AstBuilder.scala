@@ -4536,9 +4536,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
   }
   
-  /**
-    * For KYLIN drop Logical View, it is similar to `DROP VIEW`
-    */
   override def visitDropLogicalView(ctx: DropLogicalViewContext): AnyRef = withOrigin(ctx) {
     DropView(
       createUnresolvedView(
@@ -4548,5 +4545,4 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         relationTypeMismatchHint = Some("Please use DROP TABLE instead.")),
       ctx.EXISTS != null)
   }
-  
 }
