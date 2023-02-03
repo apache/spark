@@ -854,9 +854,6 @@ object SparkConnectClient {
       )
     },
 
-    // Make sure the connect server assembly jar is available for testing.
-    test := ((Test / test) dependsOn (LocalProject("connect") / assembly)).value,
-
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -899,7 +896,14 @@ object SparkConnectClient {
 }
 
 object SparkConnectClientE2ETests {
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
   lazy val settings = Seq(
+    buildTestDeps := {
+      (LocalProject("sql") / Compile / Keys.`package`).value
+      (LocalProject("connect") / assembly).value
+      (LocalProject("connect-client-jvm") / assembly).value
+    },
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
     // Make sure the connect server assembly jar is available for testing.
     test := ((Test / test) dependsOn (LocalProject("connect") / assembly)).value,
     libraryDependencies ++= {
