@@ -17,12 +17,23 @@
 
 package org.apache.spark.internal.io.cloud
 
-import org.apache.hadoop.fs.{Path, StreamCapabilities}
-import org.apache.hadoop.mapreduce.TaskAttemptContext
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
+import java.io.IOException
+import java.util.{Date, UUID}
 
-import org.apache.spark.internal.io.FileNameSpec
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import scala.collection.mutable
+import scala.util.Try
+
+import org.apache.hadoop.conf.Configurable
+import org.apache.hadoop.fs.{Path, StreamCapabilities}
+import org.apache.hadoop.fs.statistics.IOStatisticsSnapshot
+import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec, SparkHadoopWriterUtils}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.THEAD_COUNT_DEFAULT
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
 /**
  * Spark Commit protocol for Path Output Committers.
@@ -52,32 +63,56 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
  * directory, may take a large amount of time.
  * @constructor Instantiate.
  * @param jobId                     job
- * @param dest                      destination
+ * @param path                      destination
  * @param dynamicPartitionOverwrite does the caller want support for dynamic
  *                                  partition overwrite?
  */
 class PathOutputCommitProtocol(
-    jobId: String,
-    dest: String,
-    dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, dest, dynamicPartitionOverwrite)
-    with Serializable {
+    private val jobId: String,
+    private val path: String,
+    private val dynamicPartitionOverwrite: Boolean = false)
+  extends FileCommitProtocol with Serializable with Logging {
+
+  import FileCommitProtocol._
+  import PathOutputCommitProtocol._
 
   /** The committer created. */
   @transient private var committer: PathOutputCommitter = _
 
-  require(dest != null, "Null destination specified")
+  require(path != null, "Null destination specified")
 
-  private[cloud] val destination: String = dest
+  private[cloud] val destination: String = path
 
   /** The destination path. This is serializable in Hadoop 3. */
   private[cloud] val destPath: Path = new Path(destination)
+
+  private var threadCount = THEAD_COUNT_DEFAULT
+
+  /**
+   * Tracks files staged by this task for absolute output paths. These outputs are not managed by
+   * the Hadoop OutputCommitter, so we must move these to their final locations on job commit.
+   *
+   * The mapping is from the temp output path to the final desired output path of the file.
+   */
+  @transient private var addedAbsPathFiles: mutable.Map[String, String] = null
+
+  /**
+   * Tracks partitions with default path that have new files written into them by this task,
+   * e.g. a=1/b=2. Files under these partitions will be saved into staging directory and moved to
+   * destination directory at the end, if `dynamicPartitionOverwrite` is true.
+   */
+  @transient private var partitionPaths: mutable.Set[String] = null
+
+  /**
+   * The staging directory of this write job. Spark uses it to deal with files with absolute output
+   * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
+   */
+  @transient private lazy val stagingDir: Path = getStagingDir(path, jobId)
 
   logTrace(s"Instantiated committer with job ID=$jobId;" +
     s" destination=$destPath;" +
     s" dynamicPartitionOverwrite=$dynamicPartitionOverwrite")
 
-  import PathOutputCommitProtocol._
 
   /**
    * Set up the committer.
@@ -87,7 +122,7 @@ class PathOutputCommitProtocol(
    * @return the committer to use. This will always be a subclass of
    *         `PathOutputCommitter`.
    */
-  override protected def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
+  protected def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
     logTrace(s"Setting up committer for path $destination")
     committer = PathOutputCommitterFactory.createCommitter(destPath, context)
 
@@ -146,6 +181,39 @@ class PathOutputCommitProtocol(
   }
 
   /**
+   * Record the directory used so that dynamic partition overwrite
+   * knows to delete it.
+   * Includes the check that the directory is defined.
+   *
+   * @param dir directory
+   */
+  protected def addPartitionedDir(dir: Option[String]): Unit = {
+    assert(dir.isDefined,
+      "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+    partitionPaths += dir.get
+  }
+
+  /**
+   * Get an immutable copy of the partition set of a task attempt.
+   * Will be None unless/until [[setupTask()]], including the Job instance.
+   *
+   * @return None if not initiated; an immutable set otherwise.
+   */
+  private[cloud] def getPartitions: Option[Set[String]] = {
+    if (partitionPaths != null) {
+      Some(partitionPaths.toSet)
+    } else {
+      None
+    }
+  }
+
+  override def newTaskTempFile(
+      taskContext: TaskAttemptContext, dir: Option[String],
+      ext: String): String = {
+    newTaskTempFile(taskContext, dir, FileNameSpec("", ext))
+  }
+
+  /**
    * Create a temporary file for a task.
    *
    * @param taskContext task context
@@ -172,11 +240,12 @@ class PathOutputCommitProtocol(
     file.toString
   }
 
-  /**
-   * Make the getPartitions() call visible for testing.
-   */
-  override protected[cloud] def getPartitions: Option[Set[String]] =
-    super.getPartitions
+  override def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext,
+      absoluteDir: String,
+      ext: String): String = {
+    newTaskTempFileAbsPath(taskContext, absoluteDir, FileNameSpec("", ext))
+  }
 
   /**
    * Create a temporary file with an absolute path.
@@ -206,11 +275,189 @@ class PathOutputCommitProtocol(
         s"cannot not use $target as a destination of work" +
         s" in dynamic partitioned overwrite query writing to $stagingDir")
     }
+    val filename = getFilename(taskContext, spec)
+    val absOutputPath = new Path(absoluteDir, filename).toString
+    // Include a UUID here to prevent file collisions for one task writing to different dirs.
+    // In principle we could include hash(absoluteDir) instead but this is simpler.
+    val tmpOutputPath = new Path(stagingDir,
+      UUID.randomUUID().toString() + "-" + filename).toString
+
+    addedAbsPathFiles(tmpOutputPath) = absOutputPath
     val temp = super.newTaskTempFileAbsPath(taskContext, absoluteDir, spec)
-    logTrace(s"Creating tempor file $temp for absolute dir $target")
-    temp
+    logTrace(s"Creating temporary file $temp for absolute dir $target")
+    tmpOutputPath
   }
+
+  protected def getFilename(taskContext: TaskAttemptContext,
+      spec: FileNameSpec): String = {
+    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
+    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
+    // the file name is fine and won't overflow.
+    val split = taskContext.getTaskAttemptID.getTaskID.getId
+    f"${spec.prefix}part-$split%05d-$jobId${spec.suffix}"
+  }
+
+
+  override def setupJob(jobContext: JobContext): Unit = {
+    // Setup IDs
+    val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
+    val taskId = new TaskID(jobId, TaskType.MAP, 0)
+    val taskAttemptId = new TaskAttemptID(taskId, 0)
+
+    // Set up the configuration object
+    jobContext.getConfiguration.set("mapreduce.job.id", jobId.toString)
+    jobContext.getConfiguration
+      .set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
+    jobContext.getConfiguration
+      .set("mapreduce.task.attempt.id", taskAttemptId.toString)
+    jobContext.getConfiguration.setBoolean("mapreduce.task.ismap", true)
+    jobContext.getConfiguration.setInt("mapreduce.task.partition", 0)
+
+    val taskAttemptContext = new TaskAttemptContextImpl(
+      jobContext.getConfiguration, taskAttemptId)
+    committer = setupCommitter(taskAttemptContext)
+    committer.setupJob(jobContext)
+  }
+
+  override def commitJob(jobContext: JobContext,
+      taskCommits: Seq[TaskCommitMessage]): Unit = {
+    committer.commitJob(jobContext)
+
+    val (allAbsPathFiles, allPartitionPaths) =
+      taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])])
+        .unzip
+    val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+
+    val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
+    logDebug(s"Committing files staged for absolute locations $filesToMove")
+    val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
+    if (dynamicPartitionOverwrite) {
+      logDebug(
+        s"Clean up absolute partition directories for overwriting: $absParentPaths")
+      absParentPaths.foreach(fs.delete(_, true))
+    }
+    logDebug(s"Create absolute parent directories: $absParentPaths")
+    absParentPaths.foreach(fs.mkdirs)
+    for ((src, dst) <- filesToMove) {
+      if (!fs.rename(new Path(src), new Path(dst))) {
+        throw new IOException(
+          s"Failed to rename $src to $dst when committing files staged for " +
+            s"absolute locations")
+      }
+    }
+
+    if (dynamicPartitionOverwrite) {
+      val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
+      logDebug(
+        s"Clean up default partition directories for overwriting: $partitionPaths")
+      for (part <- partitionPaths) {
+        val finalPartPath = new Path(path, part)
+        if (!fs.delete(finalPartPath, true) &&
+          !fs.exists(finalPartPath.getParent)) {
+          // According to the official hadoop FileSystem API spec, delete op should assume
+          // the destination is no longer present regardless of return value, thus we do not
+          // need to double check if finalPartPath exists before rename.
+          // Also in our case, based on the spec, delete returns false only when finalPartPath
+          // does not exist. When this happens, we need to take action if parent of finalPartPath
+          // also does not exist(e.g. the scenario described on SPARK-23815), because
+          // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
+          // a parent that exists, otherwise we may get unexpected result on the rename.
+          fs.mkdirs(finalPartPath.getParent)
+        }
+        val stagingPartPath = new Path(stagingDir, part)
+        if (!fs.rename(stagingPartPath, finalPartPath)) {
+          throw new IOException(
+            s"Failed to rename $stagingPartPath to $finalPartPath when " +
+              s"committing files staged for overwriting dynamic partitions")
+        }
+      }
+    }
+
+    fs.delete(stagingDir, true)
+  }
+
+  /**
+   * Abort the job; log and ignore any IO exception thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
+   *
+   * @param jobContext job context
+   */
+  override def abortJob(jobContext: JobContext): Unit = {
+    try {
+      committer.abortJob(jobContext, JobStatus.State.FAILED)
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
+    }
+    try {
+      val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+      fs.delete(stagingDir, true)
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
+    }
+  }
+
+  override def setupTask(taskContext: TaskAttemptContext): Unit = {
+    committer = setupCommitter(taskContext)
+    committer.setupTask(taskContext)
+    addedAbsPathFiles = mutable.Map[String, String]()
+    partitionPaths = mutable.Set[String]()
+  }
+
+  override def commitTask(
+      taskContext: TaskAttemptContext): TaskCommitMessage = {
+    val attemptId = taskContext.getTaskAttemptID
+    logTrace(s"Commit task ${attemptId}")
+    SparkHadoopMapRedUtil.commitTask(
+      committer, taskContext, attemptId.getJobID.getId,
+      attemptId.getTaskID.getId)
+    new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
+  }
+
+  /**
+   * Abort the task; log and ignore any failure thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
+   *
+   * @param taskContext context
+   */
+  override def abortTask(taskContext: TaskAttemptContext): Unit = {
+    try {
+      committer.abortTask(taskContext)
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}",
+          e)
+    }
+    // best effort cleanup of other staged files
+    try {
+      for ((src, _) <- addedAbsPathFiles) {
+        val tmp = new Path(src)
+        tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+      }
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}",
+          e)
+    }
+  }
+
+  /**
+   * Payload of the task commit message
+   * @param addedAbsPathFiles map of staging to absolute files
+   * @param partitionPaths set of partition directories written to in dynamic overwrite
+   * @param iostatistics any IOStatistics collected.
+   */
+  private[cloud] class TaskCommitInfo(
+      addedAbsPathFiles: Map[String, String],
+      partitionPaths: Set[String],
+      iostatistics: IOStatisticsSnapshot) extends Serializable
+
 }
+
+
 
 object PathOutputCommitProtocol {
 
@@ -224,6 +471,8 @@ object PathOutputCommitProtocol {
    * to a new committer.
    */
   val REJECT_FILE_OUTPUT = "pathoutputcommit.reject.fileoutput"
+  val THREAD_COUNT = "pathoutputcommit.reject.fileoutput"
+  val THEAD_COUNT_DEFAULT = 8
 
   /**
    * Default behavior: accept the file output.
