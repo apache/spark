@@ -1017,10 +1017,10 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "third",
-        "dataType2" -> "\"STRUCT<C1:INT,C2:INT,C3:STRUCT<C3:INT>>\"",
+        "dataType2" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT>>\"",
         "operator" -> "UNION",
         "hint" -> "",
-        "dataType1" -> "\"STRUCT<C1:INT,C2:INT,C3:STRUCT<C3:INT,C5:INT>>\"")
+        "dataType1" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT, c5: INT>>\"")
     )
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
