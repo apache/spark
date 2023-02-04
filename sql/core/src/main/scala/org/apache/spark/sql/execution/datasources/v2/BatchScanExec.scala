@@ -79,8 +79,9 @@ case class BatchScanExec(
                 "during runtime filtering: not all partitions implement HasPartitionKey after " +
                 "filtering")
           }
-          val newPartitionValues = newPartitions
-            .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
+          val newPartitionValues = newPartitions.map(partition =>
+              InternalRowComparableWrapper(partition.asInstanceOf[HasPartitionKey], p.expressions))
+            .toSet
           val oldPartitionValues = p.partitionValues
             .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
           // We require the new number of partition values to be equal or less than the old number
@@ -130,8 +131,9 @@ case class BatchScanExec(
 
       outputPartitioning match {
         case p: KeyGroupedPartitioning =>
-          val partitionMapping = finalPartitions
-            .map(s => InternalRowComparableWrapper(s.head, p.expressions) -> s).toMap
+          val partitionMapping = finalPartitions.map(s =>
+              InternalRowComparableWrapper(s.head.asInstanceOf[HasPartitionKey], p.expressions) -> s)
+            .toMap
           finalPartitions = p.partitionValues.map { partValue =>
             // Use empty partition for those partition values that are not present
             partitionMapping.getOrElse(

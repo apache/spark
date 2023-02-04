@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
@@ -56,25 +55,22 @@ class InternalRowComparableWrapper(val row: InternalRow, val dataTypes: Seq[Data
 object InternalRowComparableWrapper {
 
   def apply(
-    partition: InputPartition,
-    partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
-    if (!partition.isInstanceOf[HasPartitionKey]) {
-      throw new SparkException("partition row should implement `HasPartitionKey`")
-    }
+      partition: InputPartition with HasPartitionKey,
+      partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
     new InternalRowComparableWrapper(
       partition.asInstanceOf[HasPartitionKey].partitionKey(), partitionExpression.map(_.dataType))
   }
 
   def apply(
-    partitionRow: InternalRow,
-    partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
+      partitionRow: InternalRow,
+      partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
     new InternalRowComparableWrapper(partitionRow, partitionExpression.map(_.dataType))
   }
 
   def mergePartitions(
-    leftPartitioning: KeyGroupedPartitioning,
-    rightPartitioning: KeyGroupedPartitioning,
-    partitionExpression: Seq[Expression]): Seq[InternalRow] = {
+      leftPartitioning: KeyGroupedPartitioning,
+      rightPartitioning: KeyGroupedPartitioning,
+      partitionExpression: Seq[Expression]): Seq[InternalRow] = {
     val partitionDataTypes = partitionExpression.map(_.dataType)
     val partitionsSet = new mutable.HashSet[InternalRowComparableWrapper]
     leftPartitioning.partitionValues

@@ -133,9 +133,10 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
         // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
         None
       } else {
-        val groupedPartitions = inputPartitions
-          .map(p => (InternalRowComparableWrapper(p, expressions), p))
-          .groupBy(_._1).toSeq
+        val groupedPartitions = inputPartitions.map(p =>
+            (InternalRowComparableWrapper(p.asInstanceOf[HasPartitionKey], expressions), p))
+          .groupBy(_._1)
+          .toSeq
           .map {
             case (key, s) => (key.row, s.map(_._2))
           }
