@@ -17,7 +17,7 @@
 
 from typing import Dict, Optional
 
-from pyspark.errors.exceptions.common import (
+from pyspark.errors.exceptions.base import (
     AnalysisException,
     IllegalArgumentException,
     ParseException,

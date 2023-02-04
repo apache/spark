@@ -22,7 +22,7 @@ from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import is_instance_of
 
 from pyspark import SparkContext
-from pyspark.errors.exceptions.common import (
+from pyspark.errors.exceptions.base import (
     AnalysisException,
     IllegalArgumentException,
     ParseException,

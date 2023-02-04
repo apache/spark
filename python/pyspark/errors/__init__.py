@@ -18,7 +18,7 @@
 """
 PySpark exceptions.
 """
-from pyspark.errors.exceptions.common import (  # noqa: F401
+from pyspark.errors.exceptions.base import (  # noqa: F401
     PySparkException,
     AnalysisException,
     TempTableAlreadyExistsException,
