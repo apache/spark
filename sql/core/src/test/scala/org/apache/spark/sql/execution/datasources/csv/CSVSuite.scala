@@ -3084,6 +3084,23 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-42237: change binary to unsupported dataType") {
+    withTempPath { path =>
+      val colName: String = "value"
+      val exception = intercept[AnalysisException] {
+        Seq(Array[Byte](1, 2))
+          .toDF(colName)
+          .write
+          .csv(path.getCanonicalPath)
+      }
+      checkError(
+        exception = exception,
+        errorClass = "_LEGACY_ERROR_TEMP_1150",
+        parameters = Map("field" -> colName, "fieldType" -> "binary", "format" -> "CSV")
+      )
+    }
+  }
+
   test("SPARK-40667: validate CSV Options") {
     assert(CSVOptions.getAllOptions.size == 38)
     // Please add validation on any new CSV options here
