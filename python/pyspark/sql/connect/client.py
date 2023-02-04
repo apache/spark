@@ -60,11 +60,12 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
 import pyspark.sql.types
 from pyspark import cloudpickle
-from pyspark.errors import (
+from pyspark.errors.exceptions.connect import (
     SparkConnectException,
     SparkConnectGrpcException,
     SparkConnectAnalysisException,
     SparkConnectParseException,
+    SparkConnectPythonException,
     SparkConnectTempTableAlreadyExistsException,
     SparkConnectIllegalArgumentException,
 )
@@ -707,6 +708,10 @@ class SparkConnectClient(object):
                         message = info.metadata["message"]
                         message = message if message != "" else status.message
                         raise SparkConnectIllegalArgumentException(message) from None
+                    elif reason == "org.apache.spark.api.python.PythonException":
+                        message = info.metadata["message"]
+                        message = message if message != "" else status.message
+                        raise SparkConnectPythonException(message) from None
                     else:
                         raise SparkConnectGrpcException(
                             status.message, reason=info.reason

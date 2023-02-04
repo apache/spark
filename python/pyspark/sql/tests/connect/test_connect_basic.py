@@ -48,7 +48,7 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.errors import (
+from pyspark.errors.exceptions.connect import (
     SparkConnectException,
     SparkConnectAnalysisException,
     SparkConnectParseException,

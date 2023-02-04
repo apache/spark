@@ -23,7 +23,7 @@ from pyspark.sql.types import StringType, StructType, StructField, ArrayType, In
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.errors import SparkConnectAnalysisException, SparkConnectException
+from pyspark.errors.exceptions.connect import SparkConnectAnalysisException, SparkConnectException
 
 
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
