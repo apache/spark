@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
@@ -679,6 +680,40 @@ class QueryCompilationErrorsSuite
         "actualNum" -> "1"),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
+  }
+
+  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+    "create temp view doesn't support identifiers consisting of more than 2 parts") {
+    checkError(
+      exception = intercept[ParseException] {
+        sql("CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column")
+      },
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      sqlState = "42601",
+      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`")
+    )
+  }
+
+  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+    "alter table doesn't support identifiers consisting of more than 2 parts") {
+    val tableName: String = "t"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+           |USING parquet
+           |PARTITIONED BY (c, d)
+           |""".stripMargin)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName RENAME TO db_name.schema_name.new_table_name")
+        },
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        sqlState = "42601",
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
+      )
+    }
   }
 }
 
