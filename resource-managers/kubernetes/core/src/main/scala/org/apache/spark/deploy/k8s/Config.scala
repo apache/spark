@@ -158,11 +158,10 @@ private[spark] object Config extends Logging {
 
   val CONFIG_MAP_MAXSIZE =
     ConfigBuilder("spark.kubernetes.configMap.maxSize")
-      .doc("Max size limit for a config map. This is configurable as per" +
-        " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
-      .version("3.1.0")
+      .doc("Max size limit for a config map. Must have at most 1048576 bytes")
+      .version("3.5.0")
       .longConf
-      .createWithDefault(1572864) // 1.5 MiB
+      .createWithDefault(1048576) // 1.0 MiB
 
   val EXECUTOR_ROLL_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.rollInterval")
