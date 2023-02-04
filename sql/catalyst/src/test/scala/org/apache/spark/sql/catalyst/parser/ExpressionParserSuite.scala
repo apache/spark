@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.parser
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.concurrent.TimeUnit
+
 import scala.language.implicitConversions
+
 import org.apache.spark.{SparkArithmeticException, SparkThrowable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
