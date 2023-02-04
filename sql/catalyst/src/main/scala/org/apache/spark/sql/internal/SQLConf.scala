@@ -1416,6 +1416,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
+    buildConf("spark.sql.sources.timestampNTZTypeInference.enabled")
+      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
+        "this config determines whether to choose the TimestampNTZ type if a column can be " +
+        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
+        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_ENABLED = buildConf("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
     .version("2.0.0")
@@ -3517,16 +3527,6 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(TimestampTypes.values.map(_.toString))
       .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
-
-  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
-    buildConf("spark.sql.inferTimestampNTZInDataSources.enabled")
-      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
-        "this config determines whether to choose the TimestampNTZ type if a column can be " +
-        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
-        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
