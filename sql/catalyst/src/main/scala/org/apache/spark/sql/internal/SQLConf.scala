@@ -3520,11 +3520,10 @@ object SQLConf {
 
   val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
     buildConf("spark.sql.inferTimestampNTZInDataSources.enabled")
-      .doc("When true, the TimestampNTZ type is the prior choice of the schema inference " +
-        "over built-in data sources. Otherwise, the inference result will be TimestampLTZ for " +
-        "backward compatibility. As a result, for JSON/CSV files and partition directories  " +
-        "written with TimestampNTZ columns, the inference results will still be of TimestampLTZ " +
-        "types.")
+      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
+        "this config determines whether to choose the TimestampNTZ type if a column can be " +
+        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
+        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)

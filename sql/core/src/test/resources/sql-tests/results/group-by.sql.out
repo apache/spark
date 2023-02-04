@@ -146,6 +146,17 @@ NULL	1
 
 
 -- !query
+SELECT count(1) FROM testData GROUP BY struct(a + 0.1 AS aa)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+2
+2
+2
+3
+
+
+-- !query
 SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a)
 FROM testData
 -- !query schema

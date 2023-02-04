@@ -1214,6 +1214,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "REPEATED_CLAUSE" : {
+    "message" : [
+      "The <clause> clause may be used at most once per <operation> operation."
+    ],
+    "sqlState" : "42614"
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the function <routineName> because it already exists.",
@@ -1601,11 +1607,6 @@
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
-        ]
-      },
-      "REPEATED_PIVOT" : {
-        "message" : [
-          "Repeated PIVOT operation."
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
