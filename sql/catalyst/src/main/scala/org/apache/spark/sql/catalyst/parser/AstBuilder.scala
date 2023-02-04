@@ -1331,10 +1331,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
         case None if ctx.NATURAL != null =>
           if (ctx.LATERAL != null) {
-            throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
+            throw QueryParsingErrors.incompatibleJoinTypesError(
+              joinType1 = ctx.LATERAL.toString, joinType2 = ctx.NATURAL.toString, ctx = ctx
+            )
           }
           if (baseJoinType == Cross) {
-            throw QueryParsingErrors.naturalCrossJoinUnsupportedError(ctx)
+            throw QueryParsingErrors.incompatibleJoinTypesError(
+              joinType1 = ctx.NATURAL.toString, joinType2 = baseJoinType.toString, ctx = ctx
+            )
           }
           (NaturalJoin(baseJoinType), None)
         case None =>

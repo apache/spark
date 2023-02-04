@@ -586,6 +586,12 @@
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
   },
+  "INCOMPATIBLE_JOIN_TYPES" : {
+    "message" : [
+      "The join types <joinType1> and <joinType2> are incompatible."
+    ],
+    "sqlState" : "42613"
+  },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
@@ -1559,11 +1565,6 @@
           "JOIN USING with LATERAL correlation."
         ]
       },
-      "LATERAL_NATURAL_JOIN" : {
-        "message" : [
-          "NATURAL join with LATERAL correlation."
-        ]
-      },
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
@@ -1577,11 +1578,6 @@
       "MULTI_ACTION_ALTER" : {
         "message" : [
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
-        ]
-      },
-      "NATURAL_CROSS_JOIN" : {
-        "message" : [
-          "NATURAL CROSS JOIN."
         ]
       },
       "ORC_TYPE_CAST" : {
