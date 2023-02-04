@@ -19,10 +19,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.concurrent.TimeUnit
-
 import scala.language.implicitConversions
-
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkArithmeticException, SparkThrowable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
@@ -804,14 +802,11 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
+    val e = intercept[SparkArithmeticException](defaultParser.parseExpression("1.20E-38BD"))
     checkError(
-      exception = parseException("1.20E-38BD"),
-      errorClass = "_LEGACY_ERROR_TEMP_0061",
-      parameters = Map("msg" -> "decimal can only support precision up to 38."),
-      context = ExpectedContext(
-        fragment = "1.20E-38BD",
-        start = 0,
-        stop = 9))
+      exception = e,
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map("precision" -> "40", "maxPrecision" -> "38"))
   }
 
   test("SPARK-30252: Decimal should set zero scale rather than negative scale by default") {
