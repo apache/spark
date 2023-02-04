@@ -1332,7 +1332,7 @@
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
     ],
-    "sqlState" : "46110"
+    "sqlState" : "42KD9"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
