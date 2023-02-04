@@ -515,7 +515,7 @@
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
     ],
-    "sqlState" : "42P18"
+    "sqlState" : "42604"
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
