@@ -1065,16 +1065,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def cannotReadFooterForFileError(file: Path, e: IOException): Throwable = {
+  def cannotReadFooterForFileError(file: Path, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2091",
-      messageParameters = Map("file" -> file.toString()),
-      cause = e)
-  }
-
-  def cannotReadFooterForFileError(file: FileStatus, e: RuntimeException): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2092",
+      errorClass = "CANNOT_READ_FOOTER",
       messageParameters = Map("file" -> file.toString()),
       cause = e)
   }

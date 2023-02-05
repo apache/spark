@@ -93,6 +93,11 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_READ_FOOTER" : {
+    "message" : [
+      "Could not read footer for file: <file>."
+    ]
+  },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
@@ -4021,16 +4026,6 @@
   "_LEGACY_ERROR_TEMP_2090" : {
     "message" : [
       "The input filter of <owner> should be fully convertible."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2091" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2092" : {
-    "message" : [
-      "Could not read footer for file: <file>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2093" : {
