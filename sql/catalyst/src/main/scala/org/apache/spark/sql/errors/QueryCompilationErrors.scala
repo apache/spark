@@ -1244,7 +1244,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(
         "sessionCatalog" -> CatalogManager.SESSION_CATALOG_NAME,
-        "namespace" -> namespace.mkString(".")))
+        "namespace" -> toSQLId(namespace)))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {

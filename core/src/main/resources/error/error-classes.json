@@ -1208,17 +1208,17 @@
     ],
     "sqlState" : "42K03"
   },
-  "REQUIRES_SINGLE_PART_NAMESPACE" : {
-    "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
-    ],
-    "sqlState" : "42K05"
-  },
   "REPEATED_CLAUSE" : {
     "message" : [
       "The <clause> clause may be used at most once per <operation> operation."
     ],
     "sqlState" : "42614"
+  },
+  "REQUIRES_SINGLE_PART_NAMESPACE" : {
+    "message" : [
+      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+    ],
+    "sqlState" : "42K05"
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
