@@ -93,6 +93,11 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_RECOGNIZE_HIVE_TYPE" : {
+    "message" : [
+      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
+    ]
+  },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
@@ -4465,11 +4470,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2188" : {
-    "message" : [
-      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2189" : {
