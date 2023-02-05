@@ -2600,9 +2600,8 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-42346: Rewrite distinct aggregates after merging subqueries") {
-    withTempView("t1", "t2") {
-      Seq((1, 2), (3, 4)).toDF("c1", "c2")
-        .createOrReplaceTempView("t1")
+    withTempView("t1") {
+      Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t1")
 
       checkAnswer(sql(
         """
