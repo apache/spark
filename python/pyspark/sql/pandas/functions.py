@@ -461,8 +461,6 @@ def _create_pandas_udf(f, returnType, evalType):
             "must take either more than one arguments (df1, df2, ...) "
         )
 
-    return _create_udf(f, returnType, evalType)
-
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
 
