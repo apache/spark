@@ -746,7 +746,7 @@
   },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
-      "Can't extract a value from <base>. Need a complex type [struct, array, map] but got <other>."
+      "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
     ],
     "sqlState" : "42000"
   },
