@@ -689,7 +689,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
     val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
-    val flatMapGroupsInPandas = FlatMapCoGroupsInPandasMulti(
+    val flatMapGroupsInPandas = FlatMapMultiCoGroupsInPandas(
       List(1, 1),
       pythonUdf,
       output,

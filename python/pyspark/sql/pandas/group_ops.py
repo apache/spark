@@ -382,12 +382,16 @@ class PandasCogroupedOps:
         Applies a function to each cogroup using pandas and returns the result
         as a `DataFrame`.
 
-        The function should take two `pandas.DataFrame`\\s and return another
+        The function can take two `pandas.DataFrame`\\s and return another
         `pandas.DataFrame`. Alternatively, the user can pass a function that takes
         a tuple of the grouping key(s) and the two `pandas.DataFrame`\\s.
         For each side of the cogroup, all columns are passed together as a
         `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined as
         a :class:`DataFrame`.
+
+        The function can also take multiple `pandas.DataFrame`\\s and return another
+        `pandas.DataFrame`. To get key as first argument of the function, pass `pass_key=True`
+        followed by dataframe args.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
         `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
@@ -406,6 +410,8 @@ class PandasCogroupedOps:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        pass_key : : bool
+             Used to pass key to the UDF when cogrouped over more than 2 dataframes.
 
         Examples
         --------
@@ -467,14 +473,18 @@ class PandasCogroupedOps:
         # The usage of the pandas_udf is internal so type checking is disabled.
         if len(self._gds) > 1:
             udf = pandas_udf(
-                func, returnType=schema, functionType=PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF
+                func,
+                returnType=schema,
+                functionType=PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
             )  # type: ignore[call-overload]
 
             all_cols = self._extract_cols(self._gd1)
             for gd in self._gds:
                 all_cols.extend(self._extract_cols(gd))
             udf_column_expr = udf(*all_cols)._jc.expr()
-            all_jgds = self._gd1.session.sparkContext._jvm.PythonUtils.toSeq([gd._jgd for gd in self._gds])
+            all_jgds = self._gd1.session.sparkContext._jvm.PythonUtils.toSeq(
+                [gd._jgd for gd in self._gds]
+            )
             jdf = self._gd1._jgd.flatMapCoGroupsInPandas(all_jgds, udf_column_expr, pass_key)
         elif len(self._gds) == 1:
             udf = pandas_udf(

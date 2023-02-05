@@ -794,7 +794,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.FlatMapCoGroupsInPandasExec(
           f.leftAttributes, f.rightAttributes,
           func, output, planLater(left), planLater(right)) :: Nil
-      case f@logical.FlatMapCoGroupsInPandasMulti(_, func, output, plans, passKey) =>
+      case f@logical.FlatMapMultiCoGroupsInPandas(_, func, output, plans, passKey) =>
         execution.python.FlatMapMultiCoGroupsInPandasExec(
           f.attributes,
           func,

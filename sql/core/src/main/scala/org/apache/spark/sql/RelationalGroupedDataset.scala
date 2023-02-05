@@ -584,7 +584,7 @@ class RelationalGroupedDataset protected[sql](
   /**
    * Applies a vectorized python user-defined function to each cogrouped data.
    * The user-defined function defines a transformation:
-   * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
+   * `pandas.DataFrame`* -> `pandas.DataFrame`.
    *  For each group in the cogrouped data, all elements in the group are passed as a
    * `pandas.DataFrame` and the results for all cogroups are combined into a new [[DataFrame]].
    *
@@ -676,7 +676,7 @@ class RelationalGroupedDataset protected[sql](
     })
 
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapCoGroupsInPandasMulti(
+    val plan = FlatMapMultiCoGroupsInPandas(
       (leftGroupingNamedExpressions.length +:
         allRightGroupingNamedExpressions.map(_.length)).toList,
       expr,

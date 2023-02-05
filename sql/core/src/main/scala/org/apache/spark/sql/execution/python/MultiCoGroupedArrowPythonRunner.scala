@@ -35,7 +35,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
- * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from two different DataFrames,
+ * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from different DataFrames,
  * groups them in Python, and receive it back in JVM as batches of single DataFrame.
  */
 class MultiCoGroupedArrowPythonRunner(

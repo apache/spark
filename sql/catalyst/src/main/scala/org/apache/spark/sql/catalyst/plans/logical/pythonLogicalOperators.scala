@@ -106,7 +106,7 @@ case class FlatMapCoGroupsInPandas(
  * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe This is
  * used by DataFrame.groupby().cogroup().apply().
  */
-case class FlatMapCoGroupsInPandasMulti(
+case class FlatMapMultiCoGroupsInPandas(
      groupingLens: List[Int],
      functionExpr: Expression,
      output: Seq[Attribute],

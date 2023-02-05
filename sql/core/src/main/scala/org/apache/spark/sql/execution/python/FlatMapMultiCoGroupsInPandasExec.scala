@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 
 /**
- * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapCoGroupsInPandas]]
+ * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapMultiCoGroupsInPandas]]
  *
  * The input dataframes are first Cogrouped. Rows from each side of the cogroup are passed to the
  * Python worker via Arrow. As each side of the cogroup may have a different schema we send every
