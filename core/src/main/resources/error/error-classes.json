@@ -582,6 +582,12 @@
     ],
     "sqlState" : "42805"
   },
+  "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
+    "message" : [
+      "<identifier> is not a valid identifier as it has more than 2 name parts."
+    ],
+    "sqlState" : "42601"
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
@@ -592,6 +598,12 @@
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
+  },
+  "INCOMPATIBLE_JOIN_TYPES" : {
+    "message" : [
+      "The join types <joinType1> and <joinType2> are incompatible."
+    ],
+    "sqlState" : "42613"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -1490,6 +1502,12 @@
       "Invalid expressions: [<invalidExprSqls>]"
     ]
   },
+  "UNSUPPORTED_EXPR_FOR_WINDOW" : {
+    "message" : [
+      "Expression <sqlExpr> not supported within a window function."
+    ],
+    "sqlState" : "42P20"
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"
@@ -1560,11 +1578,6 @@
           "JOIN USING with LATERAL correlation."
         ]
       },
-      "LATERAL_NATURAL_JOIN" : {
-        "message" : [
-          "NATURAL join with LATERAL correlation."
-        ]
-      },
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
@@ -1578,11 +1591,6 @@
       "MULTI_ACTION_ALTER" : {
         "message" : [
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
-        ]
-      },
-      "NATURAL_CROSS_JOIN" : {
-        "message" : [
-          "NATURAL CROSS JOIN."
         ]
       },
       "ORC_TYPE_CAST" : {
@@ -2854,11 +2862,6 @@
   "_LEGACY_ERROR_TEMP_1184" : {
     "message" : [
       "Catalog <plugin> does not support <ability>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1185" : {
-    "message" : [
-      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
     ]
   },
   "_LEGACY_ERROR_TEMP_1186" : {
@@ -5171,11 +5174,6 @@
   "_LEGACY_ERROR_TEMP_2411" : {
     "message" : [
       "Cannot specify order by or frame for '<aggFunc>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2412" : {
-    "message" : [
-      "Expression '<sqlExpr>' not supported within a window function."
     ]
   },
   "_LEGACY_ERROR_TEMP_2413" : {
