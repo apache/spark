@@ -27,6 +27,9 @@ import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.NullOrdering;
+import org.apache.spark.sql.connector.expressions.SortDirection;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.UserDefinedScalarFunc;
 import org.apache.spark.sql.connector.expressions.aggregate.Avg;
 import org.apache.spark.sql.connector.expressions.aggregate.Max;
@@ -56,6 +59,10 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Extract) {
       Extract extract = (Extract) expr;
       return visitExtract(extract.field(), build(extract.source()));
+    } else if (expr instanceof SortOrder) {
+      SortOrder sortOrder = (SortOrder) expr;
+      return visitSortOrder(
+        build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
@@ -366,6 +373,11 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitExtract(String field, String source) {
     return "EXTRACT(" + field + " FROM " + source + ")";
+  }
+
+  protected String visitSortOrder(
+      String sortKey, SortDirection sortDirection, NullOrdering nullOrdering) {
+    return sortKey + " " + sortDirection + " " + nullOrdering;
   }
 
   private String joinArrayToString(

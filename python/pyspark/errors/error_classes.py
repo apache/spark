@@ -59,11 +59,6 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` must be a DataFrame, got <arg_type>."
     ]
   },
-  "NOT_A_DATAFRAME" : {
-    "message" : [
-      "Argument `<arg_name>` should be a DataFrame, got <arg_type>."
-    ]
-  },
   "NOT_A_DICT" : {
     "message" : [
       "Argument `<arg_name>` should be a dict, got <arg_type>."

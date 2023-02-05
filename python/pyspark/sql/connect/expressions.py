@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import (
     TYPE_CHECKING,
@@ -132,7 +135,7 @@ class CaseWhen(Expression):
 
 
 class ColumnAlias(Expression):
-    def __init__(self, parent: Expression, alias: list[str], metadata: Any):
+    def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
 
         self._alias = alias
         self._metadata = metadata

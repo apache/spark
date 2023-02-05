@@ -172,7 +172,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "invalid window function",
     testRelation2.select(
       WindowExpression(
@@ -181,7 +181,8 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
-    "not supported within a window function" :: Nil)
+    errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+    messageParameters = Map("sqlExpr" -> "\"0\""))
 
   errorTest(
     "distinct aggregate function in window",

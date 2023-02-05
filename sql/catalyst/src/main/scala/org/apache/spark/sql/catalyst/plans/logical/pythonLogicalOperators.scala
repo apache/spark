@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
@@ -141,6 +142,8 @@ trait BaseEvalPython extends UnaryNode {
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_PYTHON_UDF)
 }
 
 /**

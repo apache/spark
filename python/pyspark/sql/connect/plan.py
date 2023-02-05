@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
@@ -1336,7 +1339,7 @@ class WriteOperation(LogicalPlan):
         self.mode: Optional[str] = None
         self.sort_cols: List[str] = []
         self.partitioning_cols: List[str] = []
-        self.options: dict[str, Optional[str]] = {}
+        self.options: Dict[str, Optional[str]] = {}
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
 

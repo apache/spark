@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder, String2StringExpression, UnaryExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -29,7 +28,6 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
 
 trait V1WriteCommand extends DataWritingCommand {
   /**
@@ -121,26 +119,6 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
 }
 
 object V1WritesUtils {
-
-  /** A function that converts the empty string to null for partition values. */
-  case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
-    override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
-    override def nullable: Boolean = true
-    override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-      nullSafeCodeGen(ctx, ev, c => {
-        s"""if ($c.numBytes() == 0) {
-           |  ${ev.isNull} = true;
-           |  ${ev.value} = null;
-           |} else {
-           |  ${ev.value} = $c;
-           |}""".stripMargin
-      })
-    }
-
-    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
-      copy(child = newChild)
-  }
-
   def getWriterBucketSpec(
       bucketSpec: Option[BucketSpec],
       dataColumns: Seq[Attribute],
@@ -230,12 +208,13 @@ object V1WritesUtils {
 
   def isOrderingMatched(
       requiredOrdering: Seq[Expression],
-      outputOrdering: Seq[Expression]): Boolean = {
+      outputOrdering: Seq[SortOrder]): Boolean = {
     if (requiredOrdering.length > outputOrdering.length) {
       false
     } else {
       requiredOrdering.zip(outputOrdering).forall {
-        case (requiredOrder, outputOrder) => requiredOrder.semanticEquals(outputOrder)
+        case (requiredOrder, outputOrder) =>
+          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }
     }
   }

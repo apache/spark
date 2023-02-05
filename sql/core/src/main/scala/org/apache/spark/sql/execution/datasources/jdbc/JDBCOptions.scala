@@ -26,6 +26,7 @@ import org.apache.spark.SparkFiles
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the JDBC data source.
@@ -232,7 +233,11 @@ class JDBCOptions(
   val prepareQuery = parameters.get(JDBC_PREPARE_QUERY).map(_ + " ").getOrElse("")
 
   // Infers timestamp values as TimestampNTZ type when reading data.
-  val inferTimestampNTZType = parameters.getOrElse(JDBC_INFER_TIMESTAMP_NTZ, "false").toBoolean
+  val inferTimestampNTZType =
+    parameters
+      .get(JDBC_INFER_TIMESTAMP_NTZ)
+      .map(_.toBoolean)
+      .getOrElse(SQLConf.get.inferTimestampNTZInDataSources)
 }
 
 class JdbcOptionsInWrite(
