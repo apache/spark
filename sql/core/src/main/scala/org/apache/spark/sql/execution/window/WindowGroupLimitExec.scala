@@ -33,9 +33,12 @@ case object Final extends WindowGroupLimitMode
 /**
  * This operator is designed to filter out unnecessary rows before WindowExec
  * for top-k computation.
- * @param partitionSpec Should be the same as [[WindowExec#partitionSpec]]
- * @param orderSpec Should be the same as [[WindowExec#orderSpec]]
+ * @param partitionSpec Should be the same as [[WindowExec#partitionSpec]].
+ * @param orderSpec Should be the same as [[WindowExec#orderSpec]].
  * @param rankLikeFunction The function to compute row rank, should be RowNumber/Rank/DenseRank.
+ * @param limit The limit for rank value.
+ * @param mode The mode describes [[WindowGroupLimitExec]] before or after shuffle.
+ * @param child The child spark plan.
  */
 case class WindowGroupLimitExec(
     partitionSpec: Seq[Expression],
