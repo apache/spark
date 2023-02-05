@@ -14,6 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 import os
 import warnings
 from collections.abc import Sized
@@ -500,6 +504,11 @@ class SparkSession:
             # Configurations to be set if unset.
             default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
 
+            if "SPARK_TESTING" in os.environ:
+                # For testing, we use 0 to use an ephemeral port to allow parallel testing.
+                # See also SPARK-42272.
+                overwrite_conf["spark.connect.grpc.binding.port"] = "0"
+
             def create_conf(**kwargs: Any) -> SparkConf:
                 conf = SparkConf(**kwargs)
                 for k, v in overwrite_conf.items():
@@ -566,52 +575,39 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.session
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.session.__dict__.copy()
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.session tests").remote("local[4]").getOrCreate()
+    )
 
-    if should_test_connect:
-        import pyspark.sql.connect.session
+    # Uses PySpark session to test builder.
+    globs["SparkSession"] = PySparkSession
+    # Spark Connect does not support to set master together.
+    pyspark.sql.connect.session.SparkSession.__doc__ = None
+    del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+    # RDD API is not supported in Spark Connect.
+    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
 
-        globs = pyspark.sql.connect.session.__dict__.copy()
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.session tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
+    del pyspark.sql.connect.session.SparkSession.sql.__doc__
 
-        # Uses PySpark session to test builder.
-        globs["SparkSession"] = PySparkSession
-        # Spark Connect does not support to set master together.
-        pyspark.sql.connect.session.SparkSession.__doc__ = None
-        del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-        # RDD API is not supported in Spark Connect.
-        del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.session,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
-        del pyspark.sql.connect.session.SparkSession.sql.__doc__
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.session,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.session doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

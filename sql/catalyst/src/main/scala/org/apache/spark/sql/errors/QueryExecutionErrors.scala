@@ -1039,10 +1039,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("n" -> n.toString(), "jdbcNumPartitions" -> jdbcNumPartitions))
   }
 
-  def transactionUnsupportedByJdbcServerError(): Throwable = {
+  def multiActionAlterError(tableName: String): Throwable = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "UNSUPPORTED_FEATURE.JDBC_TRANSACTION",
-      messageParameters = Map.empty[String, String])
+      errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): SparkUnsupportedOperationException = {
@@ -2602,10 +2602,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def repeatedPivotsUnsupportedError(): Throwable = {
+  def repeatedPivotsUnsupportedError(clause: String, operation: String): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_FEATURE.REPEATED_PIVOT",
-      messageParameters = Map.empty[String, String])
+      errorClass = "REPEATED_CLAUSE",
+      messageParameters = Map("clause" -> clause, "operation" -> operation))
   }
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {

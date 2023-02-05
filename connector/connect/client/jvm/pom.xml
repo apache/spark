@@ -33,6 +33,7 @@
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
     <guava.version>31.0.1-jre</guava.version>
+    <mima.version>1.1.0</mima.version>
   </properties>
 
   <dependencies>
@@ -92,6 +93,13 @@
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Use mima to perform the compatibility check -->
+    <dependency>
+      <groupId>com.typesafe</groupId>
+      <artifactId>mima-core_${scala.binary.version}</artifactId>
+      <version>${mima.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
@@ -105,11 +113,19 @@
           <artifactSet>
             <includes>
               <include>com.google.guava:*</include>
+              <include>io.grpc:*</include>
               <include>com.google.protobuf:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>
+            <relocation>
+              <pattern>io.grpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.grpc</shadedPattern>
+              <includes>
+                <include>io.grpc.**</include>
+              </includes>
+            </relocation>
             <relocation>
               <pattern>com.google.protobuf</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
@@ -132,6 +148,10 @@
               </includes>
             </relocation>
           </relocations>
+          <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->
+          <transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+          </transformers>
         </configuration>
       </plugin>
     </plugins>

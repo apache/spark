@@ -130,22 +130,20 @@ private[sql] object CatalogV2Implicits {
       }
     }
 
+    def original: String = ident.namespace() :+ ident.name() mkString "."
+
     def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "TableIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "FunctionIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
   }
 
@@ -159,20 +157,18 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "TableIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "FunctionIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
+
+    def original: String = parts.mkString(".")
   }
 
   implicit class TableIdentifierHelper(identifier: TableIdentifier) {

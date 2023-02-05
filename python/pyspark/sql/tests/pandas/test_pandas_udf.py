@@ -37,7 +37,7 @@ from pyspark.testing.utils import QuietTest
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class PandasUDFTests(ReusedSQLTestCase):
+class PandasUDFTestsMixin:
     def test_pandas_udf_basic(self):
         udf = pandas_udf(lambda x: x, DoubleType())
         self.assertEqual(udf.returnType, DoubleType())
@@ -290,6 +290,10 @@ class PandasUDFTests(ReusedSQLTestCase):
         ).collect()
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
+
+
+class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

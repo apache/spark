@@ -1129,13 +1129,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PARQUET_TIMESTAMP_NTZ_ENABLED =
-    buildConf("spark.sql.parquet.timestampNTZ.enabled")
-      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
-        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
-        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
-        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
-        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
+  val PARQUET_INFER_TIMESTAMP_NTZ_ENABLED =
+    buildConf("spark.sql.parquet.inferTimestampNTZ.enabled")
+      .doc("When enabled, Parquet timestamp columns with annotation isAdjustedToUTC = false " +
+        "are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet " +
+        "timestamp columns are inferred as TIMESTAMP_LTZ types. Note that Spark writes the " +
+        "output schema into Parquet's footer metadata on file writing and leverages it on file " +
+        "reading. Thus this configuration only affects the schema inference on Parquet files " +
+        "which are not written by Spark.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -1414,6 +1415,16 @@ object SQLConf {
       .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
+
+  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
+    buildConf("spark.sql.sources.timestampNTZTypeInference.enabled")
+      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
+        "this config determines whether to choose the TimestampNTZ type if a column can be " +
+        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
+        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val BUCKETING_ENABLED = buildConf("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
@@ -3517,17 +3528,6 @@ object SQLConf {
       .checkValues(TimestampTypes.values.map(_.toString))
       .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
 
-  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
-    buildConf("spark.sql.inferTimestampNTZInDataSources.enabled")
-      .doc("When true, the TimestampNTZ type is the prior choice of the schema inference " +
-        "over built-in data sources. Otherwise, the inference result will be TimestampLTZ for " +
-        "backward compatibility. As a result, for JSON/CSV files and partition directories  " +
-        "written with TimestampNTZ columns, the inference results will still be of TimestampLTZ " +
-        "types.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
       "java.time.LocalDate classes of Java 8 API are used as external types for " +
@@ -4943,7 +4943,7 @@ class SQLConf extends Serializable with Logging {
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
-  def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
+  def parquetInferTimestampNTZEnabled: Boolean = getConf(PARQUET_INFER_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

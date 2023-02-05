@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -265,6 +267,21 @@ object ResolveDefaultColumns {
         }
       }
     }
+  }
+
+  /** If any fields in a schema have default values, appends them to the result. */
+  def getDescribeMetadata(schema: StructType): Seq[(String, String, String)] = {
+    val rows = new ArrayBuffer[(String, String, String)]()
+    if (schema.fields.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+      rows.append(("", "", ""))
+      rows.append(("# Column Default Values", "", ""))
+      schema.foreach { column =>
+        column.getCurrentDefaultValue().map { value =>
+          rows.append((column.name, column.dataType.simpleString, value))
+        }
+      }
+    }
+    rows.toSeq
   }
 
   /**
