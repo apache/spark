@@ -2307,7 +2307,7 @@ class Frame(object, metaclass=ABCMeta):
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
         """
-        Group DataFrame or Series using a Series of columns.
+        Group DataFrame or Series using one or more columns.
 
         A groupby operation involves some combination of splitting the
         object, applying a function, and combining the results. This can be
