@@ -475,14 +475,19 @@ select 1.20E-38BD
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-  "sqlState" : "22003",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0061",
   "messageParameters" : {
-    "maxPrecision" : "38",
-    "precision" : "40"
-  }
+    "msg" : "[DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION] Decimal precision 40 exceeds max precision 38."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "1.20E-38BD"
+  } ]
 }
 
 
