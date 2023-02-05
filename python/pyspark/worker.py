@@ -167,7 +167,7 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
         # the number of columns of result have to match the return type
         # but it is fine for result to have no columns at all if it is empty
         if not (
-                len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
         ):
             raise RuntimeError(
                 "Number of columns of the returned pandas.DataFrame "
@@ -200,7 +200,7 @@ def wrap_multi_cogrouped_map_pandas_udf(f, return_type, runner_conf, argspec):
         # the number of columns of result have to match the return type
         # but it is fine for result to have no columns at all if it is empty
         if not (
-                len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
         ):
             raise RuntimeError(
                 "Number of columns of the returned pandas.DataFrame "
@@ -209,7 +209,10 @@ def wrap_multi_cogrouped_map_pandas_udf(f, return_type, runner_conf, argspec):
             )
         return result
 
-    return lambda key_series, value_series: [(wrapped(key_series, value_series), to_arrow_type(return_type))]
+    return lambda key_series, value_series: [
+        (wrapped(key_series, value_series), to_arrow_type(return_type))
+    ]
+
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec):
     def wrapped(key_series, value_series):
@@ -436,7 +439,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        return arg_offsets, wrap_multi_cogrouped_map_pandas_udf(func, return_type, runner_conf, argspec)
+        return arg_offsets, wrap_multi_cogrouped_map_pandas_udf(
+            func, return_type, runner_conf, argspec
+        )
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
@@ -488,7 +493,10 @@ def read_udfs(pickleSer, infile, eval_type):
             == "true"
         )
 
-        if eval_type in (PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF):
+        if eval_type in (
+            PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+        ):
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             arrow_max_records_per_batch = runner_conf.get(

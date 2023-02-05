@@ -2916,7 +2916,7 @@ class DataFrameSuite extends QueryTest
     assert(actual != null)
   }
 
-  test("SPARK-12345: flatMapCoGroupsInPandas should fail with different number of keys") {
+  test("SPARK-42349: flatMapCoGroupsInPandas should fail with different number of keys") {
     val df1 = Seq((1, 2, "A1"), (2, 1, "A2")).toDF("key1", "key2", "value")
     val df2 = df1.filter($"value" === "A2")
     val df3 = df1.filter($"value" === "A1")

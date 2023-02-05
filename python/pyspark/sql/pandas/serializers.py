@@ -291,8 +291,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         import pyarrow as pa
 
-        for b in batches:
-            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([b]).itercolumns()]
+        for batch in batches:
+            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
@@ -363,11 +363,18 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
             if dataframes_in_group > 1:
                 batches = []
                 for _ in range(0, dataframes_in_group):
-                    batches.append([batch for batch in ArrowStreamSerializer.load_stream(self, stream)])
+                    batches.append(
+                        [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                    )
 
                 loaded_streams = []
                 for batch in batches:
-                    loaded_streams.append([self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch).itercolumns()],)
+                    loaded_streams.append(
+                        [
+                            self.arrow_to_pandas(c)
+                            for c in pa.Table.from_batches(batch).itercolumns()
+                        ],
+                    )
 
                 yield tuple(loaded_streams)
 

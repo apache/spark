@@ -455,7 +455,9 @@ def _create_pandas_udf(f, returnType, evalType):
             "or three arguments (key, left, right)."
         )
 
-    if evalType == PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF and (len(argspec.args) < 2 and not argspec.varargs):
+    if evalType == PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF and (
+        len(argspec.args) < 2 and not argspec.varargs
+    ):
         raise ValueError(
             "Invalid function: the function in cogroup.applyInPandas "
             "must take either more than one arguments (df1, df2, ...) "

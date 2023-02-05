@@ -40,18 +40,11 @@ if have_pyarrow:
     import pyarrow as pa  # noqa: F401
 
 
-# TODO (Santosh):
-# Use a list of df to better represent the test
-# Use itertools to cover all the cases of empty or key
-# import itertools
-# list(itertools.permutations([1, 2, 3]))
-
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
-
     def _get_df(self, index):
         return (
             self.spark.range(10)
@@ -79,7 +72,9 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
     def test_with_empty_groups(self):
         for combination in self.combinations:
             dfs = [df for df in self.dfs]
-            with self.subTest("Test empty groups with empty_group_df_index", empty_group_df_index=combination):
+            with self.subTest(
+                "Test empty groups with empty_group_df_index", empty_group_df_index=combination
+            ):
                 for empty_group_df_index in combination:
                     dfs[empty_group_df_index] = dfs[empty_group_df_index].where(col("id") % 2 == 0)
                 self._test_merge(dfs)
@@ -87,12 +82,17 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
     def test_different_schemas(self):
         new_columns = [f"random{index}" for index, _ in enumerate(self.dfs)]
         dfs = [df.withColumn(new_column, lit("a")) for df, new_column in zip(self.dfs, new_columns)]
-        extra_schemas = ", ".join([f"v{index} int, random{index} string" for index, _ in enumerate(self.dfs)])
+        extra_schemas = ", ".join(
+            [f"v{index} int, random{index} string" for index, _ in enumerate(self.dfs)]
+        )
         self._test_merge(dfs, f"id long, k int, {extra_schemas}")
 
     def test_different_keys(self):
         def merge_pandas(*dfs):
-            return functools.reduce(lambda df1, df2: pd.merge(df1.rename(columns={"id2": "id"}), df2, on=["id", "k"]), dfs)
+            return functools.reduce(
+                lambda df1, df2: pd.merge(df1.rename(columns={"id2": "id"}), df2, on=["id", "k"]),
+                dfs,
+            )
 
         df_head, *df_tail = self.dfs
 
@@ -134,12 +134,13 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
             .toPandas()
         )
 
-        expected = pd.DataFrame.from_dict({"k": [5, 6, 7], "v": [9, 10, 11], "v2": [90, 100, 110], "v3": [91, 101, 111]})
+        expected = pd.DataFrame.from_dict(
+            {"k": [5, 6, 7], "v": [9, 10, 11], "v2": [90, 100, 110], "v3": [91, 101, 111]}
+        )
 
         assert_frame_equal(expected, result)
 
     def test_empty_group_by(self):
-
         def merge_pandas(*dfs):
             return functools.reduce(lambda df1, df2: pd.merge(df1, df2, on=["id", "k"]), dfs)
 
@@ -169,8 +170,11 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
                 IllegalArgumentException,
                 "requirement failed: Cogroup keys must have same size.",
             ):
-                (df1.groupby("id").cogroup(df2.groupby("id"), df3.groupby("id", "k"))
-                    .applyInPandas(merge_pandas, "id long, k int, v int"))
+                (
+                    df1.groupby("id")
+                    .cogroup(df2.groupby("id"), df3.groupby("id", "k"))
+                    .applyInPandas(merge_pandas, "id long, k int, v int")
+                )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         def merge_pandas(lft, rgt, *_):
@@ -277,7 +281,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
             .cogroup(df.groupby(), df.groupby())
             .applyInPandas(
                 lambda x, y, z: pd.DataFrame([(x.sum().sum(), y.sum().sum(), z.sum().sum())]),
-                "sum1 int, sum2 int, sum3 int"
+                "sum1 int, sum2 int, sum3 int",
             )
             .collect()
         )
@@ -294,7 +298,9 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
     def test_with_key_empty_groups(self):
         for empty_group_df_index in range(0, 4):
             dfs = [df for df in self.dfs]
-            with self.subTest("Test with keys for empty_group_df_index", empty_group_df_index=empty_group_df_index):
+            with self.subTest(
+                "Test with keys for empty_group_df_index", empty_group_df_index=empty_group_df_index
+            ):
                 dfs[empty_group_df_index] = dfs[empty_group_df_index].where(col("id") % 2 == 0)
                 self._test_with_key(dfs, empty_group_df_index)
 
@@ -324,7 +330,8 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(
                 NotImplementedError, "Invalid return type.*ArrayType.*TimestampType"
             ):
-                (df1.groupby("id")
+                (
+                    df1.groupby("id")
                     .cogroup(df2.groupby("id"), df3.groupby("id"))
                     .applyInPandas(lambda df1, df2, df3: df1, "id long, v array<timestamp>")
                 )
@@ -332,7 +339,8 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
     def test_wrong_args(self):
         df1, df2, df3, *_ = self.dfs
         with self.assertRaisesRegex(ValueError, "Invalid function"):
-            (df1.groupby("id")
+            (
+                df1.groupby("id")
                 .cogroup(df2.groupby("id"), df3.groupby("id"))
                 .applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
             )
@@ -391,7 +399,6 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @staticmethod
     def _test_merge(dfs, output_schema="id long, k int, v0 int, v1 int, v2 int, v3 int"):
-
         def merge_pandas(*dfs):
             return functools.reduce(lambda df1, df2: pd.merge(df1, df2, on=["id", "k"]), dfs)
 
