@@ -482,6 +482,7 @@ class PandasCogroupedOps:
             for gd in self._gds:
                 all_cols.extend(self._extract_cols(gd))
             udf_column_expr = udf(*all_cols)._jc.expr()
+            assert self._gd1.session.sparkContext._jvm is not None
             all_jgds = self._gd1.session.sparkContext._jvm.PythonUtils.toSeq(
                 [gd._jgd for gd in self._gds]
             )
@@ -489,7 +490,7 @@ class PandasCogroupedOps:
         elif len(self._gds) == 1:
             udf = pandas_udf(
                 func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
-            )  # type
+            )  # type: ignore[call-overload]
             _gd2 = self._gds[0]
             all_cols = self._extract_cols(self._gd1) + self._extract_cols(_gd2)
             udf_column = udf(*all_cols)
