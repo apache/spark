@@ -145,10 +145,16 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       sql(s"CREATE TABLE $tbl (id bigint, data string) " +
         s"$defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $tbl ADD PARTITION (id=1)")
-      val errMsg = intercept[NoSuchPartitionException] {
-        sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE 'tb*' PARTITION(id = 2)")
-      }.getMessage
-      assert(errMsg === "Partition not found in table ns1.ns2.tbl: 2 -> id")
+      checkError(
+        exception = intercept[NoSuchPartitionException] {
+          sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE 'tb*' PARTITION(id = 2)")
+        },
+        errorClass = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "PARTITION (`id` = 2)",
+          "tableName" -> "`ns1`.`ns2`.`tbl`"
+        )
+      )
     }
   }
 
