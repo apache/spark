@@ -132,20 +132,10 @@ select 1 as a
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Unclosed bracketed comment(line 3, pos 0)
-
-== SQL ==
-/*abc*/
-select 1 as a
-/*
-^^^
-
-2 as b
-/*abc*/
-, 3 as c
-
-/**/
+{
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT",
+  "sqlState" : "42601"
+}
 
 
 -- !query
@@ -163,18 +153,7 @@ select 4 as d
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Unclosed bracketed comment(line 3, pos 0)
-
-== SQL ==
-/*abc*/
-select 1 as a
-/*
-^^^
-
-2 as b
-/*abc*/
-, 3 as c
-
-/**/
-select 4 as d
+{
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT",
+  "sqlState" : "42601"
+}

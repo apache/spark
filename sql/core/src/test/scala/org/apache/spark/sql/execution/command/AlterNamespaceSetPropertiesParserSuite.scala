@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.SetNamespaceProperties
 
 class AlterNamespaceSetPropertiesParserSuite extends AnalysisTest {
+
   test("set namespace properties") {
     Seq("DATABASE", "SCHEMA", "NAMESPACE").foreach { nsToken =>
       Seq("PROPERTIES", "DBPROPERTIES").foreach { propToken =>
@@ -40,10 +40,14 @@ class AlterNamespaceSetPropertiesParserSuite extends AnalysisTest {
   }
 
   test("property values must be set") {
-    val e = intercept[ParseException] {
-      parsePlan("ALTER NAMESPACE my_db SET PROPERTIES('key_without_value', 'key_with_value'='x')")
-    }
-    assert(e.getMessage.contains(
-      "Operation not allowed: Values must be specified for key(s): [key_without_value]"))
+    val sql = "ALTER NAMESPACE my_db SET PROPERTIES('key_without_value', 'key_with_value'='x')"
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 78))
   }
 }

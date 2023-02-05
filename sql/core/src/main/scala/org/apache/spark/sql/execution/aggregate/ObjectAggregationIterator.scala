@@ -207,7 +207,7 @@ class ObjectAggregationIterator(
     if (sortBased) {
       aggBufferIterator = sortBasedAggregationStore.destructiveIterator()
     } else {
-      aggBufferIterator = hashMap.iterator
+      aggBufferIterator = hashMap.destructiveIterator()
     }
   }
 }

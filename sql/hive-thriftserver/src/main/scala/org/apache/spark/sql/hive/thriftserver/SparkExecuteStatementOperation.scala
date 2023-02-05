@@ -257,7 +257,8 @@ private[hive] class SparkExecuteStatementOperation(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
           e match {
             case _: HiveSQLException => throw e
-            case _ => throw HiveThriftServerErrors.runningQueryError(e)
+            case _ => throw HiveThriftServerErrors.runningQueryError(
+              e, sqlContext.conf.errorMessageFormat)
           }
         }
     } finally {

@@ -32,9 +32,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
-import org.apache.spark.{SparkFiles, TestUtils}
+import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -570,10 +571,19 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             sql(s"CREATE FUNCTION dAtABaSe1.test_avg AS '${classOf[GenericUDAFAverage].getName}'")
             checkAnswer(sql("SELECT dAtABaSe1.test_avg(1)"), Row(1.0))
           }
-          val message = intercept[AnalysisException] {
-            sql("SELECT dAtABaSe1.unknownFunc(1)")
-          }.getMessage
-          assert(message.contains("Undefined function: dAtABaSe1.unknownFunc"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("SELECT dAtABaSe1.unknownFunc(1)")
+            },
+            errorClass = "UNRESOLVED_ROUTINE",
+            parameters = Map(
+              "routineName" -> "`dAtABaSe1`.`unknownFunc`",
+              "searchPath" ->
+                "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+            context = ExpectedContext(
+              fragment = "dAtABaSe1.unknownFunc(1)",
+              start = 7,
+              stop = 30))
         }
       }
     }
@@ -699,6 +709,37 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         assert(fileList2.contains(text2.getName))
         assert(fileList2.contains(json2.getName))
         assert(fileList2.contains(csv2.getName))
+      }
+    }
+  }
+
+  test("SPARK-42051: HiveGenericUDF Codegen Support") {
+    withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFMaskHash].getName}'")
+      withTable("HiveGenericUDFTable") {
+        sql(s"create table HiveGenericUDFTable as select 'Spark SQL' as v")
+        val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec])
+        checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
+      }
+    }
+  }
+
+  test("SPARK-42051: HiveGenericUDF Codegen Support w/ execution failure") {
+    withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFAssertTrue].getName}'")
+      withTable("HiveGenericUDFTable") {
+        sql(s"create table HiveGenericUDFTable as select false as v")
+        val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
+        val e = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException]
+        checkError(
+          e,
+          "FAILED_EXECUTE_UDF",
+          parameters = Map(
+            "functionName" -> s"${classOf[GenericUDFAssertTrue].getName}",
+            "signature" -> "boolean",
+            "result" -> "void"))
       }
     }
   }

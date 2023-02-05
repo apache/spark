@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -524,8 +526,9 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val map = transformKeys(ai0, makeMap)
     map.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("The key of map cannot be/contain map"))
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+        assert(messageParameters === Map("keyType" -> "\"MAP<INT, INT>\""))
     }
   }
 
@@ -833,7 +836,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(!mapFilter2_1.semanticEquals(mapFilter2_3))
   }
 
-  test("SPARK-36740: ArraySort should handle NaN greater then non-NaN value") {
+  test("SPARK-36740: ArraySort should handle NaN greater than non-NaN value") {
     checkEvaluation(arraySort(
       Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
       Seq(1d, 2d, Double.NaN, null))
@@ -848,8 +851,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     withSQLConf(
         SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT.key -> "false") {
-      checkExceptionInExpression[SparkException](
-        arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator), "The comparison result is null")
+      checkErrorInExpression[SparkException](
+        expression = arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
+        errorClass = "COMPARATOR_RETURNS_NULL",
+        parameters = Map("firstValue" -> "1", "secondValue" -> "1")
+      )
     }
 
     withSQLConf(
@@ -857,5 +863,21 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
         Seq(1, 1, 2, 3))
     }
+  }
+
+  test("Return type of the given function has to be IntegerType") {
+    val comparator = {
+      val comp = ArraySort.comparator _
+      (left: Expression, right: Expression) => Literal.create("hello", StringType)
+    }
+
+    val result = arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator).checkInputDataTypes()
+    assert(result == DataTypeMismatch(
+      errorSubClass = "UNEXPECTED_RETURN_TYPE",
+      messageParameters = Map(
+        "functionName" -> toSQLId("lambdafunction"),
+        "expectedType" -> toSQLType(IntegerType),
+        "actualType" -> toSQLType(StringType)
+      )))
   }
 }

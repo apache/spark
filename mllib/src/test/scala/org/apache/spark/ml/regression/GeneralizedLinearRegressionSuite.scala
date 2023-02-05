@@ -1686,7 +1686,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
         .setFeaturesCol("features")
       val model = trainer.fit(dataset)
       val actual = model.summary.aic
-      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with regParam = $regParam.")
+      assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with regParam = $regParam.")
       idx += 1
     }
   }

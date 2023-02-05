@@ -24,7 +24,7 @@
 
 RESOURCE_DIR="$1"
 mkdir -p "$RESOURCE_DIR"
-SPARK_BUILD_INFO="${RESOURCE_DIR}"/spark-version-info.properties
+SPARK_BUILD_INFO="${RESOURCE_DIR%/}"/spark-version-info.properties
 
 echo_build_properties() {
   echo version=$1

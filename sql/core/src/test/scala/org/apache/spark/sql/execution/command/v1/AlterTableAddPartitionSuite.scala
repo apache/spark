@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -32,6 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
  *     `org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite`
  */
 trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuiteBase {
+  override def defaultPartitionName: String = DEFAULT_PARTITION_NAME
+
   test("empty string as partition value") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
@@ -132,6 +136,39 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
         val part3Loc = copyPartition(t, "part=0", "part=3")
         sql(s"ALTER TABLE $t ADD PARTITION (part=3) LOCATION '$part3Loc'")
         checkCachedRelation(v2, Seq(Row(0, 0), Row(0, 1), Row(0, 2), Row(0, 3)))
+      }
+    }
+  }
+
+  // TODO: Move this test to the common trait as soon as it is migrated on checkError()
+  test("partition already exists") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
+
+      val e = intercept[PartitionsAlreadyExistException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
+          " PARTITION (id=2) LOCATION 'loc1'")
+      }
+      checkError(e,
+        errorClass = "PARTITIONS_ALREADY_EXIST",
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
+          "tableName" -> "`ns`.`tbl`"))
+
+      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
+        " PARTITION (id=2) LOCATION 'loc1'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+    }
+  }
+
+  test("SPARK-40798: Alter partition should verify partition value - legacy") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
+
+      withSQLConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
+        sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+        checkPartitions(t, Map("p" -> "aaa"))
+        sql(s"ALTER TABLE $t DROP PARTITION (p='aaa')")
       }
     }
   }

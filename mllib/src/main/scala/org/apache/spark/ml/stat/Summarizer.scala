@@ -105,7 +105,7 @@ object Summarizer extends Logging {
    * @return a builder.
    * @throws IllegalArgumentException if one of the metric names is not understood.
    *
-   * Note: Currently, the performance of this interface is about 2x~3x slower then using the RDD
+   * Note: Currently, the performance of this interface is about 2x~3x slower than using the RDD
    * interface.
    */
   @Since("2.3.0")

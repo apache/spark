@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
@@ -63,7 +64,8 @@ case class CountMinSketchAgg(
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[CountMinSketch]
   with ExpectsInputTypes
-  with QuaternaryLike[Expression] {
+  with QuaternaryLike[Expression]
+  with QueryErrorsBase {
 
   def this(
       child: Expression,
@@ -82,17 +84,60 @@ case class CountMinSketchAgg(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!epsExpression.foldable || !confidenceExpression.foldable ||
-      !seedExpression.foldable) {
-      TypeCheckFailure(
-        "The eps, confidence or seed provided must be a literal or foldable")
-    } else if (epsExpression.eval() == null || confidenceExpression.eval() == null ||
-      seedExpression.eval() == null) {
-      TypeCheckFailure("The eps, confidence or seed provided should not be null")
+    } else if (!epsExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "eps",
+          "inputType" -> toSQLType(epsExpression.dataType),
+          "inputExpr" -> toSQLExpr(epsExpression))
+      )
+    } else if (!confidenceExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "confidence",
+          "inputType" -> toSQLType(confidenceExpression.dataType),
+          "inputExpr" -> toSQLExpr(confidenceExpression))
+      )
+    } else if (!seedExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "seed",
+          "inputType" -> toSQLType(seedExpression.dataType),
+          "inputExpr" -> toSQLExpr(seedExpression))
+      )
+    } else if (epsExpression.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "eps"))
+    } else if (confidenceExpression.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "confidence"))
+    } else if (seedExpression.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "seed"))
     } else if (eps <= 0.0) {
-      TypeCheckFailure(s"Relative error must be positive (current value = $eps)")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "eps",
+          "valueRange" -> s"(${0.toDouble}, ${Double.MaxValue}]",
+          "currentValue" -> toSQLValue(eps, DoubleType)
+        )
+      )
     } else if (confidence <= 0.0 || confidence >= 1.0) {
-      TypeCheckFailure(s"Confidence must be within range (0.0, 1.0) (current value = $confidence)")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "confidence",
+          "valueRange" -> s"(${0.toDouble}, ${1.toDouble}]",
+          "currentValue" -> toSQLValue(confidence, DoubleType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }

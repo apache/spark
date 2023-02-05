@@ -17,12 +17,20 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.CreateNamespace
+import org.apache.spark.sql.test.SharedSparkSession
 
-class CreateNamespaceParserSuite extends AnalysisTest {
-  test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
+class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
+
+  private def parseException(sqlText: String): SparkThrowable = {
+    intercept[ParseException](sql(sqlText).collect())
+  }
+
+  test("create namespace - backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespace(
       UnresolvedNamespace(Seq("a", "b", "c")),
       ifNotExists = true,
@@ -52,40 +60,79 @@ class CreateNamespaceParserSuite extends AnalysisTest {
       expected)
   }
 
-  test("create namespace -- check duplicates") {
+  test("create namespace - check duplicates") {
     def createNamespace(duplicateClause: String): String = {
-      s"""
-         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+      s"""CREATE NAMESPACE IF NOT EXISTS a.b.c
          |$duplicateClause
-         |$duplicateClause
-      """.stripMargin
+         |$duplicateClause""".stripMargin
     }
-    val sql1 = createNamespace("COMMENT 'namespace_comment'")
-    val sql2 = createNamespace("LOCATION '/home/user/db'")
-    val sql3 = createNamespace("WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-    val sql4 = createNamespace("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
-    intercept(sql1, "Found duplicate clauses: COMMENT")
-    intercept(sql2, "Found duplicate clauses: LOCATION")
-    intercept(sql3, "Found duplicate clauses: WITH PROPERTIES")
-    intercept(sql4, "Found duplicate clauses: WITH DBPROPERTIES")
+    val sql1 = createNamespace("COMMENT 'namespace_comment'")
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 91))
+
+    val sql2 = createNamespace("LOCATION '/home/user/db'")
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "LOCATION"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 85))
+
+    val sql3 = createNamespace("WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "WITH PROPERTIES"),
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 123))
+
+    val sql4 = createNamespace("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "WITH DBPROPERTIES"),
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 127))
   }
 
   test("create namespace - property values must be set") {
-    intercept(
-      "CREATE NAMESPACE a.b.c WITH PROPERTIES('key_without_value', 'key_with_value'='x')",
-      "Operation not allowed: Values must be specified for key(s): [key_without_value]")
+    val sql = "CREATE NAMESPACE a.b.c WITH PROPERTIES('key_without_value', 'key_with_value'='x')"
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 80))
   }
 
-  test("create namespace -- either PROPERTIES or DBPROPERTIES is allowed") {
+  test("create namespace - either PROPERTIES or DBPROPERTIES is allowed") {
     val sql =
-      s"""
-         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+      s"""CREATE NAMESPACE IF NOT EXISTS a.b.c
          |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
-         |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
-      """.stripMargin
-    intercept(sql, "The feature is not supported: " +
-      "set PROPERTIES and DBPROPERTIES at the same time.")
+         |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')""".stripMargin
+    checkError(
+      exception = parseException(sql),
+      errorClass = "UNSUPPORTED_FEATURE.SET_PROPERTIES_AND_DBPROPERTIES",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 125))
   }
 
   test("create namespace - support for other types in PROPERTIES") {
@@ -106,7 +153,4 @@ class CreateNamespaceParserSuite extends AnalysisTest {
           "c" -> "true",
           "location" -> "/home/user/db")))
   }
-
-  private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
 }

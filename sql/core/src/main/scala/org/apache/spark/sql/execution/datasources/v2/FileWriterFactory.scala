@@ -29,6 +29,9 @@ import org.apache.spark.sql.execution.datasources.{DynamicPartitionDataSingleWri
 case class FileWriterFactory (
     description: WriteJobDescription,
     committer: FileCommitProtocol) extends DataWriterFactory {
+
+  private val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
+
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
     val taskAttemptContext = createTaskAttemptContext(partitionId)
     committer.setupTask(taskAttemptContext)
@@ -40,7 +43,6 @@ case class FileWriterFactory (
   }
 
   private def createTaskAttemptContext(partitionId: Int): TaskAttemptContextImpl = {
-    val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
     val taskId = new TaskID(jobId, TaskType.MAP, partitionId)
     val taskAttemptId = new TaskAttemptID(taskId, 0)
     // Set up the configuration object

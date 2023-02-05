@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.util.PartitioningUtils
+import org.apache.spark.util.collection.Utils
 
 /**
  * Analyzes a given set of partitions to generate per-partition statistics, which will be used in
@@ -147,7 +148,7 @@ case class AnalyzePartitionCommand(
           r.get(i).toString
         }
       }
-      val spec = tableMeta.partitionColumnNames.zip(partitionColumnValues).toMap
+      val spec = Utils.toMap(tableMeta.partitionColumnNames, partitionColumnValues)
       val count = BigInt(r.getLong(partitionColumns.size))
       (spec, count)
     }.toMap

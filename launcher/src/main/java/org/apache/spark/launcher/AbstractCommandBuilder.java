@@ -47,6 +47,7 @@ abstract class AbstractCommandBuilder {
   String javaHome;
   String mainClass;
   String master;
+  String remote;
   protected String propertiesFile;
   final List<String> appArgs;
   final List<String> jars;

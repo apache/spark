@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.expressions.CreateNamedStruct
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StructField, StructType}
 
 class ComplexTypesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -116,5 +116,59 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("arr", ArrayType(innerStruct, containsNull = false))
     val df = spark.createDataFrame(List(Row(Seq(Row(1), Row(null)))).asJava, schema)
     checkAnswer(df.select($"arr".getField("i")), Row(Seq(1, null)))
+  }
+
+  test("SPARK-40527: correct named_struct field names in CreateStruct") {
+    val df = spark.sql(
+      """
+      select struct(a['x'], a['y']) as c
+      from (select named_struct('x', 1, 'y', 2) as a)
+      """)
+
+    val expectedSchema = StructType(
+      StructField("c", StructType(
+        StructField("x", IntegerType, false) ::
+        StructField("y", IntegerType, false) ::
+        Nil), false) ::
+      Nil)
+
+    assert(df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(Row(1, 2))))
+  }
+
+  test("SPARK-40527: correct map key names in CreateStruct") {
+    val df = spark.sql(
+      """
+      select struct(a['x'], a['y']) as c
+      from (select map('x', 1, 'y', 2) as a)
+      """)
+
+    val expectedSchema = StructType(
+      StructField("c", StructType(
+        StructField("x", IntegerType, true) ::
+        StructField("y", IntegerType, true) ::
+        Nil), false) ::
+      Nil)
+
+    assert(df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(Row(1, 2))))
+  }
+
+  test("SPARK-40527: keep generic names for non-literal expressions in CreateStruct") {
+    val df = spark.sql(
+      """
+      select struct(a[concat('x', '')], a['y']) as c
+      from (select map('x', 1, 'y', 2) as a)
+      """)
+
+    val expectedSchema = StructType(
+      StructField("c", StructType(
+        StructField("col1", IntegerType, true) ::
+        StructField("y", IntegerType, true) ::
+        Nil), false) ::
+      Nil)
+
+    assert(df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(Row(1, 2))))
   }
 }

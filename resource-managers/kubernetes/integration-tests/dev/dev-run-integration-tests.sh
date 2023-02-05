@@ -37,6 +37,7 @@ SERVICE_ACCOUNT=
 CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
+DEFAULT_EXCLUDE_TAGS="N/A"
 JAVA_VERSION="8"
 BUILD_DEPENDENCIES_MVN_FLAG="-am"
 HADOOP_PROFILE="hadoop-3"
@@ -99,6 +100,10 @@ while (( "$#" )); do
       ;;
     --exclude-tags)
       EXCLUDE_TAGS="$2"
+      shift
+      ;;
+    --default-exclude-tags)
+      DEFAULT_EXCLUDE_TAGS="$2"
       shift
       ;;
     --base-image-name)
@@ -178,6 +183,11 @@ fi
 if [ -n "$EXCLUDE_TAGS" ];
 then
   properties=( ${properties[@]} -Dtest.exclude.tags=$EXCLUDE_TAGS )
+fi
+
+if [ "$DEFAULT_EXCLUDE_TAGS" != "N/A" ];
+then
+  properties=( ${properties[@]} -Dtest.default.exclude.tags=$DEFAULT_EXCLUDE_TAGS )
 fi
 
 BASE_IMAGE_NAME=${BASE_IMAGE_NAME:-spark}

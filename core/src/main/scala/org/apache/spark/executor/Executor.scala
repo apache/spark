@@ -25,6 +25,7 @@ import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 import javax.ws.rs.core.UriBuilder
 
@@ -47,10 +48,10 @@ import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
+import org.apache.spark.serializer.SerializerHelper
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -84,6 +85,11 @@ private[spark] class Executor(
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   private[executor] val conf = env.conf
+
+  // SPARK-40235: updateDependencies() uses a ReentrantLock instead of the `synchronized` keyword
+  // so that tasks can exit quickly if they are interrupted while waiting on another task to
+  // finish downloading dependencies.
+  private val updateDependenciesLock = new ReentrantLock()
 
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
@@ -166,7 +172,7 @@ private[spark] class Executor(
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
-  // to send the result back.
+  // to send the result back. This is guaranteed to be smaller than array bytes limit (2GB)
   private val maxDirectResultSize = Math.min(
     conf.get(TASK_MAX_DIRECT_RESULT_SIZE),
     RpcUtils.maxMessageSizeBytes(conf))
@@ -394,7 +400,7 @@ private[spark] class Executor(
 
   class TaskRunner(
       execBackend: ExecutorBackend,
-      private val taskDescription: TaskDescription,
+      val taskDescription: TaskDescription,
       private val plugins: Option[PluginContainer])
     extends Runnable {
 
@@ -590,7 +596,7 @@ private[spark] class Executor(
 
         val resultSer = env.serializer.newInstance()
         val beforeSerializationNs = System.nanoTime()
-        val valueBytes = resultSer.serialize(value)
+        val valueByteBuffer = SerializerHelper.serializeToChunkedBuffer(resultSer, value)
         val afterSerializationNs = System.nanoTime()
 
         // Deserialization happens in two parts: first, we deserialize a Task object, which
@@ -607,7 +613,6 @@ private[spark] class Executor(
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(TimeUnit.NANOSECONDS.toMillis(
           afterSerializationNs - beforeSerializationNs))
-
         // Expose task metrics using the Dropwizard metrics system.
         // Update task metrics counters
         executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)
@@ -616,27 +621,6 @@ private[spark] class Executor(
         executorSource.METRIC_DESERIALIZE_TIME.inc(task.metrics.executorDeserializeTime)
         executorSource.METRIC_DESERIALIZE_CPU_TIME.inc(task.metrics.executorDeserializeCpuTime)
         executorSource.METRIC_RESULT_SERIALIZE_TIME.inc(task.metrics.resultSerializationTime)
-        executorSource.METRIC_SHUFFLE_FETCH_WAIT_TIME
-          .inc(task.metrics.shuffleReadMetrics.fetchWaitTime)
-        executorSource.METRIC_SHUFFLE_WRITE_TIME.inc(task.metrics.shuffleWriteMetrics.writeTime)
-        executorSource.METRIC_SHUFFLE_TOTAL_BYTES_READ
-          .inc(task.metrics.shuffleReadMetrics.totalBytesRead)
-        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ
-          .inc(task.metrics.shuffleReadMetrics.remoteBytesRead)
-        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ_TO_DISK
-          .inc(task.metrics.shuffleReadMetrics.remoteBytesReadToDisk)
-        executorSource.METRIC_SHUFFLE_LOCAL_BYTES_READ
-          .inc(task.metrics.shuffleReadMetrics.localBytesRead)
-        executorSource.METRIC_SHUFFLE_RECORDS_READ
-          .inc(task.metrics.shuffleReadMetrics.recordsRead)
-        executorSource.METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED
-          .inc(task.metrics.shuffleReadMetrics.remoteBlocksFetched)
-        executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
-          .inc(task.metrics.shuffleReadMetrics.localBlocksFetched)
-        executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
-          .inc(task.metrics.shuffleWriteMetrics.bytesWritten)
-        executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
-          .inc(task.metrics.shuffleWriteMetrics.recordsWritten)
         executorSource.METRIC_INPUT_BYTES_READ
           .inc(task.metrics.inputMetrics.bytesRead)
         executorSource.METRIC_INPUT_RECORDS_READ
@@ -648,14 +632,17 @@ private[spark] class Executor(
         executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
+        incrementShuffleMetrics(executorSource, task.metrics)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
         val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId)
         // TODO: do not serialize value twice
-        val directResult = new DirectTaskResult(valueBytes, accumUpdates, metricPeaks)
-        val serializedDirectResult = ser.serialize(directResult)
-        val resultSize = serializedDirectResult.limit()
+        val directResult = new DirectTaskResult(valueByteBuffer, accumUpdates, metricPeaks)
+        // try to estimate a reasonable upper bound of DirectTaskResult serialization
+        val serializedDirectResult = SerializerHelper.serializeToChunkedBuffer(ser, directResult,
+          valueByteBuffer.size + accumUpdates.size * 32 + metricPeaks.length * 8)
+        val resultSize = serializedDirectResult.size
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
@@ -668,13 +655,14 @@ private[spark] class Executor(
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId,
-              new ChunkedByteBuffer(serializedDirectResult.duplicate()),
+              serializedDirectResult,
               StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(s"Finished $taskName. $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
           } else {
             logInfo(s"Finished $taskName. $resultSize bytes result sent to driver")
-            serializedDirectResult
+            // toByteBuffer is safe here, guarded by maxDirectResultSize
+            serializedDirectResult.toByteBuffer
           }
         }
 
@@ -772,6 +760,7 @@ private[spark] class Executor(
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
+        cleanMDCForTask(taskName, mdcProperties)
         runningTasks.remove(taskId)
         if (taskStarted) {
           // This means the task was successfully deserialized, its stageId and stageAttemptId
@@ -781,6 +770,53 @@ private[spark] class Executor(
       }
     }
 
+    private def incrementShuffleMetrics(
+      executorSource: ExecutorSource,
+      metrics: TaskMetrics
+    ): Unit = {
+      executorSource.METRIC_SHUFFLE_FETCH_WAIT_TIME
+        .inc(metrics.shuffleReadMetrics.fetchWaitTime)
+      executorSource.METRIC_SHUFFLE_WRITE_TIME.inc(metrics.shuffleWriteMetrics.writeTime)
+      executorSource.METRIC_SHUFFLE_TOTAL_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.totalBytesRead)
+      executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.remoteBytesRead)
+      executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ_TO_DISK
+        .inc(metrics.shuffleReadMetrics.remoteBytesReadToDisk)
+      executorSource.METRIC_SHUFFLE_LOCAL_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.localBytesRead)
+      executorSource.METRIC_SHUFFLE_RECORDS_READ
+        .inc(metrics.shuffleReadMetrics.recordsRead)
+      executorSource.METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.remoteBlocksFetched)
+      executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.localBlocksFetched)
+      executorSource.METRIC_SHUFFLE_REMOTE_REQS_DURATION
+        .inc(metrics.shuffleReadMetrics.remoteReqsDuration)
+      executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
+        .inc(metrics.shuffleWriteMetrics.bytesWritten)
+      executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
+        .inc(metrics.shuffleWriteMetrics.recordsWritten)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS
+        .inc(metrics.shuffleReadMetrics.corruptMergedBlockChunks)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_FETCH_FALLBACK_COUNT
+        .inc(metrics.shuffleReadMetrics.mergedFetchFallbackCount)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.remoteMergedBlocksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.localMergedBlocksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.remoteMergedChunksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS_FETCHED
+        .inc(metrics.shuffleReadMetrics.localMergedChunksFetched)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.remoteMergedBytesRead)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.localMergedBytesRead)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION
+        .inc(metrics.shuffleReadMetrics.remoteMergedReqsDuration)
+    }
+
     private def hasFetchFailure: Boolean = {
       task != null && task.context != null && task.context.fetchFailed.isDefined
     }
@@ -788,11 +824,18 @@ private[spark] class Executor(
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
-      // make sure we run the task with the user-specified mdc properties only
-      MDC.clear()
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
       MDC.put("mdc.taskName", taskName)
+    } catch {
+      case _: NoSuchFieldError => logInfo("MDC is not supported.")
+    }
+  }
+
+  private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
+    try {
+      mdc.foreach { case (key, _) => MDC.remove(key) }
+      MDC.remove("mdc.taskName")
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -897,6 +940,7 @@ private[spark] class Executor(
           }
         }
       } finally {
+        cleanMDCForTask(taskRunner.taskName, taskRunner.mdcProperties)
         // Clean up entries in the taskReaperForTask map.
         taskReaperForTask.synchronized {
           taskReaperForTask.get(taskId).foreach { taskReaperInMap =>
@@ -969,13 +1013,19 @@ private[spark] class Executor(
   /**
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
+   * Visible for testing.
    */
-  private def updateDependencies(
+  private[executor] def updateDependencies(
       newFiles: Map[String, Long],
       newJars: Map[String, Long],
-      newArchives: Map[String, Long]): Unit = {
+      newArchives: Map[String, Long],
+      testStartLatch: Option[CountDownLatch] = None,
+      testEndLatch: Option[CountDownLatch] = None): Unit = {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    synchronized {
+    updateDependenciesLock.lockInterruptibly()
+    try {
+      // For testing, so we can simulate a slow file download:
+      testStartLatch.foreach(_.countDown())
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo(s"Fetching $name with timestamp $timestamp")
@@ -1018,6 +1068,10 @@ private[spark] class Executor(
           }
         }
       }
+      // For testing, so we can simulate a slow file download:
+      testEndLatch.foreach(_.await())
+    } finally {
+      updateDependenciesLock.unlock()
     }
   }
 

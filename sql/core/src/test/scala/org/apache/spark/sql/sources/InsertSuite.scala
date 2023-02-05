@@ -721,13 +721,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           " `b` due to an overflow."
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
       }
     }
@@ -743,13 +743,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "column `b` due to an overflow."
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
       }
     }
@@ -765,7 +765,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "\"DECIMAL(3,2)\" type column `b` due to an overflow."
         val msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue})")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
       }
     }
@@ -1134,10 +1134,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       sql("create table t(i boolean default true, s bigint, q int default 42) " +
         "using parquet partitioned by (i)")
-      assert(intercept[ParseException] {
-        sql("insert into t partition(i=default) values(5, default)")
-      }.getMessage.contains(
-        "References to DEFAULT column values are not allowed within the PARTITION clause"))
+      checkError(
+        exception = intercept[ParseException] {
+          sql("insert into t partition(i=default) values(5, default)")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_0059",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "partition(i=default)",
+          start = 14,
+          stop = 33))
     }
     // The configuration option to append missing NULL values to the end of the INSERT INTO
     // statement is not enabled.
@@ -1294,11 +1300,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable("t") {
         sql("create table t(i boolean default true, s bigint default 42) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (I) select true from (select 1)")
-        }.getMessage.contains(
-          "[UNRESOLVED_COLUMN] A column or function parameter with name `I` cannot be resolved. " +
-            "Did you mean one of the following? [`i`, `s`]"))
+        checkError(
+          exception =
+            intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
+          context = ExpectedContext(
+            fragment = "insert into t (I)", start = 0, stop = 16))
       }
     }
   }
@@ -1497,7 +1506,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     val createTable = "create table t(i boolean, s bigint) using parquet"
-    val insertDefaults = "insert into t values (default, default)"
     withTable("t") {
       sql(createTable)
       // The default value fails to analyze.
@@ -1519,9 +1527,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage.contains("provided a value of incompatible type"))
       // The default value is disabled per configuration.
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-        assert(intercept[ParseException] {
-          sql("alter table t alter column s set default 41 + 1")
-        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+        val sqlText = "alter table t alter column s set default 41 + 1"
+        checkError(
+          exception = intercept[ParseException] {
+            sql(sqlText)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_0058",
+          parameters = Map.empty,
+          context = ExpectedContext(
+            fragment = sqlText,
+            start = 0,
+            stop = 46))
       }
     }
     // Attempting to set a default value for a partitioning column is not allowed.
@@ -1536,7 +1552,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them") {
     case class Config(
         sqlConf: Option[(String, String)],
-        insertNullsToStorage: Boolean = true,
         useDataFrames: Boolean = false)
     def runTest(dataSource: String, config: Config): Unit = {
       def insertIntoT(): Unit = {
@@ -1575,10 +1590,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("insert into t values(null, null, null)")
         }
         sql("alter table t add column (x boolean default true)")
-        // By default, INSERT commands into some tables (such as JSON) do not store NULL values.
-        // Therefore, if such destination columns have DEFAULT values, SELECTing the same columns
-        // will return the default values (instead of NULL) since nothing is present in storage.
-        val insertedSColumn = if (config.insertNullsToStorage) null else "abcdef"
+        val insertedSColumn = null
         checkAnswer(spark.table("t"),
           Seq(
             Row("xyz", 42, "abcdef", true),
@@ -2015,27 +2027,33 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
+    val tableName = "t"
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true",
         SQLConf.FASTFAIL_ON_FILEFORMAT_OUTPUT.key -> fastFail.toString) {
-        withTable("t") {
+        withTable(tableName) {
           sql(
-            """
-              |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+            s"""
+              |CREATE TABLE $tableName(i INT, part1 INT) USING PARQUET
               |PARTITIONED BY (part1)
           """.stripMargin)
 
           val df = Seq((1, 1)).toDF("i", "part1")
           val err = intercept[SparkException] {
-            df.write.mode("overwrite").format("parquet").insertInto("t")
+            df.write.mode("overwrite").format("parquet").insertInto(tableName)
           }
 
           if (fastFail) {
-            assert(err.getCause.getMessage.contains("can not write to output file: " +
+            assert(err.getMessage.contains("can not write to output file: " +
               "org.apache.hadoop.fs.FileAlreadyExistsException"))
           } else {
-            assert(err.getCause.getMessage.contains("Task failed while writing rows"))
+            checkError(
+              exception = err.getCause.asInstanceOf[SparkException],
+              errorClass = "TASK_WRITE_FAILED",
+              parameters = Map("path" -> s".*$tableName"),
+              matchPVals = true
+            )
           }
         }
       }
@@ -2058,10 +2076,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
-    val message = intercept[ParseException] {
-      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
-    }.getMessage
-    assert(message.contains("LOCAL is supported only with file: scheme"))
+    checkError(
+      exception = intercept[ParseException] {
+        sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0050",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "insert overwrite local directory 'hdfs:/abcd' using parquet",
+        start = 0,
+        stop = 58))
   }
 
   test("SPARK-32508 " +
@@ -2088,19 +2112,29 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
-      val ex = intercept[AnalysisException] {
-        sql(
-          s"""
-            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
-            |SELECT * FROM (
-            | SELECT c3 FROM (
-            |  SELECT c1, c2 from values(1,2) t(c1, c2)
-            |  )
-            |)
-          """.stripMargin)
-      }
-      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(ex.messageParameters.head == "`c3`")
+      val insert = s"INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+              |$insert
+              |SELECT * FROM (
+              | SELECT c3 FROM (
+              |  SELECT c1, c2 from values(1,2) t(c1, c2)
+              |  )
+              |)
+            """.stripMargin)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`c3`",
+          "proposal" ->
+            "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"),
+        context = ExpectedContext(
+          fragment = "c3",
+          start = insert.length + 26,
+          stop = insert.length + 27))
     }
   }
 
@@ -2190,10 +2224,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
           sql(s"alter table t add partition(part1=1, part2=1) location '${path.getAbsolutePath}'")
 
-          val e = intercept[SparkException] {
+          val e = intercept[IOException] {
             sql(s"insert into t partition(part1=1, part2=1) select 1")
-          }.getCause
-          assert(e.isInstanceOf[IOException])
+          }
           assert(e.getMessage.contains("Failed to rename"))
           assert(e.getMessage.contains("when committing files staged for absolute location"))
         }
@@ -2214,10 +2247,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |partitioned by (part1, part2)
           """.stripMargin)
 
-        val e = intercept[SparkException] {
+        val e = intercept[IOException] {
           sql(s"insert overwrite table t partition(part1, part2) values (1, 1, 1)")
-        }.getCause
-        assert(e.isInstanceOf[IOException])
+        }
         assert(e.getMessage.contains("Failed to rename"))
         assert(e.getMessage.contains(
           "when committing files staged for overwriting dynamic partitions"))

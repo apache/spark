@@ -108,7 +108,8 @@ package object client {
         "org.apache.calcite.avatica:avatica",
         "com.fasterxml.jackson.core:*",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
@@ -117,7 +118,8 @@ package object client {
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
@@ -126,7 +128,8 @@ package object client {
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
 
     val allSupportedHiveVersions =
       Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)

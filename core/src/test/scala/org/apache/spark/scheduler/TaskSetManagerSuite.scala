@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.{Properties, Random}
 
@@ -36,7 +37,7 @@ import org.apache.spark.{FakeSchedulerBackend => _, _}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests.SKIP_VALIDATE_CORES_TESTING
+import org.apache.spark.internal.config.Tests.{SKIP_VALIDATE_CORES_TESTING, TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -73,7 +74,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
     taskScheduler.taskSetsFailed += taskSet.id
   }
 
-  override def speculativeTaskSubmitted(task: Task[_]): Unit = {
+  override def speculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
     taskScheduler.speculativeTasks += task.partitionId
   }
 }
@@ -669,6 +670,42 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execA", "host1", ANY)._1.isDefined)
   }
 
+  test("SPARK-41469: task doesn't need to rerun on executor lost if shuffle data has migrated") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    sched.addExecutor("exec0", "host0")
+
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.registerShuffle(0, 2, 0)
+
+    val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0,
+      Seq(TaskLocation("host0", "exec0")), Seq(TaskLocation("host1", "exec1")))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    // Schedule task 0 and mark it as completed with shuffle map output registered
+    val taskDesc = manager.resourceOffer("exec0", "host0", PROCESS_LOCAL)._1
+    assert(taskDesc.isDefined)
+    val taskIndex = taskDesc.get.index
+    val taskId = taskDesc.get.taskId
+    manager.handleSuccessfulTask(taskId, createTaskResult(taskId.toInt))
+    mapOutputTracker.registerMapOutput(0, taskIndex,
+      MapStatus(BlockManagerId("exec0", "host0", 8848), Array(1024), taskId))
+
+    // Mock executor "exec0" decommission and migrate shuffle map output of task 0
+    manager.executorDecommission("exec0")
+    mapOutputTracker.updateMapOutput(0, taskId, BlockManagerId("exec1", "host1", 8848))
+
+    // Trigger executor "exec0" lost. Since the map output of task 0 has been migrated, it doesn't
+    // need to rerun. So task 0 should still remain in the successful status.
+    manager.executorLost("exec0", "host0", ExecutorDecommission())
+    assert(manager.successful(taskIndex))
+  }
+
   test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)
@@ -769,7 +806,7 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
     val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0,
-      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     assert(!manager.emittedTaskSizeWarning)
@@ -785,7 +822,7 @@ class TaskSetManagerSuite
 
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     intercept[TaskNotSerializableException] {
@@ -865,7 +902,7 @@ class TaskSetManagerSuite
         override def index: Int = 0
       }, 1, Seq(TaskLocation("host1", "execA")), new Properties, null)
     val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
-      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(0))
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer host1, which should be accepted as a PROCESS_LOCAL location
@@ -881,7 +918,7 @@ class TaskSetManagerSuite
     assert(manager.runningTasks === 2)
     assert(manager.isZombie === false)
 
-    val directTaskResult = new DirectTaskResult[String](null, Seq(), Array()) {
+    val directTaskResult = new DirectTaskResult[String]() {
       override def value(resultSer: SerializerInstance): String = ""
     }
     // Complete one copy of the task, which should result in the task set manager
@@ -2191,7 +2228,7 @@ class TaskSetManagerSuite
 
     val tasks = Array.tabulate[Task[_]](2)(partition => new FakeLongTasks(stageId = 0, partition))
     val taskSet: TaskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)
@@ -2561,6 +2598,71 @@ class TaskSetManagerSuite
     val failedReason = ExceptionFailure("a", "b", Array(), "c", None)
     manager.handleFailedTask(originalTask.taskId, TaskState.FAILED, failedReason)
     assert(!manager.isZombie)
+  }
+
+  test("SPARK-40094: Send TaskEnd if task failed with " +
+    "NotSerializableException or TaskOutputFileAlreadyExistException") {
+    val sparkConf = new SparkConf()
+      .setMaster("local-cluster[1,1,1024]")
+      .setAppName("SPARK-40094")
+      .set(config.DYN_ALLOCATION_TESTING, true)
+      .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
+      .set(config.DYN_ALLOCATION_ENABLED, true)
+      .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, 1L)
+
+    // setup spark context and init ExecutorAllocationManager
+    sc = new SparkContext(sparkConf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    // replace dagScheduler to let handleFailedTask send TaskEnd
+    sched.dagScheduler = sc.dagScheduler
+
+    val taskSet1 = FakeTask.createTaskSet(1)
+    val manager1 = new TaskSetManager(sched, taskSet1, MAX_TASK_FAILURES)
+    val taskSet2 = FakeTask.createTaskSet(1)
+    val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES)
+    assert(sched.taskSetsFailed.isEmpty)
+
+
+    val offerResult1 = manager1.resourceOffer("exec1", "host1", ANY)._1
+    assert(offerResult1.isDefined,
+      "Expect resource offer on iteration 0 to return a task")
+    assert(offerResult1.get.index === 0)
+
+    val offerResult2 = manager2.resourceOffer("exec2", "host2", ANY)._1
+    assert(offerResult2.isDefined,
+      "Expect resource offer on iteration 0 to return a task")
+    assert(offerResult2.get.index === 0)
+
+    val executorMonitor = sc.executorAllocationManager.get.executorMonitor
+
+    // mock ExecutorMonitor.onTaskStart
+    val executorTracker1 = executorMonitor.ensureExecutorIsTracked("exec1",
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    executorTracker1.updateRunningTasks(1)
+    val executorTracker2 = executorMonitor.ensureExecutorIsTracked("exec2",
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    executorTracker2.updateRunningTasks(1)
+
+    // assert exec1 and exec2 are not idle
+    assert(!executorMonitor.isExecutorIdle("exec1"))
+    assert(!executorMonitor.isExecutorIdle("exec2"))
+
+    // handle failed task and send TaskEnd
+    val reason1 = new ExceptionFailure(
+      new TaskOutputFileAlreadyExistException(
+        new FileAlreadyExistsException("file already exists")),
+      Seq.empty[AccumulableInfo])
+    manager1.handleFailedTask(offerResult1.get.taskId, TaskState.FAILED, reason1)
+    val reason2 = new ExceptionFailure(
+      new NotSerializableException("test NotSerializableException"),
+      Seq.empty[AccumulableInfo])
+    manager2.handleFailedTask(offerResult2.get.taskId, TaskState.FAILED, reason2)
+
+    Thread.sleep(1200)
+
+    // executor are idle because task has removed by TaskEnd
+    assert(executorMonitor.isExecutorIdle("exec1"))
+    assert(executorMonitor.isExecutorIdle("exec2"))
   }
 
 }

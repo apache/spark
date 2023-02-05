@@ -367,7 +367,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       assert(HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10), distribution)
         .canCreatePartitioning)
     }
-    assert(SinglePartitionShuffleSpec.canCreatePartitioning)
+    assert(!SinglePartitionShuffleSpec.canCreatePartitioning)
     withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
       assert(ShuffleSpecCollection(Seq(
         HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution),

@@ -83,15 +83,14 @@ trait FileScan extends Scan
   protected def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
   private lazy val (normalizedPartitionFilters, normalizedDataFilters) = {
-    val output = readSchema().toAttributes
     val partitionFilterAttributes = AttributeSet(partitionFilters).map(a => a.name -> a).toMap
-    val dataFiltersAttributes = AttributeSet(dataFilters).map(a => a.name -> a).toMap
     val normalizedPartitionFilters = ExpressionSet(partitionFilters.map(
-      QueryPlan.normalizeExpressions(_,
-        output.map(a => partitionFilterAttributes.getOrElse(a.name, a)))))
+      QueryPlan.normalizeExpressions(_, fileIndex.partitionSchema.toAttributes
+        .map(a => partitionFilterAttributes.getOrElse(a.name, a)))))
+    val dataFiltersAttributes = AttributeSet(dataFilters).map(a => a.name -> a).toMap
     val normalizedDataFilters = ExpressionSet(dataFilters.map(
-      QueryPlan.normalizeExpressions(_,
-        output.map(a => dataFiltersAttributes.getOrElse(a.name, a)))))
+      QueryPlan.normalizeExpressions(_, dataSchema.toAttributes
+        .map(a => dataFiltersAttributes.getOrElse(a.name, a)))))
     (normalizedPartitionFilters, normalizedDataFilters)
   }
 
@@ -164,7 +163,7 @@ trait FileScan extends Scan
     }
 
     if (splitFiles.length == 1) {
-      val path = new Path(splitFiles(0).filePath)
+      val path = splitFiles(0).toPath
       if (!isSplitable(path) && splitFiles(0).length >
         sparkSession.sparkContext.getConf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
         logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +

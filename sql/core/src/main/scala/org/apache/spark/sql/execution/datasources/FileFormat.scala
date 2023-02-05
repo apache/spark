@@ -61,6 +61,11 @@ trait FileFormat {
 
   /**
    * Returns whether this format supports returning columnar batch or not.
+   * If columnar batch output is requested, users shall supply
+   * FileFormat.OPTION_RETURNING_BATCH -> true
+   * in relation options when calling buildReaderWithPartitionValues.
+   * This should only be passed as true if it can actually be supported.
+   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
    *
    * TODO: we should just have different traits for the different formats.
    */
@@ -191,19 +196,30 @@ object FileFormat {
 
   val METADATA_NAME = "_metadata"
 
-  /** Schema of metadata struct that can be produced by every file format. */
+  /**
+   * Option to pass to buildReaderWithPartitionValues to return columnar batch output or not.
+   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
+   * This should only be passed as true if it can actually be supported, which can be checked
+   * by calling supportBatch.
+   */
+  val OPTION_RETURNING_BATCH = "returning_batch"
+
+  /**
+   * Schema of metadata struct that can be produced by every file format,
+   * metadata fields for every file format must be *not* nullable.
+   * */
   val BASE_METADATA_STRUCT: StructType = new StructType()
-    .add(StructField(FileFormat.FILE_PATH, StringType))
-    .add(StructField(FileFormat.FILE_NAME, StringType))
-    .add(StructField(FileFormat.FILE_SIZE, LongType))
-    .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType))
+    .add(StructField(FileFormat.FILE_PATH, StringType, nullable = false))
+    .add(StructField(FileFormat.FILE_NAME, StringType, nullable = false))
+    .add(StructField(FileFormat.FILE_SIZE, LongType, nullable = false))
+    .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
   /**
    * Create a file metadata struct column containing fields supported by the given file format.
    */
   def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
     val struct = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
-      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType))
+      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType, nullable = false))
     } else {
       BASE_METADATA_STRUCT
     }
@@ -242,15 +258,6 @@ object FileFormat {
       }
     }
     row
-  }
-
-  /**
-   * Returns true if the given metadata column always contains identical values for all rows
-   * originating from the same data file.
-   */
-  def isConstantMetadataAttr(name: String): Boolean = name match {
-    case FILE_PATH | FILE_NAME | FILE_SIZE | FILE_MODIFICATION_TIME => true
-    case ROW_INDEX => false
   }
 }
 

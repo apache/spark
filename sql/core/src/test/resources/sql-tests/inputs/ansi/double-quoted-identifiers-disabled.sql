@@ -1,0 +1,2 @@
+--SET spark.sql.ansi.doubleQuotedIdentifiers=false
+--IMPORT double-quoted-identifiers.sql

@@ -233,3 +233,12 @@ private[sql] abstract class DatetimeType extends AtomicType
  * The interval type which conforms to the ANSI SQL standard.
  */
 private[sql] abstract class AnsiIntervalType extends AtomicType
+
+private[spark] object AnsiIntervalType extends AbstractDataType {
+  override private[sql] def simpleString: String = "ANSI interval"
+
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[AnsiIntervalType]
+
+  override private[sql] def defaultConcreteType: DataType = DayTimeIntervalType()
+}

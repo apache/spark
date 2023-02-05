@@ -130,10 +130,12 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
   }
 
   test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchDatabaseException] {
+    val e = intercept[NoSuchDatabaseException] {
       runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`unknown`"))
   }
 
 }

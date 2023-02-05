@@ -25,6 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -65,8 +67,6 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 case class ConcatWs(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, s"$prettyName requires at least one argument.")
-
   override def prettyName: String = "concat_ws"
 
   /** The 1st child (separator) is str, and rest are either str or array of str. */
@@ -79,6 +79,16 @@ case class ConcatWs(children: Seq[Expression])
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length
+      )
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     val flatInputs = children.flatMap { child =>
@@ -273,20 +283,32 @@ case class Elt(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
-      TypeCheckResult.TypeCheckFailure("elt function requires at least two arguments")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else {
       val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
       if (indexType != IntegerType) {
-        return TypeCheckResult.TypeCheckFailure(s"first input to function $prettyName should " +
-          s"have ${IntegerType.catalogString}, but it's ${indexType.catalogString}")
+        return DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> toSQLType(IntegerType),
+            "inputSql" -> toSQLExpr(indexExpr),
+            "inputType" -> toSQLType(indexType)))
       }
       if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
-        return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have ${StringType.catalogString} or " +
-            s"${BinaryType.catalogString}, but it's " +
-            inputTypes.map(_.catalogString).mkString("[", ", ", "]"))
+        return DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2...",
+            "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
+            "inputSql" -> inputExprs.map(toSQLExpr(_)).mkString(","),
+            "inputType" -> inputTypes.map(toSQLType(_)).mkString(",")
+          )
+        )
       }
-      TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(inputTypes, prettyName)
     }
   }
 
@@ -488,7 +510,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
         createStringPredicate(expressions(0), expressions(1))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
   }
 
@@ -763,7 +785,7 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       TypeUtils.checkForSameTypeInputExpr(
-        input.dataType :: replace.dataType :: Nil, s"function $prettyName")
+        input.dataType :: replace.dataType :: Nil, prettyName)
     } else {
       inputTypeCheck
     }
@@ -1486,7 +1508,7 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
         createStringPad(expressions(0), expressions(1), expressions(2))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2, 3), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
     }
   }
 
@@ -1643,8 +1665,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
 // scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+  if (children.nonEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
     checkArgumentIndexNotZero(children(0))
   }
 
@@ -1655,6 +1676,16 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def inputTypes: Seq[AbstractDataType] =
     StringType :: List.fill(children.size - 1)(AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+          toSQLId(prettyName), Seq("> 0"), children.length
+      )
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     val pattern = children(0).eval(input)
@@ -2179,9 +2210,10 @@ case class Ascii(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any = {
-    val bytes = string.asInstanceOf[UTF8String].getBytes
-    if (bytes.length > 0) {
-      bytes(0).asInstanceOf[Int]
+    // only pick the first character to reduce the `toString` cost
+    val firstCharStr = string.asInstanceOf[UTF8String].substring(0, 1)
+    if (firstCharStr.numChars > 0) {
+      firstCharStr.toString.codePointAt(0)
     } else {
       0
     }
@@ -2189,11 +2221,11 @@ case class Ascii(child: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      val bytes = ctx.freshName("bytes")
+      val firstCharStr = ctx.freshName("firstCharStr")
       s"""
-        byte[] $bytes = $child.getBytes();
-        if ($bytes.length > 0) {
-          ${ev.value} = (int) $bytes[0];
+        UTF8String $firstCharStr = $child.substring(0, 1);
+        if ($firstCharStr.numChars() > 0) {
+          ${ev.value} = $firstCharStr.toString().codePointAt(0);
         } else {
           ${ev.value} = 0;
         }
@@ -2299,31 +2331,112 @@ case class Base64(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class UnBase64(child: Expression)
+case class UnBase64(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
-  protected override def nullSafeEval(string: Any): Any =
+  def this(expr: Expression) = this(expr, false)
+
+  protected override def nullSafeEval(string: Any): Any = {
+    if (failOnError && !UnBase64.isValidBase64(string.asInstanceOf[UTF8String])) {
+      // The failOnError is set only from `ToBinary` function - hence we might safely set `hint`
+      // parameter to `try_to_binary`.
+      throw QueryExecutionErrors.invalidInputInConversionError(
+        BinaryType,
+        string.asInstanceOf[UTF8String],
+        UTF8String.fromString("BASE64"),
+        "try_to_binary")
+    }
     JBase64.getMimeDecoder.decode(string.asInstanceOf[UTF8String].toString)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
+    nullSafeCodeGen(ctx, ev, child => {
+      val maybeValidateInputCode = if (failOnError) {
+        val unbase64 = UnBase64.getClass.getName.stripSuffix("$")
+        val format = UTF8String.fromString("BASE64");
+        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
+        s"""
+           |if (!$unbase64.isValidBase64($child)) {
+           |  throw QueryExecutionErrors.invalidInputInConversionError(
+           |    $binaryType,
+           |    $child,
+           |    $format,
+           |    "try_to_binary");
+           |}
+       """.stripMargin
+      } else {
+        ""
+      }
       s"""
+         $maybeValidateInputCode
          ${ev.value} = ${classOf[JBase64].getName}.getMimeDecoder().decode($child.toString());
        """})
   }
 
   override protected def withNewChildInternal(newChild: Expression): UnBase64 =
-    copy(child = newChild)
+    copy(child = newChild, failOnError)
+}
+
+object UnBase64 {
+  def isValidBase64(srcString: UTF8String) : Boolean = {
+    // We use RFC4648. The valid base64 string should contain zero or more groups of 4 symbols plus
+    // last group consisting of 2-4 valid symbols and optional padding.
+    // Last group should contain at least 2 valid symbols and up to 2 padding characters `=`.
+    // Valid symbols include - (A-Za-z0-9+/). Each group might contain arbitrary number of
+    // whitespaces which are ignored.
+    // If padding is present - last group should include exactly 4 symbols.
+    // Examples:
+    //    "abcd"      - Valid, single group of 4 valid symbols
+    //    "abc d"     - Valid, single group of 4 valid symbols, whitespace is skipped
+    //    "abc?"      - Invalid, group contains invalid symbol `?`
+    //    "abcdA"     - Invalid, last group should contain at least 2 valid symbols
+    //    "abcdAE"    - Valid, a group of 4 valid symbols and a group of 2 valid symbols
+    //    "abcdAE=="  - Valid, last group includes 2 padding symbols and total number of symbols
+    //                  in a group is 4.
+    //    "abcdAE="   - Invalid, last group include padding symbols, therefore it should have
+    //                  exactly 4 symbols but contains only 3.
+    //    "ab==tm+1"  - Invalid, nothing should be after padding.
+    var position = 0
+    var padSize = 0
+    for (c: Char <- srcString.toString) {
+      c match {
+        case a
+          if (a >= '0' && a <= '9')
+            || (a >= 'A' && a <= 'Z')
+            || (a >= 'a' && a <= 'z')
+            || a == '/' || a == '+' =>
+          if (padSize != 0) return false // Padding symbols should conclude the string.
+          position += 1
+        case '=' =>
+          padSize += 1
+          // Last group preceding padding should have 2 or more symbols. Padding size should be 1 or
+          // less.
+          if (padSize > 2 || position % 4 < 2) {
+            return false
+          }
+        case ws if Character.isWhitespace(ws) =>
+          if (padSize != 0) { // Padding symbols should conclude the string.
+            return false
+          }
+        case _ => return false
+      }
+    }
+    if (padSize > 0) { // When padding is present last group should have exactly 4 symbols.
+      (position + padSize) % 4 == 0
+    } else { // When padding is absent last group should include 2 or more symbols.
+      position % 4 != 1
+    }
+  }
 }
 
 object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
       case 0 | 1 =>
-        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
+        throw QueryCompilationErrors.wrongNumArgsError("decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head
@@ -2334,7 +2447,7 @@ object Decode {
         while (itr.hasNext) {
           val search = itr.next
           if (itr.hasNext) {
-            val condition = EqualTo(input, search)
+            val condition = EqualNullSafe(input, search)
             branches += ((condition, itr.next))
           } else {
             default = search
@@ -2365,6 +2478,8 @@ object Decode {
        Non domestic
       > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
        NULL
+      > SELECT _FUNC_(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
+       SQL
   """,
   since = "3.2.0",
   group = "string_funcs")
@@ -2424,6 +2539,8 @@ case class StringDecode(bin: Expression, charset: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): StringDecode =
     copy(bin = newLeft, charset = newRight)
+
+  override def prettyName: String = "decode"
 }
 
 /**
@@ -2472,11 +2589,10 @@ case class Encode(value: Expression, charset: Expression)
 /**
  * Converts the input expression to a binary value based on the supplied format.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
-      `fmt` can be a case-insensitive string literal of "hex", "utf-8", or "base64".
+      `fmt` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
       By default, the binary format for conversion is "hex" if `fmt` is omitted.
       The function returns NULL if at least one of the input parameters is NULL.
   """,
@@ -2487,44 +2603,36 @@ case class Encode(value: Expression, charset: Expression)
   """,
   since = "3.3.0",
   group = "string_funcs")
-// scalastyle:on line.size.limit
 case class ToBinary(
     expr: Expression,
     format: Option[Expression],
     nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
-  with ImplicitCastInputTypes {
+    with ImplicitCastInputTypes {
 
-  override lazy val replacement: Expression = format.map { f =>
-    assert(f.foldable && (f.dataType == StringType || f.dataType == NullType))
+  @transient lazy val fmt: String = format.map { f =>
     val value = f.eval()
     if (value == null) {
-      Literal(null, BinaryType)
+      null
     } else {
-      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
-        case "hex" => Unhex(expr)
-        case "utf-8" => Encode(expr, Literal("UTF-8"))
-        case "base64" => UnBase64(expr)
-        case _ if nullOnInvalidFormat => Literal(null, BinaryType)
-        case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
-          "to_binary", "format", other,
-          Some("The value has to be a case-insensitive string literal of " +
-            "'hex', 'utf-8', or 'base64'."))
-      }
+      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT)
     }
-  }.getOrElse(Unhex(expr))
+  }.getOrElse("hex")
+
+  override lazy val replacement: Expression = if (fmt == null) {
+    Literal(null, BinaryType)
+  } else {
+    fmt match {
+      case "hex" => Unhex(expr, failOnError = true)
+      case "utf-8" | "utf8" => Encode(expr, Literal("UTF-8"))
+      case "base64" => UnBase64(expr, failOnError = true)
+      case _ => Literal(null, BinaryType)
+    }
+  }
 
   def this(expr: Expression) = this(expr, None, false)
 
-  def this(expr: Expression, format: Expression) = this(expr, Some({
-      // We perform this check in the constructor to make it eager and not go through type coercion.
-      if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
-        format
-      } else {
-        throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
-      }
-    }),
-    false
-    )
+  def this(expr: Expression, format: Expression) =
+    this(expr, Some(format), false)
 
   override def prettyName: String = "to_binary"
 
@@ -2532,13 +2640,57 @@ case class ToBinary(
 
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringType)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    def isValidFormat: Boolean = {
+      fmt == null || Set("hex", "utf-8", "utf8", "base64").contains(fmt)
+    }
+    format match {
+      case Some(f) =>
+        if (f.foldable && (f.dataType == StringType || f.dataType == NullType)) {
+          if (isValidFormat || nullOnInvalidFormat) {
+            super.checkInputDataTypes()
+          } else {
+            DataTypeMismatch(
+              errorSubClass = "INVALID_ARG_VALUE",
+              messageParameters = Map(
+                "inputName" -> "fmt",
+                "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+                "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
+                "inputValue" -> toSQLValue(fmt, StringType)
+              )
+            )
+          }
+        } else if (!f.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "fmt",
+              "inputType" -> toSQLType(StringType),
+              "inputExpr" -> toSQLExpr(f)
+            )
+          )
+        } else {
+          DataTypeMismatch(
+            errorSubClass = "INVALID_ARG_VALUE",
+            messageParameters = Map(
+              "inputName" -> "fmt",
+              "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+              "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
+              "inputValue" -> toSQLValue(f.eval(), f.dataType)
+            )
+          )
+        }
+      case _ => super.checkInputDataTypes()
+    }
+  }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    if (format.isDefined) {
-      copy(expr = newChildren.head, format = Some(newChildren.last))
-    } else {
-      copy(expr = newChildren.head)
-    }
+      if (format.isDefined) {
+        copy(expr = newChildren.head, format = Some(newChildren.last))
+      } else {
+        copy(expr = newChildren.head)
+      }
   }
 }
 
@@ -2789,9 +2941,9 @@ case class Sentences(
         widx = wi.current
         if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
       }
-      result += new GenericArrayData(words.toSeq)
+      result += new GenericArrayData(words)
     }
-    new GenericArrayData(result.toSeq)
+    new GenericArrayData(result)
   }
 
   override protected def withNewChildrenInternal(
@@ -2871,4 +3023,68 @@ case class SplitPart (
     copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
       partNum = newChildren.apply(2))
   }
+}
+
+/**
+ * A internal function that converts the empty string to null for partition values.
+ * This function should be only used in V1Writes.
+ */
+case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+
+  override def nullable: Boolean = true
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      s"""if ($c.numBytes() == 0) {
+         |  ${ev.isNull} = true;
+         |  ${ev.value} = null;
+         |} else {
+         |  ${ev.value} = $c;
+         |}""".stripMargin
+    })
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+    copy(child = newChild)
+}
+
+/**
+ * Function to check if a given number string is a valid Luhn number. Returns true, if the number
+ * string is a valid Luhn number, false otherwise.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str ) - Checks that a string of digits is valid according to the Luhn algorithm.
+    This checksum function is widely applied on credit card numbers and government identification
+    numbers to distinguish valid numbers from mistyped, incorrect numbers.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('8112189876');
+       true
+      > SELECT _FUNC_('79927398713');
+       true
+      > SELECT _FUNC_('79927398714');
+       false
+  """,
+  since = "3.5.0",
+  group = "string_funcs")
+case class Luhncheck(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BooleanType,
+    "isLuhnNumber",
+    Seq(input),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def prettyName: String = "luhn_check"
+
+  override def children: Seq[Expression] = Seq(input)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = copy(newChildren(0))
 }

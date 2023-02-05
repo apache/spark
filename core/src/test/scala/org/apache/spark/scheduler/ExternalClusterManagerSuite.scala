@@ -80,7 +80,7 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
   override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
   override def start(): Unit = {}
-  override def stop(): Unit = {}
+  override def stop(exitCode: Int): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {}
   override def killTaskAttempt(

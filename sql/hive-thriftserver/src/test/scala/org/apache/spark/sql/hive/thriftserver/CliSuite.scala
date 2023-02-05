@@ -32,14 +32,14 @@ import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.HiveTestJars
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -388,8 +388,7 @@ class CliSuite extends SparkFunSuite {
   test("SPARK-11188 Analysis error reporting") {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
-      "select * from nonexistent_table;"
-        -> "Error in query: Table or view not found: nonexistent_table;"
+      "select * from nonexistent_table;" -> "nonexistent_table"
     )
   }
 
@@ -627,13 +626,14 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
-    runCliWithin(2.minute)(
+    runCliWithin(5.minute)(
       // Only unclosed comment.
       "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
       // Unclosed nested bracketed comment.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
       // Unclosed comment with query.
-      "/* Here is a unclosed bracketed comment SELECT 1;"-> "Unclosed bracketed comment",
+      "/* Here is a unclosed bracketed comment SELECT 1;"->
+        "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
       // Whole comment.
       "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
     )
@@ -641,7 +641,7 @@ class CliSuite extends SparkFunSuite {
 
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
-      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'(line 1, pos 7)")
+      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'.(line 1, pos 7)")
   }
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {
@@ -697,5 +697,95 @@ class CliSuite extends SparkFunSuite {
     t.start()
     t.start()
     cd.await()
+  }
+
+  // scalastyle:off line.size.limit
+  test("formats of error messages") {
+    def check(format: ErrorMessageFormat.Value, errorMessage: String, silent: Boolean): Unit = {
+      val expected = errorMessage.split(System.lineSeparator()).map("" -> _)
+      runCliWithin(
+        1.minute,
+        extraArgs = Seq(
+          "--conf", s"spark.hive.session.silent=$silent",
+          "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=$format",
+          "--conf", s"${SQLConf.ANSI_ENABLED.key}=true",
+          "-e", "select 1 / 0"),
+        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected: _*)
+    }
+    check(
+      format = ErrorMessageFormat.PRETTY,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL(line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin,
+      silent = true)
+    check(
+      format = ErrorMessageFormat.PRETTY,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL(line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |
+          |org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |""".stripMargin,
+      silent = false)
+    Seq(true, false).foreach { silent =>
+      check(
+        format = ErrorMessageFormat.MINIMAL,
+        errorMessage =
+          """{
+            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "sqlState" : "22012",
+            |  "messageParameters" : {
+            |    "config" : "\"spark.sql.ansi.enabled\""
+            |  },
+            |  "queryContext" : [ {
+            |    "objectType" : "",
+            |    "objectName" : "",
+            |    "startIndex" : 8,
+            |    "stopIndex" : 12,
+            |    "fragment" : "1 / 0"
+            |  } ]
+            |}""".stripMargin,
+        silent)
+      check(
+        format = ErrorMessageFormat.STANDARD,
+        errorMessage =
+          """{
+            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+            |  "sqlState" : "22012",
+            |  "messageParameters" : {
+            |    "config" : "\"spark.sql.ansi.enabled\""
+            |  },
+            |  "queryContext" : [ {
+            |    "objectType" : "",
+            |    "objectName" : "",
+            |    "startIndex" : 8,
+            |    "stopIndex" : 12,
+            |    "fragment" : "1 / 0"
+            |  } ]
+            |}""".stripMargin,
+        silent)
+    }
+  }
+  // scalastyle:on line.size.limit
+
+  test("SPARK-35242: Support change catalog default database for spark") {
+    // Create db and table first
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}"))(
+      "create database spark_35242;" -> "",
+      "use spark_35242;" -> "",
+      "CREATE TABLE spark_test(key INT, val STRING);" -> "")
+
+    // Set default db
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}",
+          "--conf", s"${StaticSQLConf.CATALOG_DEFAULT_DATABASE.key}=spark_35242"))(
+      "show tables;" -> "spark_test")
   }
 }

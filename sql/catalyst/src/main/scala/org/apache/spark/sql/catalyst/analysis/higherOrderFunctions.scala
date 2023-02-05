@@ -72,14 +72,16 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
     case LambdaFunction(function, names, _) =>
       if (names.size != argInfo.size) {
         e.failAnalysis(
-          s"The number of lambda function arguments '${names.size}' does not " +
-            "match the number of arguments expected by the higher order function " +
-            s"'${argInfo.size}'.")
+          errorClass = "_LEGACY_ERROR_TEMP_2300",
+          messageParameters = Map(
+            "namesSize" -> names.size.toString,
+            "argInfoSize" -> argInfo.size.toString))
       }
 
       if (names.map(a => canonicalizer(a.name)).distinct.size < names.size) {
         e.failAnalysis(
-          "Lambda function arguments should not have names that are semantically the same.")
+          errorClass = "_LEGACY_ERROR_TEMP_2301",
+          messageParameters = Map.empty)
       }
 
       val arguments = argInfo.zip(names).map {

@@ -22,7 +22,7 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                                   WholeStageCodegen (1)
                                     Filter [d_date_sk,d_week_seq]
                                       Subquery #1
-                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 2680, 0, 0),bloomFilter,buf]
+                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 8990, 0, 0),bloomFilter,buf]
                                           Exchange #3
                                             ObjectHashAggregate [d_week_seq] [buf,buf]
                                               WholeStageCodegen (1)
@@ -72,7 +72,7 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                                         WholeStageCodegen (5)
                                           Filter [d_date_sk,d_week_seq]
                                             Subquery #2
-                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 2680, 0, 0),bloomFilter,buf]
+                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 8990, 0, 0),bloomFilter,buf]
                                                 Exchange #9
                                                   ObjectHashAggregate [d_week_seq] [buf,buf]
                                                     WholeStageCodegen (1)

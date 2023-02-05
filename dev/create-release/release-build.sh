@@ -324,7 +324,6 @@ if [[ "$1" == "package" ]]; then
   BINARY_PKGS_ARGS["hadoop3"]="-Phadoop-3 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
-    BINARY_PKGS_ARGS["hadoop2"]="-Phadoop-2 $HIVE_PROFILES"
   fi
 
   declare -A BINARY_PKGS_EXTRA

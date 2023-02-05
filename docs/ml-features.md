@@ -1875,7 +1875,7 @@ for more details on the API.
 ## VarianceThresholdSelector
 
 `VarianceThresholdSelector` is a selector that removes low-variance features. Features with a
- variance not greater than the `varianceThreshold` will be removed. If not set, `varianceThreshold`
+ (sample) variance not greater than the `varianceThreshold` will be removed. If not set, `varianceThreshold`
  defaults to 0, which means only features with variance 0 (i.e. features that have the same value in all samples)
  will be removed.
 
@@ -1895,7 +1895,7 @@ id | features
  6 | [8.0, 9.0, 6.0, 0.0, 0.0, 0.0]
 ~~~
 
-The variance for the 6 features are 16.67, 0.67, 8.17, 10.17,
+The sample variances for the 6 features are 16.67, 0.67, 8.17, 10.17,
 5.07, and 11.47 respectively. If we use `VarianceThresholdSelector` with
 `varianceThreshold = 8.0`, then the features with variance <= 8.0 are removed:
 

@@ -670,6 +670,16 @@ setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSp
 #' @rdname broadcast
 setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 
+#' @rdname unpivot
+setGeneric("unpivot", function(x, ids, values, variableColumnName, valueColumnName) {
+  standardGeneric("unpivot")
+})
+
+#' @rdname melt
+setGeneric("melt", function(x, ids, values, variableColumnName, valueColumnName) {
+  standardGeneric("melt")
+})
+
 ###################### Column Methods ##########################
 
 #' @rdname columnfunctions
@@ -840,7 +850,7 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+setGeneric("array_sort", function(x, ...) { standardGeneric("array_sort") })
 
 #' @rdname column_ml_functions
 #' @name NULL

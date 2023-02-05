@@ -113,7 +113,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
 
         Seq("mkdir", targetDir).!
-        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
+        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1",
+          "--no-same-owner").!
         Seq("rm", downloaded).!
 
         // For a corrupted file, `tar` returns non-zero values. However, we also need to check
@@ -201,7 +202,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // scalastyle:on line.size.limit
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
-      logError("Fail to get the latest Spark versions to test.")
+      if (PROCESS_TABLES.isPythonVersionAvailable) {
+        logError("Fail to get the latest Spark versions to test.")
+      } else {
+        logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
+          "the running environment is unavailable.")
+      }
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
@@ -233,6 +239,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 
   test("backward compatibility") {
+    assume(PROCESS_TABLES.isPythonVersionAvailable)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
@@ -249,10 +256,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line.
-  val testingVersions: Seq[String] = {
+  val testingVersions: Seq[String] = if (isPythonVersionAvailable) {
     import scala.io.Source
     val versions: Seq[String] = try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
@@ -266,12 +274,9 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil
     }
-    versions
-      .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
-      .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
-      .filter(v => !((v.startsWith("3.0") || v.startsWith("3.1")) &&
-        SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
-  }
+    versions.filter(v => !(v.startsWith("3.1") &&
+      SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
+  } else Seq.empty[String]
 
   protected var spark: SparkSession = _
 

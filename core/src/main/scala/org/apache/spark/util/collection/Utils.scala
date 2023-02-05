@@ -17,9 +17,12 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.JavaConverters._
+import java.util.Collections
 
-import com.google.common.collect.{Ordering => GuavaOrdering}
+import scala.collection.JavaConverters._
+import scala.collection.immutable
+
+import com.google.common.collect.{Iterators => GuavaIterators, Ordering => GuavaOrdering}
 
 /**
  * Utility functions for collections.
@@ -38,6 +41,23 @@ private[spark] object Utils {
   }
 
   /**
+   * Returns an iterator over the merged contents of all given input iterators,
+   * traversing every element of the input iterators.
+   * Equivalent entries will not be de-duplicated.
+   *
+   * Callers must ensure that all the input iterators are already sorted by
+   * the same ordering `ord`, otherwise the result is likely to be incorrect.
+   */
+  def mergeOrdered[T](inputs: Iterable[TraversableOnce[T]])(
+    implicit ord: Ordering[T]): Iterator[T] = {
+    val ordering = new GuavaOrdering[T] {
+      override def compare(l: T, r: T): Int = ord.compare(l, r)
+    }
+    GuavaIterators.mergeSorted(
+      inputs.map(_.toIterator.asJava).asJava, ordering).asScala
+  }
+
+  /**
    * Only returns `Some` iff ALL elements in `input` are defined. In this case, it is
    * equivalent to `Some(input.flatten)`.
    *
@@ -45,4 +65,44 @@ private[spark] object Utils {
    */
   def sequenceToOption[T](input: Seq[Option[T]]): Option[Seq[T]] =
     if (input.forall(_.isDefined)) Some(input.flatten) else None
+
+  /**
+   * Same function as `keys.zip(values).toMap`, but has perf gain.
+   */
+  def toMap[K, V](keys: Iterable[K], values: Iterable[V]): Map[K, V] = {
+    val builder = immutable.Map.newBuilder[K, V]
+    val keyIter = keys.iterator
+    val valueIter = values.iterator
+    while (keyIter.hasNext && valueIter.hasNext) {
+      builder += (keyIter.next(), valueIter.next()).asInstanceOf[(K, V)]
+    }
+    builder.result()
+  }
+
+  /**
+   * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
+   */
+  def toMapWithIndex[K](keys: Iterable[K]): Map[K, Int] = {
+    val builder = immutable.Map.newBuilder[K, Int]
+    val keyIter = keys.iterator
+    var idx = 0
+    while (keyIter.hasNext) {
+      builder += (keyIter.next(), idx).asInstanceOf[(K, Int)]
+      idx = idx + 1
+    }
+    builder.result()
+  }
+
+  /**
+   * Same function as `keys.zip(values).toMap.asJava`, but has perf gain.
+   */
+  def toJavaMap[K, V](keys: Iterable[K], values: Iterable[V]): java.util.Map[K, V] = {
+    val map = new java.util.HashMap[K, V]()
+    val keyIter = keys.iterator
+    val valueIter = values.iterator
+    while (keyIter.hasNext && valueIter.hasNext) {
+      map.put(keyIter.next(), valueIter.next())
+    }
+    Collections.unmodifiableMap(map)
+  }
 }

@@ -23,9 +23,12 @@ import tempfile
 import time
 import unittest
 from typing import cast
+import io
+from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
+from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -40,7 +43,13 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.errors import (
+    AnalysisException,
+    IllegalArgumentException,
+    SparkConnectException,
+    SparkConnectAnalysisException,
+    PySparkTypeError,
+)
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SQLTestUtils,
@@ -52,7 +61,7 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.utils import QuietTest
 
 
-class DataFrameTests(ReusedSQLTestCase):
+class DataFrameTestsMixin:
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -73,7 +82,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
-        df = self.sc.parallelize(vals).toDF()
+        df = self.spark.createDataFrame(vals)
         items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
         self.assertTrue(1 in items[0])
         self.assertTrue(-2.0 in items[1])
@@ -96,6 +105,27 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
+    def test_with_columns_renamed(self):
+        df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
+
+        # rename both columns
+        renamed_df1 = df.withColumnsRenamed({"name": "naam", "age": "leeftijd"})
+        self.assertEqual(renamed_df1.columns, ["naam", "leeftijd"])
+
+        # rename one column with one missing name
+        renamed_df2 = df.withColumnsRenamed({"name": "naam", "address": "adres"})
+        self.assertEqual(renamed_df2.columns, ["naam", "age"])
+
+        # negative test for incorrect type
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.withColumnsRenamed(("name", "x"))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_DICT",
+            message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
+        )
+
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
@@ -107,9 +137,14 @@ class DataFrameTests(ReusedSQLTestCase):
 
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
 
-        type_error_msg = "Parameter 'subset' must be a list of columns"
-        with self.assertRaisesRegex(TypeError, type_error_msg):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates("name")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "str"},
+        )
 
     def test_dropna(self):
         schema = StructType(
@@ -185,6 +220,15 @@ class DataFrameTests(ReusedSQLTestCase):
             1,
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 50, None)], schema).dropna(subset=10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
     def test_fillna(self):
         schema = StructType(
             [
@@ -256,6 +300,24 @@ class DataFrameTests(ReusedSQLTestCase):
         row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
         self.assertEqual(row.a, True)
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna(["a", True])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "value", "arg_type": "list"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna(50, subset=10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
     def test_repartitionByRange_dataframe(self):
         schema = StructType(
             [
@@ -288,6 +350,15 @@ class DataFrameTests(ReusedSQLTestCase):
         df5 = df1.repartitionByRange(5, "name", "age")
         self.assertEqual(df5.rdd.first(), df2.rdd.first())
         self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df1.repartitionByRange([10], "name", "age")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+        )
 
     def test_replace(self):
         schema = StructType(
@@ -470,12 +541,23 @@ class DataFrameTests(ReusedSQLTestCase):
                 {"Alice": "Bob", 10: 20}
             ).first()
 
-        with self.assertRaisesRegex(
-            TypeError, "value argument is required when to_replace is not a dictionary."
-        ):
-            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(
-                ["Alice", "Bob"]
-            ).first()
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(["Alice", "Bob"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="ARGUMENT_REQUIRED",
+            message_parameters={"arg_name": "value", "condition": "`to_replace` is dict"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(lambda x: x + 1, 10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
+            message_parameters={"arg_name": "to_replace", "arg_type": "function"},
+        )
 
     def test_with_column_with_existing_name(self):
         keys = self.df.withColumn("key", self.df.key).select("key").collect()
@@ -514,34 +596,36 @@ class DataFrameTests(ReusedSQLTestCase):
 
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
-        self.assertRaises(AssertionError, self.df.withColumns)
+        self.assertRaises(Exception, self.df.withColumns)
 
     def test_generic_hints(self):
-        from pyspark.sql import DataFrame
-
         df1 = self.spark.range(10e10).toDF("id")
         df2 = self.spark.range(10e10).toDF("id")
 
-        self.assertIsInstance(df1.hint("broadcast"), DataFrame)
-        self.assertIsInstance(df1.hint("broadcast", []), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast"), type(df1))
 
         # Dummy rules
-        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), DataFrame)
-        self.assertIsInstance(df1.hint("broadcast", ["foo", "bar"]), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), type(df1))
 
-        plan = df1.join(df2.hint("broadcast"), "id")._jdf.queryExecution().executedPlan()
-        self.assertEqual(1, plan.toString().count("BroadcastHashJoin"))
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df1.join(df2.hint("broadcast"), "id").explain(True)
+            self.assertEqual(1, buf.getvalue().count("BroadcastHashJoin"))
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
         hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
-        logical_plan = hinted_df._jdf.queryExecution().logical()
 
-        self.assertEqual(1, logical_plan.toString().count("1.2345"))
-        self.assertEqual(1, logical_plan.toString().count("what"))
-        self.assertEqual(3, logical_plan.toString().count("itworks"))
+        self.assertIsInstance(df.hint("broadcast", []), type(df))
+        self.assertIsInstance(df.hint("broadcast", ["foo", "bar"]), type(df))
+
+        with io.StringIO() as buf, redirect_stdout(buf):
+            hinted_df.explain(True)
+            explain_output = buf.getvalue()
+            self.assertGreaterEqual(explain_output.count("1.2345"), 1)
+            self.assertGreaterEqual(explain_output.count("what"), 1)
+            self.assertGreaterEqual(explain_output.count("itworks"), 1)
 
     def test_unpivot(self):
         # SPARK-39877: test the DataFrame.unpivot method
@@ -554,114 +638,160 @@ class DataFrameTests(ReusedSQLTestCase):
             ["id", "int", "double", "str"],
         )
 
-        with self.subTest(desc="with no identifier and no value columns"):
+        with self.subTest(desc="with none identifier"):
+            with self.assertRaisesRegex(AssertionError, "ids must not be None"):
+                df.unpivot(None, ["int", "double"], "var", "val")
+
+        with self.subTest(desc="with no identifier"):
+            for id in [[], ()]:
+                with self.subTest(ids=id):
+                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(var="int", value=10.0),
+                            Row(var="double", value=1.0),
+                            Row(var="int", value=20.0),
+                            Row(var="double", value=2.0),
+                            Row(var="int", value=30.0),
+                            Row(var="double", value=3.0),
+                        ],
+                    )
+
+        with self.subTest(desc="with single identifier column"):
+            for id in ["id", ["id"], ("id",)]:
+                with self.subTest(ids=id):
+                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(),
+                        "struct<id:bigint,var:string,val:double>",
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", value=10.0),
+                            Row(id=1, var="double", value=1.0),
+                            Row(id=2, var="int", value=20.0),
+                            Row(id=2, var="double", value=2.0),
+                            Row(id=3, var="int", value=30.0),
+                            Row(id=3, var="double", value=3.0),
+                        ],
+                    )
+
+        with self.subTest(desc="with multiple identifier columns"):
+            for ids in [["id", "double"], ("id", "double")]:
+                with self.subTest(ids=ids):
+                    actual = df.unpivot(ids, ["int", "double"], "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(),
+                        "struct<id:bigint,double:double,var:string,val:double>",
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, double=1.0, var="int", value=10.0),
+                            Row(id=1, double=1.0, var="double", value=1.0),
+                            Row(id=2, double=2.0, var="int", value=20.0),
+                            Row(id=2, double=2.0, var="double", value=2.0),
+                            Row(id=3, double=3.0, var="int", value=30.0),
+                            Row(id=3, double=3.0, var="double", value=3.0),
+                        ],
+                    )
+
+        with self.subTest(desc="with no identifier columns but none value columns"):
             # select only columns that have common data type (double)
-            actual = df.select("id", "int", "double").unpivot(
-                ids=None, values=None, variableColumnName="var", valueColumnName="val"
-            )
+            actual = df.select("id", "int", "double").unpivot([], None, "var", "val")
             self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
             self.assertEqual(
                 actual.collect(),
                 [
-                    Row(variable="id", value=1.0),
-                    Row(variable="int", value=10.0),
-                    Row(variable="double", value=1.0),
-                    Row(variable="id", value=2.0),
-                    Row(variable="int", value=20.0),
-                    Row(variable="double", value=2.0),
-                    Row(variable="id", value=3.0),
-                    Row(variable="int", value=30.0),
-                    Row(variable="double", value=3.0),
+                    Row(var="id", value=1.0),
+                    Row(var="int", value=10.0),
+                    Row(var="double", value=1.0),
+                    Row(var="id", value=2.0),
+                    Row(var="int", value=20.0),
+                    Row(var="double", value=2.0),
+                    Row(var="id", value=3.0),
+                    Row(var="int", value=30.0),
+                    Row(var="double", value=3.0),
                 ],
             )
 
-        with self.subTest(desc="with no identifier column and multiple value columns"):
-            for id in [None, [], ()]:
-                for values in [["int", "double"], ("int", "double")]:
-                    with self.subTest(ids=id, values=values):
-                        actual = df.unpivot(id, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(), "struct<var:string,val:double>"
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(variable="int", value=10.0),
-                                Row(variable="double", value=1.0),
-                                Row(variable="int", value=20.0),
-                                Row(variable="double", value=2.0),
-                                Row(variable="int", value=30.0),
-                                Row(variable="double", value=3.0),
-                            ],
-                        )
+        with self.subTest(desc="with single identifier columns but none value columns"):
+            for ids in ["id", ["id"], ("id",)]:
+                with self.subTest(ids=ids):
+                    # select only columns that have common data type (double)
+                    actual = df.select("id", "int", "double").unpivot(ids, None, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", value=10.0),
+                            Row(id=1, var="double", value=1.0),
+                            Row(id=2, var="int", value=20.0),
+                            Row(id=2, var="double", value=2.0),
+                            Row(id=3, var="int", value=30.0),
+                            Row(id=3, var="double", value=3.0),
+                        ],
+                    )
 
-        with self.subTest(desc="with single identifier column and multiple value columns"):
-            for id in ["id", ["id"], ("id",)]:
-                for values in [["int", "double"], ("int", "double")]:
-                    with self.subTest(ids=id, values=values):
-                        actual = df.unpivot(id, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(),
-                            "struct<id:bigint,var:string,val:double>",
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(id=1, variable="int", value=10.0),
-                                Row(id=1, variable="double", value=1.0),
-                                Row(id=2, variable="int", value=20.0),
-                                Row(id=2, variable="double", value=2.0),
-                                Row(id=3, variable="int", value=30.0),
-                                Row(id=3, variable="double", value=3.0),
-                            ],
-                        )
-
-        with self.subTest(desc="with multiple identifier columns and single given value columns"):
-            for ids in [["id", "double"], ("id", "double")]:
-                for values in ["str", ["str"], ("str",)]:
-                    with self.subTest(ids=ids, values=values):
-                        actual = df.unpivot(ids, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(),
-                            "struct<id:bigint,double:double,var:string,val:string>",
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(id=1, double=1.0, variable="str", value="one"),
-                                Row(id=2, double=2.0, variable="str", value="two"),
-                                Row(id=3, double=3.0, variable="str", value="three"),
-                            ],
-                        )
-
-        with self.subTest(desc="with multiple identifier columns but no given value columns"):
+        with self.subTest(desc="with multiple identifier columns but none given value columns"):
             for ids in [["id", "str"], ("id", "str")]:
-                for values in [None, [], ()]:
-                    with self.subTest(ids=ids, values=values):
-                        actual = df.unpivot(ids, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(),
-                            "struct<id:bigint,str:string,var:string,val:double>",
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(id=1, str="one", variable="int", value=10.0),
-                                Row(id=1, str="one", variable="double", value=1.0),
-                                Row(id=2, str="two", variable="int", value=20.0),
-                                Row(id=2, str="two", variable="double", value=2.0),
-                                Row(id=3, str="three", variable="int", value=30.0),
-                                Row(id=3, str="three", variable="double", value=3.0),
-                            ],
-                        )
+                with self.subTest(ids=ids):
+                    actual = df.unpivot(ids, None, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(),
+                        "struct<id:bigint,str:string,var:string,val:double>",
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, str="one", var="int", val=10.0),
+                            Row(id=1, str="one", var="double", val=1.0),
+                            Row(id=2, str="two", var="int", val=20.0),
+                            Row(id=2, str="two", var="double", val=2.0),
+                            Row(id=3, str="three", var="int", val=30.0),
+                            Row(id=3, str="three", var="double", val=3.0),
+                        ],
+                    )
 
-        with self.subTest(desc="with value columns without common data type"):
-            with self.assertRaisesRegex(
-                AnalysisException,
-                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
-                r"a least common type, some types do not: .*",
-            ):
-                df.unpivot("id", ["int", "str"], "var", "val")
+        with self.subTest(desc="with single value column"):
+            for values in ["int", ["int"], ("int",)]:
+                with self.subTest(values=values):
+                    actual = df.unpivot("id", values, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(), "struct<id:bigint,var:string,val:bigint>"
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", val=10),
+                            Row(id=2, var="int", val=20),
+                            Row(id=3, var="int", val=30),
+                        ],
+                    )
+
+        with self.subTest(desc="with multiple value columns"):
+            for values in [["int", "double"], ("int", "double")]:
+                with self.subTest(values=values):
+                    actual = df.unpivot("id", values, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", val=10.0),
+                            Row(id=1, var="double", val=1.0),
+                            Row(id=2, var="int", val=20.0),
+                            Row(id=2, var="double", val=2.0),
+                            Row(id=3, var="int", val=30.0),
+                            Row(id=3, var="double", val=3.0),
+                        ],
+                    )
 
         with self.subTest(desc="with columns"):
             for id in [df.id, [df.id], (df.id,)]:
@@ -686,6 +816,35 @@ class DataFrameTests(ReusedSQLTestCase):
                 df.unpivot("id", ["int", "double"], "var", "val").collect(),
                 df.melt("id", ["int", "double"], "var", "val").collect(),
             )
+
+    def test_unpivot_negative(self):
+        # SPARK-39877: test the DataFrame.unpivot method
+        df = self.spark.createDataFrame(
+            [
+                (1, 10, 1.0, "one"),
+                (2, 20, 2.0, "two"),
+                (3, 30, 3.0, "three"),
+            ],
+            ["id", "int", "double", "str"],
+        )
+
+        with self.subTest(desc="with no value columns"):
+            for values in [[], ()]:
+                with self.subTest(values=values):
+                    with self.assertRaisesRegex(
+                        AnalysisException,
+                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
+                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
+                    ):
+                        df.unpivot("id", values, "var", "val").collect()
+
+        with self.subTest(desc="with value columns without common data type"):
+            with self.assertRaisesRegex(
+                AnalysisException,
+                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
+                r"a least common type, some types do not: .*",
+            ):
+                df.unpivot("id", ["int", "str"], "var", "val").collect()
 
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
@@ -788,7 +947,10 @@ class DataFrameTests(ReusedSQLTestCase):
 
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample(seed="abc"))
 
-        self.assertRaises(IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0))
+        self.assertRaises(
+            (IllegalArgumentException, SparkConnectException),
+            lambda: self.spark.range(1).sample(-1.0).count(),
+        )
 
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
@@ -1107,6 +1269,35 @@ class DataFrameTests(ReusedSQLTestCase):
                 pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
                 self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
+        pandas_requirement_message
+        or pyarrow_requirement_message
+        or "Pyarrow version must be 2.0.0 or higher",
+    )
+    def test_to_pandas_for_array_of_struct(self):
+        for is_arrow_enabled in [True, False]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": is_arrow_enabled}):
+                self.check_to_pandas_for_array_of_struct(is_arrow_enabled)
+
+    def check_to_pandas_for_array_of_struct(self, is_arrow_enabled):
+        # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
+        import numpy as np
+        import pandas as pd
+
+        df = self.spark.createDataFrame(
+            [[[("a", 2, 3.0), ("a", 2, 3.0)]], [[("b", 5, 6.0), ("b", 5, 6.0)]]],
+            "array_struct_col Array<struct<col1:string, col2:long, col3:double>>",
+        )
+
+        pdf = df.toPandas()
+        self.assertEqual(type(pdf), pd.DataFrame)
+        self.assertEqual(type(pdf["array_struct_col"]), pd.Series)
+        if is_arrow_enabled:
+            self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
+        else:
+            self.assertEqual(type(pdf["array_struct_col"][0]), list)
+
     def test_create_dataframe_from_array_of_long(self):
         import array
 
@@ -1125,15 +1316,15 @@ class DataFrameTests(ReusedSQLTestCase):
         )
         # test types are inferred correctly without specifying schema
         df = self.spark.createDataFrame(pdf)
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         # test with schema will accept pdf as input
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp_ntz")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampNTZType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampNTZType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):
@@ -1293,8 +1484,14 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_same_semantics_error(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(TypeError, "should be of DataFrame.*int"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 self.spark.range(10).sameSemantics(1)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_A_STRING",
+                message_parameters={"arg_name": "other", "arg_type": "int"},
+            )
 
     def test_input_files(self):
         tpath = tempfile.mkdtemp()
@@ -1323,12 +1520,32 @@ class DataFrameTests(ReusedSQLTestCase):
         df.show(n=5, truncate="1", vertical=False)
         df.show(n=5, truncate=1.5, vertical=False)
 
-        with self.assertRaisesRegex(TypeError, "Parameter 'n'"):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(True)
-        with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_AN_INTEGER",
+            message_parameters={"arg_name": "n", "arg_type": "bool"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(vertical="foo")
-        with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_BOOLEAN",
+            message_parameters={"arg_name": "vertical", "arg_type": "str"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(truncate="foo")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_BOOLEAN",
+            message_parameters={"arg_name": "truncate", "arg_type": "str"},
+        )
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -1378,13 +1595,48 @@ class DataFrameTests(ReusedSQLTestCase):
         # incompatible field nullability
         schema4 = StructType([StructField("j", LongType(), False)])
         self.assertRaisesRegex(
-            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4)
+            (AnalysisException, SparkConnectAnalysisException),
+            "NULLABLE_COLUMN_OR_FIELD",
+            lambda: df.to(schema4).count(),
         )
 
         # field cannot upcast
         schema5 = StructType([StructField("i", LongType())])
         self.assertRaisesRegex(
-            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5)
+            (AnalysisException, SparkConnectAnalysisException),
+            "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+            lambda: df.to(schema5).count(),
+        )
+
+    def test_repartition(self):
+        df = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.repartition([10], "name", "age").rdd.getNumPartitions()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+        )
+
+    def test_colregex(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).colRegex(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "colName", "arg_type": "int"},
+        )
+
+    def test_where(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).where(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "condition", "arg_type": "int"},
         )
 
 
@@ -1460,6 +1712,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'",
             )
+
+
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

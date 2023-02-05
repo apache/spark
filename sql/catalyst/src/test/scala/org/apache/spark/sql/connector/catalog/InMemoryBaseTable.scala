@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
@@ -70,7 +71,7 @@ abstract class InMemoryBaseTable(
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
-  private val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
+  private lazy val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -83,6 +84,7 @@ abstract class InMemoryBaseTable(
     case _: HoursTransform =>
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
+    case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -177,6 +179,13 @@ abstract class InMemoryBaseTable(
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
         ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
+      case NamedTransform("truncate", Seq(ref: NamedReference, length: Literal[_])) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (str: UTF8String, StringType) =>
+            str.substring(0, length.value.asInstanceOf[Int])
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
     }
   }
 
@@ -223,6 +232,17 @@ abstract class InMemoryBaseTable(
     dataMap(key).clear()
   }
 
+  def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
+    data.foreach { p =>
+      dataMap ++= dataMap.map { case (key, currentRows) =>
+        val newRows = new BufferedRows(currentRows.key)
+        newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
+        key -> newRows
+      }
+    }
+    this
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryBaseTable = {
     withData(data, schema)
   }
@@ -265,7 +285,19 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  case class InMemoryStats(sizeInBytes: OptionalLong, numRows: OptionalLong) extends Statistics
+  case class InMemoryStats(
+      sizeInBytes: OptionalLong,
+      numRows: OptionalLong,
+      override val columnStats: util.Map[NamedReference, ColumnStatistics])
+    extends Statistics
+
+  case class InMemoryColumnStats(
+      override val distinctCount: OptionalLong,
+      override val nullCount: OptionalLong) extends ColumnStatistics
+
+  case class InMemoryHistogramBin(lo: Double, hi: Double, ndv: Long) extends HistogramBin
+
+  case class InMemoryHistogram(height: Double, bins: Array[HistogramBin]) extends Histogram
 
   abstract class BatchScanBaseClass(
       var data: Seq[InputPartition],
@@ -277,7 +309,7 @@ abstract class InMemoryBaseTable(
 
     override def estimateStatistics(): Statistics = {
       if (data.isEmpty) {
-        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L))
+        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L), new util.HashMap())
       }
 
       val inputPartitions = data.map(_.asInstanceOf[BufferedRows])
@@ -286,7 +318,39 @@ abstract class InMemoryBaseTable(
       val objectHeaderSizeInBytes = 12L
       val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
       val sizeInBytes = numRows * rowSizeInBytes
-      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
+
+      val numOfCols = tableSchema.fields.length
+      val dataTypes = tableSchema.fields.map(_.dataType)
+      val colValueSets = new Array[util.HashSet[Object]](numOfCols)
+      val numOfNulls = new Array[Long](numOfCols)
+      for (i <- 0 until numOfCols) {
+        colValueSets(i) = new util.HashSet[Object]
+      }
+
+      inputPartitions.foreach(inputPartition =>
+        inputPartition.rows.foreach(row =>
+          for (i <- 0 until numOfCols) {
+            colValueSets(i).add(row.get(i, dataTypes(i)))
+            if (row.isNullAt(i)) {
+              numOfNulls(i) += 1
+            }
+          }
+        )
+      )
+
+      val map = new util.HashMap[NamedReference, ColumnStatistics]()
+      val colNames = tableSchema.fields.map(_.name)
+      var i = 0
+      for (col <- colNames) {
+        val fieldReference = FieldReference.column(col)
+        val colStats = InMemoryColumnStats(
+          OptionalLong.of(colValueSets(i).size()),
+          OptionalLong.of(numOfNulls(i)))
+        map.put(fieldReference, colStats)
+        i = i + 1
+      }
+
+      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows), map)
     }
 
     override def outputPartitioning(): Partitioning = {
@@ -468,6 +532,7 @@ object InMemoryBaseTable {
 class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
     with InputPartition with HasPartitionKey with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
+  val deletes = new mutable.ArrayBuffer[Int]()
 
   def withRow(row: InternalRow): BufferedRows = {
     rows.append(row)
@@ -562,7 +627,7 @@ private object BufferedRowsWriterFactory extends DataWriterFactory with Streamin
 }
 
 private class BufferWriter extends DataWriter[InternalRow] {
-  private val buffer = new BufferedRows
+  protected val buffer = new BufferedRows
 
   override def write(row: InternalRow): Unit = buffer.rows.append(row.copy())
 

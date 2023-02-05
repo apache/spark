@@ -53,6 +53,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   @transient
   lazy val outputSet: AttributeSet = AttributeSet(output)
 
+  /**
+   * Returns the output ordering that this plan generates, although the semantics differ in logical
+   * and physical plans. In the logical plan it means global ordering of the data while in physical
+   * it means ordering in each partition.
+   */
+  def outputOrdering: Seq[SortOrder] = Nil
+
   // Override `treePatternBits` to propagate bits for its expressions.
   override lazy val treePatternBits: BitSet = {
     val bits: BitSet = getDefaultTreePatternBits
@@ -301,7 +308,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
             "Found duplicate rewrite attributes")
 
-          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan.toSeq)
+          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
           // Using attrMapping from the children plans to rewrite their parent node.
           // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
           newPlan = newPlan.rewriteAttrs(attributeRewrites)

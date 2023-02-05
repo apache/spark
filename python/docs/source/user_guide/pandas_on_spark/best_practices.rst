@@ -150,7 +150,7 @@ Avoid computation on single partition
 Another common case is the computation on a single partition. Currently, some APIs such as
 `DataFrame.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.DataFrame.rank.html>`_
 use PySpark’s Window without specifying partition specification. This moves all data into a single
-partition in single machine and could cause serious performance degradation.
+partition in a single machine and could cause serious performance degradation.
 Such APIs should be avoided for very large datasets.
 
 .. code-block:: python
@@ -235,7 +235,7 @@ Use ``distributed`` or ``distributed-sequence`` default index
 One common issue that pandas-on-Spark users face is the slow performance due to the default index. Pandas API on Spark attaches
 a default index when the index is unknown, for example, Spark DataFrame is directly converted to pandas-on-Spark DataFrame.
 
-Note that ``sequence`` requires the computation on single partition which is discouraged. If you plan
+Note that ``sequence`` requires the computation on a single partition which is discouraged. If you plan
 to handle large data in production, make it distributed by configuring the default index to ``distributed`` or
 ``distributed-sequence`` .
 
@@ -309,7 +309,7 @@ Therefore, it works seamlessly in pandas as below:
    Helsinki    144.0
    dtype: float64
 
-However, for pandas API on Spark it does not work as the same reason above.
+However, for pandas API on Spark it does not work for the same reason above.
 The example above can be also changed to directly using pandas-on-Spark APIs as below:
 
 .. code-block:: python

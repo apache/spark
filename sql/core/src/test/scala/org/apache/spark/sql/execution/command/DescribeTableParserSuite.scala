@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation}
@@ -76,9 +75,14 @@ class DescribeTableParserSuite extends AnalysisTest {
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
 
-    val caught = intercept[AnalysisException](
-      parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
-    assert(caught.getMessage.contains(
-      "The feature is not supported: DESC TABLE COLUMN for a specific partition."))
+    val sql = "DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 47))
   }
 }

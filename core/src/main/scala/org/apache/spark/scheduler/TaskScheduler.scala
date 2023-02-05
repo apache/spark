@@ -49,7 +49,7 @@ private[spark] trait TaskScheduler {
   def postStartHook(): Unit = { }
 
   // Disconnect from the cluster.
-  def stop(): Unit
+  def stop(exitCode: Int = 0): Unit
 
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit

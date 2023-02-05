@@ -141,10 +141,27 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     Some(new ExecutorMetrics(Map("JVMHeapMemory" -> 1200L, "JVMOffHeapMemory" -> 1201L))),
     Map(), Map(), 1, false, Set())
 
+  val execWithBiggestDiskUsed = new ExecutorSummary("13", "host:port", true, 1,
+    10, 15, 1, 1, 1,
+    4, 0, 2, 280,
+    30, 100, 100,
+    10, false, 20, new Date(1639300001000L),
+    Option.empty, Option.empty, Map(), Option.empty, Set(),
+    metrics, Map(), Map(), 1, false, Set())
+
+  val execWithBiggestTotalShuffleWrite = new ExecutorSummary("14", "host:port", true, 1,
+    10, 10, 1, 1, 1,
+    4, 0, 2, 280,
+    30, 100, 100,
+    15, false, 20, new Date(1639300001000L),
+    Option.empty, Option.empty, Map(), Option.empty, Set(),
+    metrics, Map(), Map(), 1, false, Set())
+
   val list = Seq(driverSummary, execWithSmallestID, execWithSmallestAddTime,
     execWithBiggestTotalGCTime, execWithBiggestTotalDuration, execWithBiggestFailedTasks,
     execWithBiggestAverageDuration, execWithoutTasks, execNormal, execWithTwoDigitID,
-    execWithBiggestPeakJVMOnHeapMemory, execWithBiggestPeakJVMOffHeapMemory)
+    execWithBiggestPeakJVMOnHeapMemory, execWithBiggestPeakJVMOffHeapMemory,
+    execWithBiggestDiskUsed, execWithBiggestTotalShuffleWrite)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -212,6 +229,15 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   test("Policy: PEAK_JVM_OFFHEAP_MEMORY") {
     assert(plugin.invokePrivate(
       _choose(list, ExecutorRollPolicy.PEAK_JVM_OFFHEAP_MEMORY)).contains("12"))
+  }
+
+  test("Policy: DISK_USED") {
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.DISK_USED)).contains("13"))
+  }
+
+  test("Policy: TOTAL_SHUFFLE_WRITE") {
+    assert(plugin.invokePrivate(
+      _choose(list, ExecutorRollPolicy.TOTAL_SHUFFLE_WRITE)).contains("14"))
   }
 
   test("Policy: OUTLIER - Work like TOTAL_DURATION if there is no outlier") {
@@ -360,6 +386,32 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       false, Set())
     assert(
       plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.PEAK_JVM_OFFHEAP_MEMORY)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+  }
+
+  test("Policy: OUTLIER_NO_FALLBACK - Detect an used disk outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 100000, 1, 0, 0,
+      3, 0, 1, 100,
+      0, 0, 0,
+      0, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(),
+      metrics, Map(), Map(), 1, false, Set())
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.DISK_USED)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+  }
+
+  test("Policy: OUTLIER_NO_FALLBACK - Detect a total shuffle write outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 10, 1, 0, 0,
+      3, 0, 1, 100,
+      0, 0, 0,
+      1000, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(),
+      metrics, Map(), Map(), 1, false, Set())
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_SHUFFLE_WRITE)) ==
         plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
   }
 }

@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
@@ -534,10 +535,13 @@ class HashedRelationSuite extends SharedSparkSession {
       buffer.append(keyIterator.next().getLong(0))
     }
     // attempt an illegal next() call
-    val caught = intercept[NoSuchElementException] {
-      keyIterator.next()
-    }
-    assert(caught.getLocalizedMessage === "End of the iterator")
+    checkError(
+      exception = intercept[SparkException] {
+        keyIterator.next()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2104",
+      parameters = Map.empty
+    )
     assert(buffer.sortWith(_ < _) === randomArray)
     buffer.clear()
 
@@ -721,6 +725,31 @@ class HashedRelationSuite extends SharedSparkSession {
         // should have same value and order as returned from getWithKeyIndex()
         val actualValues = row.map(_._2.getInt(1))
         assert(actualValues === expectedValues)
+    }
+  }
+
+  test("LongToUnsafeRowMap support ignoresDuplicatedKey") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        Long.MaxValue,
+        Long.MaxValue / 2,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+    val keys = Seq(1L, 1L, 1L)
+    Seq(true, false).foreach { ignoresDuplicatedKey =>
+      val map = new LongToUnsafeRowMap(taskMemoryManager, 1, ignoresDuplicatedKey)
+      keys.foreach { k =>
+        map.append(k, unsafeProj(InternalRow(k)))
+      }
+      map.optimize()
+      val res = new UnsafeRow(1)
+      val it = map.get(1L, res)
+      assert(it.hasNext)
+      assert(it.next.getLong(0) == 1)
+      assert(it.hasNext != ignoresDuplicatedKey)
+      map.free()
     }
   }
 }

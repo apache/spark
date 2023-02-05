@@ -37,6 +37,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.TestUtils._
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -1353,6 +1354,50 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       new SparkContext(conf)
     }.getMessage
     assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
+  }
+
+  test("SPARK-39957: ExitCode HEARTBEAT_FAILURE should be counted as network failure") {
+    // This test is used to prove that driver will receive executorExitCode before onDisconnected
+    // removes the executor. If the executor is removed by onDisconnected, the executor loss will be
+    // considered as a task failure. Spark will throw a SparkException because TASK_MAX_FAILURES is
+    // 1. On the other hand, driver removes executor with exitCode HEARTBEAT_FAILURE, the loss
+    // should be counted as network failure, and thus the job should not throw SparkException.
+
+    val conf = new SparkConf().set(TASK_MAX_FAILURES, 1)
+    val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code-heartbeat", conf)
+    val result = sc.parallelize(1 to 10, 1).map { x =>
+      val context = org.apache.spark.TaskContext.get()
+      if (context.taskAttemptId() == 0) {
+        System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
+      } else {
+        x
+      }
+    }.count()
+    assert(result == 10L)
+    sc.stop()
+  }
+
+  test("SPARK-39957: ExitCode HEARTBEAT_FAILURE will be counted as task failure when" +
+    "EXECUTOR_REMOVE_DELAY is disabled") {
+    // If the executor is removed by onDisconnected, the executor loss will be considered as a task
+    // failure. Spark will throw a SparkException because TASK_MAX_FAILURES is 1.
+
+    val conf = new SparkConf().set(TASK_MAX_FAILURES, 1).set(EXECUTOR_REMOVE_DELAY.key, "0s")
+    val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code-heartbeat", conf)
+    eventually(timeout(30.seconds), interval(1.seconds)) {
+      val e = intercept[SparkException] {
+        sc.parallelize(1 to 10, 1).map { x =>
+          val context = org.apache.spark.TaskContext.get()
+          if (context.taskAttemptId() == 0) {
+            System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
+          } else {
+            x
+          }
+        }.count()
+      }
+      assert(e.getMessage.contains("Remote RPC client disassociated"))
+    }
+    sc.stop()
   }
 }
 

@@ -425,7 +425,9 @@ package object dsl {
           leftGroup: Seq[Attribute],
           rightGroup: Seq[Attribute],
           leftAttr: Seq[Attribute],
-          rightAttr: Seq[Attribute]
+          rightAttr: Seq[Attribute],
+          leftOrder: Seq[SortOrder] = Nil,
+          rightOrder: Seq[SortOrder] = Nil
         ): LogicalPlan = {
         CoGroup.apply[Key, Left, Right, Result](
           func,
@@ -433,6 +435,8 @@ package object dsl {
           rightGroup,
           leftAttr,
           rightAttr,
+          leftOrder,
+          rightOrder,
           logicalPlan,
           otherPlan)
       }
@@ -500,6 +504,9 @@ package object dsl {
 
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
+
+      def repartition(): LogicalPlan =
+        RepartitionByExpression(Seq.empty, logicalPlan, None)
 
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)

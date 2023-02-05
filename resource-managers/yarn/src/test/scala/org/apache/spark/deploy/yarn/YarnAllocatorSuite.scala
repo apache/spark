@@ -693,6 +693,28 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
       .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
   }
 
+  test("SPARK-39601 YarnAllocator should not count executor failure after shutdown") {
+    val (handler, _) = createAllocator()
+    handler.updateResourceRequests()
+    handler.getNumExecutorsFailed should be(0)
+
+    val failedBeforeShutdown = createContainer("host1")
+    val failedAfterShutdown = createContainer("host2")
+    handler.handleAllocatedContainers(Seq(failedBeforeShutdown, failedAfterShutdown))
+
+    val failedBeforeShutdownStatus = ContainerStatus.newInstance(
+      failedBeforeShutdown.getId, ContainerState.COMPLETE, "Failed", -1)
+    val failedAfterShutdownStatus = ContainerStatus.newInstance(
+      failedAfterShutdown.getId, ContainerState.COMPLETE, "Failed", -1)
+
+    handler.processCompletedContainers(Seq(failedBeforeShutdownStatus))
+    handler.getNumExecutorsFailed should be(1)
+
+    handler.setShutdown(true)
+    handler.processCompletedContainers(Seq(failedAfterShutdownStatus))
+    handler.getNumExecutorsFailed should be(1)
+  }
+
   test("SPARK-28577#YarnAllocator.resource.memory should include offHeapSize " +
     "when offHeapEnabled is true.") {
     val originalOffHeapEnabled = sparkConf.get(MEMORY_OFFHEAP_ENABLED)

@@ -91,10 +91,9 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisError(plan, Seq(
-      "Invalid partitioning",
-      "point.z is missing or is in a map or array",
-      "does_not_exist is missing or is in a map or array"))
+    assertAnalysisErrorClass(plan,
+      expectedErrorClass = "_LEGACY_ERROR_TEMP_2431",
+      expectedMessageParameters = Map("cols" -> "does_not_exist, point.z"))
   }
 
   test("CreateTableAsSelect: success with top-level column") {

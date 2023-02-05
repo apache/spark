@@ -60,6 +60,7 @@ import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
@@ -129,6 +130,10 @@ public class YarnShuffleService extends AuxiliaryService {
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
+
+  @VisibleForTesting
+  static final String INTEGRATION_TESTING = "spark.yarn.shuffle.testing";
+
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
   // just for testing when you want to find an open port
@@ -237,12 +242,16 @@ public class YarnShuffleService extends AuxiliaryService {
 
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
 
+    if (_recoveryPath == null && _conf.getBoolean(INTEGRATION_TESTING, false)) {
+      _recoveryPath = new Path(JavaUtils.createTempDir().toURI());
+    }
+
     if (_recoveryPath != null) {
       String dbBackendName = _conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND,
         DBBackend.LEVELDB.name());
       dbBackend = DBBackend.byName(dbBackendName);
-      logger.info("Configured {} as {} and actually used value {}",
-        Constants.SHUFFLE_SERVICE_DB_BACKEND, dbBackendName, dbBackend);
+      logger.info("Use {} as the implementation of {}",
+        dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
     }
 
     try {
@@ -296,10 +305,15 @@ public class YarnShuffleService extends AuxiliaryService {
           DEFAULT_SPARK_SHUFFLE_SERVICE_METRICS_NAME);
       YarnShuffleServiceMetrics serviceMetrics =
           new YarnShuffleServiceMetrics(metricsNamespace, blockHandler.getAllMetrics());
+      YarnShuffleServiceMetrics mergeManagerMetrics =
+          new YarnShuffleServiceMetrics("mergeManagerMetrics", shuffleMergeManager.getMetrics());
 
       MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
       metricsSystem.register(
           metricsNamespace, "Metrics on the Spark Shuffle Service", serviceMetrics);
+      metricsSystem.register(
+          "PushBasedShuffleMergeManager", "Metrics on the push-based shuffle merge manager",
+          mergeManagerMetrics);
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
           metricsNamespace);
 

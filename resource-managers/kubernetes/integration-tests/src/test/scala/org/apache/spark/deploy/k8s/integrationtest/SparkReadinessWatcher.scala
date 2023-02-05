@@ -22,7 +22,7 @@ import com.google.common.util.concurrent.SettableFuture
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
-import io.fabric8.kubernetes.client.internal.readiness.Readiness
+import io.fabric8.kubernetes.client.readiness.Readiness
 
 private[spark] class SparkReadinessWatcher[T <: HasMetadata] extends Watcher[T] {
 

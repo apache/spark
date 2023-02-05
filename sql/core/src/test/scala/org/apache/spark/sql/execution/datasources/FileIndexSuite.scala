@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
@@ -133,10 +133,13 @@ class FileIndexSuite extends SharedSparkSession {
       val schema = StructType(Seq(StructField("a", IntegerType, false)))
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
-        val msg = intercept[RuntimeException] {
-          fileIndex.partitionSpec()
-        }.getMessage
-        assert(msg == "Failed to cast value `foo` to `IntegerType` for partition column `a`")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            fileIndex.partitionSpec()
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_2058",
+          parameters = Map("value" -> "foo", "dataType" -> "IntegerType", "columnName" -> "a")
+        )
       }
 
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
@@ -538,6 +541,18 @@ class FileIndexSuite extends SharedSparkSession {
         assert(sql("SELECT * FROM t WHERE c1 = 1 AND 2 > 1").count() == 0)
       }
     }
+  }
+
+  test("SPARK-40667: validate FileIndex Options") {
+    assert(FileIndexOptions.getAllOptions.size == 7)
+    // Please add validation on any new FileIndex options here
+    assert(FileIndexOptions.isValidOption("ignoreMissingFiles"))
+    assert(FileIndexOptions.isValidOption("timeZone"))
+    assert(FileIndexOptions.isValidOption("recursiveFileLookup"))
+    assert(FileIndexOptions.isValidOption("basePath"))
+    assert(FileIndexOptions.isValidOption("modifiedbefore"))
+    assert(FileIndexOptions.isValidOption("modifiedafter"))
+    assert(FileIndexOptions.isValidOption("pathglobfilter"))
   }
 }
 

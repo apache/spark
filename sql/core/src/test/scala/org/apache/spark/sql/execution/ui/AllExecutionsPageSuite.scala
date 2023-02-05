@@ -26,14 +26,23 @@ import scala.xml.Node
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.InMemoryStore
 
-class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
+abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
+
+  override def sparkConf: SparkConf = {
+    // Disable async kv store write in the UI, to make tests more stable here.
+    super.sparkConf.set(org.apache.spark.internal.config.Status.ASYNC_TRACKING_ENABLED, false)
+  }
 
   import testImplicits._
 
@@ -52,6 +61,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.sqlStore).thenReturn(statusStore)
 
     val request = mock(classOf[HttpServletRequest])
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
@@ -60,11 +70,50 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     assert(!html.contains("1970/01/01"))
   }
 
+  test("SPARK-40834: prioritize `errorMessage` over job failures") {
+    val statusStore = createStatusStore
+    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    when(tab.sqlStore).thenReturn(statusStore)
+
+    val request = mock(classOf[HttpServletRequest])
+    when(tab.conf).thenReturn(new SparkConf(false))
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    Seq(Some(""), Some("testErrorMsg"), None).foreach { msg =>
+      val listener = statusStore.listener.get
+      val page = new AllExecutionsPage(tab)
+      val df = createTestDataFrame
+      listener.onOtherEvent(SparkListenerSQLExecutionStart(
+        0,
+        0,
+        "test",
+        "test",
+        df.queryExecution.toString,
+        SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+        System.currentTimeMillis()))
+      listener.onJobStart(SparkListenerJobStart(
+        jobId = 0,
+        time = System.currentTimeMillis(),
+        stageInfos = Nil,
+        createProperties(0)))
+      listener.onJobEnd(SparkListenerJobEnd(
+        jobId = 0,
+        time = System.currentTimeMillis(),
+        JobFailed(new RuntimeException("Oops"))))
+      listener.onOtherEvent(SparkListenerSQLExecutionEnd(0, System.currentTimeMillis(), msg))
+      val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+
+      assert(html.contains("failed queries") == !msg.contains(""))
+    }
+  }
+
   test("sorting should be successful") {
     val statusStore = createStatusStore
     val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
     val request = mock(classOf[HttpServletRequest])
 
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.sqlStore).thenReturn(statusStore)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
@@ -77,13 +126,52 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     assert(html.contains("duration"))
   }
 
+  test("group sub executions") {
+    val statusStore = createStatusStore
+    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    val request = mock(classOf[HttpServletRequest])
 
-  private def createStatusStore: SQLAppStatusStore = {
-    val conf = sparkContext.conf
-    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
-    new SQLAppStatusStore(kvstore, Some(listener))
+    val sparkConf = new SparkConf(false).set(UI_SQL_GROUP_SUB_EXECUTION_ENABLED, true)
+    when(tab.conf).thenReturn(sparkConf)
+    when(tab.sqlStore).thenReturn(statusStore)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    val listener = statusStore.listener.get
+    val page = new AllExecutionsPage(tab)
+    val df = createTestDataFrame
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      0,
+      0,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      1,
+      0,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    // sub execution has a missing root execution
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      2,
+      100,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    assert(html.contains("sub execution ids") && html.contains("sub-execution-list"))
+    // sub execution should still be displayed if the root execution is missing
+    assert(html.contains("id=2"))
   }
+
+  protected def createStatusStore: SQLAppStatusStore
 
   private def createTestDataFrame: DataFrame = {
     Seq(
@@ -108,6 +196,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
       val df = createTestDataFrame
       listener.onOtherEvent(SparkListenerSQLExecutionStart(
         executionId,
+        executionId,
         "test",
         "test",
         df.queryExecution.toString,
@@ -115,7 +204,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
         System.currentTimeMillis(),
         Map.empty))
       listener.onOtherEvent(SparkListenerSQLExecutionEnd(
-        executionId, System.currentTimeMillis()))
+        executionId, System.currentTimeMillis(), Some("Oops")))
       listener.onJobStart(SparkListenerJobStart(
         jobId = 0,
         time = System.currentTimeMillis(),
@@ -133,6 +222,34 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     val properties = new Properties()
     properties.setProperty(SQLExecution.EXECUTION_ID_KEY, executionId.toString)
     properties
+  }
+}
+
+class AllExecutionsPageWithInMemoryStoreSuite extends AllExecutionsPageSuite {
+  override protected def createStatusStore: SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+}
+
+class AllExecutionsPageWithRocksDBBackendSuite extends AllExecutionsPageSuite {
+  private val storePath = Utils.createTempDir()
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+    val appStatusStore = AppStatusStore.createLiveStore(conf)
+    kvstore = appStatusStore.store.asInstanceOf[ElementTrackingStore]
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+
+  protected override def afterAll(): Unit = {
+    if (storePath.exists()) {
+      Utils.deleteRecursively(storePath)
+    }
+    super.afterAll()
   }
 }
 

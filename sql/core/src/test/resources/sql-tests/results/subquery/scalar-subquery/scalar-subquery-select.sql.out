@@ -415,3 +415,324 @@ struct<c1:int,scalarsubquery(c1):bigint>
 -- !query output
 0	3
 1	1
+
+
+-- !query
+SELECT (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t) AS b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "(SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t)"
+  } ]
+}
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW t1(c1, c2) AS (VALUES (0, 1), (1, 2))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW t2(c1, c2) AS (VALUES (0, 2), (0, 3))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW students(id, name, major, year) AS (VALUES
+    (0, 'A', 'CS', 2022),
+    (1, 'B', 'CS', 2022),
+    (2, 'C', 'Math', 2022))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW exams(sid, course, curriculum, grade, date) AS (VALUES
+    (0, 'C1', 'CS', 4, 2020),
+    (0, 'C2', 'CS', 3, 2021),
+    (1, 'C1', 'CS', 2, 2020),
+    (1, 'C2', 'CS', 1, 2021))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT students.name, exams.course
+FROM students, exams
+WHERE students.id = exams.sid
+  AND (students.major = 'CS' OR students.major = 'Games Eng')
+  AND exams.grade >= (
+        SELECT avg(exams.grade) + 1
+        FROM exams
+        WHERE students.id = exams.sid
+           OR (exams.curriculum = students.major AND students.year > exams.date))
+-- !query schema
+struct<name:string,course:string>
+-- !query output
+A	C1
+
+
+-- !query
+SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 > t2.c1) FROM t1
+-- !query schema
+struct<scalarsubquery(c1):int>
+-- !query output
+2
+NULL
+
+
+-- !query
+SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 >= t2.c1 AND t1.c2 < t2.c2) FROM t1
+-- !query schema
+struct<scalarsubquery(c1, c2):int>
+-- !query output
+2
+3
+
+
+-- !query
+SELECT (SELECT count(*) FROM t2 WHERE t1.c1 > t2.c1) FROM t1
+-- !query schema
+struct<scalarsubquery(c1):bigint>
+-- !query output
+0
+2
+
+
+-- !query
+SELECT c, (
+    SELECT count(*)
+    FROM (VALUES ('ab'), ('abc'), ('bc')) t2(c)
+    WHERE t1.c = substring(t2.c, 1, 1)
+) FROM (VALUES ('a'), ('b')) t1(c)
+-- !query schema
+struct<c:string,scalarsubquery(c):bigint>
+-- !query output
+a	2
+b	1
+
+
+-- !query
+SELECT c, (
+    SELECT count(*)
+    FROM (VALUES (0, 6), (1, 5), (2, 4), (3, 3)) t1(a, b)
+    WHERE a + b = c
+) FROM (VALUES (6)) t2(c)
+-- !query schema
+struct<c:int,scalarsubquery(c):bigint>
+-- !query output
+6	4
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW t1(t1a, t1b, t1c) AS VALUES (1, 1, 3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW t2(t2a, t2b, t2c) AS VALUES (1, 1, 5), (2, 2, 7)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT t0a, (SELECT sum(c) FROM
+  (SELECT t1c as c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t2c as c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+-- !query output
+1	8
+2	NULL
+
+
+-- !query
+SELECT t0a, (SELECT sum(c) FROM
+  (SELECT t1c as c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t2c as c
+  FROM   t2
+  WHERE  t2a = t0a)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+-- !query output
+1	8
+2	7
+
+
+-- !query
+SELECT t0a, (SELECT sum(c) FROM
+  (SELECT t1c as c
+  FROM   t1
+  WHERE  t1a > t0a
+  UNION ALL
+  SELECT t2c as c
+  FROM   t2
+  WHERE  t2b <= t0b)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+-- !query output
+1	5
+2	NULL
+
+
+-- !query
+SELECT t0a, (SELECT sum(t1c) FROM
+  (SELECT t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+-- !query output
+1	8
+2	NULL
+
+
+-- !query
+SELECT t0a, (SELECT sum(t1c) FROM
+  (SELECT t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION DISTINCT
+  SELECT t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+-- !query output
+1	8
+2	NULL
+
+
+-- !query
+SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
+  (SELECT t1c as t1a, t1a as t1b, t0a as t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t0a as t2b, t2c as t1a, t0b as t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0a, t0a, t0b, t0b):bigint>
+-- !query output
+1	32
+2	NULL
+
+
+-- !query
+SELECT t0a, (SELECT count(t1c) FROM
+  (SELECT t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION DISTINCT
+  SELECT t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+-- !query output
+1	2
+2	0
+
+
+-- !query
+SELECT t0a, (SELECT sum(d) FROM
+  (SELECT t1a - t0a as d
+  FROM   t1
+  UNION ALL
+  SELECT t2a - t0a as d
+  FROM   t2)
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+-- !query output
+1	1
+2	-2
+
+
+-- !query
+SELECT t0a, (SELECT sum(d) FROM
+  (SELECT sum(t0a) as d
+  FROM   t1
+  UNION ALL
+  SELECT sum(t2a) + t0a as d
+  FROM   t2)
+)
+FROM t0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}

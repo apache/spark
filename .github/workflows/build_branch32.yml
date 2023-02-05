@@ -25,6 +25,8 @@ on:
 
 jobs:
   run-build:
+    permissions:
+      packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'

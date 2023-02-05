@@ -32,7 +32,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                               WholeStageCodegen (1)
                                                                 Filter [ss_store_sk,ss_item_sk,ss_promo_sk]
                                                                   Subquery #2
-                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 101823, 814584, 0, 0),bloomFilter,buf]
+                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 101823, 1521109, 0, 0),bloomFilter,buf]
                                                                       Exchange #5
                                                                         ObjectHashAggregate [i_item_sk] [buf,buf]
                                                                           WholeStageCodegen (1)
@@ -42,7 +42,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                                   InputAdapter
                                                                                     Scan parquet spark_catalog.default.item [i_item_sk,i_current_price]
                                                                   Subquery #3
-                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(p_promo_sk, 42), 986, 7888, 0, 0),bloomFilter,buf]
+                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(p_promo_sk, 42), 986, 24246, 0, 0),bloomFilter,buf]
                                                                       Exchange #6
                                                                         ObjectHashAggregate [p_promo_sk] [buf,buf]
                                                                           WholeStageCodegen (1)

@@ -22,11 +22,14 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -287,7 +290,7 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
       }
       buildWithTwoParams(expressions(0), scale)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
   }
 }
@@ -1035,6 +1038,7 @@ object Hex {
   def unhex(bytes: Array[Byte]): Array[Byte] = {
     val out = new Array[Byte]((bytes.length + 1) >> 1)
     var i = 0
+    var oddShift = 0
     if ((bytes.length & 0x01) != 0) {
       // padding with '0'
       if (bytes(0) < 0) {
@@ -1046,6 +1050,7 @@ object Hex {
       }
       out(0) = v
       i += 1
+      oddShift = 1
     }
     // two characters form the hex value.
     while (i < bytes.length) {
@@ -1057,7 +1062,7 @@ object Hex {
       if (first == -1 || second == -1) {
         return null
       }
-      out(i / 2) = (((first << 4) | second) & 0xFF).toByte
+      out(i / 2 + oddShift) = (((first << 4) | second) & 0xFF).toByte
       i += 2
     }
     out
@@ -1120,28 +1125,58 @@ case class Hex(child: Expression)
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Unhex(child: Expression)
+case class Unhex(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(expr: Expression) = this(expr, false)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
 
-  protected override def nullSafeEval(num: Any): Any =
-    Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+  protected override def nullSafeEval(num: Any): Any = {
+    val result = Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+    if (failOnError && result == null) {
+      // The failOnError is set only from `ToBinary` function - hence we might safely set `hint`
+      // parameter to `try_to_binary`.
+      throw QueryExecutionErrors.invalidInputInConversionError(
+        BinaryType,
+        num.asInstanceOf[UTF8String],
+        UTF8String.fromString("HEX"),
+        "try_to_binary")
+    }
+    result
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (c) => {
+    nullSafeCodeGen(ctx, ev, c => {
       val hex = Hex.getClass.getName.stripSuffix("$")
+      val maybeFailOnErrorCode = if (failOnError) {
+        val format = UTF8String.fromString("BASE64");
+        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
+        s"""
+           |if (${ev.value} == null) {
+           |  throw QueryExecutionErrors.invalidInputInConversionError(
+           |    $binaryType,
+           |    $c,
+           |    $format,
+           |    "try_to_binary");
+           |}
+           |""".stripMargin
+      } else {
+        s"${ev.isNull} = ${ev.value} == null;"
+      }
+
       s"""
         ${ev.value} = $hex.unhex($c.getBytes());
-        ${ev.isNull} = ${ev.value} == null;
+        $maybeFailOnErrorCode
        """
     })
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Unhex = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Unhex =
+    copy(child = newChild, failOnError)
 }
 
 
@@ -1414,10 +1449,12 @@ case class Logarithm(left: Expression, right: Expression)
  */
 abstract class RoundBase(child: Expression, scale: Expression,
     mode: BigDecimal.RoundingMode.Value, modeStr: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes with SupportQueryContext {
 
   override def left: Expression = child
   override def right: Expression = scale
+
+  protected def ansiEnabled: Boolean = false
 
   // round of Decimal would eval to null if it fails to `changePrecision`
   override def nullable: Boolean = true
@@ -1451,7 +1488,12 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (scale.foldable) {
           TypeCheckSuccess
         } else {
-          TypeCheckFailure("Only foldable Expression is allowed for scale arguments")
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "scala",
+              "inputType" -> toSQLType(scale.dataType),
+              "inputExpr" -> toSQLExpr(scale)))
         }
       case f => f
     }
@@ -1462,6 +1504,14 @@ abstract class RoundBase(child: Expression, scale: Expression,
   // by checking if scaleV == null as well.
   private lazy val scaleV: Any = scale.eval(EmptyRow)
   protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
+
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (ansiEnabled) {
+      Some(origin.context)
+    } else {
+      None
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     if (scaleV == null) { // if scale is null, no need to eval its child at all
@@ -1487,12 +1537,28 @@ abstract class RoundBase(child: Expression, scale: Expression,
         } else {
           Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
+      case ByteType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
+          context = getContextOrNull)
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
+      case ShortType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShortExact,
+          context = getContextOrNull)
       case ShortType =>
         BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
+      case IntegerType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toIntExact,
+          context = getContextOrNull)
       case IntegerType =>
         BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
+      case LongType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLongExact,
+          context = getContextOrNull)
       case LongType =>
         BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
       case FloatType =>
@@ -1515,6 +1581,26 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
+    def codegenForIntegralType(dt: String): String = {
+      if (_scale < 0) {
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          val evalCode = s"""
+            |${ev.value} = new java.math.BigDecimal(${ce.value}).
+            |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}ValueExact();
+            |""".stripMargin
+          MathUtils.withOverflowCode(evalCode, errorContext)
+        } else {
+          s"""
+             |${ev.value} = new java.math.BigDecimal(${ce.value}).
+             |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}Value();
+             |""".stripMargin
+        }
+      } else {
+        s"${ev.value} = ${ce.value};"
+      }
+    }
+
     val evaluationCode = dataType match {
       case DecimalType.Fixed(p, s) =>
         if (_scale >= 0) {
@@ -1529,37 +1615,13 @@ abstract class RoundBase(child: Expression, scale: Expression,
             ${ev.isNull} = ${ev.value} == null;"""
         }
       case ByteType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).byteValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("byte")
       case ShortType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).shortValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("short")
       case IntegerType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("int")
       case LongType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).longValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("long")
       case FloatType => // if child eval to NaN or Infinity, just return it.
         s"""
           if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
@@ -1606,15 +1668,21 @@ abstract class RoundBase(child: Expression, scale: Expression,
     Examples:
       > SELECT _FUNC_(2.5, 0);
        3
-      > SELECT _FUNC_(25, -1);
-       30
   """,
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Round(child: Expression, scale: Expression)
+case class Round(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP") {
-  def this(child: Expression) = this(child, Literal(0))
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
+
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
     copy(child = newLeft, scale = newRight)
 }
@@ -1637,9 +1705,17 @@ case class Round(child: Expression, scale: Expression)
   since = "2.0.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class BRound(child: Expression, scale: Expression)
+case class BRound(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN") {
-  def this(child: Expression) = this(child, Literal(0))
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
+
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
@@ -1758,7 +1834,7 @@ case class WidthBucket(
             TypeCheckSuccess
           case _ =>
             val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)
-            TypeUtils.checkForSameTypeInputExpr(types, s"function $prettyName")
+            TypeUtils.checkForSameTypeInputExpr(types, prettyName)
         }
       case f => f
     }

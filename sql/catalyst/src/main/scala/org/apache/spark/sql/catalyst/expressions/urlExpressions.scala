@@ -22,10 +22,11 @@ import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -110,7 +111,12 @@ object UrlCodec {
   }
 
   def decode(src: UTF8String, enc: UTF8String): UTF8String = {
-    UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
+    try {
+      UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
+    } catch {
+      case e: IllegalArgumentException =>
+        throw QueryExecutionErrors.illegalUrlError(src)
+    }
   }
 }
 
@@ -177,7 +183,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size > 3 || children.size < 2) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName function requires two or three arguments")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("[2, 3]"), children.length
+      )
     } else {
       super[ExpectsInputTypes].checkInputDataTypes()
     }

@@ -344,6 +344,24 @@ class DataFrameJoinSuite extends QueryTest
     }
   }
 
+  Seq("left_semi", "left_anti").foreach { joinType =>
+    test(s"SPARK-41162: $joinType self-joined aggregated dataframe") {
+      // aggregated dataframe
+      val ids = Seq(1, 2, 3).toDF("id").distinct()
+
+      // self-joined via joinType
+      val result = ids.withColumn("id", $"id" + 1)
+        .join(ids, "id", joinType).collect()
+
+      val expected = joinType match {
+        case "left_semi" => 2
+        case "left_anti" => 1
+        case _ => -1  // unsupported test type, test will always fail
+      }
+      assert(result.length == expected)
+    }
+  }
+
   def extractLeftDeepInnerJoins(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
     case j @ Join(left, right, _: InnerLike, _, _) => right +: extractLeftDeepInnerJoins(left)
     case Filter(_, child) => extractLeftDeepInnerJoins(child)

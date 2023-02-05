@@ -90,7 +90,6 @@ class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
             "expected": pd.read_excel(pandas_location, index_col=0),
         }
 
-    @unittest.skip("openpyxl")
     def test_to_excel(self):
         with self.temp_dir() as dirpath:
             pandas_location = dirpath + "/" + "output1.xlsx"
@@ -263,7 +262,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe_conversion import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

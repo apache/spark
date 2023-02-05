@@ -103,7 +103,7 @@ then
   cd $SPARK_INPUT_DIR
 
   if [[ $DOCKER_FILE == "N/A" ]]; then
-    # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
+    # OpenJDK base-image tag (e.g. 8-jre-focal, 11-jre-focal)
     JAVA_IMAGE_TAG_BUILD_ARG="-b java_image_tag=$JAVA_IMAGE_TAG"
   else
     if [[ $DOCKER_FILE = /* ]]; then

@@ -187,3 +187,156 @@ SELECT c1, (
         UNION SELECT * FROM v3 WHERE c2 > 0
     ) WHERE c1 = v1.c1
 ) FROM v1;
+
+-- Multi-value subquery error
+SELECT (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t) AS b;
+
+-- SPARK-36114: Support correlated non-equality predicates
+CREATE OR REPLACE TEMP VIEW t1(c1, c2) AS (VALUES (0, 1), (1, 2));
+CREATE OR REPLACE TEMP VIEW t2(c1, c2) AS (VALUES (0, 2), (0, 3));
+
+-- Neumann example Q2
+CREATE OR REPLACE TEMP VIEW students(id, name, major, year) AS (VALUES
+    (0, 'A', 'CS', 2022),
+    (1, 'B', 'CS', 2022),
+    (2, 'C', 'Math', 2022));
+CREATE OR REPLACE TEMP VIEW exams(sid, course, curriculum, grade, date) AS (VALUES
+    (0, 'C1', 'CS', 4, 2020),
+    (0, 'C2', 'CS', 3, 2021),
+    (1, 'C1', 'CS', 2, 2020),
+    (1, 'C2', 'CS', 1, 2021));
+
+SELECT students.name, exams.course
+FROM students, exams
+WHERE students.id = exams.sid
+  AND (students.major = 'CS' OR students.major = 'Games Eng')
+  AND exams.grade >= (
+        SELECT avg(exams.grade) + 1
+        FROM exams
+        WHERE students.id = exams.sid
+           OR (exams.curriculum = students.major AND students.year > exams.date));
+
+-- Correlated non-equality predicates
+SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 > t2.c1) FROM t1;
+SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 >= t2.c1 AND t1.c2 < t2.c2) FROM t1;
+
+-- Correlated non-equality predicates with the COUNT bug.
+SELECT (SELECT count(*) FROM t2 WHERE t1.c1 > t2.c1) FROM t1;
+
+-- Correlated equality predicates that are not supported after SPARK-35080
+SELECT c, (
+    SELECT count(*)
+    FROM (VALUES ('ab'), ('abc'), ('bc')) t2(c)
+    WHERE t1.c = substring(t2.c, 1, 1)
+) FROM (VALUES ('a'), ('b')) t1(c);
+
+SELECT c, (
+    SELECT count(*)
+    FROM (VALUES (0, 6), (1, 5), (2, 4), (3, 3)) t1(a, b)
+    WHERE a + b = c
+) FROM (VALUES (6)) t2(c);
+
+-- Set operations in correlation path
+
+CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0);
+CREATE OR REPLACE TEMP VIEW t1(t1a, t1b, t1c) AS VALUES (1, 1, 3);
+CREATE OR REPLACE TEMP VIEW t2(t2a, t2b, t2c) AS VALUES (1, 1, 5), (2, 2, 7);
+
+SELECT t0a, (SELECT sum(c) FROM
+  (SELECT t1c as c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t2c as c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0;
+
+SELECT t0a, (SELECT sum(c) FROM
+  (SELECT t1c as c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t2c as c
+  FROM   t2
+  WHERE  t2a = t0a)
+)
+FROM t0;
+
+SELECT t0a, (SELECT sum(c) FROM
+  (SELECT t1c as c
+  FROM   t1
+  WHERE  t1a > t0a
+  UNION ALL
+  SELECT t2c as c
+  FROM   t2
+  WHERE  t2b <= t0b)
+)
+FROM t0;
+
+SELECT t0a, (SELECT sum(t1c) FROM
+  (SELECT t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0;
+
+SELECT t0a, (SELECT sum(t1c) FROM
+  (SELECT t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION DISTINCT
+  SELECT t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0;
+
+-- Tests for column aliasing
+SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
+  (SELECT t1c as t1a, t1a as t1b, t0a as t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION ALL
+  SELECT t0a as t2b, t2c as t1a, t0b as t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0;
+
+-- Test handling of COUNT bug
+SELECT t0a, (SELECT count(t1c) FROM
+  (SELECT t1c
+  FROM   t1
+  WHERE  t1a = t0a
+  UNION DISTINCT
+  SELECT t2c
+  FROM   t2
+  WHERE  t2b = t0b)
+)
+FROM t0;
+
+-- Correlated references in project
+SELECT t0a, (SELECT sum(d) FROM
+  (SELECT t1a - t0a as d
+  FROM   t1
+  UNION ALL
+  SELECT t2a - t0a as d
+  FROM   t2)
+)
+FROM t0;
+
+-- Correlated references in aggregate - unsupported
+SELECT t0a, (SELECT sum(d) FROM
+  (SELECT sum(t0a) as d
+  FROM   t1
+  UNION ALL
+  SELECT sum(t2a) + t0a as d
+  FROM   t2)
+)
+FROM t0;

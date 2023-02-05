@@ -50,7 +50,7 @@ private[spark] trait KnownSizeEstimation {
  * memory-aware caches.
  *
  * Based on the following JavaWorld article:
- * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
+ * https://www.infoworld.com/article/2077408/sizeof-for-java.html
  */
 @DeveloperApi
 object SizeEstimator extends Logging {

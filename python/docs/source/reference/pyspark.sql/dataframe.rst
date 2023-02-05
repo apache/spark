@@ -119,6 +119,7 @@ DataFrame
     DataFrame.withColumn
     DataFrame.withColumns
     DataFrame.withColumnRenamed
+    DataFrame.withColumnsRenamed
     DataFrame.withMetadata
     DataFrame.withWatermark
     DataFrame.write

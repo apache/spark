@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder}
+import io.fabric8.kubernetes.api.model.ContainerBuilder
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
@@ -84,25 +84,18 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
           "variables instead.")
     }
 
-    val pythonEnvs =
-      Seq(
-        conf.get(PYSPARK_PYTHON)
-          .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON)).map { value =>
-          new EnvVarBuilder()
-            .withName(ENV_PYSPARK_PYTHON)
-            .withValue(value)
-            .build()
-        },
-        conf.get(PYSPARK_DRIVER_PYTHON)
-          .orElse(conf.get(PYSPARK_PYTHON))
-          .orElse(environmentVariables.get(ENV_PYSPARK_DRIVER_PYTHON))
-          .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON)).map { value =>
-          new EnvVarBuilder()
-            .withName(ENV_PYSPARK_DRIVER_PYTHON)
-            .withValue(value)
-            .build()
-        }
-      ).flatten
+    val pythonEnvs = {
+      KubernetesUtils.buildEnvVars(
+        Seq(
+          ENV_PYSPARK_PYTHON -> conf.get(PYSPARK_PYTHON)
+            .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))
+            .orNull,
+          ENV_PYSPARK_DRIVER_PYTHON -> conf.get(PYSPARK_DRIVER_PYTHON)
+            .orElse(conf.get(PYSPARK_PYTHON))
+            .orElse(environmentVariables.get(ENV_PYSPARK_DRIVER_PYTHON))
+            .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))
+            .orNull))
+    }
 
     // re-write primary resource to be the remote one and upload the related file
     val newResName = KubernetesUtils

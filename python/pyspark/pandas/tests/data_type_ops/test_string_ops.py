@@ -160,7 +160,7 @@ class StringOpsTest(OpsTestBase):
         data = ["x", "y", "z"]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -275,7 +275,7 @@ class StringExtensionOpsTest(StringOpsTest):
         data = ["x", "y", "z", None]
         pser = pd.Series(data, dtype="string")
         psser = ps.Series(data, dtype="string")
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -342,7 +342,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

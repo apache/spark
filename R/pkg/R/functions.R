@@ -258,6 +258,13 @@ NULL
 #'          into accumulator (the first argument).
 #' @param finish an unary \code{function} \code{(Column) -> Column} used to
 #'          apply final transformation on the accumulated data in \code{array_aggregate}.
+#' @param comparator an optional binary (\code{(Column, Column) -> Column}) \code{function}
+#'          which is used to compare the elemnts of the array.
+#'          The comparator will take two
+#'          arguments representing two elements of the array. It returns a negative integer,
+#'          0, or a positive integer as the first element is less than, equal to,
+#'          or greater than the second element.
+#'          If the comparator function returns null, the function will fail and raise an error.
 #' @param ... additional argument(s).
 #'          \itemize{
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
@@ -292,6 +299,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
+#' head(select(tmp, array_sort(tmp$v1, function(x, y) coalesce(cast(y - x, "integer"), lit(0L)))))
 #' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' head(select(tmp, array_transform("v1", function(x) x * 10)))
 #' head(select(tmp, array_exists("v1", function(x) x > 120)))
@@ -445,7 +453,7 @@ setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lit",
-                              if (class(x) == "Column") { x@jc } else { x })
+                              if (inherits(x, "Column")) { x@jc } else { x })
             column(jc)
           })
 
@@ -966,7 +974,7 @@ setMethod("hash",
 #' @details
 #' \code{xxhash64}: Calculates the hash code of given columns using the 64-bit
 #' variant of the xxHash algorithm, and returns the result as a long
-#' column.
+#' column. The hash computation uses an initial seed of 42.
 #'
 #' @rdname column_misc_functions
 #' @aliases xxhash64 xxhash64,Column-method
@@ -3587,7 +3595,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
-              value <- if (class(value) == "Column") { value@jc } else { value }
+              value <- if (inherits(value, "Column")) { value@jc } else { value }
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
@@ -3606,8 +3614,8 @@ setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
               test <- test@jc
-              yes <- if (class(yes) == "Column") { yes@jc } else { yes }
-              no <- if (class(no) == "Column") { no@jc } else { no }
+              yes <- if (inherits(yes, "Column")) { yes@jc } else { yes }
+              no <- if (inherits(no, "Column")) { no@jc } else { no }
               jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
                                             "when",
                                             test, yes),
@@ -4141,9 +4149,16 @@ setMethod("array_repeat",
 #' @note array_sort since 2.4.0
 setMethod("array_sort",
           signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
-            column(jc)
+          function(x, comparator = NULL) {
+            if (is.null(comparator)) {
+               column(callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc))
+            } else {
+              invoke_higher_order_function(
+                "ArraySort",
+                cols = list(x),
+                funs = list(comparator)
+              )
+            }
           })
 
 #' @details

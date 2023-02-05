@@ -283,6 +283,56 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     check(innerPlan, outerPlan, correctAnswer, Seq(y <=> y, x === a, y === z))
   }
 
+  test("union in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Union(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b, c === 6),
+          testRelation))
+    val correctAnswer =
+      Union(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a, b, c, x, y),
+          Filter(And(y === b, c === 6),
+            DomainJoin(Seq(x, y),
+              testRelation)))
+      )
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
+  }
+
+  test("another union in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Union(Seq(
+        Filter(And(OuterReference(x) === a, a > 2),
+          testRelation),
+        Filter(And(OuterReference(y) === b, b > 3),
+          testRelation),
+        Filter(And(OuterReference(z) === c, c > 4),
+          testRelation)))
+    val correctAnswer =
+      Union(Seq(
+        Project(Seq(a, b, c, x, y, z),
+          Filter(And(x === a, a > 2),
+            DomainJoin(Seq(x, y, z),
+              testRelation))),
+        Project(Seq(a, b, c, x, y, z),
+          Filter(And(y === b, b > 3),
+            DomainJoin(Seq(x, y, z),
+              testRelation))),
+        Project(Seq(a, b, c, x, y, z),
+          Filter(And(z === c, c > 4),
+            DomainJoin(Seq(x, y, z),
+              testRelation)))
+      ))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y, z <=> z))
+  }
+
   test("SPARK-38155: distinct with non-equality correlated predicates") {
     val outerPlan = testRelation2
     val innerPlan =

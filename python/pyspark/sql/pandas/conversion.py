@@ -63,6 +63,9 @@ class PandasConversionMixin:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Notes
         -----
         This method should only be used if the resulting Pandas ``pandas.DataFrame`` is
@@ -295,7 +298,7 @@ class PandasConversionMixin:
         elif type(dt) == DoubleType:
             return np.float64
         elif type(dt) == BooleanType:
-            return np.bool  # type: ignore[attr-defined]
+            return bool
         elif type(dt) == TimestampType:
             return np.datetime64
         elif type(dt) == TimestampNTZType:
@@ -471,7 +474,7 @@ class SparkConversionMixin:
                             pdf[field.name] = s
             else:
                 should_localize = not is_timestamp_ntz_preferred()
-                for column, series in pdf.iteritems():
+                for column, series in pdf.items():
                     s = series
                     if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
                         s = _check_series_convert_timestamps_tz_local(series, timezone)
@@ -483,7 +486,7 @@ class SparkConversionMixin:
                             copied = True
                         pdf[column] = s
 
-            for column, series in pdf.iteritems():
+            for column, series in pdf.items():
                 if is_timedelta64_dtype(series):
                     if not copied:
                         pdf = pdf.copy()
@@ -601,7 +604,7 @@ class SparkConversionMixin:
 
         # Create list of Arrow (columns, type) for serializer dump_stream
         arrow_data = [
-            [(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]
+            [(c, t) for (_, c), t in zip(pdf_slice.items(), arrow_types)]
             for pdf_slice in pdf_slices
         ]
 

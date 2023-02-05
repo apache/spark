@@ -179,4 +179,18 @@ public class NettyUtils {
       allowCache ? PooledByteBufAllocator.defaultUseCacheForAllThreads() : false
     );
   }
+
+  /**
+   * ByteBuf allocator prefers to allocate direct ByteBuf iif both Spark allows to create direct
+   * ByteBuf and Netty enables directBufferPreferred.
+   */
+  public static boolean preferDirectBufs(TransportConf conf) {
+    boolean allowDirectBufs;
+    if (conf.sharedByteBufAllocators()) {
+      allowDirectBufs = conf.preferDirectBufsForSharedByteBufAllocators();
+    } else {
+      allowDirectBufs = conf.preferDirectBufs();
+    }
+    return allowDirectBufs && PlatformDependent.directBufferPreferred();
+  }
 }

@@ -81,11 +81,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       val shuffleDBName = sparkConf.get(config.SHUFFLE_SERVICE_DB_BACKEND)
-      val dBBackend = DBBackend.byName(shuffleDBName)
-      logInfo(s"Configured ${config.SHUFFLE_SERVICE_DB_BACKEND.key} as $shuffleDBName " +
-        s"and actually used value ${dBBackend.name()} ")
+      val dbBackend = DBBackend.byName(shuffleDBName)
+      logInfo(s"Use ${dbBackend.name()} as the implementation of " +
+        s"${config.SHUFFLE_SERVICE_DB_BACKEND.key}")
       new ExternalBlockHandler(conf,
-        findRegisteredExecutorsDBFile(dBBackend.fileName(registeredExecutorsDB)))
+        findRegisteredExecutorsDBFile(dbBackend.fileName(registeredExecutorsDB)))
     } else {
       new ExternalBlockHandler(conf, null)
     }

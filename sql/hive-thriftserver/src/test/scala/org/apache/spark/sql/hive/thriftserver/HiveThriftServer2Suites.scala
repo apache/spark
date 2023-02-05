@@ -1189,7 +1189,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   protected val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
   protected val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
 
-  val localhost = Utils.localHostNameForURI()
+  val localhost = Utils.localCanonicalHostName
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
 

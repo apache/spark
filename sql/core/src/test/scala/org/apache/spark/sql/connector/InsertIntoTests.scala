@@ -20,6 +20,8 @@ package org.apache.spark.sql.connector
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -231,11 +233,13 @@ trait InsertIntoSQLOnlyTests
       val t2 = s"${catalogAndNamespace}tbl2"
       withTableAndData(t1) { _ =>
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        val parsed = CatalystSqlParser.parseMultipartIdentifier(t2)
+          .map(part => quoteIdentifier(part)).mkString(".")
         val e = intercept[AnalysisException] {
           sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
         }
-        assert(e.getMessage.contains(t2))
-        assert(e.getMessage.contains("Table not found"))
+        checkErrorTableNotFound(e, parsed,
+          ExpectedContext(t2, 12, 11 + t2.length))
       }
     }
 

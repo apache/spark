@@ -19,17 +19,17 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.RecoverPartitions
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("recover partitions without table") {
-    val errMsg = intercept[ParseException] {
-      parsePlan("ALTER TABLE RECOVER PARTITIONS")
-    }.getMessage
-    assert(errMsg.contains("Syntax error at or near 'PARTITIONS'"))
+    val sql = "ALTER TABLE RECOVER PARTITIONS"
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'PARTITIONS'", "hint" -> ""))
   }
 
   test("recover partitions of a table") {

@@ -149,7 +149,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: PODS = _
 
   @Mock
-  private var namedPods: PodResource[Pod] = _
+  private var podsWithNamespace: PODS_WITH_NAMESPACE = _
+
+  @Mock
+  private var namedPods: PodResource = _
 
   @Mock
   private var loggingPodStatusWatcher: LoggingPodStatusWatcher = _
@@ -170,11 +173,13 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
     when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
     when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withName(POD_NAME)).thenReturn(namedPods)
+    when(podOperations.inNamespace(kconf.namespace)).thenReturn(podsWithNamespace)
+    when(podsWithNamespace.withName(POD_NAME)).thenReturn(namedPods)
 
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
-    when(podOperations.create(fullExpectedPod())).thenReturn(podWithOwnerReference())
+    when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
+    when(namedPods.create()).thenReturn(podWithOwnerReference())
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     when(loggingPodStatusWatcher.watchOrStop(kconf.namespace + ":" + POD_NAME)).thenReturn(true)
     doReturn(resourceList)
@@ -189,7 +194,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(podOperations).create(fullExpectedPod())
+    verify(podsWithNamespace).resource(fullExpectedPod())
+    verify(namedPods).create()
   }
 
   test("The client should create Kubernetes resources") {
@@ -298,8 +304,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val expectedKeyToPaths = (expectedConfFiles.map(x => new KeyToPath(x, 420, x)).toList ++
       List(KEY_TO_PATH)).sortBy(x => x.getKey)
 
-    when(podOperations.create(fullExpectedPod(expectedKeyToPaths)))
-      .thenReturn(podWithOwnerReference(expectedKeyToPaths))
+    when(podsWithNamespace.resource(fullExpectedPod(expectedKeyToPaths)))
+      .thenReturn(namedPods)
+    when(namedPods.create()).thenReturn(podWithOwnerReference(expectedKeyToPaths))
 
     kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))

@@ -630,7 +630,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_ops_on_diff_frames_groupby import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

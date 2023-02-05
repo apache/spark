@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
-import java.net.URI
 import java.sql.Timestamp
 
 import com.google.common.io.{ByteStreams, Closeables}
@@ -101,7 +100,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
-      val path = new Path(new URI(file.filePath))
+      val path = file.toPath
       val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
       val status = fs.getFileStatus(path)
       if (filterFuncs.forall(_.apply(status))) {
@@ -152,11 +151,11 @@ object BinaryFileFormat {
    *  - length (LongType): The length of the file in bytes.
    *  - content (BinaryType): The content of the file.
    */
-  val schema = StructType(
-    StructField(PATH, StringType, false) ::
-    StructField(MODIFICATION_TIME, TimestampType, false) ::
-    StructField(LENGTH, LongType, false) ::
-    StructField(CONTENT, BinaryType, true) :: Nil)
+  val schema = StructType(Array(
+    StructField(PATH, StringType, false),
+    StructField(MODIFICATION_TIME, TimestampType, false),
+    StructField(LENGTH, LongType, false),
+    StructField(CONTENT, BinaryType, true)))
 
   private[binaryfile] def createFilterFunction(filter: Filter): Option[FileStatus => Boolean] = {
     filter match {

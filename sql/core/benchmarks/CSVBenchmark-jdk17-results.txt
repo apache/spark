@@ -2,66 +2,66 @@
 Benchmark to measure CSV read/write performance
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Parsing quoted values:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-One quoted string                                 30565          32584        1846          0.0      611297.2       1.0X
+One quoted string                                 46299          46385         148          0.0      925970.7       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Wide rows with 1000 columns:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Select 1000 columns                               80114          80611         837          0.0       80114.1       1.0X
-Select 100 columns                                30863          30923          94          0.0       30862.6       2.6X
-Select one column                                 25510          25555          62          0.0       25510.4       3.1X
-count()                                            5392           5429          33          0.2        5391.6      14.9X
-Select 100 columns, one bad input field           43113          43160          44          0.0       43112.8       1.9X
-Select 100 columns, corrupt record field          48960          49084         189          0.0       48960.4       1.6X
+Select 1000 columns                               73622          74098         777          0.0       73621.6       1.0X
+Select 100 columns                                34148          34201          47          0.0       34147.9       2.2X
+Select one column                                 29519          29596          78          0.0       29519.4       2.5X
+count()                                            4756           4833          67          0.2        4756.3      15.5X
+Select 100 columns, one bad input field           51979          52036          74          0.0       51979.0       1.4X
+Select 100 columns, corrupt record field          57043          57321         339          0.0       57043.2       1.3X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Count a dataset with 10 columns:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Select 10 columns + count()                       12827          12847          24          0.8        1282.7       1.0X
-Select 1 column + count()                         11803          11843          37          0.8        1180.3       1.1X
-count()                                            2811           2844          43          3.6         281.1       4.6X
+Select 10 columns + count()                       17428          17469          40          0.6        1742.8       1.0X
+Select 1 column + count()                         11682          11703          31          0.9        1168.2       1.5X
+count()                                            2787           2800          13          3.6         278.7       6.3X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Create a dataset of timestamps                     1373           1383           9          7.3         137.3       1.0X
-to_csv(timestamp)                                 11007          11025          16          0.9        1100.7       0.1X
-write timestamps to files                          8820           8823           4          1.1         882.0       0.2X
-Create a dataset of dates                          1505           1516          17          6.6         150.5       0.9X
-to_csv(date)                                       7313           7316           3          1.4         731.3       0.2X
-write dates to files                               5305           5307           3          1.9         530.5       0.3X
+Create a dataset of timestamps                     1241           1264          22          8.1         124.1       1.0X
+to_csv(timestamp)                                  9455           9520          84          1.1         945.5       0.1X
+write timestamps to files                          8592           8608          23          1.2         859.2       0.1X
+Create a dataset of dates                          1463           1470           8          6.8         146.3       0.8X
+to_csv(date)                                       6328           6333           4          1.6         632.8       0.2X
+write dates to files                               5112           5115           3          2.0         511.2       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Read dates and timestamps:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read timestamp text from files                     1912           1928          14          5.2         191.2       1.0X
-read timestamps from files                        24182          24206          31          0.4        2418.2       0.1X
-infer timestamps from files                       49352          49412          83          0.2        4935.2       0.0X
-read date text from files                          1858           1867          11          5.4         185.8       1.0X
-read date from files                               7837           7841           3          1.3         783.7       0.2X
-infer date from files                             19249          19276          24          0.5        1924.9       0.1X
-timestamp strings                                  2308           2313           8          4.3         230.8       0.8X
-parse timestamps from Dataset[String]             26899          26960          71          0.4        2689.9       0.1X
-infer timestamps from Dataset[String]             51968          52045          67          0.2        5196.8       0.0X
-date strings                                       2406           2407           1          4.2         240.6       0.8X
-parse dates from Dataset[String]                   9765           9793          26          1.0         976.5       0.2X
-from_csv(timestamp)                               24924          24940          25          0.4        2492.4       0.1X
-from_csv(date)                                     9426           9435           8          1.1         942.6       0.2X
+read timestamp text from files                     1781           1800          20          5.6         178.1       1.0X
+read timestamps from files                        29126          29146          18          0.3        2912.6       0.1X
+infer timestamps from files                       60051          60101          47          0.2        6005.1       0.0X
+read date text from files                          1833           1850          27          5.5         183.3       1.0X
+read date from files                              16687          16711          22          0.6        1668.7       0.1X
+infer date from files                             35526          35565          55          0.3        3552.6       0.1X
+timestamp strings                                  1948           1959          14          5.1         194.8       0.9X
+parse timestamps from Dataset[String]             33202          33302         138          0.3        3320.2       0.1X
+infer timestamps from Dataset[String]             64771          64820          57          0.2        6477.1       0.0X
+date strings                                       2336           2346           9          4.3         233.6       0.8X
+parse dates from Dataset[String]                  20674          20698          22          0.5        2067.4       0.1X
+from_csv(timestamp)                               32259          32649         504          0.3        3225.9       0.1X
+from_csv(date)                                    18588          18622          31          0.5        1858.8       0.1X
 
-OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.5+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-w/o filters                                       15556          15568          13          0.0      155561.6       1.0X
-pushdown disabled                                 15566          15573          12          0.0      155656.9       1.0X
-w/ filters                                          973            979           8          0.1        9726.7      16.0X
+w/o filters                                       15982          15983           1          0.0      159816.5       1.0X
+pushdown disabled                                 15989          16007          16          0.0      159888.2       1.0X
+w/ filters                                         1161           1174          11          0.1       11612.3      13.8X
 
 

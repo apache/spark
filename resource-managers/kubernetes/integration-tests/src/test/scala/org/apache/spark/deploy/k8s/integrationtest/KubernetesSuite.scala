@@ -465,10 +465,12 @@ class KubernetesSuite extends SparkFunSuite
       .get(0)
     driverPodChecker(driverPod)
 
-    // If we're testing decommissioning we an executors, but we should have an executor
-    // at some point.
-    Eventually.eventually(TIMEOUT, patienceInterval) {
-      execPods.values.nonEmpty should be (true)
+    if (patienceInterval.value.toSeconds.toInt > 0) {
+      // If we're testing decommissioning we an executors, but we should have an executor
+      // at some point.
+      Eventually.eventually(TIMEOUT, patienceInterval) {
+        execPods.values.nonEmpty should be (true)
+      }
     }
     execPods.values.foreach(executorPodChecker(_))
 
@@ -618,6 +620,7 @@ private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val localTestTag = Tag("local")
   val schedulingTestTag = Tag("schedule")
+  val decomTestTag = Tag("decom")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"

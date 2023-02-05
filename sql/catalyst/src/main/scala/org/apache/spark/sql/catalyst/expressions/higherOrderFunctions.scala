@@ -24,6 +24,8 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -195,7 +197,15 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
    * bind function takes the potential lambda and it's (partial) arguments and converts this into
    * a bound lambda function.
    */
-  def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction
+  final def bind(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction = {
+    val res = bindInternal(f)
+    res.copyTagsFrom(this)
+    res
+  }
+
+  protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction
 
   // Make sure the lambda variables refer the same instances as of arguments for case that the
   // variables in instantiated separately during serialization or for some reason.
@@ -208,7 +218,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       }
   }
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     var currExprId = -1
     val argumentMap = functions.flatMap(_.collect {
       case l: NamedLambdaVariable =>
@@ -221,7 +231,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
         val newExprId = argumentMap(l.exprId)
         NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
     }
-    val canonicalizedChildren = cleaned.children.map(_.preCanonicalized)
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
     withNewChildren(canonicalizedChildren)
   }
 }
@@ -301,7 +311,8 @@ case class ArrayTransform(
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
     val ArrayType(elementType, containsNull) = argument.dataType
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
@@ -338,7 +349,7 @@ case class ArrayTransform(
     result
   }
 
-  override def prettyName: String = "transform"
+  override def nodeName: String = "transform"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayTransform =
@@ -400,17 +411,32 @@ case class ArraySort(
             if (function.dataType == IntegerType) {
               TypeCheckResult.TypeCheckSuccess
             } else {
-              TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
-                "IntegerType")
+              DataTypeMismatch(
+                errorSubClass = "UNEXPECTED_RETURN_TYPE",
+                messageParameters = Map(
+                  "functionName" -> toSQLId(function.prettyName),
+                  "expectedType" -> toSQLType(IntegerType),
+                  "actualType" -> toSQLType(function.dataType)
+                )
+              )
             }
           case _ =>
-            TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+            DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_INPUT_TYPE",
+              messageParameters = Map(
+                "paramIndex" -> "1",
+                "requiredType" -> toSQLType(ArrayType),
+                "inputSql" -> toSQLExpr(argument),
+                "inputType" -> toSQLType(argument.dataType)
+              )
+            )
         }
       case failure => failure
     }
   }
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySort = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySort = {
     val ArrayType(elementType, containsNull) = argument.dataType
         copy(function =
           f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
@@ -426,7 +452,7 @@ case class ArraySort(
       secondElemVar.value.set(o2)
       val cmp = f.eval(inputRow)
       if (!allowNullComparisonResult && cmp == null) {
-        throw QueryExecutionErrors.nullComparisonResultError()
+        throw QueryExecutionErrors.comparatorReturnsNull(o1.toString, o1.toString)
       }
       cmp.asInstanceOf[Int]
     }
@@ -440,7 +466,7 @@ case class ArraySort(
     new GenericArrayData(arr.asInstanceOf[Array[Any]])
   }
 
-  override def prettyName: String = "array_sort"
+  override def nodeName: String = "array_sort"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArraySort =
@@ -496,7 +522,8 @@ case class MapFilter(
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
@@ -520,7 +547,7 @@ case class MapFilter(
 
   override def functionType: AbstractDataType = BooleanType
 
-  override def prettyName: String = "map_filter"
+  override def nodeName: String = "map_filter"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): MapFilter =
@@ -555,7 +582,8 @@ case class ArrayFilter(
 
   override def functionType: AbstractDataType = BooleanType
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
     val ArrayType(elementType, containsNull) = argument.dataType
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
@@ -586,10 +614,10 @@ case class ArrayFilter(
       }
       i += 1
     }
-    new GenericArrayData(buffer.toSeq)
+    new GenericArrayData(buffer)
   }
 
-  override def prettyName: String = "filter"
+  override def nodeName: String = "filter"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayFilter =
@@ -640,7 +668,8 @@ case class ArrayExists(
 
   override def functionType: AbstractDataType = BooleanType
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayExists = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayExists = {
     val ArrayType(elementType, containsNull) = argument.dataType
     copy(function = f(function, (elementType, containsNull) :: Nil))
   }
@@ -672,7 +701,7 @@ case class ArrayExists(
     }
   }
 
-  override def prettyName: String = "exists"
+  override def nodeName: String = "exists"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayExists =
@@ -713,7 +742,8 @@ case class ArrayForAll(
 
   override def functionType: AbstractDataType = BooleanType
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayForAll = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayForAll = {
     val ArrayType(elementType, containsNull) = argument.dataType
     copy(function = f(function, (elementType, containsNull) :: Nil))
   }
@@ -750,7 +780,7 @@ case class ArrayForAll(
     }
   }
 
-  override def prettyName: String = "forall"
+  override def nodeName: String = "forall"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayForAll =
@@ -804,9 +834,13 @@ case class ArrayAggregate(
       case TypeCheckResult.TypeCheckSuccess =>
         if (!DataType.equalsStructurally(
             zero.dataType, merge.dataType, ignoreNullability = true)) {
-          TypeCheckResult.TypeCheckFailure(
-            s"argument 3 requires ${zero.dataType.simpleString} type, " +
-              s"however, '${merge.sql}' is of ${merge.dataType.catalogString} type.")
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "3",
+              "requiredType" -> toSQLType(zero.dataType),
+              "inputSql" -> toSQLExpr(merge),
+              "inputType" -> toSQLType(merge.dataType)))
         } else {
           TypeCheckResult.TypeCheckSuccess
         }
@@ -814,7 +848,8 @@ case class ArrayAggregate(
     }
   }
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayAggregate = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayAggregate = {
     // Be very conservative with nullable. We cannot be sure that the accumulator does not
     // evaluate to null. So we always set nullable to true here.
     val ArrayType(elementType, containsNull) = argument.dataType
@@ -846,7 +881,7 @@ case class ArrayAggregate(
     }
   }
 
-  override def prettyName: String = "aggregate"
+  override def nodeName: String = "aggregate"
 
   override def first: Expression = argument
   override def second: Expression = zero
@@ -886,7 +921,8 @@ case class TransformKeys(
     TypeUtils.checkForMapKeyType(function.dataType)
   }
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
@@ -909,7 +945,7 @@ case class TransformKeys(
     mapBuilder.from(resultKeys, map.valueArray())
   }
 
-  override def prettyName: String = "transform_keys"
+  override def nodeName: String = "transform_keys"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): TransformKeys =
@@ -939,8 +975,8 @@ case class TransformValues(
 
   override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction)
-  : TransformValues = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformValues = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
@@ -961,7 +997,7 @@ case class TransformValues(
     new ArrayBasedMapData(map.keyArray(), resultValues)
   }
 
-  override def prettyName: String = "transform_values"
+  override def nodeName: String = "transform_values"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): TransformValues =
@@ -1014,7 +1050,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapZipWith = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapZipWith = {
     val arguments = Seq((keyType, false), (leftValueType, true), (rightValueType, true))
     copy(function = f(function, arguments))
   }
@@ -1023,11 +1060,16 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     super.checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
         if (leftKeyType.sameType(rightKeyType)) {
-          TypeUtils.checkForOrderingExpr(leftKeyType, s"function $prettyName")
+          TypeUtils.checkForOrderingExpr(leftKeyType, prettyName)
         } else {
-          TypeCheckResult.TypeCheckFailure(s"The input to function $prettyName should have " +
-            s"been two ${MapType.simpleString}s with compatible key types, but the key types are " +
-            s"[${leftKeyType.catalogString}, ${rightKeyType.catalogString}].")
+          DataTypeMismatch(
+            errorSubClass = "MAP_ZIP_WITH_DIFF_TYPES",
+            messageParameters = Map(
+              "functionName" -> toSQLId(prettyName),
+              "leftType" -> toSQLType(leftKeyType),
+              "rightType" -> toSQLType(rightKeyType)
+            )
+          )
         }
       case failure => failure
     }
@@ -1151,7 +1193,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     new ArrayBasedMapData(keys, values)
   }
 
-  override def prettyName: String = "map_zip_with"
+  override def nodeName: String = "map_zip_with"
 
   override def first: Expression = left
   override def second: Expression = right
@@ -1195,7 +1237,8 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ZipWith = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ZipWith = {
     val ArrayType(leftElementType, _) = left.dataType
     val ArrayType(rightElementType, _) = right.dataType
     copy(function = f(function,
@@ -1238,7 +1281,7 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
     }
   }
 
-  override def prettyName: String = "zip_with"
+  override def nodeName: String = "zip_with"
 
   override def first: Expression = left
   override def second: Expression = right

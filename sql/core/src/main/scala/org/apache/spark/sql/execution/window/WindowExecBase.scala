@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.Utils
 
 /**
  * Holds common logic for window operators
@@ -69,7 +70,7 @@ trait WindowExecBase extends UnaryExecNode {
       // Results of window expressions will be on the right side of child's output
       BoundReference(child.output.size + i, e.dataType, e.nullable)
     }
-    val unboundToRefMap = expressions.zip(references).toMap
+    val unboundToRefMap = Utils.toMap(expressions, references)
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
     UnsafeProjection.create(
       child.output ++ patchedWindowExpression,

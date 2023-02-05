@@ -83,16 +83,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val driverCustomEnvs = (Seq(
-      (ENV_APPLICATION_ID, conf.appId)
-    ) ++ conf.environment)
-      .map { env =>
-        new EnvVarBuilder()
-          .withName(env._1)
-          .withValue(env._2)
-          .build()
-      }
-
+    val driverCustomEnvs = KubernetesUtils.buildEnvVars(
+      Seq(ENV_APPLICATION_ID -> conf.appId) ++ conf.environment)
     val driverCpuQuantity = new Quantity(driverCoresRequest)
     val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
@@ -176,27 +168,27 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       MEMORY_OVERHEAD_FACTOR.key -> defaultOverheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
-      val uris = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
+      val (localUris, remoteUris) =
+        conf.get(key).partition(uri => KubernetesUtils.isLocalAndResolvable(uri))
       val value = {
         if (key == ARCHIVES) {
-          uris.map(UriBuilder.fromUri(_).fragment(null).build()).map(_.toString)
+          localUris.map(UriBuilder.fromUri(_).fragment(null).build()).map(_.toString)
         } else {
-          uris
+          localUris
         }
       }
       val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
       if (resolved.nonEmpty) {
         val resolvedValue = if (key == ARCHIVES) {
-          uris.zip(resolved).map { case (uri, r) =>
+          localUris.zip(resolved).map { case (uri, r) =>
             UriBuilder.fromUri(r).fragment(new java.net.URI(uri).getFragment).build().toString
           }
         } else {
           resolved
         }
-        additionalProps.put(key.key, resolvedValue.mkString(","))
+        additionalProps.put(key.key, (resolvedValue ++ remoteUris).mkString(","))
       }
     }
     additionalProps.toMap
   }
 }
-

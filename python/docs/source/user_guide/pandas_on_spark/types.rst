@@ -101,7 +101,7 @@ The example below shows how data types are casted from pandas-on-Spark DataFrame
 Type casting between pandas and pandas API on Spark
 ---------------------------------------------------
 
-When converting pandas-on-Spark DataFrame to pandas DataFrame, and the data types are basically same as pandas.
+When converting pandas-on-Spark DataFrame to pandas DataFrame, the data types are basically the same as pandas.
 
 .. code-block:: python
 
@@ -136,14 +136,14 @@ However, there are several data types only provided by pandas.
     Categories (3, int64): [1, 2, 3] with type Categorical: did not recognize Python value type when inferring an Arrow data type
 
 
-These kind of pandas specific data types below are not currently supported in pandas API on Spark but planned to be supported.
+These kinds of pandas specific data types below are not currently supported in the pandas API on Spark but planned to be supported.
 
 * pd.Timedelta
 * pd.Categorical
 * pd.CategoricalDtype
 
 
-The pandas specific data types below are not planned to be supported in pandas API on Spark yet.
+The pandas specific data types below are not planned to be supported in the pandas API on Spark yet.
 
 * pd.SparseDtype
 * pd.DatetimeTZDtype
@@ -155,7 +155,7 @@ The pandas specific data types below are not planned to be supported in pandas A
 Internal type mapping
 ---------------------
 
-The table below shows which NumPy data types are matched to which PySpark data types internally in pandas API on Spark.
+The table below shows which NumPy data types are matched to which PySpark data types internally in the pandas API on Spark.
 
 ============= =======================
 NumPy         PySpark
@@ -197,7 +197,7 @@ decimal.Decimal   DecimalType(38, 18)
 
 For decimal type, pandas API on Spark uses Spark's system default precision and scale.
 
-You can check this mapping by using `as_spark_type` function.
+You can check this mapping by using the `as_spark_type` function.
 
 .. code-block:: python
 
@@ -236,7 +236,7 @@ You can also check the underlying PySpark data type of `Series` or schema of `Da
 
 .. note::
 
-    Pandas API on Spark currently does not support multiple types of data in single column.
+    Pandas API on Spark currently does not support multiple types of data in a single column.
 
     .. code-block:: python
     

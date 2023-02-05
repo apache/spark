@@ -73,8 +73,8 @@ def _unsupported_property_exponential_moving(property_name, deprecated=False, re
 
 
 class MissingPandasLikeExpanding:
-    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
-    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_expanding("agg")
     aggregate = _unsupported_function_expanding("aggregate")
@@ -82,7 +82,6 @@ class MissingPandasLikeExpanding:
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
     median = _unsupported_function_expanding("median")
-    quantile = _unsupported_function_expanding("quantile")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -92,8 +91,8 @@ class MissingPandasLikeExpanding:
 
 
 class MissingPandasLikeRolling:
-    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
-    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_rolling("agg")
     aggregate = _unsupported_function_rolling("aggregate")
@@ -101,7 +100,6 @@ class MissingPandasLikeRolling:
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
     median = _unsupported_function_rolling("median")
-    quantile = _unsupported_function_rolling("quantile")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")
@@ -111,8 +109,8 @@ class MissingPandasLikeRolling:
 
 
 class MissingPandasLikeExpandingGroupby:
-    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
-    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_expanding("agg")
     aggregate = _unsupported_function_expanding("aggregate")
@@ -120,7 +118,6 @@ class MissingPandasLikeExpandingGroupby:
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
     median = _unsupported_function_expanding("median")
-    quantile = _unsupported_function_expanding("quantile")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -130,8 +127,8 @@ class MissingPandasLikeExpandingGroupby:
 
 
 class MissingPandasLikeRollingGroupby:
-    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
-    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_rolling("agg")
     aggregate = _unsupported_function_rolling("aggregate")
@@ -139,7 +136,6 @@ class MissingPandasLikeRollingGroupby:
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
     median = _unsupported_function_rolling("median")
-    quantile = _unsupported_function_rolling("quantile")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")

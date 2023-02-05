@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.util.collection.{OpenHashMap, Utils}
 
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.
@@ -181,14 +181,14 @@ private[spark] object ChiSqTest extends Logging {
       counts: Map[(Double, Double), Long],
       methodName: String,
       col: Int): ChiSqTestResult = {
-    val label2Index = counts.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
+    val label2Index = Utils.toMapWithIndex(counts.iterator.map(_._1._1).toArray.distinct.sorted)
     val numLabels = label2Index.size
     if (numLabels > maxCategories) {
       throw new SparkException(s"Chi-square test expect factors (categorical values) but "
         + s"found more than $maxCategories distinct label values.")
     }
 
-    val value2Index = counts.iterator.map(_._1._2).toArray.distinct.sorted.zipWithIndex.toMap
+    val value2Index = Utils.toMapWithIndex(counts.iterator.map(_._1._2).toArray.distinct.sorted)
     val numValues = value2Index.size
     if (numValues > maxCategories) {
       throw new SparkException(s"Chi-square test expect factors (categorical values) but "

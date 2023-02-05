@@ -488,10 +488,10 @@ object PartitioningUtils extends SQLConfHelper {
 
     val timestampTry = Try {
       val unescapedRaw = unescapePathName(raw)
-      // the inferred data type is consistent with the default timestamp type
-      val timestampType = conf.timestampType
       // try and parse the date, if no exception occurs this is a candidate to be resolved as
-      // TimestampType or TimestampNTZType
+      // TimestampType or TimestampNTZType. The inference timestamp typ is controlled by the conf
+      // "spark.sql.inferTimestampNTZInDataSources.enabled".
+      val timestampType = conf.timestampTypeInSchemaInference
       timestampType match {
         case TimestampType => timestampFormatter.parse(unescapedRaw)
         case TimestampNTZType => timestampFormatter.parseWithoutTimeZone(unescapedRaw)
@@ -530,9 +530,12 @@ object PartitioningUtils extends SQLConfHelper {
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
     case StringType => UTF8String.fromString(unescapePathName(value))
-    case ByteType | ShortType | IntegerType => Integer.parseInt(value)
+    case ByteType => Integer.parseInt(value).toByte
+    case ShortType => Integer.parseInt(value).toShort
+    case IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
-    case FloatType | DoubleType => JDouble.parseDouble(value)
+    case FloatType => JDouble.parseDouble(value).toFloat
+    case DoubleType => JDouble.parseDouble(value)
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
@@ -555,8 +558,7 @@ object PartitioningUtils extends SQLConfHelper {
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
 
-    SchemaUtils.checkColumnNameDuplication(
-      partitionColumns, partitionColumns.mkString(", "), caseSensitive)
+    SchemaUtils.checkColumnNameDuplication(partitionColumns, caseSensitive)
 
     partitionColumnsSchema(schema, partitionColumns).foreach {
       field => field.dataType match {

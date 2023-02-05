@@ -19,4 +19,4 @@ license: |
   limitations under the License.
 ---
 
-The Arrow usage guide is now archived on [this page](https://spark.apache.org/docs/latest/api/python/user_guide/arrow_pandas.html).
+The Arrow usage guide is now archived on [this page](https://spark.apache.org/docs/latest/api/python/user_guide/sql/arrow_pandas.html).

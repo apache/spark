@@ -1,12 +1,12 @@
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 metrics aggregation (50 metrics, 100000 tasks per stage):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------------
-1 stage(s)                                                         2584           2766         258          0.0  2584215059.0       1.0X
-2 stage(s)                                                         5493           5524          44          0.0  5493196710.0       0.5X
-3 stage(s)                                                         7890           8249         508          0.0  7889542206.0       0.3X
+1 stage(s)                                                         2650           2717          95          0.0  2649783154.0       1.0X
+2 stage(s)                                                         5093           5204         157          0.0  5093105620.0       0.5X
+3 stage(s)                                                         7879           7990         157          0.0  7879288268.0       0.3X
 
 Stage Count    Stage Proc. Time    Aggreg. Time
-     1              1454                297
-     2              1560                698
-     3              1499                1081
+     1              1392                273
+     2              1371                615
+     3              1342                1101

@@ -370,6 +370,47 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
+  test("SPARK-40280: filter pushdown - int with annotation") {
+    implicit val df = readResourceParquetFile("test-data/tagged_int.parquet")
+
+    val intAttr = df("_c0").expr
+    assert(intAttr.dataType === IntegerType)
+
+    checkFilterPredicate(intAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+    checkFilterPredicate(intAttr.isNotNull, classOf[NotEq[_]],
+      (1 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(intAttr === 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(intAttr <=> 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(intAttr =!= 1, classOf[NotEq[_]],
+      (2 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(intAttr < 2, classOf[Lt[_]], 1)
+    checkFilterPredicate(intAttr > 3, classOf[Gt[_]], 4)
+    checkFilterPredicate(intAttr <= 1, classOf[LtEq[_]], 1)
+    checkFilterPredicate(intAttr >= 4, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(Literal(1) === intAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(1) <=> intAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(2) > intAttr, classOf[Lt[_]], 1)
+    checkFilterPredicate(Literal(3) < intAttr, classOf[Gt[_]], 4)
+    checkFilterPredicate(Literal(1) >= intAttr, classOf[LtEq[_]], 1)
+    checkFilterPredicate(Literal(4) <= intAttr, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(!(intAttr < 4), classOf[GtEq[_]], 4)
+    checkFilterPredicate(intAttr < 2 || intAttr > 3, classOf[Operators.Or],
+      Seq(Row(1), Row(4)))
+
+    Seq(3, 20).foreach { threshold =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+        checkFilterPredicate(
+          In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
+          if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
+          Seq(Row(2), Row(3), Row(4)))
+      }
+    }
+  }
+
   test("filter pushdown - long") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toLong)))
     withNestedParquetDataFrame(data) { case (inputDF, colName, resultFun) =>
@@ -410,6 +451,47 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2L)), Row(resultFun(3L)), Row(resultFun(4L))))
         }
+      }
+    }
+  }
+
+  test("SPARK-40280: filter pushdown - long with annotation") {
+    implicit val df = readResourceParquetFile("test-data/tagged_long.parquet")
+
+    val longAttr = df("_c0").expr
+    assert(longAttr.dataType === LongType)
+
+    checkFilterPredicate(longAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+    checkFilterPredicate(longAttr.isNotNull, classOf[NotEq[_]],
+      (1 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(longAttr === 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(longAttr <=> 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(longAttr =!= 1, classOf[NotEq[_]],
+      (2 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(longAttr < 2, classOf[Lt[_]], 1)
+    checkFilterPredicate(longAttr > 3, classOf[Gt[_]], 4)
+    checkFilterPredicate(longAttr <= 1, classOf[LtEq[_]], 1)
+    checkFilterPredicate(longAttr >= 4, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(Literal(1) === longAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(1) <=> longAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(2) > longAttr, classOf[Lt[_]], 1)
+    checkFilterPredicate(Literal(3) < longAttr, classOf[Gt[_]], 4)
+    checkFilterPredicate(Literal(1) >= longAttr, classOf[LtEq[_]], 1)
+    checkFilterPredicate(Literal(4) <= longAttr, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(!(longAttr < 4), classOf[GtEq[_]], 4)
+    checkFilterPredicate(longAttr < 2 || longAttr > 3, classOf[Operators.Or],
+      Seq(Row(1), Row(4)))
+
+    Seq(3, 20).foreach { threshold =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+        checkFilterPredicate(
+          In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
+          if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
+          Seq(Row(2L), Row(3L), Row(4L)))
       }
     }
   }

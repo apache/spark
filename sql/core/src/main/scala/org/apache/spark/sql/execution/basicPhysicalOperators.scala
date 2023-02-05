@@ -42,8 +42,8 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
     with CodegenSupport
-    with AliasAwareOutputPartitioning
-    with AliasAwareOutputOrdering {
+    with PartitioningPreservingUnaryExecNode
+    with OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -153,7 +153,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
       } else {
-        s""
+        ""
       }
 
       s"""

@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
-import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -1150,18 +1150,31 @@ class AdaptiveQueryExecSuite
         SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
         SQLConf.PLANNED_WRITE_ENABLED.key -> enabled.toString) {
         withTable("t1") {
-          val df = sql("CREATE TABLE t1 USING parquet AS SELECT 1 col")
-          val plan = df.queryExecution.executedPlan
-          assert(plan.isInstanceOf[CommandResultExec])
-          val commandPhysicalPlan = plan.asInstanceOf[CommandResultExec].commandPhysicalPlan
-          if (enabled) {
-            assert(commandPhysicalPlan.isInstanceOf[AdaptiveSparkPlanExec])
-            assert(commandPhysicalPlan.asInstanceOf[AdaptiveSparkPlanExec]
-              .executedPlan.isInstanceOf[DataWritingCommandExec])
-          } else {
-            assert(commandPhysicalPlan.isInstanceOf[DataWritingCommandExec])
-            assert(commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
-              .child.isInstanceOf[AdaptiveSparkPlanExec])
+          var checkDone = false
+          val listener = new SparkListener {
+            override def onOtherEvent(event: SparkListenerEvent): Unit = {
+              event match {
+                case SparkListenerSQLAdaptiveExecutionUpdate(_, _, planInfo) =>
+                  if (enabled) {
+                    assert(planInfo.nodeName == "AdaptiveSparkPlan")
+                    assert(planInfo.children.size == 1)
+                    assert(planInfo.children.head.nodeName ==
+                      "Execute InsertIntoHadoopFsRelationCommand")
+                  } else {
+                    assert(planInfo.nodeName == "Execute InsertIntoHadoopFsRelationCommand")
+                  }
+                  checkDone = true
+                case _ => // ignore other events
+              }
+            }
+          }
+          spark.sparkContext.addSparkListener(listener)
+          try {
+            sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").collect()
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(checkDone)
+          } finally {
+            spark.sparkContext.removeSparkListener(listener)
           }
         }
       }
@@ -1209,16 +1222,12 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
       withTable("t1") {
-        var checkDone = false
+        var commands: Seq[SparkPlanInfo] = Seq.empty
         val listener = new SparkListener {
           override def onOtherEvent(event: SparkListenerEvent): Unit = {
             event match {
-              case SparkListenerSQLAdaptiveExecutionUpdate(_, _, planInfo) =>
-                assert(planInfo.nodeName == "AdaptiveSparkPlan")
-                assert(planInfo.children.size == 1)
-                assert(planInfo.children.head.nodeName ==
-                  "Execute CreateDataSourceTableAsSelectCommand")
-                checkDone = true
+              case start: SparkListenerSQLExecutionStart =>
+                commands = commands ++ Seq(start.sparkPlanInfo)
               case _ => // ignore other events
             }
           }
@@ -1227,7 +1236,12 @@ class AdaptiveQueryExecSuite
         try {
           sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").collect()
           spark.sparkContext.listenerBus.waitUntilEmpty()
-          assert(checkDone)
+          assert(commands.size == 3)
+          assert(commands.head.nodeName == "Execute CreateDataSourceTableAsSelectCommand")
+          assert(commands(1).nodeName == "AdaptiveSparkPlan")
+          assert(commands(1).children.size == 1)
+          assert(commands(1).children.head.nodeName == "Execute InsertIntoHadoopFsRelationCommand")
+          assert(commands(2).nodeName == "CommandResult")
         } finally {
           spark.sparkContext.removeSparkListener(listener)
         }
@@ -2127,8 +2141,8 @@ class AdaptiveQueryExecSuite
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
           // partition size [0,258,72,72,72]
           checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 2, 4)
-          // partition size [72,216,216,144,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 4, 7)
+          // partition size [144,72,144,72,72,144,72]
+          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 6, 7)
         }
 
         // no skewed partition should be optimized
@@ -2641,6 +2655,49 @@ class AdaptiveQueryExecSuite
         """.stripMargin
       )
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+    }
+  }
+
+  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "6") {
+      // partitioning:  HashPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5, $"id").rdd.getNumPartitions == 5)
+      // shuffleOrigin: REPARTITION_BY_COL
+      // The minimum partition number after AQE coalesce is 1
+      assert(spark.range(0).repartition($"id").rdd.getNumPartitions == 1)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5, $"c1").select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  RangePartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      // The minimum partition number of RangePartitioner is 1
+      assert(spark.range(0).repartitionByRange(5, $"id").rdd.getNumPartitions == 1)
+      // shuffleOrigin: REPARTITION_BY_COL
+      assert(spark.range(0).repartitionByRange($"id").rdd.getNumPartitions == 1)
+
+      // partitioning:  RoundRobinPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5).rdd.getNumPartitions == 5)
+      // shuffleOrigin: REBALANCE_PARTITIONS_BY_NONE
+      assert(spark.range(0).repartition().rdd.getNumPartitions == 0)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5).select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  SinglePartition
+      assert(spark.range(0).repartition(1).rdd.getNumPartitions == 1)
+    }
+  }
+
+  test("SPARK-39915: Ensure the output partitioning is user-specified") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(1).selectExpr("id as c1")
+      val df2 = spark.range(1).selectExpr("id as c2")
+      val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
+      assert(df.rdd.getNumPartitions == 3)
     }
   }
 }

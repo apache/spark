@@ -190,7 +190,7 @@ def as_spark_type(
     elif tpe in (np.int8, np.byte, "int8", "byte", "b"):
         return types.ByteType()
     elif tpe in (decimal.Decimal,):
-        # TODO: considering about the precision & scale for decimal type.
+        # TODO: considering the precision & scale for decimal type.
         return types.DecimalType(38, 18)
     elif tpe in (float, np.float_, np.float64, "float", "float64", "double"):
         return types.DoubleType()
@@ -639,7 +639,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
 
 
 # TODO: once pandas exposes a typing module like numpy.typing, we should deprecate
-#   this logic and migrate to it with implementing the typing module in pandas API on Spark.
+#   this logic and migrate to it by implementing the typing module in pandas API on Spark.
 
 
 def create_type_for_series_type(param: Any) -> Type[SeriesType]:

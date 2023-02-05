@@ -162,9 +162,30 @@ private[spark] object ThreadUtils {
   /**
    * Wrapper over newSingleThreadExecutor.
    */
-  def newDaemonSingleThreadExecutor(threadName: String): ExecutorService = {
+  def newDaemonSingleThreadExecutor(threadName: String): ThreadPoolExecutor = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    Executors.newSingleThreadExecutor(threadFactory)
+    Executors.newFixedThreadPool(1, threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
+
+  /**
+   * Wrapper over newSingleThreadExecutor that allows the specification
+   * of a RejectedExecutionHandler
+   */
+  def newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
+      threadName: String,
+      taskQueueCapacity: Int,
+      rejectedExecutionHandler: RejectedExecutionHandler): ThreadPoolExecutor = {
+
+    val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
+
+    new ThreadPoolExecutor(
+      1,
+      1,
+      0L,
+      TimeUnit.MILLISECONDS,
+      new ArrayBlockingQueue[Runnable](taskQueueCapacity),
+      threadFactory,
+      rejectedExecutionHandler)
   }
 
   /**

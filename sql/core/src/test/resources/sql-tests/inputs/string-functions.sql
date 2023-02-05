@@ -26,6 +26,10 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 -- split function
 SELECT split('aa1cc2ee3', '[1-9]+');
 SELECT split('aa1cc2ee3', '[1-9]+', 2);
+SELECT split('hello', '');
+SELECT split('', '');
+SELECT split('abc', null);
+SELECT split(null, 'b');
 
 -- split_part function
 SELECT split_part('11.12.13', '.', 2);
@@ -38,6 +42,7 @@ SELECT split_part('11.12.13', '.', 4);
 SELECT split_part('11.12.13', '.', 5);
 SELECT split_part('11.12.13', '.', -5);
 SELECT split_part(null, '.', 1);
+SELECT split_part(str, delimiter, partNum) FROM VALUES ('11.12.13', '.', 3) AS v1(str, delimiter, partNum);
 
 -- substring function
 SELECT substr('Spark SQL', 5);
@@ -78,6 +83,8 @@ SELECT rpad('hi', 'invalid_length');
 SELECT hex(lpad(unhex(''), 5));
 SELECT hex(lpad(unhex('aabb'), 5));
 SELECT hex(lpad(unhex('aabbcc'), 2));
+SELECT hex(lpad(unhex('123'), 2));
+SELECT hex(lpad(unhex('12345'), 2));
 SELECT hex(lpad(unhex(''), 5, unhex('1f')));
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f')));
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f')));
@@ -92,6 +99,8 @@ SELECT hex(lpad(unhex('aabbcc'), 2, unhex('ff')));
 SELECT hex(rpad(unhex(''), 5));
 SELECT hex(rpad(unhex('aabb'), 5));
 SELECT hex(rpad(unhex('aabbcc'), 2));
+SELECT hex(rpad(unhex('123'), 2));
+SELECT hex(rpad(unhex('12345'), 2));
 SELECT hex(rpad(unhex(''), 5, unhex('1f')));
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f')));
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f')));
@@ -117,6 +126,8 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.');
 
 -- contains
 SELECT CONTAINS(null, 'Spark');
@@ -169,12 +180,43 @@ select to_number('00,454.8-', '00,000.9MI');
 select to_number('<00,454.8>', '00,000.9PR');
 
 -- to_binary
-select to_binary('abc');
-select to_binary('abc', 'utf-8');
-select to_binary('abc', 'base64');
-select to_binary('abc', 'hex');
+-- base64 valid
+select to_binary('', 'base64');
+select to_binary('  ', 'base64');
+select to_binary(' ab cd ', 'base64');
+select to_binary(' ab c=', 'base64');
+select to_binary(' ab cdef= = ', 'base64');
+select to_binary(
+  concat(' b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0',
+         'd2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl'), 'base64');
+-- base64 invalid
+select to_binary('a', 'base64');
+select to_binary('a?', 'base64');
+select to_binary('abcde', 'base64');
+select to_binary('abcd=', 'base64');
+select to_binary('a===', 'base64');
+select to_binary('ab==f', 'base64');
+-- utf-8
+select to_binary(
+  '∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)', 'utf-8');
+select to_binary('大千世界', 'utf8');
+select to_binary('', 'utf-8');
+select to_binary('  ', 'utf8');
+-- hex valid
+select to_binary('737472696E67');
+select to_binary('737472696E67', 'hex');
+select to_binary('');
+select to_binary('1', 'hex');
+select to_binary('FF');
+select to_binary('123', 'hex');
+select to_binary('12345', 'hex');
+-- hex invalid
+select to_binary('GG');
+select to_binary('01 AF', 'hex');
 -- 'format' parameter can be any foldable string value, not just literal.
 select to_binary('abc', concat('utf', '-8'));
+select to_binary(' ab cdef= = ', substr('base64whynot', 0, 6));
+select to_binary(' ab cdef= = ', replace('HEX0', '0'));
 -- 'format' parameter is case insensitive.
 select to_binary('abc', 'Hex');
 -- null inputs lead to null result.
@@ -182,10 +224,36 @@ select to_binary('abc', null);
 select to_binary(null, 'utf-8');
 select to_binary(null, null);
 select to_binary(null, cast(null as string));
--- 'format' parameter must be string type or void type.
-select to_binary(null, cast(null as int));
-select to_binary('abc', 1);
 -- invalid format
+select to_binary('abc', 1);
 select to_binary('abc', 'invalidFormat');
--- invalid string input
-select to_binary('a!', 'base64');
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat');
+SELECT to_binary('abc', fmtField) FROM fmtTable;
+-- Clean up
+DROP VIEW IF EXISTS fmtTable;
+-- luhn_check
+-- basic cases
+select luhn_check('4111111111111111');
+select luhn_check('5500000000000004');
+select luhn_check('340000000000009');
+select luhn_check('6011000000000004');
+select luhn_check('6011000000000005');
+select luhn_check('378282246310006');
+select luhn_check('0');
+-- spaces in the beginning/middle/end
+select luhn_check('4111111111111111    ');
+select luhn_check('4111111 111111111');
+select luhn_check(' 4111111111111111');
+-- space
+select luhn_check('');
+select luhn_check('  ');
+-- non-digits
+select luhn_check('510B105105105106');
+select luhn_check('ABCDED');
+-- null
+select luhn_check(null);
+-- non string (test implicit cast)
+select luhn_check(6011111111111117);
+select luhn_check(6011111111111118);
+select luhn_check(123.456);
+

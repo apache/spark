@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
 
 /**
  * Resolves the catalog of the name parts for table/view/function/namespace.
@@ -28,8 +28,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case UnresolvedIdentifier(CatalogAndIdentifier(catalog, identifier)) =>
-      ResolvedIdentifier(catalog, identifier)
+    case UnresolvedIdentifier(nameParts, allowTemp) =>
+      if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
+        val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      } else {
+        val CatalogAndIdentifier(catalog, identifier) = nameParts
+        ResolvedIdentifier(catalog, identifier)
+      }
     case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
       s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
     case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>

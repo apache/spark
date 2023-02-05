@@ -1023,7 +1023,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
         file.deleteOnExit()
         val cmd =
           s"""
-             |#!/bin/bash
+             |#!/usr/bin/env bash
              |trap "" SIGTERM
              |sleep 10
            """.stripMargin

@@ -107,8 +107,8 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
-  override lazy val preCanonicalized: Expression = {
-    copy(child = child.preCanonicalized, name = None)
+  override lazy val canonicalized: Expression = {
+    copy(child = child.canonicalized, name = None)
   }
 
   override def dataType: DataType = childSchema(ordinal).dataType
@@ -391,21 +391,16 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")
-    val found = ctx.freshName("found")
     val key = ctx.freshName("key")
     val values = ctx.freshName("values")
     val keyType = mapType.keyType
     val nullCheck = if (mapType.valueContainsNull) {
-      s"""else if ($values.isNullAt($index)) {
-            ${ev.isNull} = true;
-          }
-       """
+      s" || $values.isNullAt($index)"
     } else {
       ""
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
@@ -413,19 +408,18 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         final ArrayData $values = $eval1.valueArray();
 
         int $index = 0;
-        boolean $found = false;
-        while ($index < $length && !$found) {
+        while ($index < $length) {
           final $keyJavaType $key = ${CodeGenerator.getValue(keys, keyType, index)};
           if (${ctx.genEqual(keyType, key, eval2)}) {
-            $found = true;
+            break;
           } else {
             $index++;
           }
         }
 
-        if (!$found) {
+        if ($index == $length$nullCheck) {
           ${ev.isNull} = true;
-        } $nullCheck else {
+        } else {
           ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
       """
@@ -448,9 +442,9 @@ case class GetMapValue(child: Expression, key: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
+      case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(keyType, prettyName)
     }
   }
 

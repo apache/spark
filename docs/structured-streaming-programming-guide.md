@@ -498,14 +498,14 @@ to track the read position in the stream. The engine uses checkpointing and writ
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
-([Scala](api/scala/org/apache/spark/sql/SparkSession.html)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[R](api/R/sparkR.session.html) docs)
+([Scala](api/scala/org/apache/spark/sql/SparkSession.html)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[R](api/R/reference/sparkR.session.html) docs)
 to create streaming DataFrames/Datasets from streaming sources, and apply the same operations on them as static DataFrames/Datasets. If you are not familiar with Datasets/DataFrames, you are strongly advised to familiarize yourself with them using the
 [DataFrame/Dataset Programming Guide](sql-programming-guide.html).
 
 ## Creating streaming DataFrames and streaming Datasets
 Streaming DataFrames can be created through the `DataStreamReader` interface
 ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamReader.html#pyspark.sql.streaming.DataStreamReader) docs)
-returned by `SparkSession.readStream()`. In [R](api/R/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
+returned by `SparkSession.readStream()`. In [R](api/R/reference/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
 
 #### Input Sources
 There are a few built-in sources.
@@ -1834,19 +1834,22 @@ Though Spark cannot check and force it, the state function should be implemented
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
 Some of them are as follows.
  
-- Multiple streaming aggregations (i.e. a chain of aggregations on a streaming DF) are not yet supported on streaming Datasets.
-
 - Limit and take the first N rows are not supported on streaming Datasets.
 
 - Distinct operations on streaming Datasets are not supported.
-
-- Deduplication operation is not supported after aggregation on a streaming Datasets.
 
 - Sorting operations are supported on streaming Datasets only after an aggregation and in Complete Output Mode.
 
 - Few types of outer joins on streaming Datasets are not supported. See the
   <a href="#support-matrix-for-joins-in-streaming-queries">support matrix in the Join Operations section</a>
   for more details.
+
+- Chaining multiple stateful operations on streaming Datasets is not supported with Update and Complete mode.
+  - In addition, below operations followed by other stateful operation is not supported in Append mode.
+    - stream-stream time interval join (inner/outer)
+    - flatMapGroupsWithState
+  - A known workaround is to split your streaming query into multiple queries having a single stateful operation per each query,
+    and ensure end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
 In addition, there are some Dataset methods that will not work on streaming Datasets. They are actions that will immediately run queries and return results, which does not make sense on a streaming Dataset. Rather, those functionalities can be done by explicitly starting a streaming query (see the next section regarding that).
 
@@ -1862,35 +1865,6 @@ there are others which are fundamentally hard to implement on streaming data eff
 For example, sorting on the input stream is not supported, as it requires keeping 
 track of all the data received in the stream. This is therefore fundamentally hard to execute 
 efficiently.
-
-### Limitation of global watermark
-
-In Append mode, if a stateful operation emits rows older than current watermark plus allowed late record delay,
-they will be "late rows" in downstream stateful operations (as Spark uses global watermark). Note that these rows may be discarded.
-This is a limitation of a global watermark, and it could potentially cause a correctness issue.
-
-Spark will check the logical plan of query and log a warning when Spark detects such a pattern.
-
-Any of the stateful operation(s) after any of below stateful operations can have this issue:
-
-* streaming aggregation in Append mode
-* stream-stream outer join
-* `mapGroupsWithState` and `flatMapGroupsWithState` in Append mode (depending on the implementation of the state function)
-
-As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
-emits late rows if the operator uses Append mode.
-
-Spark provides two ways to check the number of late rows on stateful operators which would help you identify the issue:
-
-1. On Spark UI: check the metrics in stateful operator nodes in query execution details page in SQL tab
-2. On Streaming Query Listener: check "numRowsDroppedByWatermark" in "stateOperators" in QueryProcessEvent.
-
-Please note that "numRowsDroppedByWatermark" represents the number of "dropped" rows by watermark, which is not always same as the count of "late input rows" for the operator.
-It depends on the implementation of the operator - e.g. streaming aggregation does pre-aggregate input rows and checks the late inputs against pre-aggregated inputs,
-hence the number is not same as the number of original input rows. You'd like to just check the fact whether the value is zero or non-zero.
-
-There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
-end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
 ### State Store
 
@@ -3569,6 +3543,62 @@ the effect of the change is not well-defined. For all of them:
     structures into bytes using an encoding/decoding scheme that supports schema migration. For example,
     if you save your state as Avro-encoded bytes, then you are free to change the Avro-state-schema between query
     restarts as the binary state will always be restored successfully.
+
+# Asynchronous Progress Tracking
+## What is it?
+
+Asynchronous progress tracking allows streaming queries to checkpoint progress asynchronously and in parallel to the actual data processing within a micro-batch, reducing latency associated with maintaining the offset log and commit log.
+
+![Async Progress Tracking](img/async-progress.png)
+
+## How does it work?
+
+Structured Streaming relies on persisting and managing offsets as progress indicators for query processing. Offset management operation directly impacts processing latency, because no data processing can occur until these operations are complete. Asynchronous progress tracking enables streaming queries to checkpoint progress without being impacted by these offset management operations.
+
+## How to use it?
+
+The code snippet below provides an example of how to use this feature:
+```scala
+val stream = spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+      .option("subscribe", "in")
+      .load()
+val query = stream.writeStream
+     .format("kafka")
+	.option("topic", "out")
+     .option("checkpointLocation", "/tmp/checkpoint")
+	.option("asyncProgressTrackingEnabled", "true")
+     .start()
+```
+
+The table below describes the configurations for this feature and default values associated with them.
+
+| Option    | Value           | Default | Description       | 
+|-------------|-----------------|------------|---------------------|
+|asyncProgressTrackingEnabled|true/false|false|enable or disable asynchronous progress tracking|
+|asyncProgressCheckpointingInterval|minutes|1|the interval in which we commit offsets and completion commits|
+
+## Limitations
+The initial version of the feature has the following limitations:
+
+* Asynchronous progress tracking is only supported in stateless queries using Kafka Sink
+* Exactly once end-to-end processing will not be supported with this asynchronous progress tracking because offset ranges for batch can be changed in case of failure. Though many sinks, such as Kafka sink, do not support writing exactly once anyways.
+
+## Switching the setting off
+Turning the async progress tracking off may cause the following exception to be thrown
+
+```scala
+java.lang.IllegalStateException: batch x doesn't exist
+```
+
+Also the following error message may be printed in the driver logs:
+
+```
+The offset log for batch x doesn't exist, which is required to restart the query from the latest batch x from the offset log. Please ensure there are two subsequent offset logs available for the latest batch via manually deleting the offset file(s). Please also ensure the latest batch for commit log is equal or one batch earlier than the latest batch for offset log.
+```
+
+This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used. To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressCheckpointingInterval” to 0 and run the streaming query until at least two micro-batches have been processed. Async progress tracking can be now safely disabled and restarting query should proceed normally.
 
 # Continuous Processing
 ## [Experimental]

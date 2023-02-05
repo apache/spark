@@ -44,7 +44,7 @@ object ArrowWriter {
     new ArrowWriter(root, children.toArray)
   }
 
-  private def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
+  private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
     val field = vector.getField()
     (ArrowUtils.fromArrowField(field), vector) match {
       case (BooleanType, vector: BitVector) => new BooleanWriter(vector)

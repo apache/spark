@@ -46,7 +46,10 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
       }
-      assert(e.message === "Partition not found in table 'table' database 'ns':\nid -> 1")
+      checkError(e,
+        errorClass = "PARTITIONS_NOT_FOUND",
+        parameters = Map("partitionList" -> "PARTITION (`id` = 1)",
+          "tableName" -> "`ns`.`table`"))
     }
   }
 
@@ -56,10 +59,16 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         |CREATE TABLE $tbl
         |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
         |$defaultUsing""".stripMargin)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"DESC $tbl key1").collect()
-      }.getMessage
-      assert(errMsg === "Column key1 does not exist")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESC $tbl key1").collect()
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`key1`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
     }
   }
 
@@ -76,10 +85,16 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { tbl =>
         sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"DESC $tbl KEY").collect()
-        }.getMessage
-        assert(errMsg === "Column KEY does not exist")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"DESC $tbl KEY").collect()
+          },
+          errorClass = "COLUMN_NOT_FOUND",
+          parameters = Map(
+            "colName" -> "`KEY`",
+            "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+          )
+        )
       }
     }
   }
@@ -167,6 +182,27 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       }
     }
   }
+
+  test("describe a column with a default value") {
+    withTable("t") {
+      sql(s"create table t(a int default 42) $defaultUsing")
+      val descriptionDf = sql("describe table extended t a")
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "a"),
+          Row("data_type", "int"),
+          Row("comment", "NULL"),
+          Row("default", "42"),
+          Row("min", "NULL"),
+          Row("max", "NULL"),
+          Row("num_nulls", "NULL"),
+          Row("distinct_count", "NULL"),
+          Row("max_col_len", "NULL"),
+          Row("avg_col_len", "NULL"),
+          Row("histogram", "NULL")))
+    }
+  }
 }
 
 /**
@@ -208,6 +244,34 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("Table Properties", "[bar=baz]", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Partition Provider", "Catalog", "")))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED of a table with a default column value") {
+    withTable("t") {
+      spark.sql(s"CREATE TABLE t (id bigint default 42) $defaultUsing")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
+      assert(descriptionDf.schema.map { field =>
+        (field.name, field.dataType)
+      } === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf.filter(
+          "!(col_name in ('Created Time', 'Created By', 'Database', 'Location', " +
+            "'Provider', 'Type'))"),
+        Seq(
+          Row("id", "bigint", null),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Catalog", SESSION_CATALOG_NAME, ""),
+          Row("Table", "t", ""),
+          Row("Last Access", "UNKNOWN", ""),
+          Row("", "", ""),
+          Row("# Column Default Values", "", ""),
+          Row("id", "bigint", "42")
+        ))
     }
   }
 }

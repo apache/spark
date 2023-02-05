@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import java.util.Random
 import java.util.function.Supplier
 
 import scala.concurrent.Future
@@ -39,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
+import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Common trait for all shuffle exchange implementations to facilitate pattern matching.
@@ -299,7 +299,14 @@ object ShuffleExchangeExec {
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) =>
         // Distributes elements evenly across output partitions, starting from a random partition.
-        var position = new Random(TaskContext.get().partitionId()).nextInt(numPartitions)
+        // nextInt(numPartitions) implementation has a special case when bound is a power of 2,
+        // which is basically taking several highest bits from the initial seed, with only a
+        // minimal scrambling. Due to deterministic seed, using the generator only once,
+        // and lack of scrambling, the position values for power-of-two numPartitions always
+        // end up being almost the same regardless of the index. substantially scrambling the
+        // seed by hashing will help. Refer to SPARK-21782 for more details.
+        val partitionId = TaskContext.get().partitionId()
+        var position = new XORShiftRandom(partitionId).nextInt(numPartitions)
         (row: InternalRow) => {
           // The HashPartitioner will handle the `mod` by the number of partitions
           position += 1

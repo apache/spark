@@ -732,7 +732,7 @@ class BooleanExtensionOpsTest(OpsTestBase):
         data = [True, True, False, None]
         pser = pd.Series(data, dtype="boolean")
         psser = ps.Series(data, dtype="boolean")
-        self.check_extension(pser, psser.to_pandas())
+        self.check_extension(pser, psser._to_pandas())
         self.check_extension(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -813,7 +813,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.data_type_ops.test_boolean_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

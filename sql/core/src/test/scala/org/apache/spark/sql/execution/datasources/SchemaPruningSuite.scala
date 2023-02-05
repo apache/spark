@@ -398,6 +398,26 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("SPARK-41961: nested schema pruning on table-valued generator functions") {
+    val query1 = sql("select friend.first from contacts, lateral explode(friends) t(friend)")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Currently we don't prune multiple field case.
+    val query2 = sql(
+      "select friend.first, friend.middle from contacts, lateral explode(friends) t(friend)")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    val query3 = sql(
+      """
+        |select friend.first, friend.middle, friend
+        |from contacts, lateral explode(friends) t(friend)
+        |""".stripMargin)
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
   testSchemaPruning("select one deep nested complex field after repartition") {
     val query = sql("select * from contacts")
       .repartition(100)
@@ -1079,5 +1099,66 @@ abstract class SchemaPruningSuite
 
       checkAnswer(query, Row(Row("Jane", "X.", "Doe")) :: Nil)
     }
+  }
+
+  testSchemaPruning("SPARK-40033: Schema pruning support through element_at") {
+    // nested struct fields inside array
+    val query1 =
+      sql("""
+            |SELECT
+            |element_at(friends, 1).first, element_at(friends, 1).last
+            |FROM contacts WHERE id = 0
+            |""".stripMargin)
+    checkScan(query1, "struct<id:int,friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query1.orderBy("id"),
+      Row("Susan", "Smith"))
+
+    // nested struct fields inside map values
+    val query2 =
+      sql("""
+            |SELECT
+            |element_at(relatives, "brother").first, element_at(relatives, "brother").middle
+            |FROM contacts WHERE id = 0
+            |""".stripMargin)
+    checkScan(query2, "struct<id:int,relatives:map<string,struct<first:string,middle:string>>>")
+    checkAnswer(query2.orderBy("id"),
+      Row("John", "Y."))
+  }
+
+  testSchemaPruning("SPARK-41017: column pruning through 2 filters") {
+    import testImplicits._
+    val query = spark.table("contacts").filter(rand() > 0.5).filter(rand() < 0.8)
+      .select($"id", $"name.first")
+    checkScan(query, "struct<id:int, name:struct<first:string>>")
+  }
+
+  testSchemaPruning("SPARK-42163: GetArrayItem and GetMapItem with non-foldable index") {
+    // Technically, there's no reason that we can't support a non-foldable index, it's just tricky
+    // with the existing pruning code. If we ever do support it, this test can be modified to check
+    // for a narrower scan schema.
+    val arrayQuery =
+      sql("""
+            |SELECT
+            |employer.company, friends[employer.id].first
+            |FROM contacts
+            |""".stripMargin)
+    checkScan(arrayQuery,
+        """struct<friends:array<struct<first:string,middle:string,last:string>>,
+          |employer:struct<id:int,company:struct<name:string,address:string>>>""".stripMargin)
+    checkAnswer(arrayQuery,
+      Row(Row("abc", "123 Business Street"), "Susan") ::
+      Row(null, null) :: Row(null, null) :: Row(null, null) :: Nil)
+
+    val mapQuery =
+      sql("""
+            |SELECT
+            |employer.id, relatives[employer.company.name].first
+            |FROM contacts
+            |""".stripMargin)
+    checkScan(mapQuery,
+        """struct<relatives:map<string,struct<first:string,middle:string,last:string>>,
+          |employer:struct<id:int,company:struct<name:string>>>""".stripMargin)
+    checkAnswer(mapQuery, Row(0, null) :: Row(1, null) ::
+      Row(null, null) :: Row(null, null) :: Nil)
   }
 }

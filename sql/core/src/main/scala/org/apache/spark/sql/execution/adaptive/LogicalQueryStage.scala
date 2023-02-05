@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, RepartitionOperation, Statistics}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, REPARTITION_OPERATION, TreePattern}
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -40,7 +40,15 @@ case class LogicalQueryStage(
   override def output: Seq[Attribute] = logicalPlan.output
   override val isStreaming: Boolean = logicalPlan.isStreaming
   override val outputOrdering: Seq[SortOrder] = physicalPlan.outputOrdering
-  override protected val nodePatterns: Seq[TreePattern] = Seq(LOGICAL_QUERY_STAGE)
+  override protected val nodePatterns: Seq[TreePattern] = {
+    // Repartition is a special node that it represents a shuffle exchange,
+    // then in AQE the repartition will be always wrapped into `LogicalQueryStage`
+    val repartitionPattern = logicalPlan match {
+      case _: RepartitionOperation => Some(REPARTITION_OPERATION)
+      case _ => None
+    }
+    Seq(LOGICAL_QUERY_STAGE) ++ repartitionPattern
+  }
 
   override def computeStats(): Statistics = {
     // TODO this is not accurate when there is other physical nodes above QueryStageExec.

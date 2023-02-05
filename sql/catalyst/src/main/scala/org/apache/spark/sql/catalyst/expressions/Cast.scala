@@ -21,9 +21,10 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
@@ -33,21 +34,21 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
-object Cast {
+object Cast extends QueryErrorsBase {
   /**
    * As per section 6.13 "cast specification" in "Information technology — Database languages " +
    * "- SQL — Part 2: Foundation (SQL/Foundation)":
    * If the <cast operand> is a <value expression>, then the valid combinations of TD and SD
-   * in a <cast specification> are given by the following table. “Y” indicates that the
-   * combination is syntactically valid without restriction; “M” indicates that the combination
-   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and “N” indicates
+   * in a <cast specification> are given by the following table. "Y" indicates that the
+   * combination is syntactically valid without restriction; "M" indicates that the combination
+   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and "N" indicates
    * that the combination is not valid:
    * SD                   TD
    *     EN AN C D T TS YM DT BO UDT B RT CT RW
@@ -293,6 +294,9 @@ object Cast {
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
+    case (DateType, TimestampNTZType) => true
+    case (TimestampNTZType, TimestampType) => true
+    case (TimestampType, TimestampNTZType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
     case (NullType, _) => true
@@ -412,47 +416,48 @@ object Cast {
     }
   }
 
-  // Show suggestion on how to complete the disallowed explicit casting with built-in type
-  // conversion functions.
-  private def suggestionOnConversionFunctions (
-      from: DataType,
-      to: DataType,
-      functionNames: String): String = {
-    // scalastyle:off line.size.limit
-    s"""cannot cast ${from.catalogString} to ${to.catalogString}.
-       |To convert values from ${from.catalogString} to ${to.catalogString}, you can use $functionNames instead.
-       |""".stripMargin
-    // scalastyle:on line.size.limit
-  }
-
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
-      fallbackConf: Option[(String, String)]): String =
+      fallbackConf: Option[(String, String)]): DataTypeMismatch = {
+    def withFunSuggest(names: String*): DataTypeMismatch = {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(from),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> names.map(toSQLId).mkString("/")))
+    }
     (from, to) match {
       case (_: NumericType, TimestampType) =>
-        suggestionOnConversionFunctions(from, to,
-          "functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS")
+        withFunSuggest("TIMESTAMP_SECONDS", "TIMESTAMP_MILLIS", "TIMESTAMP_MICROS")
 
       case (TimestampType, _: NumericType) =>
-        suggestionOnConversionFunctions(from, to, "functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS")
+        withFunSuggest("UNIX_SECONDS", "UNIX_MILLIS", "UNIX_MICROS")
 
       case (_: NumericType, DateType) =>
-        suggestionOnConversionFunctions(from, to, "function DATE_FROM_UNIX_DATE")
+        withFunSuggest("DATE_FROM_UNIX_DATE")
 
       case (DateType, _: NumericType) =>
-        suggestionOnConversionFunctions(from, to, "function UNIX_DATE")
+        withFunSuggest("UNIX_DATE")
 
-      // scalastyle:off line.size.limit
       case _ if fallbackConf.isDefined && Cast.canCast(from, to) =>
-        s"""
-           | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set ${fallbackConf.get._1} as ${fallbackConf.get._2}.
-           |""".stripMargin
-      // scalastyle:on line.size.limit
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(from),
+            "targetType" -> toSQLType(to),
+            "config" -> toSQLConf(fallbackConf.get._1),
+            "configVal" -> toSQLValue(fallbackConf.get._2, StringType)))
 
-      case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(from),
+            "targetType" -> toSQLType(to)))
     }
+  }
 
   def apply(
       child: Expression,
@@ -487,8 +492,12 @@ case class Cast(
     child: Expression,
     dataType: DataType,
     timeZoneId: Option[String] = None,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends UnaryExpression
-  with TimeZoneAwareExpression with NullIntolerant with SupportQueryContext {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with NullIntolerant
+  with SupportQueryContext
+  with QueryErrorsBase {
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
     this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))
@@ -501,7 +510,7 @@ case class Cast(
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   def ansiEnabled: Boolean = {
-    evalMode == EvalMode.ANSI || evalMode == EvalMode.TRY
+    evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
   }
 
   // Whether this expression is used for `try_cast()`.
@@ -509,7 +518,7 @@ case class Cast(
     evalMode == EvalMode.TRY
   }
 
-  private def typeCheckFailureMessage: String = evalMode match {
+  private def typeCheckFailureInCast: DataTypeMismatch = evalMode match {
     case EvalMode.ANSI =>
       if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
         Cast.typeCheckFailureMessage(child.dataType, dataType,
@@ -522,7 +531,11 @@ case class Cast(
     case EvalMode.TRY =>
       Cast.typeCheckFailureMessage(child.dataType, dataType, None)
     case _ =>
-      s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(child.dataType),
+          "targetType" -> toSQLType(dataType)))
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -535,7 +548,7 @@ case class Cast(
     if (canCast) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(typeCheckFailureMessage)
+      typeCheckFailureInCast
     }
   }
 
@@ -563,8 +576,8 @@ case class Cast(
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
-  override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[Cast]
+  override lazy val canonicalized: Expression = {
+    val basic = withNewChildren(Seq(child.canonicalized)).asInstanceOf[Cast]
     if (timeZoneId.isDefined && !needsTimeZone) {
       basic.withTimeZone(null)
     } else {
@@ -761,7 +774,7 @@ case class Cast(
         }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => if (b) 1L else 0)
+      buildCast[Boolean](_, b => if (b) 1L else 0L)
     case LongType =>
       buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
@@ -1257,7 +1270,7 @@ case class Cast(
   }
 
   private def cast(from: DataType, to: DataType): Any => Any = {
-    if (!isTryCast) {
+    if (!isTryCast || canUseLegacyCastForTryCast) {
       castInternal(from, to)
     } else {
       (input: Any) =>
@@ -1267,6 +1280,20 @@ case class Cast(
           case _: Exception =>
             null
         }
+    }
+  }
+
+  // Whether Spark SQL can evaluation the try_cast as the legacy cast, so that no `try...catch`
+  // is needed and the performance can be faster.
+  private lazy val canUseLegacyCastForTryCast: Boolean = {
+    if (!child.resolved) {
+      false
+    } else {
+      (child.dataType, dataType) match {
+        case (StringType, _: FractionalType) => true
+        case (StringType, _: DatetimeType) => true
+        case _ => false
+      }
     }
   }
 
@@ -1335,7 +1362,7 @@ case class Cast(
   protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
-    val castCodeWithTryCatchIfNeeded = if (!isTryCast) {
+    val castCodeWithTryCatchIfNeeded = if (!isTryCast || canUseLegacyCastForTryCast) {
       s"${cast(input, result, resultIsNull)}"
     } else {
       s"""
@@ -2257,7 +2284,7 @@ case class Cast(
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = getContextOrNullCode(ctx)
-            s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
+            "throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.FloatType$$.MODULE$$,$c, $errorContext);"
           } else {
             s"$evNull = true;"
@@ -2295,7 +2322,7 @@ case class Cast(
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = getContextOrNullCode(ctx)
-            s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
+            "throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c, $errorContext);"
           } else {
             s"$evNull = true;"
@@ -2482,21 +2509,42 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
  * Casting a numeric value as another numeric type in store assignment. It can capture the
  * arithmetic errors and show proper error messages to users.
  */
-case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends UnaryExpression {
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild.asInstanceOf[Cast])
+case class CheckOverflowInTableInsert(child: Expression, columnName: String)
+    extends UnaryExpression {
+  checkChild(child)
+
+  private def checkChild(child: Expression): Unit = child match {
+    case _: Cast =>
+    case ExpressionProxy(c, _, _) if c.isInstanceOf[Cast] =>
+    case _ =>
+      throw SparkException.internalError("Child is not Cast or ExpressionProxy of Cast")
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    checkChild(newChild)
+    copy(child = newChild)
+  }
+
+  private def getCast: Cast = child match {
+    case c: Cast =>
+      c
+    case ExpressionProxy(c, _, _) =>
+      c.asInstanceOf[Cast]
+  }
 
   override def eval(input: InternalRow): Any = try {
     child.eval(input)
   } catch {
     case e: SparkArithmeticException =>
+      val cast = getCast
       throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
-        child.child.dataType,
-        child.dataType,
+        cast.child.dataType,
+        cast.dataType,
         columnName)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val child = getCast
     val childGen = child.genCode(ctx)
     val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
     val fromDt =

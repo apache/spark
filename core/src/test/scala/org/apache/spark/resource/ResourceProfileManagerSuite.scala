@@ -116,6 +116,43 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     assert(rpmanager.isSupported(immrprof))
   }
 
+  test("isSupported task resource profiles with dynamic allocation disabled") {
+    val conf = new SparkConf().setMaster("spark://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, false)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+
+    var rpmanager = new ResourceProfileManager(conf, listenerBus)
+    // default profile should always work
+    val defaultProf = rpmanager.defaultResourceProfile
+    assert(rpmanager.isSupported(defaultProf))
+
+    // task resource profile.
+    val gpuTaskReq = new TaskResourceRequests().resource("gpu", 1)
+    val taskProf = new TaskResourceProfile(gpuTaskReq.requests)
+    assert(rpmanager.isSupported(taskProf))
+
+    conf.setMaster("local")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    val error = intercept[SparkException] {
+      rpmanager.isSupported(taskProf)
+    }.getMessage
+    assert(error === "TaskResourceProfiles are only supported for Standalone " +
+      "cluster for now when dynamic allocation is disabled.")
+  }
+
+  test("isSupported task resource profiles with dynamic allocation enabled") {
+    val conf = new SparkConf().setMaster("spark://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, true)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+
+    // task resource profile.
+    val gpuTaskReq = new TaskResourceRequests().resource("gpu", 1)
+    val taskProf = new TaskResourceProfile(gpuTaskReq.requests)
+    assert(rpmanager.isSupported(taskProf))
+  }
+
   test("isSupported with local mode") {
     val conf = new SparkConf().setMaster("local").set(EXECUTOR_CORES, 4)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")

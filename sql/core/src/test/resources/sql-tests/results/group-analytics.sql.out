@@ -131,12 +131,19 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Empty set in ROLLUP grouping sets is not supported.(line 1, pos 61)
-
-== SQL ==
-SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year), ()) ORDER BY course, year
--------------------------------------------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "messageParameters" : {
+    "element" : "ROLLUP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 101,
+    "fragment" : "GROUP BY ROLLUP(course, year, (course, year), ())"
+  } ]
+}
 
 
 -- !query
@@ -193,12 +200,19 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, 
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Empty set in CUBE grouping sets is not supported.(line 1, pos 61)
-
-== SQL ==
-SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year), ()) ORDER BY course, year
--------------------------------------------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "messageParameters" : {
+    "element" : "CUBE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 99,
+    "fragment" : "GROUP BY CUBE(course, year, (course, year), ())"
+  } ]
+}
 
 
 -- !query
@@ -451,7 +465,16 @@ SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2445",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 37,
+    "fragment" : "GROUPING(course)"
+  } ]
+}
 
 
 -- !query
@@ -460,7 +483,16 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course,
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2407",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 46,
+    "fragment" : "GROUPING_ID(course, year)"
+  } ]
+}
 
 
 -- !query
@@ -496,7 +528,9 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING(cours
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query
@@ -505,7 +539,9 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING_ID(co
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query
@@ -560,7 +596,9 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING(cou
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query
@@ -569,7 +607,9 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING_ID(
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query

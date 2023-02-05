@@ -154,9 +154,9 @@ class LibSVMRelationSuite
     rawData.add(Row(1.0, Vectors.sparse(3, Seq((0, 2.0), (1, 3.0)))))
     rawData.add(Row(4.0, Vectors.sparse(3, Seq((0, 5.0), (2, 6.0)))))
 
-    val struct = StructType(
-      StructField("labelFoo", DoubleType, false) ::
-      StructField("featuresBar", VectorType, false) :: Nil
+    val struct = StructType(Array(
+      StructField("labelFoo", DoubleType, false),
+      StructField("featuresBar", VectorType, false))
     )
     val df = spark.sqlContext.createDataFrame(rawData, struct)
 

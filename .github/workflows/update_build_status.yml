@@ -27,9 +27,12 @@ jobs:
   update:
     name: Update build status
     runs-on: ubuntu-20.04
+    permissions:
+      actions: read
+      checks: write
     steps:
       - name: "Update build status"
-        uses: actions/github-script@f05a81df23035049204b043b50c3322045ce7eb3 # pin@v3
+        uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

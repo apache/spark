@@ -347,7 +347,8 @@ trait FileSourceAggregatePushDownSuite
         spark.read.format(format).load(file.getCanonicalPath).createOrReplaceTempView("test")
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",
-            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            vectorizedReaderEnabledKey -> enableVectorizedReader,
+            SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
 
             val testMinWithAllTypes = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
               "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +

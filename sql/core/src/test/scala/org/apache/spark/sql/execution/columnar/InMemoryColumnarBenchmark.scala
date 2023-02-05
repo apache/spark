@@ -26,14 +26,15 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
- *        --jars <spark core test jar> <spark sql test jar>
- *   2. build/sbt "sql/Test/runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar> <rowsNum>
+ *   2. build/sbt "sql/Test/runMain <this class> <rowsNum>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>
+ *        <rowsNum>"
  *      Results will be written to "benchmarks/InMemoryColumnarBenchmark-results.txt".
  * }}}
  */
 object InMemoryColumnarBenchmark extends SqlBasedBenchmark {
-  def intCache(rowsNum: Int, numIters: Int): Unit = {
+  def intCache(rowsNum: Long, numIters: Int): Unit = {
     val data = spark.range(0, rowsNum, 1, 1).toDF("i").cache()
 
     val inMemoryScan = data.queryExecution.executedPlan.collect {
@@ -59,8 +60,9 @@ object InMemoryColumnarBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark("Int In-memory") {
-      intCache(rowsNum = 1000000, numIters = 3)
+    val rowsNum = if (mainArgs.length > 0) mainArgs(0).toLong else 1000000
+    runBenchmark(s"Int In-memory with $rowsNum rows") {
+      intCache(rowsNum = rowsNum, numIters = 3)
     }
   }
 }

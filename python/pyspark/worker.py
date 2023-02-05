@@ -23,6 +23,7 @@ import sys
 import time
 from inspect import currentframe, getframeinfo, getfullargspec
 import importlib
+import json
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -57,6 +58,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     CogroupUDFSerializer,
     ArrowStreamUDFSerializer,
+    ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
@@ -207,6 +209,90 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
     return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
 
 
+def wrap_grouped_map_pandas_udf_with_state(f, return_type):
+    """
+    Provides a new lambda instance wrapping user function of applyInPandasWithState.
+
+    The lambda instance receives (key series, iterator of value series, state) and performs
+    some conversion to be adapted with the signature of user function.
+
+    See the function doc of inner function `wrapped` for more details on what adapter does.
+    See the function doc of `mapper` function for
+    `eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE` for more details on
+    the input parameters of lambda function.
+
+    Along with the returned iterator, the lambda instance will also produce the return_type as
+    converted to the arrow schema.
+    """
+
+    def wrapped(key_series, value_series_gen, state):
+        """
+        Provide an adapter of the user function performing below:
+
+        - Extract the first value of all columns in key series and produce as a tuple.
+        - If the state has timed out, call the user function with empty pandas DataFrame.
+        - If not, construct a new generator which converts each element of value series to
+          pandas DataFrame (lazy evaluation), and call the user function with the generator
+        - Verify each element of returned iterator to check the schema of pandas DataFrame.
+        """
+        import pandas as pd
+
+        key = tuple(s[0] for s in key_series)
+
+        if state.hasTimedOut:
+            # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
+            values = [
+                pd.DataFrame(columns=pd.concat(next(value_series_gen), axis=1).columns),
+            ]
+        else:
+            values = (pd.concat(x, axis=1) for x in value_series_gen)
+
+        result_iter = f(key, values, state)
+
+        def verify_element(result):
+            if not isinstance(result, pd.DataFrame):
+                raise TypeError(
+                    "The type of element in return iterator of the user-defined function "
+                    "should be pandas.DataFrame, but is {}".format(type(result))
+                )
+            # the number of columns of result have to match the return type
+            # but it is fine for result to have no columns at all if it is empty
+            if not (
+                len(result.columns) == len(return_type)
+                or (len(result.columns) == 0 and result.empty)
+            ):
+                raise RuntimeError(
+                    "Number of columns of the element (pandas.DataFrame) in return iterator "
+                    "doesn't match specified schema. "
+                    "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+                )
+
+            return result
+
+        if isinstance(result_iter, pd.DataFrame):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "iterable of pandas.DataFrame, but is {}".format(type(result_iter))
+            )
+
+        try:
+            iter(result_iter)
+        except TypeError:
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "iterable, but is {}".format(type(result_iter))
+            )
+
+        result_iter_with_validation = (verify_element(x) for x in result_iter)
+
+        return (
+            result_iter_with_validation,
+            state,
+        )
+
+    return lambda k, v, s: [(wrapped(k, v, s), to_arrow_type(return_type))]
+
+
 def wrap_grouped_agg_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
@@ -311,6 +397,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+        return arg_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec)
@@ -336,6 +424,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
     ):
 
         # Load conf used for pandas_udf evaluation
@@ -344,6 +433,10 @@ def read_udfs(pickleSer, infile, eval_type):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
+
+        state_object_schema = None
+        if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+            state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
@@ -361,6 +454,19 @@ def read_udfs(pickleSer, infile, eval_type):
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
+        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+            arrow_max_records_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
+            )
+            arrow_max_records_per_batch = int(arrow_max_records_per_batch)
+
+            ser = ApplyInPandasWithStateSerializer(
+                timezone,
+                safecheck,
+                assign_cols_by_name,
+                state_object_schema,
+                arrow_max_records_per_batch,
+            )
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         else:
@@ -485,6 +591,43 @@ def read_udfs(pickleSer, infile, eval_type):
             keys = [a[o] for o in parsed_offsets[0][0]]
             vals = [a[o] for o in parsed_offsets[0][1]]
             return f(keys, vals)
+
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+
+        def mapper(a):
+            """
+            The function receives (iterator of data, state) and performs extraction of key and
+            value from the data, with retaining lazy evaluation.
+
+            See `load_stream` in `ApplyInPandasWithStateSerializer` for more details on the input
+            and see `wrap_grouped_map_pandas_udf_with_state` for more details on how output will
+            be used.
+            """
+            from itertools import tee
+
+            state = a[1]
+            data_gen = (x[0] for x in a[0])
+
+            # We know there should be at least one item in the iterator/generator.
+            # We want to peek the first element to construct the key, hence applying
+            # tee to construct the key while we retain another iterator/generator
+            # for values.
+            keys_gen, values_gen = tee(data_gen)
+            keys_elem = next(keys_gen)
+            keys = [keys_elem[o] for o in parsed_offsets[0][0]]
+
+            # This must be generator comprehension - do not materialize.
+            vals = ([x[o] for o in parsed_offsets[0][1]] for x in values_gen)
+
+            return f(keys, vals, state)
 
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't

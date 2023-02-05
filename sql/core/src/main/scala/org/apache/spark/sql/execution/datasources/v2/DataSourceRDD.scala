@@ -111,12 +111,14 @@ private class PartitionIterator[T](
     reader: PartitionReader[T],
     customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
   private[this] var valuePrepared = false
+  private[this] var hasMoreInput = true
 
   private var numRow = 0L
 
   override def hasNext: Boolean = {
-    if (!valuePrepared) {
-      valuePrepared = reader.next()
+    if (!valuePrepared && hasMoreInput) {
+      hasMoreInput = reader.next()
+      valuePrepared = hasMoreInput
     }
     valuePrepared
   }

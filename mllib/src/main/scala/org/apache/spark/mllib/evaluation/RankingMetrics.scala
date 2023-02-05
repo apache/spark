@@ -26,6 +26,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.collection.Utils
 
 /**
  * Evaluator for ranking algorithms.
@@ -155,7 +156,7 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
     rdd.map { case (pred, lab, rel) =>
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
-      val relMap = lab.zip(rel).toMap
+      val relMap = Utils.toMap(lab, rel)
       if (useBinary && lab.size != rel.size) {
         logWarning(
           "# of ground truth set and # of relevance value set should be equal, " +

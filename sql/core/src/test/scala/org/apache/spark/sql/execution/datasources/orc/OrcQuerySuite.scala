@@ -861,6 +861,28 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       }
     })
   }
+
+  test("SPARK-39830: Reading ORC table that requires type promotion may throw AIOOBE") {
+    withSQLConf(SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> "1",
+      "orc.stripe.size" -> "10240",
+      "orc.rows.between.memory.checks" -> "1") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = spark.range(1, 1 + 512, 1, 1).map { i =>
+          if (i == 1) {
+            (i, Array.fill[Byte](5 * 1024 * 1024)('X'))
+          } else {
+            (i, Array.fill[Byte](1)('X'))
+          }
+        }.toDF("c1", "c2")
+        df.write.format("orc").save(path)
+        withTable("t1") {
+          spark.sql(s"create table t1 (c1 string,c2 binary) using orc location '$path'")
+          spark.sql("select * from t1").collect()
+        }
+      }
+    }
+  }
 }
 
 class OrcV1QuerySuite extends OrcQuerySuite {

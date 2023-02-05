@@ -1887,7 +1887,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(
       ConvertTimezone(
-        Literal("Europe/Amsterdam"),
+        Literal("Europe/Brussels"),
         Literal("Europe/Moscow"),
         Literal(LocalDateTime.of(2022, 3, 27, 3, 0, 0))),
       LocalDateTime.of(2022, 3, 27, 4, 0, 0))

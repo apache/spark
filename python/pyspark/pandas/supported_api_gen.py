@@ -98,12 +98,14 @@ def generate_supported_api(output_rst_file_path: str) -> None:
 
     Write supported APIs documentation.
     """
-    if LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
-        warnings.warn(
-            "Warning: Latest version of pandas(>=1.4.0) is required to generate the documentation; "
-            + "however, your version was %s" % pd.__version__,
-            UserWarning,
+    pandas_latest_version = "1.5.3"
+    if LooseVersion(pd.__version__) != LooseVersion(pandas_latest_version):
+        msg = (
+            "Warning: Latest version of pandas (%s) is required to generate the documentation; "
+            "however, your version was %s" % (pandas_latest_version, pd.__version__)
         )
+        warnings.warn(msg, UserWarning)
+        raise ImportError(msg)
 
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
     for pd_module_group, ps_module_group in MODULE_GROUP_MATCH:
@@ -169,8 +171,8 @@ def _organize_by_implementation_status(
     """
     Check the implementation status and parameters of both modules.
 
-    Parmeters
-    ---------
+    Parameters
+    ----------
     module_name : str
         Class name that exists in the path of the module.
     pd_funcs: Dict[str, Callable]
@@ -282,11 +284,11 @@ def _update_all_supported_status(
     """
     Updates supported status across multiple module paths.
 
-    Parmeters
-    ---------
+    Parameters
+    ----------
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]
         Data that stores the supported status across multiple module paths.
-    pd_modles: List[str]
+    pd_modules: List[str]
         Name list of pandas modules.
     pd_module_group : Any
         Specific path of importable pandas module.

@@ -140,6 +140,7 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
           }
         }.asInstanceOf[Seq[NamedExpression]]
         Project(projList, child)
+      case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
     }
   }
 

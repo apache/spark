@@ -39,3 +39,5 @@ Upgrading from PySpark 3.3 to 3.4
 * In Spark 3.4, the ``Series.concat`` sort parameter will be respected to follow pandas 1.4 behaviors.
 
 * In Spark 3.4, the ``DataFrame.__setitem__`` will make a copy and replace pre-existing arrays, which will NOT be over-written to follow pandas 1.4 behaviors.
+
+* In Spark 3.4, the ``SparkSession.sql`` and the Pandas on Spark API ``sql`` have got new parameter ``args`` which provides binding of named parameters to their SQL literals.

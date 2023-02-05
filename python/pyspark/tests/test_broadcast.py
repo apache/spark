@@ -26,6 +26,7 @@ from py4j.protocol import Py4JJavaError
 from pyspark import SparkConf, SparkContext, Broadcast
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import ChunkedStream
+from pyspark.sql import SparkSession, Row
 
 
 class BroadcastTest(unittest.TestCase):
@@ -126,6 +127,19 @@ class BroadcastTest(unittest.TestCase):
         with self.assertRaisesRegex(Py4JJavaError, "RuntimeError.*Broadcast.*unpersisted.*driver"):
             self.sc.parallelize([1]).map(lambda x: bs.unpersist()).collect()
 
+    def test_broadcast_in_udfs_with_encryption(self):
+        conf = SparkConf()
+        conf.set("spark.io.encryption.enabled", "true")
+        conf.setMaster("local-cluster[2,1,1024]")
+        self.sc = SparkContext(conf=conf)
+        bar = {"a": "aa", "b": "bb"}
+        foo = self.sc.broadcast(bar)
+        spark = SparkSession(self.sc)
+        spark.udf.register("MYUDF", lambda x: foo.value[x] if x else "")
+        sel = spark.sql("SELECT MYUDF('a') AS a, MYUDF('b') AS b")
+        self.assertEqual(sel.collect(), [Row(a="aa", b="bb")])
+        spark.stop()
+
 
 class BroadcastFrameProtocolTest(unittest.TestCase):
     @classmethod
@@ -174,7 +188,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_broadcast import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

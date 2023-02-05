@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -323,13 +324,13 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  *
  * @param expressions partition expressions for the partitioning.
  * @param numPartitions the number of partitions
- * @param partitionValuesOpt if set, the values for the cluster keys of the distribution, must be
- *                           in ascending order.
+ * @param partitionValues the values for the cluster keys of the distribution, must be
+ *                        in ascending order.
  */
 case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
-    partitionValuesOpt: Option[Seq[InternalRow]] = None) extends Partitioning {
+    partitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -359,7 +360,26 @@ object KeyGroupedPartitioning {
   def apply(
       expressions: Seq[Expression],
       partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
-    KeyGroupedPartitioning(expressions, partitionValues.size, Some(partitionValues))
+    KeyGroupedPartitioning(expressions, partitionValues.size, partitionValues)
+  }
+
+  def supportsExpressions(expressions: Seq[Expression]): Boolean = {
+    def isSupportedTransform(transform: TransformExpression): Boolean = {
+      transform.children.size == 1 && isReference(transform.children.head)
+    }
+
+    @tailrec
+    def isReference(e: Expression): Boolean = e match {
+      case _: Attribute => true
+      case g: GetStructField => isReference(g.child)
+      case _ => false
+    }
+
+    expressions.forall {
+      case t: TransformExpression if isSupportedTransform(t) => true
+      case e: Expression if isReference(e) => true
+      case _ => false
+    }
   }
 }
 
@@ -529,7 +549,6 @@ trait ShuffleSpec {
    * clustering expressions.
    *
    * This will only be called when:
-   *  - [[canCreatePartitioning]] returns true.
    *  - [[isCompatibleWith]] returns false on the side where the `clustering` is from.
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
@@ -542,7 +561,7 @@ case object SinglePartitionShuffleSpec extends ShuffleSpec {
     other.numPartitions == 1
   }
 
-  override def canCreatePartitioning: Boolean = true
+  override def canCreatePartitioning: Boolean = false
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning =
     SinglePartition
@@ -658,7 +677,7 @@ case class KeyGroupedShuffleSpec(
     }
   }
 
-  private lazy val ordering: Ordering[InternalRow] =
+  lazy val ordering: Ordering[InternalRow] =
     RowOrdering.createNaturalAscendingOrdering(partitioning.expressions.map(_.dataType))
 
   override def numPartitions: Int = partitioning.numPartitions
@@ -673,28 +692,32 @@ case class KeyGroupedShuffleSpec(
     //        partition keys must share overlapping positions in their respective clustering keys.
     //    3.3 each pair of partition expressions at the same index must share compatible
     //        transform functions.
-    //  4. the partition values, if present on both sides, are following the same order.
+    //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
-      val expressions = partitioning.expressions
-      val otherExpressions = otherPartitioning.expressions
-
       distribution.clustering.length == otherDistribution.clustering.length &&
-        numPartitions == other.numPartitions &&
-          expressions.length == otherExpressions.length && {
-            val otherKeyPositions = otherSpec.keyPositions
-            keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
-              left.intersect(right).nonEmpty
-            }
-          } && expressions.zip(otherExpressions).forall {
-            case (l, r) => isExpressionCompatible(l, r)
-          } && partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
-            case (left, right) => left.zip(right).forall { case (l, r) =>
-              ordering.compare(l, r) == 0
-            }
-         }
+        numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
+          partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
+            case (left, right) => ordering.compare(left, right) == 0
+          }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ => false
+  }
+
+  // Whether the partition keys (i.e., partition expressions) are compatible between this and the
+  // `other` spec.
+  def areKeysCompatible(other: KeyGroupedShuffleSpec): Boolean = {
+    val expressions = partitioning.expressions
+    val otherExpressions = other.partitioning.expressions
+
+    expressions.length == otherExpressions.length && {
+      val otherKeyPositions = other.keyPositions
+      keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
+        left.intersect(right).nonEmpty
+      }
+    } && expressions.zip(otherExpressions).forall {
+      case (l, r) => isExpressionCompatible(l, r)
+    }
   }
 
   private def isExpressionCompatible(left: Expression, right: Expression): Boolean =

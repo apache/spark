@@ -405,7 +405,7 @@ class _ValidatorSharedReadWrite:
                 elif isinstance(v, MLWritable):
                     raise RuntimeError(
                         "ValidatorSharedReadWrite.saveImpl does not handle parameters of type: "
-                        "MLWritable that are not Estimaor/Evaluator/Transformer, and if parameter "
+                        "MLWritable that are not Estimator/Evaluator/Transformer, and if parameter "
                         "is estimator, it cannot be meta estimator such as Validator or OneVsRest"
                     )
                 else:

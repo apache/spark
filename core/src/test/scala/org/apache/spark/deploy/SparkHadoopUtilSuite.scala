@@ -17,9 +17,13 @@
 
 package org.apache.spark.deploy
 
+import java.net.InetAddress
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil.{SET_TO_DEFAULT_VALUES, SOURCE_SPARK_HADOOP, SOURCE_SPARK_HIVE}
+import org.apache.spark.internal.config.BUFFER_SIZE
 
 class SparkHadoopUtilSuite extends SparkFunSuite {
 
@@ -32,9 +36,10 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     val hadoopConf = new Configuration(false)
     sc.set("spark.hadoop.orc.filterPushdown", "true")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
-    assertConfigValue(hadoopConf, "orc.filterPushdown", "true" )
-    assertConfigValue(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "true")
-    assertConfigValue(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com")
+    assertConfigMatches(hadoopConf, "orc.filterPushdown", "true", SOURCE_SPARK_HADOOP)
+    assertConfigMatches(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "true",
+      SET_TO_DEFAULT_VALUES)
+    assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com", SET_TO_DEFAULT_VALUES)
   }
 
   /**
@@ -46,7 +51,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     val hadoopConf = new Configuration(false)
     sc.set("spark.hadoop.fs.s3a.endpoint", "")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
-    assertConfigValue(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com")
+    assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com", SET_TO_DEFAULT_VALUES)
   }
 
   /**
@@ -67,7 +72,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
    * If the endpoint region is set (even to a blank string) in
    * "spark.hadoop.fs.s3a.endpoint.region" then the endpoint is not set,
    * even when the s3a endpoint is "".
-   * This supports a feature in later hadoop versions where this configuration
+   * This supports a feature in hadoop 3.3.1 where this configuration
    * pair triggers a revert to the "SDK to work out the region" algorithm,
    * which works on EC2 deployments.
    */
@@ -81,16 +86,90 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   }
 
   /**
+   * spark.hive.* is passed to the hadoop config as hive.*.
+   */
+  test("SPARK-40640: spark.hive propagation") {
+    val sc = new SparkConf()
+    val hadoopConf = new Configuration(false)
+    sc.set("spark.hive.hiveoption", "value")
+    new SparkHadoopUtil().appendS3AndSparkHadoopHiveConfigurations(sc, hadoopConf)
+    assertConfigMatches(hadoopConf, "hive.hiveoption", "value", SOURCE_SPARK_HIVE)
+  }
+
+  /**
+   * The explicit buffer size propagation records this.
+   */
+  test("SPARK-40640: buffer size propagation") {
+    val sc = new SparkConf()
+    val hadoopConf = new Configuration(false)
+    sc.set(BUFFER_SIZE.key, "123")
+    new SparkHadoopUtil().appendS3AndSparkHadoopHiveConfigurations(sc, hadoopConf)
+    assertConfigMatches(hadoopConf, "io.file.buffer.size", "123", BUFFER_SIZE.key)
+  }
+
+  test("SPARK-40640: aws credentials from environment variables") {
+    val hadoopConf = new Configuration(false)
+    SparkHadoopUtil.appendS3CredentialsFromEnvironment(hadoopConf,
+      "access-key", "secret-key", "session-token")
+    val source = "Set by Spark on " + InetAddress.getLocalHost + " from "
+    assertConfigMatches(hadoopConf, "fs.s3a.access.key", "access-key", source)
+    assertConfigMatches(hadoopConf, "fs.s3a.secret.key", "secret-key", source)
+    assertConfigMatches(hadoopConf, "fs.s3a.session.token", "session-token", source)
+  }
+
+  test("SPARK-19739: S3 session token propagation requires access and secret keys") {
+    val hadoopConf = new Configuration(false)
+    SparkHadoopUtil.appendS3CredentialsFromEnvironment(hadoopConf, null, null, "session-token")
+    assertConfigValue(hadoopConf, "fs.s3a.session.token", null)
+  }
+
+  /**
    * Assert that a hadoop configuration option has the expected value.
    * @param hadoopConf configuration to query
    * @param key key to look up
    * @param expected expected value.
    */
   private def assertConfigValue(
-    hadoopConf: Configuration,
-    key: String,
-    expected: String): Unit = {
+      hadoopConf: Configuration,
+      key: String,
+      expected: String): Unit = {
     assert(hadoopConf.get(key) === expected,
       s"Mismatch in expected value of $key")
+  }
+
+  /**
+   * Assert that a hadoop configuration option has the expected value
+   * and has the expected source.
+   *
+   * @param hadoopConf configuration to query
+   * @param key        key to look up
+   * @param expected   expected value.
+   * @param expectedSource string required to be in the property source string
+   */
+  private def assertConfigMatches(
+      hadoopConf: Configuration,
+      key: String,
+      expected: String,
+      expectedSource: String): Unit = {
+    assertConfigValue(hadoopConf, key, expected)
+    assertConfigSourceContains(hadoopConf, key, expectedSource)
+  }
+
+  /**
+   * Assert that a source of a configuration matches a specific string.
+   * @param hadoopConf hadoop configuration
+   * @param key key to probe
+   * @param expectedSource expected source
+   */
+  private def assertConfigSourceContains(
+      hadoopConf: Configuration,
+      key: String,
+      expectedSource: String): Unit = {
+    val v = hadoopConf.get(key)
+    // get the source list
+    val origin = SparkHadoopUtil.propertySources(hadoopConf, key)
+    assert(origin.nonEmpty, s"Sources are missing for '$key' with value '$v'")
+    assert(origin.contains(expectedSource),
+      s"Expected source $key with value $v: and source $origin to contain $expectedSource")
   }
 }

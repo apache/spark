@@ -19,11 +19,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.quoteNameParts
 import org.apache.spark.sql.connector.catalog.Identifier
 
 class CannotReplaceMissingTableException(
     tableIdentifier: Identifier,
     cause: Option[Throwable] = None)
   extends AnalysisException(
-    s"Table $tableIdentifier cannot be replaced as it did not exist." +
-      s" Use CREATE OR REPLACE TABLE to create the table.", cause = cause)
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName"
+        -> quoteNameParts(tableIdentifier.namespace :+ tableIdentifier.name)))

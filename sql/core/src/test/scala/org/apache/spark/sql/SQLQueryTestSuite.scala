@@ -128,8 +128,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   import IntegratedUDFTestUtils._
 
-  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-
   protected val baseResourcePath = {
     // We use a path based on Spark home for 2 reasons:
     //   1. Maven can't get correct resource directory when resources in other jars.
@@ -218,6 +216,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       resultFile: String,
       udf: TestUDF) extends TestCase with UDFTest
 
+  /** A UDAF test case. */
+  protected case class UDAFTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF) extends TestCase with UDFTest
+
   /** A UDF PostgreSQL test case. */
   protected case class UDFPgSQLTestCase(
       name: String,
@@ -246,7 +251,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           /* Do nothing */
         }
       case udfTestCase: UDFTest
-          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestScalarPandasUDFs =>
+          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
+            !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
@@ -435,7 +447,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && shouldTestPythonUDFs =>
         s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
       case udfTestCase: UDFTest
-          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestScalarPandasUDFs =>
+          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestPandasUDFs =>
+        s"${testCase.name}${System.lineSeparator()}" +
+          s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
+            shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case _ =>
@@ -497,6 +514,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           UDFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udaf")) {
+        Seq(TestGroupedAggPandasUDF("udaf")).map { udf =>
+          UDAFTestCase(
+            s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
+        }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
@@ -506,7 +528,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
-    }
+    }.sortBy(_.name)
   }
 
   /** Returns all the files (not directories) in a directory, recursively. */

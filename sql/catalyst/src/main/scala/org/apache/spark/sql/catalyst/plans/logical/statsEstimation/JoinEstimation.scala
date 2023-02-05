@@ -83,8 +83,7 @@ case class JoinEstimation(join: Join) extends Logging {
       }
 
       // 3. Update statistics based on the output of join
-      val inputAttrStats = AttributeMap(
-        leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
+      val inputAttrStats = leftStats.attributeStats ++ rightStats.attributeStats
       val attributesWithStat = join.output.filter(a =>
         inputAttrStats.get(a).map(_.hasCountStats).getOrElse(false))
       val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
@@ -145,8 +144,7 @@ case class JoinEstimation(join: Join) extends Logging {
 
     case _ =>
       // When there is no equi-join condition, we do estimation like cartesian product.
-      val inputAttrStats = AttributeMap(
-        leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
+      val inputAttrStats = leftStats.attributeStats ++ rightStats.attributeStats
       // Propagate the original column stats
       val outputRows = leftStats.rowCount.get * rightStats.rowCount.get
       Some(Statistics(
@@ -213,7 +211,7 @@ case class JoinEstimation(join: Join) extends Logging {
       }
       i += 1
     }
-    (joinCard, AttributeMap(keyStatsAfterJoin.toSeq))
+    (joinCard, AttributeMap(keyStatsAfterJoin))
   }
 
   /** Returns join cardinality and the column stat for this pair of join keys. */

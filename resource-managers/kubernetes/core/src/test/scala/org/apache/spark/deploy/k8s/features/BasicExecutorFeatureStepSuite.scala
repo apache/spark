@@ -367,6 +367,27 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
+  test("SPARK-40065 Mount configmap on executors with non-default profile as well") {
+    val baseDriverPod = SparkPod.initialPod()
+    val rp = new ResourceProfileBuilder().build()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
+  test("SPARK-40065 Disable configmap volume on executor pod's container (non-default profile)") {
+    baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
+    val baseDriverPod = SparkPod.initialPod()
+    val rp = new ResourceProfileBuilder().build()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(!SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
   test("SPARK-35482: user correct block manager port for executor pods") {
     try {
       val initPod = SparkPod.initialPod()
@@ -489,6 +510,19 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(mem === s"${expected}Mi")
   }
 
+  test("SPARK-39546: Support ports definition in executor pod template") {
+    val baseDriverPod = SparkPod.initialPod()
+    val ports = new ContainerPortBuilder()
+      .withName("port-from-template")
+      .withContainerPort(1000)
+      .build()
+    baseDriverPod.container.setPorts(Seq(ports).asJava)
+    val step1 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured1 = step1.configurePod(baseDriverPod)
+    // port-from-template should exist after step1
+    assert(podConfigured1.container.getPorts.contains(ports))
+  }
 
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {

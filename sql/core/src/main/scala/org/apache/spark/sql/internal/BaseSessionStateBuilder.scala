@@ -196,6 +196,7 @@ abstract class BaseSessionStateBuilder(
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis(this) +:
+        ApplyCharTypePadding +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
 
@@ -316,6 +317,10 @@ abstract class BaseSessionStateBuilder(
       extensions.buildRuntimeOptimizerRules(session))
   }
 
+  protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPlanNormalizationRules(session)
+  }
+
   /**
    * Create a query execution object.
    */
@@ -370,7 +375,8 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
-      adaptiveRulesHolder)
+      adaptiveRulesHolder,
+      planNormalizationRules)
   }
 }
 
@@ -412,7 +418,7 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
         udafName = Some(name))
       // Check input argument size
       if (expr.inputTypes.size != input.size) {
-        throw QueryCompilationErrors.invalidFunctionArgumentsError(
+        throw QueryCompilationErrors.wrongNumArgsError(
           name, expr.inputTypes.size.toString, input.size)
       }
       expr

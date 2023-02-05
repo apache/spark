@@ -2,69 +2,69 @@
 Parquet writer benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Parquet(PARQUET_1_0) writer benchmark:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           2288           2392         148          6.9         145.4       1.0X
-Output Single Double Column                        2411           2468          82          6.5         153.3       0.9X
-Output Int and String Column                       5979           6167         265          2.6         380.1       0.4X
-Output Partitions                                  4283           4477         275          3.7         272.3       0.5X
-Output Buckets                                     6337           6464         180          2.5         402.9       0.4X
+Output Single Int Column                           2867           2917          71          5.5         182.3       1.0X
+Output Single Double Column                        3097           3105          11          5.1         196.9       0.9X
+Output Int and String Column                       7374           7557         258          2.1         468.8       0.4X
+Output Partitions                                  5885           5954          98          2.7         374.2       0.5X
+Output Buckets                                     7920           8100         254          2.0         503.6       0.4X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Parquet(PARQUET_2_0) writer benchmark:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           2543           2560          24          6.2         161.7       1.0X
-Output Single Double Column                        2455           2467          18          6.4         156.1       1.0X
-Output Int and String Column                       6471           6493          30          2.4         411.4       0.4X
-Output Partitions                                  4915           5004         126          3.2         312.5       0.5X
-Output Buckets                                     6292           6328          51          2.5         400.0       0.4X
+Output Single Int Column                           3189           3224          50          4.9         202.8       1.0X
+Output Single Double Column                        2963           3007          62          5.3         188.4       1.1X
+Output Int and String Column                       8263           8268           7          1.9         525.3       0.4X
+Output Partitions                                  6587           6612          36          2.4         418.8       0.5X
+Output Buckets                                     8393           8457          91          1.9         533.6       0.4X
 
 
 ================================================================================================
 ORC writer benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 ORC writer benchmark:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           1608           1626          26          9.8         102.3       1.0X
-Output Single Double Column                        2301           2323          32          6.8         146.3       0.7X
-Output Int and String Column                       5913           5962          70          2.7         375.9       0.3X
-Output Partitions                                  4176           4263         124          3.8         265.5       0.4X
-Output Buckets                                     6057           6059           2          2.6         385.1       0.3X
+Output Single Int Column                           1834           1849          20          8.6         116.6       1.0X
+Output Single Double Column                        2448           2495          66          6.4         155.7       0.7X
+Output Int and String Column                       6551           6593          59          2.4         416.5       0.3X
+Output Partitions                                  4329           4360          43          3.6         275.2       0.4X
+Output Buckets                                     6106           6113           9          2.6         388.2       0.3X
 
 
 ================================================================================================
 JSON writer benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 JSON writer benchmark:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           2365           2380          21          6.7         150.4       1.0X
-Output Single Double Column                        3385           3398          18          4.6         215.2       0.7X
-Output Int and String Column                       5881           6002         172          2.7         373.9       0.4X
-Output Partitions                                  4808           4935         179          3.3         305.7       0.5X
-Output Buckets                                     6341           6430         125          2.5         403.2       0.4X
+Output Single Int Column                           3275           3327          73          4.8         208.2       1.0X
+Output Single Double Column                        4386           4404          25          3.6         278.8       0.7X
+Output Int and String Column                       7487           7500          18          2.1         476.0       0.4X
+Output Partitions                                  5871           5983         157          2.7         373.3       0.6X
+Output Buckets                                     7832           7992         226          2.0         498.0       0.4X
 
 
 ================================================================================================
 CSV writer benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 CSV writer benchmark:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           3326           3335          12          4.7         211.5       1.0X
-Output Single Double Column                        3958           3977          27          4.0         251.6       0.8X
-Output Int and String Column                       6605           6639          48          2.4         419.9       0.5X
-Output Partitions                                  6012           6042          43          2.6         382.2       0.6X
-Output Buckets                                     7800           7929         182          2.0         495.9       0.4X
+Output Single Int Column                           3912           4009         137          4.0         248.7       1.0X
+Output Single Double Column                        4993           5027          47          3.1         317.5       0.8X
+Output Int and String Column                       8605           8640          51          1.8         547.1       0.5X
+Output Partitions                                  7806           7838          45          2.0         496.3       0.5X
+Output Buckets                                    10539          10587          68          1.5         670.0       0.4X
 
 

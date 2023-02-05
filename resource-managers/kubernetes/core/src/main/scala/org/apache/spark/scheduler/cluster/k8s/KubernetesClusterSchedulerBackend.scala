@@ -19,7 +19,6 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 
 import io.fabric8.kubernetes.api.model.Pod
@@ -35,7 +34,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
+import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
   TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
@@ -69,6 +68,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
 
+  private val namespace = conf.get(KUBERNETES_NAMESPACE)
+
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
@@ -77,7 +78,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {
     val configMapName = KubernetesClientUtils.configMapNameExecutor
     val resolvedExecutorProperties =
-      Map(KUBERNETES_NAMESPACE.key -> conf.get(KUBERNETES_NAMESPACE))
+      Map(KUBERNETES_NAMESPACE.key -> namespace)
     val confFilesMap = KubernetesClientUtils
       .buildSparkConfDirFilesMap(configMapName, conf, resolvedExecutorProperties) ++
       resolvedExecutorProperties
@@ -85,7 +86,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
     KubernetesUtils.addOwnerReference(driverPod.orNull, Seq(configMap))
-    kubernetesClient.configMaps().create(configMap)
+    kubernetesClient.configMaps().inNamespace(namespace).resource(configMap).create()
   }
 
   /**
@@ -136,6 +137,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       Utils.tryLogNonFatalError {
         kubernetesClient
           .services()
+          .inNamespace(namespace)
           .withLabel(SPARK_APP_ID_LABEL, applicationId())
           .delete()
       }
@@ -145,6 +147,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       Utils.tryLogNonFatalError {
         kubernetesClient
           .persistentVolumeClaims()
+          .inNamespace(namespace)
           .withLabel(SPARK_APP_ID_LABEL, applicationId())
           .delete()
       }
@@ -158,6 +161,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         Utils.tryLogNonFatalError {
           kubernetesClient
             .configMaps()
+            .inNamespace(namespace)
             .withLabel(SPARK_APP_ID_LABEL, applicationId())
             .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
             .delete()
@@ -193,22 +197,19 @@ private[spark] class KubernetesClusterSchedulerBackend(
     conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL).foreach { label =>
       val labelTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
-
-          val podsToLabel = kubernetesClient.pods()
+          kubernetesClient.pods()
+            .inNamespace(namespace)
             .withLabel(SPARK_APP_ID_LABEL, applicationId())
             .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
-            .list().getItems().asScala
-
-          podsToLabel.foreach { pod =>
-            kubernetesClient.pods()
-              .inNamespace(pod.getMetadata.getNamespace)
-              .withName(pod.getMetadata.getName)
-              .edit({p: Pod => new PodBuilder(p).editMetadata()
-                .addToLabels(label,
-                  conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse(""))
-                .endMetadata()
-                .build()})
+            .resources()
+            .forEach { podResource =>
+              podResource.edit({ p: Pod =>
+                new PodBuilder(p).editOrNewMetadata()
+                  .addToLabels(label,
+                    conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse(""))
+                  .endMetadata()
+                  .build()})
           }
         }
       }
@@ -246,6 +247,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       override def run(): Unit = Utils.tryLogNonFatalError {
         val running = kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withField("status.phase", "Running")
           .withLabel(SPARK_APP_ID_LABEL, applicationId())
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
@@ -302,6 +304,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
           override def run(): Unit = Utils.tryLogNonFatalError {
             // Label the pod with it's exec ID
             kubernetesClient.pods()
+              .inNamespace(namespace)
               .withName(x.podName)
               .edit({p: Pod => new PodBuilder(p).editMetadata()
                 .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId)
@@ -321,11 +324,24 @@ private[spark] class KubernetesClusterSchedulerBackend(
           super.receiveAndReply(context)))
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
-      // Don't do anything besides disabling the executor - allow the Kubernetes API events to
-      // drive the rest of the lifecycle decisions
-      // TODO what if we disconnect from a networking issue? Probably want to mark the executor
-      // to be deleted eventually.
-      addressToExecutorId.get(rpcAddress).foreach(disableExecutor)
+      val execId = addressToExecutorId.get(rpcAddress)
+      execId match {
+        case Some(id) =>
+          executorsPendingDecommission.get(id) match {
+            case Some(host) =>
+              // We don't pass through the host because by convention the
+              // host is only populated if the entire host is going away
+              // and we don't know if that's the case or just one container.
+              removeExecutor(id, ExecutorDecommission(None))
+            case _ =>
+              // Don't do anything besides disabling the executor - allow the K8s API events to
+              // drive the rest of the lifecycle decisions.
+              // If it's disconnected due to network issues eventually heartbeat will clear it up.
+              disableExecutor(id)
+          }
+        case _ =>
+          logInfo(s"No executor found for ${rpcAddress}")
+      }
     }
   }
 

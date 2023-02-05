@@ -342,6 +342,16 @@ Security options for the Spark History Server are covered more detail in the
     <td>2.3.0</td>
   </tr>
   <tr>
+    <td>spark.history.store.serializer</td>
+    <td>JSON</td>
+    <td>
+        Serializer for writing/reading in-memory UI objects to/from disk-based KV Store; JSON or PROTOBUF.
+        JSON serializer is the only choice before Spark 3.4.0, thus it is the default value.
+        PROTOBUF serializer is fast and compact, compared to the JSON serializer.
+    </td>
+    <td>3.4.0</td>
+  </tr>
+  <tr>
     <td>spark.history.custom.executor.log.url</td>
     <td>(none)</td>
     <td>
@@ -394,6 +404,25 @@ Security options for the Spark History Server are covered more detail in the
       so the heap memory should be increased through the memory option for SHS if the HybridStore is enabled.
     </td>
     <td>3.1.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.diskBackend</td>
+    <td>LEVELDB</td>
+    <td>
+      Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.
+    </td>
+    <td>3.3.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.update.batchSize</td>
+    <td>Int.MaxValue</td>
+    <td>
+      Specifies the batch size for updating new eventlog files.
+      This controls each scan process to be completed within a reasonable time, and such
+      prevent the initial scan from running too long and blocking new eventlog files to
+      be scanned in time in large environments.
+    </td>
+    <td>3.4.0</td>
   </tr>
 </table>
 
@@ -609,17 +638,6 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
-    </td>
-  </tr>
-  <tr>
-    <td><code>/applications/[app-id]/diagnostics/sql/[execution-id]</code></td>
-    <td>Diagnostic for the given query, including:
-    <br>
-    1. plan change history of adaptive execution
-    <br>
-    2. physical plan description with unlimited fields
-    <br>
-    This API requires setting <code>spark.appStatusStore.diskStoreDir</code> for storing the diagnostic information.
     </td>
   </tr>
   <tr>
@@ -1212,6 +1230,7 @@ This is the component with the largest amount of instrumented metrics
   - executors.numberAllExecutors
   - executors.numberTargetExecutors
   - executors.numberMaxNeededExecutors
+  - executors.numberDecommissioningExecutors
   - executors.numberExecutorsGracefullyDecommissioned.count
   - executors.numberExecutorsDecommissionUnfinished.count
   - executors.numberExecutorsExitedUnexpectedly.count
@@ -1401,6 +1420,22 @@ Note: applies to the shuffle service
 - registeredExecutorsSize
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
+
+
+- **note:** the metrics below apply when the server side configuration
+  `spark.shuffle.push.server.mergedShuffleFileManagerImpl` is set to
+  `org.apache.spark.network.shuffle.MergedShuffleFileManager` for Push-Based Shuffle
+- blockBytesWritten - size of the pushed block data written to file in bytes
+- blockAppendCollisions - number of shuffle push blocks collided in shuffle services
+  as another block for the same reduce partition were being written
+- lateBlockPushes - number of shuffle push blocks that are received in shuffle service
+  after the specific shuffle merge has been finalized
+- deferredBlocks - number of the current deferred block parts buffered in memory
+- deferredBlockBytes - size of the current deferred block parts buffered in memory
+- staleBlockPushes - number of stale shuffle block push requests
+- ignoredBlockBytes - size of the pushed block data that was transferred to ESS, but ignored.
+  The pushed block data are considered as ignored when: 1. it was received after the shuffle
+  was finalized; 2. when a push request is for a duplicate block; 3. ESS was unable to write the block.
 
 # Advanced Instrumentation
 

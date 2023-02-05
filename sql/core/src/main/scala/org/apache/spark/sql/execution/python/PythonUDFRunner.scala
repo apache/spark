@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
 import org.apache.spark.api.python._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -31,7 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
 class PythonUDFRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
-    argOffsets: Array[Array[Int]])
+    argOffsets: Array[Array[Int]],
+    pythonMetrics: Map[String, SQLMetric])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs, evalType, argOffsets) {
 
@@ -50,8 +52,13 @@ class PythonUDFRunner(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        val startData = dataOut.size()
+
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+
+        val deltaData = dataOut.size() - startData
+        pythonMetrics("pythonDataSent") += deltaData
       }
     }
   }
@@ -77,6 +84,7 @@ class PythonUDFRunner(
             case length if length > 0 =>
               val obj = new Array[Byte](length)
               stream.readFully(obj)
+              pythonMetrics("pythonDataReceived") += length
               obj
             case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>

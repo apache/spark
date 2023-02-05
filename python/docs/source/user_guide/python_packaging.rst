@@ -23,7 +23,7 @@ Python Package Management
 When you want to run your PySpark application on a cluster such as YARN, Kubernetes, Mesos, etc., you need to make
 sure that your code and all used libraries are available on the executors.
 
-As an example let's say you may want to run the `Pandas UDF's examples <sql/arrow_pandas.rst#series-to-scalar>`_.
+As an example, let's say you may want to run the `Pandas UDF examples <sql/arrow_pandas.rst#series-to-scalar>`_.
 As it uses pyarrow as an underlying implementation we need to make sure to have pyarrow installed on each executor
 on the cluster. Otherwise you may get errors such as ``ModuleNotFoundError: No module named 'pyarrow'``.
 
@@ -70,7 +70,7 @@ to the executors by one of the following:
 - Directly calling :meth:`pyspark.SparkContext.addPyFile` in applications
 
 This is a straightforward method to ship additional custom Python code to the cluster. You can just add individual files or zip whole
-packages and upload them. Using :meth:`pyspark.SparkContext.addPyFile` allows to upload code even after having started your job.
+packages and upload them. Using :meth:`pyspark.SparkContext.addPyFile` allows you to upload code even after having started your job.
 
 However, it does not allow to add packages built as `Wheels <https://www.python.org/dev/peps/pep-0427/>`_ and therefore
 does not allow to include dependencies with native code.

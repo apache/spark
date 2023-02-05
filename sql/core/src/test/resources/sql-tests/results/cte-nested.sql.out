@@ -34,6 +34,34 @@ struct<scalarsubquery():int>
 
 
 -- !query
+SELECT * FROM
+  (
+   WITH cte AS (SELECT * FROM range(10))
+   SELECT * FROM cte WHERE id = 8
+  ) a
+UNION
+SELECT * FROM cte
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 120,
+    "stopIndex" : 122,
+    "fragment" : "cte"
+  } ]
+}
+
+
+-- !query
 WITH
   t AS (SELECT 1),
   t2 AS (
@@ -45,7 +73,13 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -82,7 +116,13 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -136,7 +176,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -151,7 +197,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -167,7 +219,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -181,7 +239,13 @@ WHERE c IN (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -210,7 +274,13 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name aBc is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "aBc"
+  }
+}
 
 
 -- !query
@@ -223,7 +293,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name aBc is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "aBc"
+  }
+}
 
 
 -- !query
@@ -240,3 +316,108 @@ SELECT * FROM t2
 struct<1:int>
 -- !query output
 1
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_outer
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM (
+      WITH cte_inner_inner AS (
+        SELECT * FROM cte_outer
+      )
+      SELECT * FROM cte_inner_inner
+    )
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH cte_outer AS (
+  WITH cte_invisible_inner AS (
+    SELECT 1
+  )
+  SELECT * FROM cte_invisible_inner
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 164,
+    "stopIndex" : 182,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT * FROM (
+    WITH cte_invisible_inner AS (
+      SELECT 1
+    )
+    SELECT * FROM cte_invisible_inner
+  )
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 194,
+    "stopIndex" : 212,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}

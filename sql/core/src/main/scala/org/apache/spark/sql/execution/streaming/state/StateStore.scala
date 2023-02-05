@@ -601,9 +601,8 @@ object StateStore extends Logging {
     }
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
       try {
-        if (verifyIfStoreInstanceActive(id)) {
-          provider.doMaintenance()
-        } else {
+        provider.doMaintenance()
+        if (!verifyIfStoreInstanceActive(id)) {
           unload(id)
           logInfo(s"Unloaded $provider")
         }
