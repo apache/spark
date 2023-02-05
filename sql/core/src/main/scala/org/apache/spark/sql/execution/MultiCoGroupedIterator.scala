@@ -36,10 +36,10 @@ class MultiCoGroupedIterator(
   private val keyOrdering =
     GenerateOrdering.generate(groupingSchema.map(SortOrder(_, Ascending)), groupingSchema)
 
-  private var currentData: mutable.MutableList[(InternalRow, Iterator[InternalRow])] = _
+  private var currentData: mutable.ListBuffer[(InternalRow, Iterator[InternalRow])] = _
   override def hasNext: Boolean = {
     if (currentData == null) {
-      currentData = mutable.MutableList()
+      currentData = mutable.ListBuffer()
       iterators.foreach(_ => currentData += null)
     }
     iterators.zipWithIndex.foreach({ case (data, index) =>
