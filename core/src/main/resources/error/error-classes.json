@@ -70,6 +70,11 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
+    "message" : [
+      "Failed to merge incompatible data types <left> and <right>."
+    ]
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal."
@@ -4168,19 +4173,9 @@
       "Failed parsing <simpleString>: <raw>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2123" : {
-    "message" : [
-      "Failed to merge fields '<leftName>' and '<rightName>'. <message>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2124" : {
     "message" : [
       "Failed to merge decimal types with incompatible scale <leftScale> and <rightScale>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2125" : {
-    "message" : [
-      "Failed to merge incompatible data types <leftCatalogString> and <rightCatalogString>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2126" : {

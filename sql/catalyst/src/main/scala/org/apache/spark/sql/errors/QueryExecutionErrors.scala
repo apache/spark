@@ -1298,16 +1298,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("simpleString" -> StructType.simpleString, "raw" -> raw))
   }
 
-  def failedMergingFieldsError(leftName: String, rightName: String, e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2123",
-      messageParameters = Map(
-        "leftName" -> leftName,
-        "rightName" -> rightName,
-        "message" -> e.getMessage),
-      cause = null)
-  }
-
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
       leftScale: Int, rightScale: Int): Throwable = {
     new SparkException(
@@ -1320,10 +1310,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2125",
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       messageParameters = Map(
-        "leftCatalogString" -> left.catalogString,
-        "rightCatalogString" -> right.catalogString),
+        "left" -> toSQLType(left),
+        "right" -> toSQLType(right)),
       cause = null)
   }
 
