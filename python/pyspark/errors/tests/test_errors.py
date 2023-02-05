@@ -16,13 +16,15 @@
 # limitations under the License.
 #
 
+import json
 import unittest
 
+from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
 
 
 class ErrorsTest(unittest.TestCase):
-    def test_error_classes(self):
+    def test_error_classes_sorted(self):
         # Test error classes is sorted alphabetically
         error_reader = ErrorClassesReader()
         error_class_names = list(error_reader.error_info_map.keys())
@@ -32,6 +34,17 @@ class ErrorsTest(unittest.TestCase):
                 f"Error class [{error_class_names[i]}] should place"
                 f"after [{error_class_names[i + 1]}]",
             )
+
+    def test_error_classes_duplicated(self):
+        # Test error classes is not duplicated
+        def detect_duplication(pairs):
+            error_classes_json = {}
+            for name, message in pairs:
+                self.assertTrue(name not in error_classes_json, f"Duplicate error class: {name}")
+                error_classes_json[name] = message
+            return error_classes_json
+
+        json.loads(ERROR_CLASSES_JSON, object_pairs_hook=detect_duplication)
 
 
 if __name__ == "__main__":

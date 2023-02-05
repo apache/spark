@@ -18,20 +18,7 @@
 import decimal
 import datetime
 
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import LiteralExpression
-from pyspark.sql.connect.types import (
-    JVM_BYTE_MIN,
-    JVM_BYTE_MAX,
-    JVM_SHORT_MIN,
-    JVM_SHORT_MAX,
-    JVM_INT_MIN,
-    JVM_INT_MAX,
-    JVM_LONG_MIN,
-    JVM_LONG_MAX,
-)
-
+from pyspark.sql import functions as SF
 from pyspark.sql.types import (
     Row,
     StructField,
@@ -54,13 +41,26 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
-from pyspark.testing.connectutils import should_test_connect
 from pyspark.errors import SparkConnectException
+from pyspark.testing.connectutils import should_test_connect
+from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+
 
 if should_test_connect:
     import pandas as pd
-    from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
+    from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect.types import (
+        JVM_BYTE_MIN,
+        JVM_BYTE_MAX,
+        JVM_SHORT_MIN,
+        JVM_SHORT_MAX,
+        JVM_INT_MIN,
+        JVM_INT_MAX,
+        JVM_LONG_MIN,
+        JVM_LONG_MAX,
+    )
 
 
 class SparkConnectColumnTests(SparkConnectSQLTestCase):

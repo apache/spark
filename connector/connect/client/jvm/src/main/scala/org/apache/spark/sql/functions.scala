@@ -19,10 +19,13 @@ package org.apache.spark.sql
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.LocalDate
 
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
+
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.unsupported
+import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 
 /**
  * Commonly used functions available for DataFrame operations.
@@ -80,4 +83,256 @@ object functions {
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
   }
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Defines a Scala closure of 0 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[RT: TypeTag](f: () => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, typeTag[RT])
+  }
+
+  /**
+   * Defines a Scala closure of 1 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[RT: TypeTag, A1: TypeTag](f: A1 => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1])
+  }
+
+  /**
+   * Defines a Scala closure of 2 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: (A1, A2) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2])
+  }
+
+  /**
+   * Defines a Scala closure of 3 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](
+      f: (A1, A2, A3) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3])
+  }
+
+  /**
+   * Defines a Scala closure of 4 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](
+      f: (A1, A2, A3, A4) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3], typeTag[A4])
+  }
+
+  /**
+   * Defines a Scala closure of 5 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](
+      f: (A1, A2, A3, A4, A5) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      f,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5])
+  }
+
+  /**
+   * Defines a Scala closure of 6 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag](f: (A1, A2, A3, A4, A5, A6) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      f,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6])
+  }
+
+  /**
+   * Defines a Scala closure of 7 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      f,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7])
+  }
+
+  /**
+   * Defines a Scala closure of 8 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      f,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8])
+  }
+
+  /**
+   * Defines a Scala closure of 9 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8, A9) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      f,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9])
+  }
+
+  /**
+   * Defines a Scala closure of 10 arguments as user-defined function (UDF). The data types are
+   * automatically inferred based on the Scala closure's signature. By default the returned UDF is
+   * deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.4.0
+   */
+  def udf[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) => RT): UserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      f,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10])
+  }
+  // scalastyle:off line.size.limit
+
 }

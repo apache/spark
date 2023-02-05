@@ -3584,6 +3584,11 @@ class DataFrameSuite extends QueryTest
       assert(row.getInt(0).toString == row.getString(3))
     }
   }
+
+  test("SPARK-41219: IntegralDivide use decimal(1, 0) to represent 0") {
+    val df = Seq("0.5944910").toDF("a")
+    checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

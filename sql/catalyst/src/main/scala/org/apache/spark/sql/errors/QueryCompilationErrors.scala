@@ -1759,7 +1759,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("dataType" -> field.dataType.catalogString))
   }
 
-  def incompatibleViewSchemaChange(
+  def incompatibleViewSchemaChangeError(
       viewName: String,
       colName: String,
       expectedNum: Int,
@@ -1767,21 +1767,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       viewDDL: Option[String]): Throwable = {
     viewDDL.map { v =>
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1176",
+        errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,
           "expectedNum" -> expectedNum.toString,
           "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]"),
-          "viewDDL" -> v))
+          "suggestion" -> v))
     }.getOrElse {
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1177",
+        errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
         messageParameters = Map(
           "viewName" -> viewName,
           "colName" -> colName,
           "expectedNum" -> expectedNum.toString,
-          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]")))
+          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]"),
+          "suggestion" -> "CREATE OR REPLACE TEMPORARY VIEW"))
     }
   }
 
@@ -1874,13 +1875,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "ability" -> ability))
   }
 
-  def identifierHavingMoreThanTwoNamePartsError(
-      quoted: String, identifier: String): Throwable = {
+  def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1185",
-      messageParameters = Map(
-        "quoted" -> quoted,
-        "identifier" -> identifier))
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {
@@ -3183,9 +3181,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("name" -> toSQLId(name)))
   }
 
-  def nullableArrayOrMapElementError(path: Seq[String]): Throwable = {
+  def notNullConstraintViolationArrayElementError(path: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "NULLABLE_ARRAY_OR_MAP_ELEMENT",
+      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.ARRAY_ELEMENT",
+      messageParameters = Map("columnPath" -> toSQLId(path)))
+  }
+
+  def notNullConstraintViolationMapValueError(path: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.MAP_VALUE",
+      messageParameters = Map("columnPath" -> toSQLId(path)))
+  }
+
+  def notNullConstraintViolationStructFieldError(path: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.STRUCT_FIELD",
       messageParameters = Map("columnPath" -> toSQLId(path)))
   }
 
@@ -3420,6 +3430,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "lca" -> toSQLId(lcaNameParts),
         "aggFunc" -> toSQLExpr(aggExpr)
+      )
+    )
+  }
+
+  def lateralColumnAliasInWindowUnsupportedError(
+      lcaNameParts: Seq[String], windowExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_WINDOW",
+      messageParameters = Map(
+        "lca" -> toSQLId(lcaNameParts),
+        "windowExpr" -> toSQLExpr(windowExpr)
+      )
+    )
+  }
+
+  def lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
+      lcaNameParts: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING",
+      messageParameters = Map(
+        "lca" -> toSQLId(lcaNameParts)
       )
     )
   }

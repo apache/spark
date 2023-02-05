@@ -575,6 +575,12 @@
     ],
     "sqlState" : "42805"
   },
+  "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
+    "message" : [
+      "<identifier> is not a valid identifier as it has more than 2 name parts."
+    ],
+    "sqlState" : "42601"
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
@@ -584,6 +590,18 @@
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
+    ]
+  },
+  "INCOMPATIBLE_JOIN_TYPES" : {
+    "message" : [
+      "The join types <joinType1> and <joinType2> are incompatible."
+    ],
+    "sqlState" : "42613"
+  },
+  "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
+    "message" : [
+      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
+      "Please try to re-create the view by running: <suggestion>."
     ]
   },
   "INCOMPLETE_TYPE_DEFINITION" : {
@@ -603,7 +621,7 @@
       },
       "STRUCT" : {
         "message" : [
-          "The definition of \"STRUCT\" type is incomplete. You must provide at least one field type. For example: \"STRUCT<Field1: INT>\"."
+          "The definition of \"STRUCT\" type is incomplete. You must provide at least one field type. For example: \"STRUCT<name STRING, phone DECIMAL(10, 0)>\"."
         ]
       }
     },
@@ -1032,6 +1050,24 @@
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ]
   },
+  "NOT_NULL_CONSTRAINT_VIOLATION" : {
+    "message" : [
+      "Assigning a NULL is not allowed here."
+    ],
+    "subClass" : {
+      "ARRAY_ELEMENT" : {
+        "message" : [
+          "The array <columnPath> is defined to contain only elements that are NOT NULL."
+        ]
+      },
+      "MAP_VALUE" : {
+        "message" : [
+          "The map <columnPath> is defined to contain only values that are NOT NULL."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -1046,12 +1082,6 @@
     "message" : [
       "UDF class <className> doesn't implement any UDF interface."
     ]
-  },
-  "NULLABLE_ARRAY_OR_MAP_ELEMENT" : {
-    "message" : [
-      "Array or map at <columnPath> contains nullable element while it's required to be non-nullable."
-    ],
-    "sqlState" : "42000"
   },
   "NULLABLE_COLUMN_OR_FIELD" : {
     "message" : [
@@ -1189,6 +1219,12 @@
       "Failed to rename as <sourcePath> was not found."
     ],
     "sqlState" : "42K03"
+  },
+  "REPEATED_CLAUSE" : {
+    "message" : [
+      "The <clause> clause may be used at most once per <operation> operation."
+    ],
+    "sqlState" : "42614"
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
@@ -1459,6 +1495,12 @@
       "Invalid expressions: [<invalidExprSqls>]"
     ]
   },
+  "UNSUPPORTED_EXPR_FOR_WINDOW" : {
+    "message" : [
+      "Expression <sqlExpr> not supported within a window function."
+    ],
+    "sqlState" : "42P20"
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"
@@ -1504,24 +1546,29 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
-      "JDBC_TRANSACTION" : {
-        "message" : [
-          "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
-        ]
-      },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
         "message" : [
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
         ]
       },
+      "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING" : {
+        "message" : [
+          "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
+        "message" : [
+          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in window expression <windowExpr>."
+        ]
+      },
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
-        ]
-      },
-      "LATERAL_NATURAL_JOIN" : {
-        "message" : [
-          "NATURAL join with LATERAL correlation."
         ]
       },
       "LITERAL_TYPE" : {
@@ -1534,9 +1581,9 @@
           "Multiple bucket TRANSFORMs."
         ]
       },
-      "NATURAL_CROSS_JOIN" : {
+      "MULTI_ACTION_ALTER" : {
         "message" : [
-          "NATURAL CROSS JOIN."
+          "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
         ]
       },
       "ORC_TYPE_CAST" : {
@@ -1562,11 +1609,6 @@
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
-        ]
-      },
-      "REPEATED_PIVOT" : {
-        "message" : [
-          "Repeated PIVOT operation."
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
@@ -2790,17 +2832,6 @@
       "Unsupported data type <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1176" : {
-    "message" : [
-      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
-      "Please try to re-create the view by running: <viewDDL>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1177" : {
-    "message" : [
-      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1178" : {
     "message" : [
       "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
@@ -2824,11 +2855,6 @@
   "_LEGACY_ERROR_TEMP_1184" : {
     "message" : [
       "Catalog <plugin> does not support <ability>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1185" : {
-    "message" : [
-      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
     ]
   },
   "_LEGACY_ERROR_TEMP_1186" : {
@@ -5149,11 +5175,6 @@
       "Cannot specify order by or frame for '<aggFunc>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2412" : {
-    "message" : [
-      "Expression '<sqlExpr>' not supported within a window function."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2413" : {
     "message" : [
       "Input argument to <argName> must be a constant."
@@ -5293,6 +5314,228 @@
   "_LEGACY_ERROR_TEMP_2446" : {
     "message" : [
       "Operation not allowed: <cmd> only works on table with location provided: <tableIdentWithDB>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3000" : {
+    "message" : [
+      "Unexpected Py4J server <class>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3001" : {
+    "message" : [
+      "EOFException occurred while reading the port number from <daemonModule>'s stdout<additionalMessage>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3002" : {
+    "message" : [
+      "Data of type <other> is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3003" : {
+    "message" : [
+      "Could not compute split, block <blockId> of RDD <id> not found"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3004" : {
+    "message" : [
+      "Attempted to use <string> after its blocks have been removed!"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3005" : {
+    "message" : [
+      "Histogram on either an empty RDD or RDD containing +/-infinity or NaN"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3006" : {
+    "message" : [
+      "empty RDD"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3007" : {
+    "message" : [
+      "Checkpoint block <rddBlockId> not found! Either the executor",
+      "that originally checkpointed this partition is no longer alive, or the original RDD is",
+      "unpersisted. If this problem persists, you may consider using `rdd.checkpoint()`",
+      "instead, which is slower than local checkpointing but more fault-tolerant."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3008" : {
+    "message" : [
+      "Cannot use map-side combining with array keys."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3009" : {
+    "message" : [
+      "HashPartitioner cannot partition array keys."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3010" : {
+    "message" : [
+      "reduceByKeyLocally() does not support array keys"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3011" : {
+    "message" : [
+      "This RDD lacks a SparkContext. It could happen in the following cases:",
+      "(1) RDD transformations and actions are NOT invoked by the driver, but inside of other transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the rdd1.map transformation. For more information, see SPARK-5063.",
+      "(2) When a Spark Streaming job recovers from checkpoint, this exception will be hit if a reference to an RDD not defined by the streaming job is used in DStream operations. For more information, See SPARK-13758."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3012" : {
+    "message" : [
+      "Cannot change storage level of an RDD after it was already assigned a level"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3013" : {
+    "message" : [
+      "Can only zip RDDs with same number of elements in each partition"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3014" : {
+    "message" : [
+      "empty collection"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3015" : {
+    "message" : [
+      "countByValueApprox() does not support arrays"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3016" : {
+    "message" : [
+      "Checkpoint directory has not been set in the SparkContext"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3017" : {
+    "message" : [
+      "Invalid checkpoint file: <path>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3018" : {
+    "message" : [
+      "Failed to create checkpoint path <checkpointDirPath>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3019" : {
+    "message" : [
+      "Checkpoint RDD has a different number of partitions from original RDD. Original",
+      "RDD [ID: <originalRDDId>, num of partitions: <originalRDDLength>];",
+      "Checkpoint RDD [ID: <newRDDId>, num of partitions: <newRDDLength>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3020" : {
+    "message" : [
+      "Checkpoint dir must be specified."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3021" : {
+    "message" : [
+      "Error asking standalone scheduler to shut down executors"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3022" : {
+    "message" : [
+      "Error stopping standalone scheduler's driver endpoint"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3023" : {
+    "message" : [
+      "Can't run submitMapStage on RDD with 0 partitions"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3024" : {
+    "message" : [
+      "attempted to access non-existent accumulator <id>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3025" : {
+    "message" : [
+      "TaskSetManagers should only send Resubmitted task statuses for tasks in ShuffleMapStages."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3026" : {
+    "message" : [
+      "duration() called on unfinished task"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3027" : {
+    "message" : [
+      "Unrecognized <schedulerModeProperty>: <schedulingModeConf>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3028" : {
+    "message" : [
+      "<errorMsg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3029" : {
+    "message" : [
+      "Exiting due to error from cluster scheduler: <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3030" : {
+    "message" : [
+      "Task <currentTaskAttemptId> has not locked block <blockId> for writing"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3031" : {
+    "message" : [
+      "Block <blockId> does not exist"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3032" : {
+    "message" : [
+      "Error occurred while waiting for replication to finish"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3033" : {
+    "message" : [
+      "Unable to register with external shuffle server due to : <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3034" : {
+    "message" : [
+      "Error occurred while waiting for async. reregistration"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3035" : {
+    "message" : [
+      "Unexpected shuffle block <blockId> with unsupported shuffle resolver <shuffleBlockResolver>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3036" : {
+    "message" : [
+      "Failure while trying to store block <blockId> on <blockManagerId>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3037" : {
+    "message" : [
+      "Block <blockId> was not found even though it's read-locked"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3038" : {
+    "message" : [
+      "get() failed for block <blockId> even though we held a lock"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3039" : {
+    "message" : [
+      "BlockManager returned null for BlockStatus query: <blockId>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3040" : {
+    "message" : [
+      "BlockManagerMasterEndpoint returned false, expected true."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3041" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3042" : {
+    "message" : [
+      "Failed to get block <blockId>, which is not a shuffle block"
     ]
   }
 }
