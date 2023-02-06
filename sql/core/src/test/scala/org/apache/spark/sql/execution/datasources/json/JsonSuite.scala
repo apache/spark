@@ -2612,8 +2612,8 @@ abstract class JsonSuite
     val e = intercept[SparkException] {df.collect()}
     checkError(
       exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "FAILED_PARSE_EMPTY_STRING",
-      parameters = Map("dataType" -> s"${toSQLType(dataType)}")
+      errorClass = "EMPTY_JSON_FIELD_VALUE",
+      parameters = Map("dataType" -> toSQLType(dataType))
     )
   }
 

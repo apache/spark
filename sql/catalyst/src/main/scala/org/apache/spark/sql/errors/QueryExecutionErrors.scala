@@ -1431,11 +1431,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "dataType" -> dataType.toString()))
   }
 
-  def failToParseEmptyStringForDataTypeError(dataType: DataType): SparkRuntimeException = {
+  def emptyJsonFieldValueError(dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "FAILED_PARSE_EMPTY_STRING",
-      messageParameters = Map(
-        "dataType" -> toSQLType(dataType)))
+      errorClass = "EMPTY_JSON_FIELD_VALUE",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 
   def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
