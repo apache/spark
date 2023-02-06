@@ -336,6 +336,17 @@ class PathOutputCommitProtocol(
     committer.setupJob(jobContext)
   }
 
+  /**
+   * Commit the job.
+   * This performs the same operations as HadoopMapReduceCommitProtocol,
+   * but with parallel directory setup and file/directory rename.
+   * After the commit succeeds (and only if it succeeds) IOStatistic
+   * summary data will be saved to the report directory, if configured.
+   * @param jobContext job context
+   * @param taskCommits all task commit messages from (exclusively)
+   *                    those task attempts which successfully committed and
+   *                    reported their success back.
+   */
   override def commitJob(jobContext: JobContext,
       taskCommits: Seq[TaskCommitMessage]): Unit = {
     // commit the job through the instantiated committer.
@@ -347,15 +358,6 @@ class PathOutputCommitProtocol(
     val allAbsPathFiles = commitMessages.map(_.addedAbsPathFiles)
     val allPartitionPaths = commitMessages.map(_.partitionPaths)
 
-    // merge the IOStatistics
-    val iostatsSnapshot = new IOStatisticsSnapshot()
-    commitMessages.foreach(m => iostatsSnapshot.aggregate(m.iostatistics))
-    val anyStatCollected = commitMessages.foldLeft(false)((f, m) =>
-      iostatsSnapshot.aggregate(m.iostatistics) || f)
-    if (anyStatCollected) {
-      // print out the received statistics
-      logInfo(s"IOStatistics were collected from tasks ${ioStatisticsToPrettyString(iostatsSnapshot)}")
-    }
 
     val jobConf = jobContext.getConfiguration
     val fs = stagingDir.getFileSystem(jobConf)
@@ -459,9 +461,24 @@ class PathOutputCommitProtocol(
     // now save iostats if configured to do so.
     // even if no stats are collected, the existence of this file is evidence
     // a job went through the committer.
+
+    // merge the IOStatistics
+    val iostatsSnapshot = new IOStatisticsSnapshot()
+    commitMessages.foreach(m => iostatsSnapshot.aggregate(m.iostatistics))
+    val anyStatCollected = commitMessages.foldLeft(false)((f, m) =>
+      iostatsSnapshot.aggregate(m.iostatistics) || f)
+    if (anyStatCollected) {
+      // print out the received statistics
+      logInfo(s"IOStatistics were collected from tasks" +
+        s" ${ioStatisticsToPrettyString(iostatsSnapshot)}")
+    }
     reportDir.foreach { dir =>
       iostatsSnapshot.aggregate(retrieveIOStatistics(committer))
-      val reportPath = new Path(dir, buildStatisticsFilename(jobId, LocalDateTime.now()))
+      jobConf.get(SPARK_WRITE_UUID, "")
+      val reportPath = new Path(dir, buildStatisticsFilename(
+        jobId,
+        jobConf.get(SPARK_WRITE_UUID, ""),
+        LocalDateTime.now()))
       logInfo(s"Saving statistics report to ${reportPath}")
       IOStatisticsSnapshot.serializer().save(
         reportPath.getFileSystem(jobConf),
@@ -626,6 +643,13 @@ object PathOutputCommitProtocol {
     "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory"
 
   /**
+   * The UUID for jobs.
+   * This should be provided for all invocations, but as it cannot be
+   * guaranteed in external code, is treated as optional.
+   */
+  private[cloud] val SPARK_WRITE_UUID: String = "spark.sql.sources.writeJobUUID"
+
+  /**
    * Classic ISO date time doesn't work in URIs because of the : separators.
    */
   private lazy val DATETIME_IN_PATH: DateTimeFormatter =
@@ -657,10 +681,19 @@ object PathOutputCommitProtocol {
   /**
    * Build the filename for a statistics report file.
    * @param jobId job ID
+   * @param write job UUID passed in through jobConfll
    * @param timestamp timestamp
    * @return a string for the report.
    */
-  private [cloud] def buildStatisticsFilename(jobId: String, timestamp: LocalDateTime): String = {
-    s"${timestamp.format(DATETIME_IN_PATH)}-${jobId}-statistics.json"
+  private[cloud] def buildStatisticsFilename(
+      jobId: String,
+      writeJobUUID: String,
+      timestamp: LocalDateTime): String = {
+    val id = if (writeJobUUID != null && !writeJobUUID.isEmpty) {
+      writeJobUUID
+    } else {
+      jobId
+    }
+    s"${timestamp.format(DATETIME_IN_PATH)}-${id}-statistics.json"
   }
 }
