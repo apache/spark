@@ -464,7 +464,7 @@ class ReshapeTest(PandasOnSparkTestCase):
         with self.assertRaisesRegex(ValueError, "can only asof on a key for right"):
             ps.merge_asof(psdf_left, psdf_right, right_on=["a", "b"], left_on="a")
         with self.assertRaisesRegex(
-            ValueError, 'Can only pass argument "on" OR "left_by" and "right_by".'
+            ValueError, 'Can only pass argument "by" OR "left_by" and "right_by".'
         ):
             ps.merge_asof(psdf_left, psdf_right, on="a", by="b", left_by="a")
         with self.assertRaisesRegex(ValueError, "missing right_by"):

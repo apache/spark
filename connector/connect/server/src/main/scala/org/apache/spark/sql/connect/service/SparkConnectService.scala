@@ -226,6 +226,14 @@ object SparkConnectService {
 
   private var server: Server = _
 
+  // For testing purpose, it's package level private.
+  private[connect] lazy val localPort = {
+    assert(server != null)
+    // Return the actual local port being used. This can be different from the csonfigured port
+    // when the server binds to the port 0 as an example.
+    server.getPort
+  }
+
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
@@ -283,9 +291,14 @@ object SparkConnectService {
     startGRPCService()
   }
 
-  def stop(): Unit = {
+  def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = {
     if (server != null) {
-      server.shutdownNow()
+      if (timeout.isDefined && unit.isDefined) {
+        server.shutdown()
+        server.awaitTermination(timeout.get, unit.get)
+      } else {
+        server.shutdownNow()
+      }
     }
   }
 }

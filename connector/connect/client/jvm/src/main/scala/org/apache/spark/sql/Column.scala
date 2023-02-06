@@ -19,6 +19,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Column.fn
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.functions.lit
@@ -44,7 +45,7 @@ import org.apache.spark.sql.functions.lit
  *
  * @since 3.4.0
  */
-class Column private[sql] (private[sql] val expr: proto.Expression) {
+class Column private[sql] (private[sql] val expr: proto.Expression) extends Logging {
 
   /**
    * Sum of this expression and another expression.
@@ -80,7 +81,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) {
   }
 }
 
-object Column {
+private[sql] object Column {
 
   def apply(name: String): Column = Column { builder =>
     name match {

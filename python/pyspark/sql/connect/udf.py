@@ -17,6 +17,10 @@
 """
 User-defined function related classes and functions
 """
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 import functools
 from typing import Callable, Any, TYPE_CHECKING, Optional
 
@@ -24,7 +28,7 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     PythonUDF,
-    ScalarInlineUserDefinedFunction,
+    CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.types import DataType, StringType
@@ -129,7 +133,7 @@ class UserDefinedFunction:
             command=CloudPickleSerializer().dumps((self.func, self._returnType)),
         )
         return Column(
-            ScalarInlineUserDefinedFunction(
+            CommonInlineUserDefinedFunction(
                 function_name=self._name,
                 deterministic=self.deterministic,
                 arguments=arg_exprs,

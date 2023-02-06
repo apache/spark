@@ -981,6 +981,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(Exception, "reached finally block"):
                 self.spark.range(1).select(test_close(col("id"))).collect()
 
+    @unittest.skip("LimitPushDown should push limits through Python UDFs so this won't occur")
     def test_scalar_iter_udf_close_early(self):
         tmp_dir = tempfile.mkdtemp()
         try:

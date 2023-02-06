@@ -28,7 +28,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -1342,5 +1342,49 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
       ,
       queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
+  }
+
+  test("SPARK-38591: resolve left and right CoGroup sort order on respective side only") {
+    def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
+      Iterator.empty
+    }
+
+    implicit val intEncoder = ExpressionEncoder[Int]
+
+    val left = testRelation2.select($"e").analyze
+    val right = testRelation3.select($"e").analyze
+    val leftWithKey = AppendColumns[Int, Int]((x: Int) => x, left)
+    val rightWithKey = AppendColumns[Int, Int]((x: Int) => x, right)
+    val order = SortOrder($"e", Ascending)
+
+    val cogroup = leftWithKey.cogroup[Int, Int, Int, Int](
+      rightWithKey,
+      func,
+      leftWithKey.newColumns,
+      rightWithKey.newColumns,
+      left.output,
+      right.output,
+      order :: Nil,
+      order :: Nil
+    )
+
+    // analyze the plan
+    val actualPlan = getAnalyzer.executeAndCheck(cogroup, new QueryPlanningTracker)
+    val cg = actualPlan.collectFirst {
+      case cg: CoGroup => cg
+    }
+    // assert sort order reference only their respective plan
+    assert(cg.isDefined)
+    cg.foreach { cg =>
+      assert(cg.leftOrder != cg.rightOrder)
+
+      assert(cg.leftOrder.flatMap(_.references).nonEmpty)
+      assert(cg.leftOrder.flatMap(_.references).forall(cg.left.output.contains))
+      assert(!cg.leftOrder.flatMap(_.references).exists(cg.right.output.contains))
+
+      assert(cg.rightOrder.flatMap(_.references).nonEmpty)
+      assert(cg.rightOrder.flatMap(_.references).forall(cg.right.output.contains))
+      assert(!cg.rightOrder.flatMap(_.references).exists(cg.left.output.contains))
+    }
   }
 }

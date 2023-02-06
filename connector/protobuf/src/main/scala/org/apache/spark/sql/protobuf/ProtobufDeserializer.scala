@@ -91,7 +91,8 @@ private[sql] class ProtobufDeserializer(
         val element = iterator.next()
         if (element == null) {
           if (!containsNull) {
-            throw QueryCompilationErrors.nullableArrayOrMapElementError(protoElementPath)
+            throw QueryCompilationErrors.notNullConstraintViolationArrayElementError(
+              protoElementPath)
           } else {
             elementUpdater.setNullAt(i)
           }
@@ -129,7 +130,7 @@ private[sql] class ProtobufDeserializer(
             keyWriter(keyUpdater, i, field.getField(keyField))
             if (field.getField(valueField) == null) {
               if (!valueContainsNull) {
-                throw QueryCompilationErrors.nullableArrayOrMapElementError(protoPath)
+                throw QueryCompilationErrors.notNullConstraintViolationMapValueError(protoPath)
               } else {
                 valueUpdater.setNullAt(i)
               }
