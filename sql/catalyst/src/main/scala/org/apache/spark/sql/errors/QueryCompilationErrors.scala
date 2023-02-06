@@ -1117,14 +1117,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     dataType match {
       case StructType(_) =>
         new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_1105",
-          messageParameters = Map("extraction" -> extraction.toString))
+          errorClass = "INVALID_EXTRACT_FIELD_TYPE",
+          messageParameters = Map("extraction" -> toSQLExpr(extraction)))
       case other =>
         new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_1106",
+          errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
           messageParameters = Map(
-            "child" -> child.toString,
-            "other" -> other.catalogString))
+            "base" -> toSQLExpr(child),
+            "other" -> toSQLType(other)))
     }
   }
 
@@ -1874,13 +1874,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "ability" -> ability))
   }
 
-  def identifierHavingMoreThanTwoNamePartsError(
-      quoted: String, identifier: String): Throwable = {
+  def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1185",
-      messageParameters = Map(
-        "quoted" -> quoted,
-        "identifier" -> identifier))
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {
@@ -2102,10 +2099,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "fields" -> fields.map(f => toSQLId(f.name)).mkString(", ")))
   }
 
-  def ambiguousReferenceToFieldsError(fields: String): Throwable = {
+  def ambiguousReferenceToFieldsError(field: String, numberOfAppearance: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1209",
-      messageParameters = Map("fields" -> fields))
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      messageParameters = Map("field" -> toSQLId(field), "count" -> numberOfAppearance.toString))
   }
 
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
