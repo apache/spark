@@ -177,6 +177,11 @@
     ],
     "sqlState" : "22018"
   },
+  "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT" : {
+    "message" : [
+      "Cannot create a persistent <obj> <objName> by referencing a temporary <tempObj> <tempObjName>. Please make the temporary <tempObj> persistent, or make the persistent <obj> temporary."
+    ]
+  },
   "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
     "message" : [
       "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid."
@@ -3275,16 +3280,6 @@
   "_LEGACY_ERROR_TEMP_1282" : {
     "message" : [
       "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1283" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1284" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_1285" : {
