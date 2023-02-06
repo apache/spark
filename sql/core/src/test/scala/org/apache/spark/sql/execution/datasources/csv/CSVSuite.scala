@@ -3101,22 +3101,50 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-42335: Add a legacy config for restoring written comment option " +
-    "behavior in CSV dataSource") {
-    Seq("true", "false").foreach { confVal =>
-      withSQLConf(SQLConf.LEGACY_DEFAULT_UNICODE_NULL_AS_WRITTEN_COMMENT.key -> confVal) {
-        withTempPath { path =>
-          Seq(("#abc", 1))
-            .toDF("value", "id")
-            .write
-            .csv(path.getCanonicalPath)
-          if (confVal == "false") {
-            checkAnswer(spark.read.text(path.getCanonicalPath), Row("\"#abc\",1"))
-          } else {
-            checkAnswer(spark.read.text(path.getCanonicalPath), Row("#abc,1"))
-          }
-        }
-      }
+  test("SPARK-42335: Pass the comment option through to univocity " +
+    "if users set it explicitly in CSV dataSource") {
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.option("comment", "\u0000").csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("\"def\""), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.option("comment", "#").csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.option("comment", "\u0000").csv(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("xyz")))
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.option("comment", "#").csv(path.getCanonicalPath),
+        Seq(Row("\u0000def"), Row("xyz")))
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.csv(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("\u0000def"), Row("xyz"))
+      )
     }
   }
 
