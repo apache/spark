@@ -506,6 +506,12 @@
     ],
     "sqlState" : "22003"
   },
+  "EMPTY_JSON_FIELD_VALUE" : {
+    "message" : [
+      "Failed to parse an empty string for data type <dataType>."
+    ],
+    "sqlState" : "42604"
+  },
   "ENCODER_NOT_FOUND" : {
     "message" : [
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at https://spark.apache.org/docs/latest/sql-ref-datatypes.html."
@@ -4235,11 +4241,6 @@
   "_LEGACY_ERROR_TEMP_2134" : {
     "message" : [
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2135" : {
-    "message" : [
-      "Failed to parse an empty string for data type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2138" : {
