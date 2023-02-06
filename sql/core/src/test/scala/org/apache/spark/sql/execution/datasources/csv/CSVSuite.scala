@@ -68,6 +68,8 @@ abstract class CSVSuite
   private val carsEmptyValueFile = "test-data/cars-empty-value.csv"
   private val carsBlankColName = "test-data/cars-blank-column-name.csv"
   private val carsCrlf = "test-data/cars-crlf.csv"
+  private val carsWithLinesToSkip = "test-data/cars-with-lines-to-skip.csv"
+  private val carsWithMultilineLinesToSkip = "test-data/cars-with-multiline-lines-to-skip.csv"
   private val emptyFile = "test-data/empty.csv"
   private val commentsFile = "test-data/comments.csv"
   private val disableCommentsFile = "test-data/disable_comments.csv"
@@ -2612,6 +2614,106 @@ abstract class CSVSuite
     val csv = spark.read.option("header", true).option("inferSchema", true).csv(ds)
     assert(csv.schema.fieldNames === Seq("a", "b", "0"))
     checkAnswer(csv, Row("a", "b", 1))
+  }
+
+  test("skipLines restrictions") {
+    val errMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("skipLines", -1).csv(testFile(carsFile)).collect
+    }.getMessage
+    assert(errMsg1.contains("'skipLines' must be equal to or greater than 0."))
+  }
+
+  test("parses dataset with skipline") {
+    Seq(true, false).foreach { multiline =>
+      0.to(10).foreach(skipLines => {
+        val ds = spark.range(skipLines + 1).selectExpr("concat('a,b,', id) AS `a.text`").as[String]
+        val csv = spark.read
+          .option("skipLines", skipLines)
+          .option("multiLine", multiline)
+          .option("inferSchema", true).csv(ds)
+        checkAnswer(csv, Row("a", "b", skipLines))
+      })
+    }
+  }
+
+  test("parses dataset with multiline skiplines") {
+    0.to(10).foreach(skipLines => {
+      val ds = spark.range(skipLines + 1)
+        .selectExpr("concat('a,\"b\nb\",', id) AS `a.text`")
+        .as[String]
+      val csv = spark.read
+        .option("skipLines", skipLines)
+        .option("multiLine", true)
+        .option("inferSchema", true).csv(ds)
+      checkAnswer(csv, Row("a", "b\nb", skipLines))
+    })
+  }
+
+  test("parses dataset with skipline and header") {
+    Seq(true, false).foreach { multiline =>
+      0.to(10).foreach(skipLines => {
+        val ds = spark.range(skipLines + 2).selectExpr("concat('a,b,', id) AS `a.text`").as[String]
+        val csv = spark.read
+          .option("header", true)
+          .option("multiLine", multiline)
+          .option("skipLines", skipLines)
+          .option("inferSchema", true).csv(ds)
+        assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
+        checkAnswer(csv, Row("a", "b", skipLines + 1))
+      })
+    }
+  }
+
+  test("parses CSV file with skipline") {
+    Seq(true, false).foreach { multiline =>
+      val cars = spark
+        .read
+        .format("csv")
+        .option("skipLines", 3)
+        .option("multiLine", multiline)
+        .option("header", "false")
+        .load(testFile(carsWithLinesToSkip))
+
+      verifyCars(cars, withHeader = false, checkTypes = false)
+    }
+  }
+
+  test("parses CSV file with multiline skipline") {
+    val cars = spark
+      .read
+      .format("csv")
+      .option("skipLines", 3)
+      .option("multiLine", true)
+      .option("header", "false")
+      .load(testFile(carsWithMultilineLinesToSkip))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
+  test("parses CSV file with skipline and header") {
+    Seq(true, false).foreach { multiline =>
+      val cars = spark
+        .read
+        .format("csv")
+        .option("skipLines", 3)
+        .option("multiLine", multiline)
+        .option("header", "true")
+        .load(testFile(carsWithLinesToSkip))
+
+      verifyCars(cars, withHeader = true, checkTypes = false)
+    }
+  }
+
+  test("parses CSV file with multiline skipline and header") {
+    val cars = spark
+      .read
+      .format("csv")
+      .option("skipLines", 3)
+      .option("multiLine", true)
+      .option("header", "true")
+      .load(testFile(carsWithMultilineLinesToSkip))
+
+    verifyCars(cars, withHeader = true, checkTypes = false)
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {

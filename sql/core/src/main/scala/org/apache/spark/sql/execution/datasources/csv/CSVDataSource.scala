@@ -108,7 +108,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-    val maybeFirstLine = CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
+    val maybeFirstLine = CSVUtils.skipUnwantedLines(csv, parsedOptions).take(1).headOption
     inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
   }
 
@@ -194,6 +194,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
         shouldDropHeader = false,
+        parsedOptions.skipLines,
         new CsvParser(parsedOptions.asParserSettings),
         encoding = parsedOptions.charset)
     }.take(1).headOption match {
@@ -206,6 +207,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
               lines.getConfiguration,
               new Path(lines.getPath())),
             parsedOptions.headerFlag,
+            parsedOptions.skipLines,
             new CsvParser(parsedOptions.asParserSettings),
             encoding = parsedOptions.charset)
         }

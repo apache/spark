@@ -378,12 +378,15 @@ private[sql] object UnivocityParser {
   def tokenizeStream(
       inputStream: InputStream,
       shouldDropHeader: Boolean,
+      skipLines: Int,
       tokenizer: CsvParser,
       encoding: String): Iterator[Array[String]] = {
+    val handleSkipLines: () => Unit =
+      () => 1.to(skipLines).foreach(_ => tokenizer.parseNext())
     val handleHeader: () => Unit =
       () => if (shouldDropHeader) tokenizer.parseNext
 
-    convertStream(inputStream, tokenizer, handleHeader, encoding)(tokens => tokens)
+    convertStream(inputStream, tokenizer, handleHeader, handleSkipLines, encoding)(tokens => tokens)
   }
 
   /**
@@ -401,10 +404,17 @@ private[sql] object UnivocityParser {
       schema,
       parser.options.columnNameOfCorruptRecord)
 
+    val handleSkipLines: () => Unit =
+      () => 1.to(parser.options.skipLines).foreach(_ => tokenizer.parseNext())
     val handleHeader: () => Unit =
       () => headerChecker.checkHeaderColumnNames(tokenizer)
 
-    convertStream(inputStream, tokenizer, handleHeader, parser.options.charset) { tokens =>
+    convertStream(
+      inputStream,
+      tokenizer,
+      handleHeader,
+      handleSkipLines,
+      parser.options.charset) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
@@ -413,11 +423,13 @@ private[sql] object UnivocityParser {
       inputStream: InputStream,
       tokenizer: CsvParser,
       handleHeader: () => Unit,
+      handleSkipLines: () => Unit,
       encoding: String)(
       convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream, encoding)
 
-    // We can handle header here since here the stream is open.
+    // We can handle header and skipLines here since here the stream is open.
+    handleSkipLines()
     handleHeader()
 
     private var nextRecord = tokenizer.parseNext()
@@ -442,11 +454,11 @@ private[sql] object UnivocityParser {
       parser: UnivocityParser,
       headerChecker: CSVHeaderChecker,
       schema: StructType): Iterator[InternalRow] = {
-    headerChecker.checkHeaderColumnNames(lines, parser.tokenizer)
-
     val options = parser.options
 
-    val filteredLines: Iterator[String] = CSVExprUtils.filterCommentAndEmpty(lines, options)
+    val filteredLines: Iterator[String] = CSVExprUtils.skipUnwantedLines(lines, options)
+
+    headerChecker.checkHeaderColumnNames(lines, parser.tokenizer)
 
     val safeParser = new FailureSafeParser[String](
       input => parser.parse(input),

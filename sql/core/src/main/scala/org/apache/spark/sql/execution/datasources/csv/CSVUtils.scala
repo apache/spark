@@ -43,6 +43,20 @@ object CSVUtils {
   }
 
   /**
+   * Skips the number of lines specified in options from the start of the file. Then
+   * blank entries (and comments if set) are removed.
+   * This is only used for parsing a dataset of CSV strings.
+   */
+  def skipUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
+    import lines.sqlContext.implicits._
+    val skippedLines = lines.rdd.zipWithIndex().toDF("value", "order")
+      .filter($"order" >= options.skipLines)
+      .drop("order")
+      .as[String]
+    filterCommentAndEmpty(skippedLines, options)
+  }
+
+  /**
    * Skip the given first line so that only data can remain in a dataset.
    * This is similar with `dropHeaderLine` below and currently being used in CSV schema inference.
    */

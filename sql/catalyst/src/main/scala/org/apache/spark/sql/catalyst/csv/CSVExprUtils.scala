@@ -35,6 +35,18 @@ object CSVExprUtils {
     }
   }
 
+  /**
+   * Skips the number of lines specified in options from the start of the file. Then
+   * blank entries (and comments if set) are removed.
+   * This function currently only used for non-multiline CSV parsing.
+   */
+  def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+    val skippedLines = iter.drop {
+      options.skipLines
+    }
+    filterCommentAndEmpty(skippedLines, options)
+  }
+
   def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString

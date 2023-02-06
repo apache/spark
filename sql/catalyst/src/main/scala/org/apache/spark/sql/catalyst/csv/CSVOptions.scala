@@ -119,6 +119,8 @@ class CSVOptions(
   val comment = getChar(COMMENT, '\u0000')
 
   val headerFlag = getBool(HEADER)
+  val skipLines = getInt(SKIPLINES, 0)
+  require(skipLines >= 0, "'skipLines' must be equal to or greater than 0.")
   val inferSchemaFlag = getBool(INFER_SCHEMA)
   val ignoreLeadingWhiteSpaceInRead = getBool(IGNORE_LEADING_WHITESPACE, default = false)
   val ignoreTrailingWhiteSpaceInRead = getBool(IGNORE_TRAILING_WHITESPACE, default = false)
@@ -332,6 +334,7 @@ class CSVOptions(
 
 object CSVOptions extends DataSourceOptions {
   val HEADER = newOption("header")
+  val SKIPLINES = newOption("skipLines")
   val INFER_SCHEMA = newOption("inferSchema")
   val IGNORE_LEADING_WHITESPACE = newOption("ignoreLeadingWhiteSpace")
   val IGNORE_TRAILING_WHITESPACE = newOption("ignoreTrailingWhiteSpace")

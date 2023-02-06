@@ -103,6 +103,12 @@ Data source options of CSV can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>skipLines</code></td>
+    <td>0</td>
+    <td>Sets a number of lines to skip before parsing each of the CSV files. If the <code>header</code> option is set to <code>true</code>, the first line after the the number of <code>skipLines</code> will be taken as the header.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>inferSchema</code></td>
     <td>false</td>
     <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option.</td>
