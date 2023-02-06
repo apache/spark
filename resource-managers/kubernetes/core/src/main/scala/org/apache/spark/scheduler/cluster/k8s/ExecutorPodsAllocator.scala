@@ -75,6 +75,11 @@ class ExecutorPodsAllocator(
 
   protected val maxNumExecutorFailures = ExecutorFailureTracker.maxNumExecutorFailures(conf)
 
+  // Threshold at which if we fall bellow we trigger an allocation if
+  // block on snapshot is set to false.
+  private val blockOnSnapshot = conf.get(KUBERNETES_ALLOCATION_BLOCK_ON_SNAPSHOT)
+  private val podAllocationThreshold = math.min(maxPendingPods, podAllocationSize)
+
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
@@ -157,10 +162,14 @@ class ExecutorPodsAllocator(
       totalExpectedExecutorsPerResourceProfileId.put(rp.id, numExecs)
     }
     logDebug(s"Set total expected execs to $totalExpectedExecutorsPerResourceProfileId")
-    if (numOutstandingPods.get() < maxPendingPods) {
+    if (numOutstandingPods.get() == 0) {
       snapshotsStore.notifySubscribers()
-    } else {
-      logStalled(numOutstandingPods.get())
+    } else if (!blockOnSnapshot) {
+      if (numOutstandingPods.get() < podAllocationThreshold) {
+        snapshotsStore.notifySubscribers()
+      } else {
+        logStalled(numOutstandingPods.get())
+      }
     }
   }
 
@@ -394,7 +403,8 @@ class ExecutorPodsAllocator(
           }
         }
       }
-      if (newlyCreatedExecutorsForRpId.isEmpty && podCountForRpId < targetNum) {
+      if ((!blockOnSnapshot || newlyCreatedExecutorsForRpId.isEmpty)
+        && podCountForRpId < targetNum) {
         Some(rpId, podCountForRpId, targetNum)
       } else {
         // for this resource profile we do not request more PODs

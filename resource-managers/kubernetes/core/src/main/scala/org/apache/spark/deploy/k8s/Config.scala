@@ -727,6 +727,18 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_ALLOCATION_BLOCK_ON_SNAPSHOT =
+    ConfigBuilder("spark.kubernetes.allocation.blockOnSnapshot")
+      .doc("By default Spark on Kube will not trigger a new allocation until Kube delivers a new " +
+        "snapshot this allows an implicit feedback from the cluster manager in that if it is too " +
+        "busy snapshots may be backed up. Settings this to false increases the speed at which " +
+        "Spark an scale up but does increase the risk of an excessive number of pending " +
+        s"resources in some environments. See ${KUBERNETES_MAX_PENDING_PODS.key} " +
+        s" ${KUBERNETES_ALLOCATION_BATCH_SIZE.key} for configuration options.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
       .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +

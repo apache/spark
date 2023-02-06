@@ -201,7 +201,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(ExecutorPodsAllocator.splitSlots(seq2, 4) === Seq(("a", 2), ("b", 1), ("c", 1)))
   }
 
-  test("SPARK-36052: pending pod limit with multiple resource profiles") {
+  test("SPARK-42261: Allow allocations without snapshot up to min of max pending & alloc size.") {
     when(podOperations
       .withField("status.phase", "Pending"))
       .thenReturn(podOperations)
@@ -226,7 +226,106 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     rpb.require(ereq).require(treq)
     val rp = rpb.build()
 
-    val confWithLowMaxPendingPods = conf.clone.set(KUBERNETES_MAX_PENDING_PODS.key, "3")
+    val confWithMediumMaxPendingPods = conf.clone.set(
+      KUBERNETES_MAX_PENDING_PODS.key, "20").set(
+      KUBERNETES_ALLOCATION_BLOCK_ON_SNAPSHOT.key, "false").set(
+      KUBERNETES_ALLOCATION_BATCH_SIZE.key, "20")
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithMediumMaxPendingPods, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 3))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    // We should have allocated something in each RPI so we don't count as "stalled."
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+
+    // We should not yet have stalled.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(rp -> 100))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 20)
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+
+    // And now we stall.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(rp -> 200))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 20)
+    assert(podsAllocatorUnderTest.stalledStartTime != null)
+  }
+
+  test("SPARK-42261: Don't allow allocations without snapshot by default (except new rpID)") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4).memory("2g")
+    treq.cpus(2)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
+    val confWithMediumMaxPendingPods = conf.clone.set(
+      KUBERNETES_MAX_PENDING_PODS.key, "20").set(
+      KUBERNETES_ALLOCATION_BATCH_SIZE.key, "20")
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithMediumMaxPendingPods, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 3))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    // We should have allocated something in each RPI so we don't count as "stalled."
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(rp -> 100))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(rp -> 200))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.stalledStartTime == null)
+  }
+
+  test("SPARK-36052: pending pod limit with multiple resource profiles & SPARK-42261") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4).memory("2g")
+    treq.cpus(2)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
+    val confWithLowMaxPendingPods = conf.clone.set(
+      KUBERNETES_MAX_PENDING_PODS.key, "3").set(
+      KUBERNETES_ALLOCATION_BLOCK_ON_SNAPSHOT.key, "false")
     assert(podsAllocatorUnderTest.stalledStartTime == null)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithLowMaxPendingPods, secMgr,
       executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
