@@ -320,8 +320,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
               case other =>
                 other.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2412",
-                  messageParameters = Map("sqlExpr" -> other.toString))
+                  errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+                  messageParameters = Map("sqlExpr" -> toSQLExpr(other)))
             }
 
           case s: SubqueryExpression =>

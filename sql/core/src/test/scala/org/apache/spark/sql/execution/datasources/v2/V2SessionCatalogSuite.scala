@@ -1119,4 +1119,22 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     }
     catalog.dropNamespace(testNs, cascade = false)
   }
+
+  test("IdentifierHelper should throw exception when identifier has more than 2 parts") {
+    val testIdent: IdentifierHelper = Identifier.of(Array("a", "b"), "c")
+    checkError(
+      exception = intercept[AnalysisException](testIdent.asTableIdentifier),
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
+    )
+  }
+
+  test("MultipartIdentifierHelper should throw exception when identifier has more than 2 parts") {
+    val testIdent: MultipartIdentifierHelper = Seq("a", "b", "c")
+    checkError(
+      exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
+    )
+  }
 }

@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
@@ -231,8 +231,10 @@ class BlockManagerMasterEndpoint(
       bmId: BlockManagerId,
       defaultValue: T): PartialFunction[Throwable, T] = {
     case e: IOException =>
-      logWarning(s"Error trying to remove $blockType $blockId" +
-        s" from block manager $bmId", e)
+      if (!SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
+        logWarning(s"Error trying to remove $blockType $blockId" +
+          s" from block manager $bmId", e)
+      }
       defaultValue
 
     case t: TimeoutException =>

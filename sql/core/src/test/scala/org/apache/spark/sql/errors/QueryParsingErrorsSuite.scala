@@ -33,8 +33,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   test("UNSUPPORTED_FEATURE: LATERAL join with NATURAL join not supported") {
     checkError(
       exception = parseException("SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)"),
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
-      sqlState = "0A000",
+      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      parameters = Map("joinType1" -> "LATERAL", "joinType2" -> "NATURAL"),
+      sqlState = "42613",
       context = ExpectedContext(
         fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
         start = 17,
@@ -90,8 +91,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   test("UNSUPPORTED_FEATURE: NATURAL CROSS JOIN is not supported") {
     checkError(
       exception = parseException("SELECT * FROM a NATURAL CROSS JOIN b"),
-      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
-      sqlState = "0A000",
+      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      parameters = Map("joinType1" -> "NATURAL", "joinType2" -> "CROSS"),
+      sqlState = "42613",
       context = ExpectedContext(
         fragment = "NATURAL CROSS JOIN b",
         start = 16,
