@@ -2616,104 +2616,85 @@ abstract class CSVSuite
     checkAnswer(csv, Row("a", "b", 1))
   }
 
-  test("skipLines restrictions") {
+  test("SPARK-42359: skipLines restrictions") {
     val errMsg1 = intercept[IllegalArgumentException] {
       spark.read.option("skipLines", -1).csv(testFile(carsFile)).collect
     }.getMessage
     assert(errMsg1.contains("'skipLines' must be equal to or greater than 0."))
   }
 
-  test("parses dataset with skipline") {
-    Seq(true, false).foreach { multiline =>
-      0.to(10).foreach(skipLines => {
-        val ds = spark.range(skipLines + 1).selectExpr("concat('a,b,', id) AS `a.text`").as[String]
-        val csv = spark.read
-          .option("skipLines", skipLines)
-          .option("multiLine", multiline)
-          .option("inferSchema", true).csv(ds)
-        checkAnswer(csv, Row("a", "b", skipLines))
-      })
+  test("SPARK-42359: parses dataset with skipLines") {
+    Seq(0, 1, 2, 10, 100).foreach { skipLines =>
+      Seq(true, false).foreach { multiline =>
+        Seq(true, false).foreach { header =>
+          val ds = spark.range(skipLines + 2)
+            .selectExpr("concat('a,b,', id) AS `a.text`").as[String]
+          val csv = spark.read
+            .option("header", header)
+            .option("multiLine", multiline)
+            .option("skipLines", skipLines)
+            .option("inferSchema", true)
+            .csv(ds)
+          assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
+          if (header) {
+            checkAnswer(csv, Row("a", "b", skipLines + 1))
+          } else {
+            checkAnswer(csv, Seq(Row("a", "b", skipLines), Row("a", "b", skipLines + 1)))
+          }
+        }
+      }
     }
   }
 
-  test("parses dataset with multiline skiplines") {
-    0.to(10).foreach(skipLines => {
-      val ds = spark.range(skipLines + 1)
-        .selectExpr("concat('a,\"b\nb\",', id) AS `a.text`")
-        .as[String]
-      val csv = spark.read
-        .option("skipLines", skipLines)
-        .option("multiLine", true)
-        .option("inferSchema", true).csv(ds)
-      checkAnswer(csv, Row("a", "b\nb", skipLines))
-    })
-  }
-
-  test("parses dataset with skipline and header") {
-    Seq(true, false).foreach { multiline =>
-      0.to(10).foreach(skipLines => {
-        val ds = spark.range(skipLines + 2).selectExpr("concat('a,b,', id) AS `a.text`").as[String]
+  test("SPARK-42359: parses dataset with multiline skipLines") {
+    Seq(0, 1, 2, 10, 100).foreach { skipLines =>
+      Seq(true, false).foreach { header =>
+        val ds = spark.range(skipLines + 2)
+          .selectExpr("concat('a,\"b\nb\",', id) AS `a.text`")
+          .as[String]
         val csv = spark.read
-          .option("header", true)
-          .option("multiLine", multiline)
           .option("skipLines", skipLines)
-          .option("inferSchema", true).csv(ds)
+          .option("multiLine", true)
+          .option("inferSchema", true)
+          .csv(ds)
         assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
-        checkAnswer(csv, Row("a", "b", skipLines + 1))
-      })
+        if (header) {
+          checkAnswer(csv, Row("a", "b\nb", skipLines + 1))
+        } else {
+          checkAnswer(csv, Seq(Row("a", "b\nb", skipLines), Row("a", "b\nb", skipLines + 1)))
+        }
+      }
     }
   }
 
-  test("parses CSV file with skipline") {
-    Seq(true, false).foreach { multiline =>
+  test("SPARK-42359: parses CSV file with skipLines") {
+    Seq(true, false).foreach { header =>
+      Seq(true, false).foreach { multiline =>
+        val cars = spark
+          .read
+          .format("csv")
+          .option("skipLines", 3)
+          .option("multiLine", multiline)
+          .option("header", header)
+          .csv(testFile(carsWithLinesToSkip))
+
+        verifyCars(cars, withHeader = header, checkTypes = false)
+      }
+    }
+  }
+
+  test("SPARK-42359: parses CSV file with multiline skipLines") {
+    Seq(true, false).foreach { header =>
       val cars = spark
         .read
         .format("csv")
         .option("skipLines", 3)
-        .option("multiLine", multiline)
-        .option("header", "false")
-        .load(testFile(carsWithLinesToSkip))
+        .option("multiLine", true)
+        .option("header", header)
+        .csv(testFile(carsWithMultilineLinesToSkip))
 
-      verifyCars(cars, withHeader = false, checkTypes = false)
+      verifyCars(cars, withHeader = header, checkTypes = false)
     }
-  }
-
-  test("parses CSV file with multiline skipline") {
-    val cars = spark
-      .read
-      .format("csv")
-      .option("skipLines", 3)
-      .option("multiLine", true)
-      .option("header", "false")
-      .load(testFile(carsWithMultilineLinesToSkip))
-
-    verifyCars(cars, withHeader = false, checkTypes = false)
-  }
-
-  test("parses CSV file with skipline and header") {
-    Seq(true, false).foreach { multiline =>
-      val cars = spark
-        .read
-        .format("csv")
-        .option("skipLines", 3)
-        .option("multiLine", multiline)
-        .option("header", "true")
-        .load(testFile(carsWithLinesToSkip))
-
-      verifyCars(cars, withHeader = true, checkTypes = false)
-    }
-  }
-
-  test("parses CSV file with multiline skipline and header") {
-    val cars = spark
-      .read
-      .format("csv")
-      .option("skipLines", 3)
-      .option("multiLine", true)
-      .option("header", "true")
-      .load(testFile(carsWithMultilineLinesToSkip))
-
-    verifyCars(cars, withHeader = true, checkTypes = false)
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {

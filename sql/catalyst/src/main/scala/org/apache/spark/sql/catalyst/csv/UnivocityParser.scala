@@ -428,7 +428,7 @@ private[sql] object UnivocityParser {
       convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream, encoding)
 
-    // We can handle header and skipLines here since here the stream is open.
+    // We can handle header and skipLines here since the stream is open.
     handleSkipLines()
     handleHeader()
 

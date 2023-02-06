@@ -43,9 +43,8 @@ object CSVUtils {
   }
 
   /**
-   * Skips the number of lines specified in options from the start of the file. Then
-   * blank entries (and comments if set) are removed.
-   * This is only used for parsing a dataset of CSV strings.
+   * Skips the number of lines specified in options from the start of the file. Then blank entries
+   * (and comments if set) are removed. This is currently being used in CSV schema inference.
    */
   def skipUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
     import lines.sqlContext.implicits._
