@@ -2071,7 +2071,9 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
       },
       errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> "`global_temp`.`ns1`.`ns2`"))
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "namespace" -> "`global_temp`.`ns1`.`ns2`"))
   }
 
   test("table name same as catalog can be used") {
