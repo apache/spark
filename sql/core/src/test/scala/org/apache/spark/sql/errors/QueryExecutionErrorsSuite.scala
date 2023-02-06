@@ -205,9 +205,9 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e1,
-      errorClass = "UNSUPPORTED_FEATURE.REPEATED_PIVOT",
-      parameters = Map[String, String](),
-      sqlState = "0A000")
+      errorClass = "REPEATED_CLAUSE",
+      parameters = Map("clause" -> "PIVOT", "operation" -> "SUBQUERY"),
+      sqlState = "42614")
 
     val e2 = intercept[SparkUnsupportedOperationException] {
       trainingSales
@@ -770,6 +770,31 @@ class QueryExecutionErrorsSuite
     }
     assert(e.getErrorClass === "STREAM_FAILED")
     assert(e.getCause.isInstanceOf[NullPointerException])
+  }
+
+  test("UNSUPPORTED_EXPR_FOR_WINDOW: to_date is not supported with WINDOW") {
+    withTable("t") {
+      sql("CREATE TABLE t(c String) USING parquet")
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT to_date('2009-07-30 04:17:52') OVER (PARTITION BY c ORDER BY c) FROM t;")
+      }
+
+      checkError(
+        exception = e,
+        errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+        parameters = Map(
+          "sqlExpr" -> "\"to_date(2009-07-30 04:17:52)\""
+        ),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "to_date('2009-07-30 04:17:52') OVER (PARTITION BY c ORDER BY c)",
+            start = 7,
+            stop = 69
+          )
+        )
+      )
+    }
   }
 }
 
