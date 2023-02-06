@@ -96,7 +96,8 @@
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
-    ]
+    ],
+    "sqlState" : "429BB"
   },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
