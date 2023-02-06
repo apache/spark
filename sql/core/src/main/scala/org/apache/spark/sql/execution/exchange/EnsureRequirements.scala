@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.collection.Utils
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -157,7 +156,7 @@ case class EnsureRequirements(
       //      multi-way join at the moment, so this check should be sufficient.
       //   2. All children are of `KeyGroupedPartitioning`, and they are compatible with each other
       // If both are true, skip shuffle.
-      val isCompatible = parent.isDefined &&
+      val isKeyGroupCompatible = parent.isDefined &&
           children.length == 2 && childrenIndexes.length == 2 && {
         val left = children.head
         val right = children(1)
@@ -170,7 +169,7 @@ case class EnsureRequirements(
       }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if isCompatible || !childrenIndexes.contains(idx) =>
+        case ((child, _), idx) if isKeyGroupCompatible || !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
@@ -387,10 +386,10 @@ case class EnsureRequirements(
       isCompatible = leftSpec.areKeysCompatible(rightSpec)
 
       // Partition expressions are compatible. Regardless of whether partition values
-      // match from both sides of children, we can we can calculate a superset of
-      // partition values and push-down to respective data sources so they can adjust
-      // their output partitioning by filling missing partition keys with empty
-      // partitions. As result, we can still avoid shuffle.
+      // match from both sides of children, we can calculate a superset of partition values and
+      // push-down to respective data sources so they can adjust their output partitioning by
+      // filling missing partition keys with empty partitions. As result, we can still avoid
+      // shuffle.
       //
       // For instance, if two sides of a join have partition expressions
       // `day(a)` and `day(b)` respectively
@@ -411,10 +410,9 @@ case class EnsureRequirements(
              |Right side # of partitions: ${rightPartValues.size}
              |""".stripMargin)
 
-        var mergedPartValues = Utils.mergeOrdered(
-          Seq(leftPartValues, rightPartValues))(leftSpec.ordering)
-            .toSeq
-            .distinct
+        var mergedPartValues = InternalRowComparableWrapper
+            .mergePartitions(leftSpec.partitioning, rightSpec.partitioning,
+              leftSpec.partitioning.expressions)
             .map(v => (v, 1))
 
         logInfo(s"After merging, there are ${mergedPartValues.size} partitions")
