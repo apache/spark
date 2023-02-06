@@ -171,7 +171,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkErrorInExpression[SparkRuntimeException](
       MapConcat(Seq(m0, m1)),
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
@@ -332,7 +332,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(ai4),
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
@@ -365,7 +365,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(as4),
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",

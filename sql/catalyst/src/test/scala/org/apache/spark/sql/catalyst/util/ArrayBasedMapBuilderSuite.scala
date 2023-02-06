@@ -53,7 +53,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     builder.put(1, 1)
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(1, 2)),
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
@@ -81,7 +81,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val arr = Array(1.toByte)
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(arr, 3)),
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> arr.toString,
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
@@ -118,7 +118,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     // By default duplicated map key fails the query.
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(unsafeRow, 3)),
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "[0,1]",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
@@ -153,7 +153,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     // By default duplicated map key fails the query.
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(unsafeArray, 3)),
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> unsafeArray.toString,
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
