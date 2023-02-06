@@ -20,6 +20,7 @@
 | org.apache.spark.sql.catalyst.expressions.ArrayExists | exists | SELECT exists(array(1, 2, 3), x -> x % 2 == 0) | struct<exists(array(1, 2, 3), lambdafunction(((namedlambdavariable() % 2) = 0), namedlambdavariable())):boolean> |
 | org.apache.spark.sql.catalyst.expressions.ArrayFilter | filter | SELECT filter(array(1, 2, 3), x -> x % 2 == 1) | struct<filter(array(1, 2, 3), lambdafunction(((namedlambdavariable() % 2) = 1), namedlambdavariable())):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayForAll | forall | SELECT forall(array(1, 2, 3), x -> x % 2 == 0) | struct<forall(array(1, 2, 3), lambdafunction(((namedlambdavariable() % 2) = 0), namedlambdavariable())):boolean> |
+| org.apache.spark.sql.catalyst.expressions.ArrayInsert | array_insert | SELECT array_insert(array(1, 2, 3, 4), 5, 5) | struct<array_insert(array(1, 2, 3, 4), 5, 5):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayIntersect | array_intersect | SELECT array_intersect(array(1, 2, 3), array(1, 3, 5)) | struct<array_intersect(array(1, 2, 3), array(1, 3, 5)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayJoin | array_join | SELECT array_join(array('hello', 'world'), ' ') | struct<array_join(array(hello, world),  ):string> |
 | org.apache.spark.sql.catalyst.expressions.ArrayMax | array_max | SELECT array_max(array(1, 20, null, 3)) | struct<array_max(array(1, 20, NULL, 3)):int> |
