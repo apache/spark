@@ -500,8 +500,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def add(self, other: Any, fill_value: Union[int, str, float] = None) -> "Series":
         if fill_value is not None:
             if isinstance(other, (int, str, float)):
-                new_sdf = self._internal.resolved_copy.spark_frame.fillna(fill_value)
-                self = first_series(DataFrame(self._internal.with_new_sdf(new_sdf)))
+                scol = self.spark.column
+                scol = F.when(scol.isNull() | F.isnan(scol), fill_value).otherwise(scol)
+                self = self._with_new_scol(scol)
             else:
                 raise NotImplementedError(
                     "`fill_value` currently only works when type of `other` is in (int, str, float)"
@@ -520,8 +521,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def radd(self, other: Any, fill_value: Union[int, str, float] = None) -> "Series":
         if fill_value is not None:
             if isinstance(other, (int, str, float)):
-                new_sdf = self._internal.resolved_copy.spark_frame.fillna(fill_value)
-                self = first_series(DataFrame(self._internal.with_new_sdf(new_sdf)))
+                scol = self.spark.column
+                scol = F.when(scol.isNull() | F.isnan(scol), fill_value).otherwise(scol)
+                self = self._with_new_scol(scol)
             else:
                 raise NotImplementedError(
                     "`fill_value` currently only works when type of `other` is in (int, str, float)"
