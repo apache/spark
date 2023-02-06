@@ -277,6 +277,36 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
   }
 }
 
+/**
+ * Optimize out the right side of a left-outer join under a Project
+ * if the left side provides all of the columns needed by the Project
+ */
+object EliminateUnusedLeftOuterJoin extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformUp {
+      // Match a Project around a left-outer Join
+      case project @Project(
+        // Grab the output from the Project which includes the expression IDs
+        projectList,
+        Join(
+          // Grab the left and all of the expression IDs it outputs
+          left,
+          _,
+          LeftOuter,
+          _,
+          _
+        )
+      // If all of the required expressions for the Project are provided by the left...
+      ) if projectList.isEmpty || {
+        val outputExprIds = left.output.map(_.exprId)
+        outputExprIds != null && projectList.map(_.exprId).forall(outputExprIds.contains)
+      } =>
+        // ...drop the join keeping the left side
+        project.copy(child = left)
+    }
+  }
+}
+
 sealed abstract class BuildSide
 
 case object BuildRight extends BuildSide

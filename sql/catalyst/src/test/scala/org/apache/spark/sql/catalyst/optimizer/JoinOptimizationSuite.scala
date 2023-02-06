@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -37,6 +37,7 @@ class JoinOptimizationSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         ReorderJoin,
+        EliminateUnusedLeftOuterJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         RemoveNoopOperators,
@@ -118,6 +119,65 @@ class JoinOptimizationSuite extends PlanTest {
         x.join(y, Inner).join(z, Cross).where("x.b".attr === "z.a".attr),
         x.join(z, Cross, Some("x.b".attr === "z.a".attr)).join(y, Inner)
           .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
+      )
+    )
+
+    queryAnswers foreach { queryAnswerPair =>
+      val optimized = Optimize.execute(queryAnswerPair._1.analyze)
+      comparePlans(optimized, queryAnswerPair._2.analyze)
+    }
+  }
+
+  test("eliminate left-outer joins that is not used") {
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation1.subquery(Symbol("y"))
+    val z = testRelation.subquery(Symbol("z"))
+    val j = x.join(y, LeftOuter, Some("x.a".attr === "y.d".attr))
+      .join(z, LeftOuter, Some("x.b".attr === "z.b".attr))
+
+    val queryAnswers = Seq(
+      // The join on it's own shouldn't change
+      (
+        j,
+        j
+      ),
+      // Selecting everything  shouldn't change the join, Project will be removed by other
+      (
+        j.select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*),
+        j
+      ),
+      // Other types of joins should be kept
+      (
+        x.join(y, Inner, Some("x.a".attr === "y.d".attr))
+          .join(z, Inner, Some("x.b".attr === "z.b".attr))
+          .select(Seq("x.a").map(_.attr): _*),
+        x.select(Seq("x.a", "x.b").map(_.attr): _*)
+          .join(y, Inner, Some("x.a".attr === "y.d".attr))
+          .select(Seq("x.a", "x.b").map(_.attr): _*)
+          .join(z.select(Seq("z.b").map(_.attr): _*), Inner, Some("x.b".attr === "z.b".attr))
+          .select(Seq("x.a").map(_.attr): _*)
+      ),
+      // Both joins should be eliminated
+      (
+        j.select(Seq("x.a").map(_.attr): _*),
+        x.select(Seq("x.a").map(_.attr): _*)
+      ),
+      (
+        j.select(Seq("x.a", "x.c").map(_.attr): _*),
+        x.select(Seq("x.a", "x.c").map(_.attr): _*)
+      ),
+      // y join should be eliminated
+      (
+        j.select(Seq("x.a", "z.b").map(_.attr): _*),
+        x.select(Seq("x.a", "x.b").map(_.attr): _*)
+          .join(z.select(Seq("z.b").map(_.attr): _*), LeftOuter, Some("x.b".attr === "z.b".attr))
+          .select(Seq("x.a", "z.b").map(_.attr): _*)
+      ),
+      // z join should be eliminated
+      (
+        j.select(Seq("x.a", "y.d").map(_.attr): _*),
+        x.select(Seq("x.a").map(_.attr): _*)
+          .join(y, LeftOuter, Some("x.a".attr === "y.d".attr))
       )
     )
 
