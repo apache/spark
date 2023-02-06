@@ -202,8 +202,42 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     })
   }
 
+  /**
+   * Transform LeftOuter Join to Anti Join if:
+   * 1. Only select from the left side
+   * 2. Exists isNull filter on the right side
+   */
+  object LeftOuterJoinsWithNullFilter extends PredicateHelper {
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+      case Project(projectList, f @ Filter(cond, j @ Join(left, right, LeftOuter, _, _)))
+        if projectList.forall(canEvaluate(_, left)) =>
+        val filterConditions = splitConjunctivePredicates(cond)
+        val isNullConstraints = f.constraints.collect {
+          case IsNull(e: Attribute) if right.outputSet.contains(e) => e.exprId
+        }
+        val isNotNullConstraints = right.constraints.collect {
+          case IsNotNull(e: Attribute) if right.outputSet.contains(e) => e.exprId
+        }
+        if (isNullConstraints.intersect(isNotNullConstraints).nonEmpty) {
+          val newJoin = j.copy(joinType = LeftAnti)
+          val leftConds = filterConditions.filter(_.references.intersect(right.outputSet).isEmpty)
+          if (leftConds.isEmpty) {
+            Some(Project(projectList, newJoin))
+          } else {
+            Some(Project(projectList, Filter(buildBalancedPredicate(leftConds, And), newJoin)))
+          }
+        } else {
+          None
+        }
+
+      case _ => None
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(OUTER_JOIN), ruleId) {
+    case LeftOuterJoinsWithNullFilter(newProject) =>
+      newProject
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))

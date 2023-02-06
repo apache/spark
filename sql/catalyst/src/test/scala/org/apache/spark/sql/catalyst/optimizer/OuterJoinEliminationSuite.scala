@@ -315,4 +315,28 @@ class OuterJoinEliminationSuite extends PlanTest {
       .select($"a", $"d").analyze
     comparePlans(Optimize.execute(p3), p3)
   }
+
+  test("SPARK-42360: Transform LeftOuter join with IsNull filter on right side to Anti join") {
+    object InferFilterOptimize extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("Infer Filters", Once,
+          InferFiltersFromConstraints) ::
+          Batch("Subqueries", Once,
+            EliminateSubqueryAliases) ::
+          Batch("Outer Join Elimination", Once,
+            EliminateOuterJoin,
+            PushPredicateThroughJoin) :: Nil
+    }
+
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    comparePlans(InferFilterOptimize.execute(
+      x.join(y, LeftOuter, Some($"a" === $"d"))
+        .where($"d".isNull && rand(1) < 0.5)
+        .select($"a", $"b", $"c").analyze),
+      x.join(y.where($"d".isNotNull), LeftAnti, Some($"a" === $"d"))
+        .where(rand(1) < 0.5)
+        .select($"a", $"b", $"c").analyze
+    )
+  }
 }
