@@ -2598,4 +2598,29 @@ class SubquerySuite extends QueryTest
         Row("aa"))
     }
   }
+
+  test("SPARK-42346: Rewrite distinct aggregates after merging subqueries") {
+    withTempView("t1") {
+      Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t1")
+
+      checkAnswer(sql(
+        """
+          |SELECT
+          |  (SELECT count(distinct c1) FROM t1),
+          |  (SELECT count(distinct c2) FROM t1)
+          |""".stripMargin),
+        Row(2, 2))
+
+      // In this case we don't merge the subqueries as `RewriteDistinctAggregates` kicks off for the
+      // 2 subqueries first but `MergeScalarSubqueries` is not prepared for the `Expand` nodes that
+      // are inserted by the rewrite.
+      checkAnswer(sql(
+        """
+          |SELECT
+          |  (SELECT count(distinct c1) + sum(distinct c2) FROM t1),
+          |  (SELECT count(distinct c2) + sum(distinct c1) FROM t1)
+          |""".stripMargin),
+        Row(8, 6))
+    }
+  }
 }
