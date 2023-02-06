@@ -55,7 +55,8 @@ class SparkOptimizer(
       InjectRuntimeFilter,
       RewritePredicateSubquery) :+
     Batch("MergeScalarSubqueries", Once,
-      MergeScalarSubqueries) :+
+      MergeScalarSubqueries,
+      RewriteDistinctAggregates) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
