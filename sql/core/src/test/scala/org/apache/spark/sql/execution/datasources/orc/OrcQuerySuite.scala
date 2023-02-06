@@ -610,7 +610,7 @@ abstract class OrcQueryTest extends OrcTest {
         exception = intercept[SparkException] {
           testAllCorruptFiles()
         },
-        errorClass = "CANNOT_READ_FOOTER",
+        errorClass = "CANNOT_READ_FILE_FOOTER",
         parameters = Map("file" -> "file:.*"),
         matchPVals = true
       )

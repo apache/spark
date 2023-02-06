@@ -1067,7 +1067,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotReadFooterForFileError(file: Path, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_READ_FOOTER",
+      errorClass = "CANNOT_READ_FILE_FOOTER",
       messageParameters = Map("file" -> file.toString()),
       cause = e)
   }

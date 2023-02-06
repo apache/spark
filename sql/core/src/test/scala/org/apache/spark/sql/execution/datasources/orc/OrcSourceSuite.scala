@@ -234,7 +234,7 @@ abstract class OrcSuite
       exception = intercept[SparkException] {
         testMergeSchemasInParallel(false, schemaReader)
       }.getCause.getCause.asInstanceOf[SparkException],
-      errorClass = "CANNOT_READ_FOOTER",
+      errorClass = "CANNOT_READ_FILE_FOOTER",
       parameters = Map("file" -> "file:.*"),
       matchPVals = true
     )
@@ -484,7 +484,7 @@ abstract class OrcSuite
             exception = intercept[SparkException] {
               spark.read.orc(basePath).columns.length
             }.getCause.getCause.asInstanceOf[SparkException],
-            errorClass = "CANNOT_READ_FOOTER",
+            errorClass = "CANNOT_READ_FILE_FOOTER",
             parameters = Map("file" -> "file:.*"),
             matchPVals = true
           )

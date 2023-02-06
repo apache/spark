@@ -93,7 +93,7 @@
     ],
     "sqlState" : "22007"
   },
-  "CANNOT_READ_FOOTER" : {
+  "CANNOT_READ_FILE_FOOTER" : {
     "message" : [
       "Could not read footer for file: <file>."
     ]
