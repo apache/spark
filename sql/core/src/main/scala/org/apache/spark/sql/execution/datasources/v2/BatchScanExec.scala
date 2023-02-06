@@ -140,9 +140,6 @@ case class BatchScanExec(
 
       outputPartitioning match {
         case p: KeyGroupedPartitioning =>
-          // This means the input partitions are not grouped by partition values. We'll need to
-          // check `groupByPartitionValues` and decide whether to group and replicate splits within
-          // a partition.
           if (conf.v2BucketingPushPartValuesEnabled &&
               conf.v2BucketingPartiallyClusteredDistributionEnabled) {
             assert(filteredPartitions.forall(_.size == 1),
@@ -152,6 +149,9 @@ case class BatchScanExec(
 
             val groupedPartitions = groupPartitions(finalPartitions.map(_.head), true).get
 
+            // This means the input partitions are not grouped by partition values. We'll need to
+            // check `groupByPartitionValues` and decide whether to group and replicate splits
+            // within a partition.
             if (commonPartitionValues.isDefined && applyPartialClustering) {
               // A mapping from the common partition values to how many splits the partition
               // should contain. Note this no longer maintain the partition key ordering.

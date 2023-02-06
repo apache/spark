@@ -430,6 +430,11 @@ case class EnsureRequirements(
           logInfo("Calculating partially clustered distribution for " +
               "storage-partitioned join")
 
+          // Similar to `OptimizeSkewedJoin`, we need to check join type and decide
+          // whether partially clustered distribution can be applied. For instance, the
+          // optimization cannot be applied to a left outer join, where the left hand
+          // side is chosen as the side to replicate partitions according to stats.
+          // Otherwise, query result could be incorrect.
           val canReplicateLeft = canReplicateLeftSide(joinType)
           val canReplicateRight = canReplicateRightSide(joinType)
 
