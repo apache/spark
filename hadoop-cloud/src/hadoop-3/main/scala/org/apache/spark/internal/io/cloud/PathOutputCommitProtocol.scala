@@ -18,7 +18,10 @@
 package org.apache.spark.internal.io.cloud
 
 import java.io.IOException
-import java.util.{Date, UUID}
+import java.time.LocalDateTime
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
+import java.time.temporal.ChronoField.{HOUR_OF_DAY, MINUTE_OF_HOUR, SECOND_OF_MINUTE}
+import java.util.{Date, Locale, UUID}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
@@ -131,7 +134,7 @@ class PathOutputCommitProtocol(
    * @return the committer to use. This will always be a subclass of
    *         `PathOutputCommitter`.
    */
-  protected def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
+  private def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
     logTrace(s"Setting up committer for path $destination")
     committer = PathOutputCommitterFactory.createCommitter(destPath, context)
 
@@ -400,7 +403,11 @@ class PathOutputCommitProtocol(
     }
 
     // directory rename in dynamic overwrite.
-    // this can be O(1) (HDFS), slow O(1) (ABFS), O(files) (GCS) or O(data) (S3)
+    // this may be
+    // Fast O(1) HDFS
+    // Slow/throttled O(1) ABFS
+    // O(files) GCS
+    // O(data) S3
     // As well as parallelizing the operation for speed, error handling should
     // fail fast on the first failure, rather than continue with other directory renames
 
@@ -444,21 +451,23 @@ class PathOutputCommitProtocol(
       }
     }
 
+    // delete staging dir. This will be free of data, and temp files should
+    // already have been cleaned up by the inner commit operation.
     fs.delete(stagingDir, true)
 
     // the job is now complete.
     // now save iostats if configured to do so.
     // even if no stats are collected, the existence of this file is evidence
     // a job went through the committer.
-    iostatsSnapshot.aggregate(retrieveIOStatistics(committer))
     reportDir.foreach { dir =>
-      val reportPath = new Path(dir, jobId)
+      iostatsSnapshot.aggregate(retrieveIOStatistics(committer))
+      val reportPath = new Path(dir, buildStatisticsFilename(jobId, LocalDateTime.now()))
       logInfo(s"Saving statistics report to ${reportPath}")
       IOStatisticsSnapshot.serializer().save(
         reportPath.getFileSystem(jobConf),
         reportPath,
         iostatsSnapshot,
-         true)
+        true)
     }
   }
 
@@ -605,6 +614,31 @@ object PathOutputCommitProtocol {
   private[cloud] val OUTPUTCOMMITTER_FACTORY_SCHEME = "mapreduce.outputcommitter.factory.scheme"
 
   /**
+   * Classname of the manifest committer factory (Hadoop 3.3.5+).
+   * If present, the manifest committer is available; if absent it is not.
+   * By setting the factory for a filesystem scheme or a job to this
+   * committer, task commit is implemented by saving a JSON manifest of
+   * files to rename.
+   * Job commit consists of reading these files, creating the destination directories
+   * and then renaming the new files into their final location.
+   */
+  private[cloud] val MANIFEST_COMMITTER_FACTORY =
+    "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory"
+
+  /**
+   * Classic ISO date time doesn't work in URIs because of the : separators.
+   */
+  private lazy val DATETIME_IN_PATH: DateTimeFormatter =
+    new DateTimeFormatterBuilder()
+      .parseCaseInsensitive
+      .append(DateTimeFormatter.ISO_LOCAL_DATE)
+      .appendLiteral('T')
+      .appendValue(HOUR_OF_DAY, 2)
+      .appendLiteral('.').appendValue(MINUTE_OF_HOUR, 2).optionalStart
+      .appendLiteral('.').appendValue(SECOND_OF_MINUTE, 2).optionalStart
+      .toFormatter(Locale.US)
+
+  /**
    * Is one path equal to or ancestor of another?
    * @param parent parent path; may be root.
    * @param child path which is to be tested
@@ -618,5 +652,15 @@ object PathOutputCommitProtocol {
     } else {
       isAncestorOf(parent, child.getParent)
     }
+  }
+
+  /**
+   * Build the filename for a statistics report file.
+   * @param jobId job ID
+   * @param timestamp timestamp
+   * @return a string for the report.
+   */
+  private [cloud] def buildStatisticsFilename(jobId: String, timestamp: LocalDateTime): String = {
+    s"${timestamp.format(DATETIME_IN_PATH)}-${jobId}-statistics.json"
   }
 }
