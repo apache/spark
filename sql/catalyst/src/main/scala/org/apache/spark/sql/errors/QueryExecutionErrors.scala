@@ -1844,10 +1844,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def cannotRecognizeHiveTypeError(
       e: ParseException, fieldType: String, fieldName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2188",
+      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
       messageParameters = Map(
-        "fieldType" -> fieldType,
-        "fieldName" -> fieldName),
+        "fieldType" -> toSQLType(fieldType),
+        "fieldName" -> toSQLId(fieldName)),
       cause = e)
   }
 
