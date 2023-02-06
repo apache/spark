@@ -816,3 +816,9 @@ message StreamingQueryProgress {
 message StreamingQueryProgressWrapper {
   StreamingQueryProgress progress = 1;
 }
+
+message FsHistoryProviderMetadata {
+  int64 version = 1;
+  int64 ui_version = 2;
+  optional string log_dir = 3;
+}

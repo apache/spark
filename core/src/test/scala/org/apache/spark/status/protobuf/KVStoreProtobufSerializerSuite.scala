@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.io.Source
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
+import org.apache.spark.deploy.history.FsHistoryProviderMetadata
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.DeterministicLevel
@@ -1445,6 +1446,21 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       val result = serializer.deserialize(bytes, classOf[PoolData])
       assert(result.name == input.name)
       assert(result.stageIds == input.stageIds)
+    }
+  }
+
+  test("FsHistoryProviderMetadata") {
+    Seq( "file:/tmp/spark-events", null).foreach { logDir =>
+      val input = FsHistoryProviderMetadata(
+        version = 1L,
+        uiVersion = 2L,
+        logDir = logDir
+      )
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[FsHistoryProviderMetadata])
+      assert(result.version == input.version)
+      assert(result.uiVersion == input.uiVersion)
+      assert(result.logDir == input.logDir)
     }
   }
 

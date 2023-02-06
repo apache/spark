@@ -31,3 +31,4 @@ org.apache.spark.status.protobuf.RDDOperationGraphWrapperSerializer
 org.apache.spark.status.protobuf.StageDataWrapperSerializer
 org.apache.spark.status.protobuf.AppSummarySerializer
 org.apache.spark.status.protobuf.PoolDataSerializer
+org.apache.spark.status.protobuf.FsHistoryProviderMetadataSerializer
