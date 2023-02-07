@@ -933,7 +933,7 @@
     ],
     "sqlState" : "42604"
   },
-  "INVALID_USAGE_OF_STAR" : {
+  "INVALID_USAGE_OF_STAR_OR_REGEX" : {
     "message" : [
       "Invalid usage of <elem> in <prettyName>."
     ],

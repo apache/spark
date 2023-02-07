@@ -238,7 +238,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     )
     assertAnalysisErrorClass(
       lateralJoin(t1.as("t1"), t0.select(Count(star("t1")))),
-      expectedErrorClass = "INVALID_USAGE_OF_STAR",
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
       expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `count`"))
   }
 

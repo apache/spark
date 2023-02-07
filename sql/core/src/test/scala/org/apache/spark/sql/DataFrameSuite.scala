@@ -345,7 +345,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.select(explode($"*"))
       },
-      errorClass = "INVALID_USAGE_OF_STAR",
+      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
       parameters = Map("elem" -> "'*'", "prettyName" -> "expression `explode`")
     )
   }
