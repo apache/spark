@@ -2691,12 +2691,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_unsupported_catalog_functions(self):
         # SPARK-41939: Disable unsupported functions.
 
-        for f in (
-            "isCached",
-            "cacheTable",
-            "uncacheTable",
-            "registerFunction",
-        ):
+        for f in ("registerFunction",):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.catalog, f)()
 
