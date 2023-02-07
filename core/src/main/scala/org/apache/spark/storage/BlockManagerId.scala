@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 
