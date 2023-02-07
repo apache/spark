@@ -894,7 +894,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       // No imported Python libraries
       pythonIncludes = Lists.newArrayList(),
       pythonExec = pythonExec,
-      pythonVer = "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      pythonVer = fun.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
       // Null accumulator
