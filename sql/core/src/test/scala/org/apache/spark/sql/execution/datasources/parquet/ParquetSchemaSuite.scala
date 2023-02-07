@@ -1057,10 +1057,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    val e = intercept[org.apache.spark.SparkException] {
+    val e = intercept[SparkException] {
       spark.read.parquet(testDataPath).collect()
     }
-    assert(e.getMessage.contains("Illegal Parquet type: INT64 (TIMESTAMP(NANOS,true))."))
+    assert(e.getMessage.contains("Illegal Parquet type: INT64 (TIMESTAMP(NANOS,true))"))
   }
 
   // =======================================================
