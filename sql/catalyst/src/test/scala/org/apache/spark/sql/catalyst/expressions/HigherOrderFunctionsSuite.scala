@@ -474,8 +474,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
-        "lastWin" -> "\"LAST_WIN\"")
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.

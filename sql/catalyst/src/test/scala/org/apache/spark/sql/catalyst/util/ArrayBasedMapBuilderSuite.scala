@@ -56,8 +56,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
-        "lastWin" -> "\"LAST_WIN\"")
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
   }
 
@@ -84,8 +83,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> arr.toString,
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
-        "lastWin" -> "\"LAST_WIN\"")
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
@@ -121,8 +119,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "[0,1]",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
-        "lastWin" -> "\"LAST_WIN\"")
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
@@ -156,8 +153,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> unsafeArray.toString,
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"",
-        "lastWin" -> "\"LAST_WIN\"")
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
