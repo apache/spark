@@ -31,6 +31,7 @@ import java.util.Set;
 
 import scala.Option;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
@@ -39,6 +40,9 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.VersionParser.ParsedVersion;
+import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
@@ -48,6 +52,7 @@ import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
+
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.internal.SQLConf;
