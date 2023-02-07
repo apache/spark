@@ -24,6 +24,7 @@ import java.util.OptionalLong
 
 import scala.collection.mutable
 
+import com.google.common.base.Objects
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -541,11 +542,29 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
 
   def keyString(): String = key.toArray.mkString("/")
 
-  override def partitionKey(): InternalRow = {
-    InternalRow.fromSeq(key)
-  }
+  override def partitionKey(): InternalRow = PartitionInternalRow(key.toArray)
 
   def clear(): Unit = rows.clear()
+}
+
+/**
+ * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]]
+ * does not need to implement equal and hashcode methods.
+ * But [[GenericInternalRow]] implements equals and hashcode methods already. Here we override it
+ * to simulate that it has not been implemented to verify codes correctness.
+ */
+case class PartitionInternalRow(keys: Array[Any])
+  extends GenericInternalRow(keys) {
+  override def equals(other: Any): Boolean = {
+    if (!other.isInstanceOf[PartitionInternalRow]) {
+      return false
+    }
+    // Just compare by reference, not by value
+    this.keys == other.asInstanceOf[PartitionInternalRow].keys
+  }
+  override def hashCode: Int = {
+    Objects.hashCode(keys)
+  }
 }
 
 private class BufferedRowsReaderFactory(
