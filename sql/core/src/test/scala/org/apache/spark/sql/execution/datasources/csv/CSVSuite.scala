@@ -2676,6 +2676,7 @@ abstract class CSVSuite
           .option("skipLines", 3)
           .option("multiLine", multiline)
           .option("header", header)
+          .option("comment", "#")
           .csv(testFile(carsWithLinesToSkip))
 
         verifyCars(cars, withHeader = header, checkTypes = false)
@@ -2691,6 +2692,7 @@ abstract class CSVSuite
         .option("skipLines", 3)
         .option("multiLine", true)
         .option("header", header)
+        .option("comment", "#")
         .csv(testFile(carsWithMultilineLinesToSkip))
 
       verifyCars(cars, withHeader = header, checkTypes = false)
