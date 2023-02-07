@@ -410,9 +410,12 @@ case class EnsureRequirements(
              |Right side # of partitions: ${rightPartValues.size}
              |""".stripMargin)
 
+        // As partition keys are compatible, we can pick either left or right as partition
+        // expressions
+        val partitionExprs = leftSpec.partitioning.expressions
+
         var mergedPartValues = InternalRowComparableWrapper
-            .mergePartitions(leftSpec.partitioning, rightSpec.partitioning,
-              leftSpec.partitioning.expressions)
+            .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
             .map(v => (v, 1))
 
         logInfo(s"After merging, there are ${mergedPartValues.size} partitions")
@@ -480,10 +483,14 @@ case class EnsureRequirements(
               replicateRightSide = false
             } else {
               val partValues = if (replicateLeftSide) rightPartValues else leftPartValues
-              val numExpectedPartitions = partValues.groupBy(identity).mapValues(_.size)
+              val numExpectedPartitions = partValues
+                .map(InternalRowComparableWrapper(_, partitionExprs))
+                .groupBy(identity)
+                .mapValues(_.size)
 
               mergedPartValues = mergedPartValues.map { case (partVal, numParts) =>
-                (partVal, numExpectedPartitions.getOrElse(partVal, numParts))
+                (partVal, numExpectedPartitions.getOrElse(
+                  InternalRowComparableWrapper(partVal, partitionExprs), numParts))
               }
 
               logInfo("After applying partially clustered distribution, there are " +

@@ -155,11 +155,15 @@ case class BatchScanExec(
             if (commonPartitionValues.isDefined && applyPartialClustering) {
               // A mapping from the common partition values to how many splits the partition
               // should contain. Note this no longer maintain the partition key ordering.
-              val commonPartValuesMap = commonPartitionValues.get.toMap
+              val commonPartValuesMap = commonPartitionValues
+                .get
+                .map(t => (InternalRowComparableWrapper(t._1, p.expressions), t._2))
+                .toMap
               val nestGroupedPartitions = groupedPartitions.map {
                 case (partValue, splits) =>
                   // `commonPartValuesMap` should contain the part value since it's the super set.
-                  val numSplits = commonPartValuesMap.get(partValue)
+                  val numSplits = commonPartValuesMap
+                    .get(InternalRowComparableWrapper(partValue, p.expressions))
                   assert(numSplits.isDefined, s"Partition value $partValue does not exist in " +
                       "common partition values from Spark plan")
 
