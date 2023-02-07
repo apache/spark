@@ -128,6 +128,6 @@ object CSVUtils {
     }
   }
 
-  def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] =
+  def filterComment(iter: Iterator[String], options: CSVOptions): Iterator[String] =
     CSVExprUtils.filterComment(iter, options)
 }
