@@ -65,7 +65,6 @@ if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
-    from pyspark.sql.connect.function_builder import udf
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.client import Retrying
@@ -420,15 +419,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .withColumnsRenamed({"id": "id_new", "name": "name_new"})
             .schema,
         )
-
-    def test_simple_udf(self):
-        def conv_udf(x) -> str:
-            return "Martin"
-
-        u = udf(conv_udf)
-        df = self.connect.read.table(self.tbl_name)
-        result = df.select(u(df.id)).toPandas()
-        self.assertIsNotNone(result)
 
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
