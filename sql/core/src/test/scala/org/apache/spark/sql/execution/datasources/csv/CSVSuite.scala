@@ -2643,7 +2643,7 @@ abstract class CSVSuite
           }
         }
       }
-    }tils
+    }
   }
 
   test("SPARK-42359: parses dataset with multiline skipLines") {
