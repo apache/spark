@@ -251,7 +251,7 @@ private[jdbc] class JDBCRDD(
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
 
-    val builder = dialect
+    var builder = dialect
       .getJdbcSQLQueryBuilder(options)
       .withColumns(columns)
       .withPredicates(predicates, part)
@@ -259,8 +259,13 @@ private[jdbc] class JDBCRDD(
       .withLimit(limit)
       .withOffset(offset)
 
-    groupByColumns.foreach(builder.withGroupByColumns)
-    sample.foreach(builder.withTableSample)
+    groupByColumns.foreach { groupByKeys =>
+      builder = builder.withGroupByColumns(groupByKeys)
+    }
+
+    sample.foreach { tableSampleInfo =>
+      builder = builder.withTableSample(tableSampleInfo)
+    }
 
     val sqlText = builder.build()
     stmt = conn.prepareStatement(sqlText,
