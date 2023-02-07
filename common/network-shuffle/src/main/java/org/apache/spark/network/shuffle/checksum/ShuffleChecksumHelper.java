@@ -154,7 +154,7 @@ public class ShuffleChecksumHelper {
       logger.warn("Unable to diagnose shuffle block corruption", e);
       cause = Cause.UNKNOWN_ISSUE;
     }
-    logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}, " +
+    logger.debug("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}, " +
       "checksumByReader {}, checksumByWriter {}, checksumByReCalculation {}",
       duration, checksumFile.getAbsolutePath(), cause,
       checksumByReader, checksumByWriter, checksumByReCalculation);
