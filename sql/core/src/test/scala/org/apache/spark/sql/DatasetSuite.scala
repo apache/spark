@@ -354,15 +354,21 @@ class DatasetSuite extends QueryTest
           start = 0,
           stop = 8))
 
-      var e = intercept[AnalysisException] {
-        ds.select(ds("`(_1)?+.+`"))
-      }
-      assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(ds("`(_1)?+.+`"))
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`(_1)?+.+`", "proposal" -> "`_1`, `_2`")
+      )
 
-      e = intercept[AnalysisException] {
-        ds.select(ds("`(_1|_2)`"))
-      }
-      assert(e.getMessage.contains("Cannot resolve column name \"`(_1|_2)`\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(ds("`(_1|_2)`"))
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`(_1|_2)`", "proposal" -> "`_1`, `_2`")
+      )
     }
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
@@ -2166,10 +2172,14 @@ class DatasetSuite extends QueryTest
     forAll(dotColumnTestModes) { (caseSensitive, colName) =>
       val ds = Seq(SpecialCharClass("1", "2")).toDS
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        val errorMsg = intercept[AnalysisException] {
-          ds(colName)
-        }
-        assert(errorMsg.getMessage.contains(s"did you mean to quote the `$colName` column?"))
+        val colName = if (caseSensitive == "true") "`Field`.`1`" else "`field`.`1`"
+        checkError(
+          exception = intercept[AnalysisException] {
+            ds(colName)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          parameters = Map("objectName" -> colName, "proposal" -> "`field`.`1`, `field 2`")
+        )
       }
     }
   }

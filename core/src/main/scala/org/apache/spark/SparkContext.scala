@@ -2092,6 +2092,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
    */
   def stop(exitCode: Int): Unit = {
+    logInfo(s"SparkContext is stopping with exitCode $exitCode.")
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
