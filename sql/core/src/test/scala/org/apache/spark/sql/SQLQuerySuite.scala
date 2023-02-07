@@ -2702,15 +2702,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2430",
+        errorClass = "INCOMPATIBLE_COLUMN_TYPE",
         parameters = Map(
+          "tableOrdinalNumber" -> "second",
+          "columnOrdinalNumber" -> "first",
+          "dataType2" -> "\"STRUCT<a: INT>\"",
           "operator" -> "EXCEPT",
-          "dt1" -> "struct<A:int>",
-          "dt2" -> "struct<a:int>",
           "hint" -> "",
-          "ci" -> "first",
-          "ti" -> "second"
-        ),
+          "dataType1" -> "\"STRUCT<A: INT>\""),
         context = ExpectedContext(
           fragment = "SELECT struct(1 a) EXCEPT (SELECT struct(2 A))",
           start = 0,
