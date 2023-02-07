@@ -259,9 +259,10 @@ private[jdbc] class JDBCRDD(
       .withLimit(limit)
       .withOffset(offset)
 
-    val sqlText = groupByColumns.map(builder.withGroupByColumns).getOrElse(
-      sample.map(builder.withTableSample).getOrElse(builder)).build()
+    groupByColumns.foreach(builder.withGroupByColumns)
+    sample.foreach(builder.withTableSample)
 
+    val sqlText = builder.build()
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

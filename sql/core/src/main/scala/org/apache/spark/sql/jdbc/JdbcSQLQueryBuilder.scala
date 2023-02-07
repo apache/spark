@@ -105,8 +105,10 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
    * Constructs the GROUP BY clause that following dialect's SQL syntax.
    */
   def withGroupByColumns(groupByColumns: Array[String]): JdbcSQLQueryBuilder = {
-    // The GROUP BY columns should already be quoted by the caller side.
-    groupByClause = s"GROUP BY ${groupByColumns.mkString(", ")}"
+    if (groupByColumns.nonEmpty) {
+      // The GROUP BY columns should already be quoted by the caller side.
+      groupByClause = s"GROUP BY ${groupByColumns.mkString(", ")}"
+    }
 
     this
   }
