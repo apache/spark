@@ -29,10 +29,10 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.network.shuffle.ExternalBlockStoreClient
+import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
@@ -231,8 +231,10 @@ class BlockManagerMasterEndpoint(
       bmId: BlockManagerId,
       defaultValue: T): PartialFunction[Throwable, T] = {
     case e: IOException =>
-      logWarning(s"Error trying to remove $blockType $blockId" +
-        s" from block manager $bmId", e)
+      if (!SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
+        logWarning(s"Error trying to remove $blockType $blockId" +
+          s" from block manager $bmId", e)
+      }
       defaultValue
 
     case t: TimeoutException =>
@@ -321,14 +323,6 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
-    val removeMsg = RemoveShuffle(shuffleId)
-    val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
-      bm.storageEndpoint.ask[Boolean](removeMsg).recover {
-        // use false as default value means no shuffle data were removed
-        handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
-      }
-    }.toSeq
-
     // Find all shuffle blocks on executors that are no longer running
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
@@ -366,8 +360,32 @@ class BlockManagerMasterEndpoint(
         }
       }.getOrElse(Seq.empty)
 
+    val removeShuffleMergeFromShuffleServicesFutures =
+      externalBlockStoreClient.map { shuffleClient =>
+        val mergerLocations =
+          if (Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
+            mapOutputTracker.getShufflePushMergerLocations(shuffleId)
+          } else {
+            Seq.empty[BlockManagerId]
+          }
+        mergerLocations.map { bmId =>
+          Future[Boolean] {
+            shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId,
+              RemoteBlockPushResolver.DELETE_ALL_MERGED_SHUFFLE)
+          }
+        }
+      }.getOrElse(Seq.empty)
+
+    val removeMsg = RemoveShuffle(shuffleId)
+    val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
+      bm.storageEndpoint.ask[Boolean](removeMsg).recover {
+        // use false as default value means no shuffle data were removed
+        handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
+      }
+    }.toSeq
     Future.sequence(removeShuffleFromExecutorsFutures ++
-      removeShuffleFromShuffleServicesFutures)
+      removeShuffleFromShuffleServicesFutures ++
+      removeShuffleMergeFromShuffleServicesFutures)
   }
 
   /**

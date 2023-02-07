@@ -45,6 +45,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -98,6 +99,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "function" : "min((outer(t1.t1a) + t2.t2a))"
   },
@@ -126,6 +128,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "function" : "min((outer(t2.t2a) + t3.t3a))"
   },
@@ -152,6 +155,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "sqlExprs" : "\"min(t2a) AS `min(outer(t2.t2a))`\""
   },
@@ -186,7 +190,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1a`",
     "proposal" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"

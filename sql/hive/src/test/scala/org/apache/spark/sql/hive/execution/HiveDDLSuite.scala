@@ -156,16 +156,21 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   }
 
   test("SPARK-22431: illegal nested type") {
-    val queries = Seq(
-      "CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
+    checkError(
+      exception = intercept[SparkException] {
+        spark.sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      },
+      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
+      parameters = Map("fieldType" -> "\"STRUCT<$A:STRING,B:INT>\"", "fieldName" -> "`q`")
+    )
 
-    queries.foreach(query => {
-      val err = intercept[SparkException] {
-        spark.sql(query)
-      }.getMessage
-      assert(err.contains("Cannot recognize hive type string"))
-    })
+    checkError(
+      exception = intercept[SparkException] {
+        spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
+      },
+      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
+      parameters = Map("fieldType" -> "\"STRUCT<$A:INT,COL2:STRING>\"", "fieldName" -> "`q`")
+    )
 
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
@@ -1052,9 +1057,17 @@ class HiveDDLSuite
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
-      assertAnalysisError(
-        "DROP VIEW tab1",
-        "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+      assertAnalysisErrorClass(
+        sqlText = "DROP VIEW tab1",
+        errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+        parameters = Map(
+          "alternative" -> "DROP TABLE",
+          "operation" -> "DROP VIEW",
+          "foundType" -> "MANAGED",
+          "requiredType" -> "VIEW",
+          "objectName" -> "spark_catalog.default.tab1"
+        )
+      )
     }
   }
 
@@ -1063,9 +1076,17 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        assertAnalysisError(
-          "DROP TABLE view1",
-          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+        assertAnalysisErrorClass(
+          sqlText = "DROP TABLE view1",
+          errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+          parameters = Map(
+            "alternative" -> "DROP VIEW",
+            "operation" -> "DROP TABLE",
+            "foundType" -> "VIEW",
+            "requiredType" -> "EXTERNAL or MANAGED",
+            "objectName" -> "spark_catalog.default.view1"
+          )
+        )
       }
     }
   }

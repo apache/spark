@@ -554,7 +554,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     if (!triggeredByExecutor) {
       executorsToDecommission.foreach { executorId =>
-        logInfo(s"Notify executor $executorId to decommissioning.")
+        logInfo(s"Notify executor $executorId to decommission.")
         executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
       }
     }

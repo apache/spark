@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.{RandomDataGenerator, Row}
@@ -310,6 +311,19 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
   }
 
+  private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
+    val schema = new StructType().add("a", ArrayType(dt, nullable))
+    test(s"RowEncoder should return WrappedArray with properly typed array for $schema") {
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[mutable.WrappedArray[_]](0)
+      assert(result.array.getClass === data.getClass)
+      assert(result === data)
+    }
+  }
+
+  roundTripArray(IntegerType, nullable = false, Array(1, 2, 3).map(Int.box))
+  roundTripArray(StringType, nullable = true, Array("hello", "world", "!", null))
+
   test("SPARK-25791: Datatype of serializers should be accessible") {
     val udtSQLType = new StructType().add("a", IntegerType)
     val pythonUDT = new PythonUserDefinedType(udtSQLType, "pyUDT", "serializedPyClass")
@@ -457,5 +471,15 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
         assert(row.getInt(3) === expectedDays)
       }
     }
+  }
+
+  test("Encoding an ArraySeq/WrappedArray in scala-2.13") {
+    val schema = new StructType()
+      .add("headers", ArrayType(new StructType()
+        .add("key", StringType)
+        .add("value", BinaryType)))
+    val encoder = RowEncoder(schema, lenient = true).resolveAndBind()
+    val data = Row(mutable.WrappedArray.make(Array(Row("key", "value".getBytes))))
+    val row = encoder.createSerializer()(data)
   }
 }

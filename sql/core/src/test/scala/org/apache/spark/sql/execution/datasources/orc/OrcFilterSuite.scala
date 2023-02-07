@@ -38,10 +38,12 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
  */
+@ExtendedSQLTest
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf =

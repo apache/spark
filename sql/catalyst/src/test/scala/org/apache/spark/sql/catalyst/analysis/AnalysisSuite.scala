@@ -28,7 +28,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -118,6 +118,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
+  }
+
+  test("SPARK-42108: transform count(*) to count(1)") {
+    val a = testRelation.output(0)
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: Nil, testRelation))
+
+    checkAnalysis(
+      Project(
+        Alias(UnresolvedFunction("count" :: Nil,
+          UnresolvedStar(None) :: Nil, isDistinct = false), "x")() ::
+          Alias(UnresolvedFunction("count" :: Nil,
+            UnresolvedAttribute("a") :: Nil, isDistinct = false), "y")() :: Nil, testRelation),
+      Aggregate(Nil, count(Literal(1)).as("x") :: count(a).as("y") :: Nil, testRelation))
   }
 
   test("resolve sort references - filter/limit") {
@@ -931,36 +949,65 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       AttributeReference("c", IntegerType)(),
       AttributeReference("d", TimestampType)())
 
-    val r1 = Union(firstTable, secondTable)
-    val r2 = Union(firstTable, thirdTable)
-    val r3 = Union(firstTable, fourthTable)
-    val r4 = Except(firstTable, secondTable, isAll = false)
-    val r5 = Intersect(firstTable, secondTable, isAll = false)
+    assertAnalysisErrorClass(
+      Union(firstTable, secondTable),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r1,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Union(firstTable, thirdTable),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "third",
+        "dataType2" -> "\"INT\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r2,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The third column of the second table is timestamp type which is not compatible " +
-        "with int at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Union(firstTable, fourthTable),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "4th",
+        "dataType2" -> "\"FLOAT\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r3,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The 4th column of the second table is timestamp type which is not compatible " +
-        "with float at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Except(firstTable, secondTable, isAll = false),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "EXCEPT",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r4,
-      Seq("Except can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
-
-    assertAnalysisError(r5,
-      Seq("Intersect can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Intersect(firstTable, secondTable, isAll = false),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "INTERSECT",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
@@ -1310,5 +1357,63 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         plan = parsePlan("SELECT c FROM a WHERE c < :param2"),
         args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
       parsePlan("SELECT c FROM a WHERE c < 20"))
+  }
+
+  test("SPARK-41489: type of filter expression should be a bool") {
+    assertAnalysisErrorClass(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id)
+         |SELECT *
+         |FROM t1
+         |WHERE 'true'""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
+      ,
+      queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
+  }
+
+  test("SPARK-38591: resolve left and right CoGroup sort order on respective side only") {
+    def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
+      Iterator.empty
+    }
+
+    implicit val intEncoder = ExpressionEncoder[Int]
+
+    val left = testRelation2.select($"e").analyze
+    val right = testRelation3.select($"e").analyze
+    val leftWithKey = AppendColumns[Int, Int]((x: Int) => x, left)
+    val rightWithKey = AppendColumns[Int, Int]((x: Int) => x, right)
+    val order = SortOrder($"e", Ascending)
+
+    val cogroup = leftWithKey.cogroup[Int, Int, Int, Int](
+      rightWithKey,
+      func,
+      leftWithKey.newColumns,
+      rightWithKey.newColumns,
+      left.output,
+      right.output,
+      order :: Nil,
+      order :: Nil
+    )
+
+    // analyze the plan
+    val actualPlan = getAnalyzer.executeAndCheck(cogroup, new QueryPlanningTracker)
+    val cg = actualPlan.collectFirst {
+      case cg: CoGroup => cg
+    }
+    // assert sort order reference only their respective plan
+    assert(cg.isDefined)
+    cg.foreach { cg =>
+      assert(cg.leftOrder != cg.rightOrder)
+
+      assert(cg.leftOrder.flatMap(_.references).nonEmpty)
+      assert(cg.leftOrder.flatMap(_.references).forall(cg.left.output.contains))
+      assert(!cg.leftOrder.flatMap(_.references).exists(cg.right.output.contains))
+
+      assert(cg.rightOrder.flatMap(_.references).nonEmpty)
+      assert(cg.rightOrder.flatMap(_.references).forall(cg.right.output.contains))
+      assert(!cg.rightOrder.flatMap(_.references).exists(cg.left.output.contains))
+    }
   }
 }

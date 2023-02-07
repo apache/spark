@@ -214,6 +214,25 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Union")
   }
 
+  test("Union By Name") {
+    val union = proto.Relation.newBuilder
+      .setSetOp(
+        proto.SetOperation.newBuilder
+          .setLeftInput(readRel)
+          .setRightInput(readRel)
+          .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_UNION)
+          .setByName(false)
+          .setAllowMissingColumns(true)
+          .build())
+      .build()
+    val msg = intercept[InvalidPlanInput] {
+      transform(union)
+    }
+    assert(
+      msg.getMessage.contains(
+        "UnionByName `allowMissingCol` can be true only if `byName` is true."))
+  }
+
   test("Simple Join") {
     val incompleteJoin =
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
@@ -533,7 +552,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .addExpressions(
           proto.Expression
             .newBuilder()
-            .setUnresolvedStar(UnresolvedStar.newBuilder().addTarget("a").addTarget("b").build())
+            .setUnresolvedStar(UnresolvedStar.newBuilder().setUnparsedTarget("a.b.*").build())
             .build())
         .build()
 
@@ -591,7 +610,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue(10000)))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(10000)).build()))
         .build())
 
     val df = Dataset.ofRows(spark, logical)
@@ -636,7 +656,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue("id")))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue("id")).build()))
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
@@ -658,7 +679,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .newBuilder()
             .setInput(input)
             .setName("REPARTITION")
-            .addParameters(toConnectProtoValue(true)))
+            .addParameters(
+              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(true)).build()))
         .build())
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }

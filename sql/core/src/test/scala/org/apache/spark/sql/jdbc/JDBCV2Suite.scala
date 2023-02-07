@@ -2650,7 +2650,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       },
       errorClass = "INDEX_ALREADY_EXISTS",
       parameters = Map(
-        "message" -> "Failed to create index people_index in test.people"
+        "indexName" -> "people_index",
+        "tableName" -> "test.people"
       )
     )
     assert(jdbcTable.indexExists("people_index"))
@@ -2666,12 +2667,29 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
       errorClass = "INDEX_NOT_FOUND",
-      parameters = Map(
-        "message" -> "Failed to drop index people_index in test.people"
-      )
+      parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
     )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
     assert(indexes3.isEmpty)
+  }
+
+  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+    "jdbc function doesn't support identifiers consisting of more than 2 parts") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
+        },
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        sqlState = "42601",
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
+      )
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 }

@@ -2126,7 +2126,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             """.stripMargin)
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        sqlState = "42000",
+        sqlState = "42703",
         parameters = Map(
           "objectName" -> "`c3`",
           "proposal" ->
@@ -2323,9 +2323,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       },
       errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-      "operation" ->
-        s"creating generated columns with GENERATED ALWAYS AS expressions")
+        "operation" ->
+          s"creating generated columns with GENERATED ALWAYS AS expressions")
     )
+  }
+
+  test("SPARK-42286: Insert into a table select from case when with cast, positive test") {
+    withTable("t1", "t2") {
+      sql("create table t1 (x int) using parquet")
+      sql("insert into t1 values (1), (2)")
+      sql("create table t2 (x Decimal(9, 0)) using parquet")
+      sql("insert into t2 select 0 - (case when x = 1 then 1 else x end) from t1 where x = 1")
+      checkAnswer(spark.table("t2"), Row(-1))
+    }
   }
 }
 

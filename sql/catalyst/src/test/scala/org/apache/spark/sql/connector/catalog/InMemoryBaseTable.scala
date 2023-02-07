@@ -24,6 +24,7 @@ import java.util.OptionalLong
 
 import scala.collection.mutable
 
+import com.google.common.base.Objects
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -230,6 +231,17 @@ abstract class InMemoryBaseTable(
   protected def clearPartition(key: Seq[Any]): Unit = dataMap.synchronized {
     assert(dataMap.contains(key))
     dataMap(key).clear()
+  }
+
+  def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
+    data.foreach { p =>
+      dataMap ++= dataMap.map { case (key, currentRows) =>
+        val newRows = new BufferedRows(currentRows.key)
+        newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
+        key -> newRows
+      }
+    }
+    this
   }
 
   def withData(data: Array[BufferedRows]): InMemoryBaseTable = {
@@ -521,6 +533,7 @@ object InMemoryBaseTable {
 class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
     with InputPartition with HasPartitionKey with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
+  val deletes = new mutable.ArrayBuffer[Int]()
 
   def withRow(row: InternalRow): BufferedRows = {
     rows.append(row)
@@ -529,11 +542,29 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
 
   def keyString(): String = key.toArray.mkString("/")
 
-  override def partitionKey(): InternalRow = {
-    InternalRow.fromSeq(key)
-  }
+  override def partitionKey(): InternalRow = PartitionInternalRow(key.toArray)
 
   def clear(): Unit = rows.clear()
+}
+
+/**
+ * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]]
+ * does not need to implement equal and hashcode methods.
+ * But [[GenericInternalRow]] implements equals and hashcode methods already. Here we override it
+ * to simulate that it has not been implemented to verify codes correctness.
+ */
+case class PartitionInternalRow(keys: Array[Any])
+  extends GenericInternalRow(keys) {
+  override def equals(other: Any): Boolean = {
+    if (!other.isInstanceOf[PartitionInternalRow]) {
+      return false
+    }
+    // Just compare by reference, not by value
+    this.keys == other.asInstanceOf[PartitionInternalRow].keys
+  }
+  override def hashCode: Int = {
+    Objects.hashCode(keys)
+  }
 }
 
 private class BufferedRowsReaderFactory(
@@ -615,7 +646,7 @@ private object BufferedRowsWriterFactory extends DataWriterFactory with Streamin
 }
 
 private class BufferWriter extends DataWriter[InternalRow] {
-  private val buffer = new BufferedRows
+  protected val buffer = new BufferedRows
 
   override def write(row: InternalRow): Unit = buffer.rows.append(row.copy())
 

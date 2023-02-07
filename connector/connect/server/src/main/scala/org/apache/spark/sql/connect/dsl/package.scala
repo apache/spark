@@ -242,6 +242,44 @@ package object dsl {
               .setInput(logicalPlan))
           .build()
       }
+
+      def writeV2(
+          tableName: Option[String] = None,
+          provider: Option[String] = None,
+          options: Map[String, String] = Map.empty,
+          tableProperties: Map[String, String] = Map.empty,
+          partitionByCols: Seq[Expression] = Seq.empty,
+          mode: Option[String] = None,
+          overwriteCondition: Option[Expression] = None): Command = {
+        val writeOp = WriteOperationV2.newBuilder()
+        writeOp.setInput(logicalPlan)
+        tableName.foreach(writeOp.setTableName)
+        provider.foreach(writeOp.setProvider)
+        partitionByCols.foreach(writeOp.addPartitioningColumns)
+        options.foreach { case (k, v) =>
+          writeOp.putOptions(k, v)
+        }
+        tableProperties.foreach { case (k, v) =>
+          writeOp.putTableProperties(k, v)
+        }
+        mode.foreach { m =>
+          if (m == "MODE_CREATE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE)
+          } else if (m == "MODE_OVERWRITE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE)
+            overwriteCondition.foreach(writeOp.setOverwriteCondition)
+          } else if (m == "MODE_OVERWRITE_PARTITIONS") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS)
+          } else if (m == "MODE_APPEND") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_APPEND)
+          } else if (m == "MODE_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_REPLACE)
+          } else if (m == "MODE_CREATE_OR_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
+          }
+        }
+        Command.newBuilder().setWriteOperationV2(writeOp.build()).build()
+      }
     }
   }
 
@@ -294,7 +332,7 @@ package object dsl {
             proto.NAFill
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllCols(cols.toSeq.asJava)
+              .addAllCols(cols.asJava)
               .addAllValues(Seq(toConnectProtoValue(value)).asJava)
               .build())
           .build()
@@ -615,7 +653,7 @@ package object dsl {
           .build()
       }
 
-      def createDefaultSortField(col: String): Expression.SortOrder = {
+      private def createDefaultSortField(col: String): Expression.SortOrder = {
         Expression.SortOrder
           .newBuilder()
           .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
@@ -752,7 +790,11 @@ package object dsl {
             createSetOperation(logicalPlan, otherPlan, SetOpType.SET_OP_TYPE_INTERSECT, isAll))
           .build()
 
-      def union(otherPlan: Relation, isAll: Boolean = true, byName: Boolean = false): Relation =
+      def union(
+          otherPlan: Relation,
+          isAll: Boolean = true,
+          byName: Boolean = false,
+          allowMissingColumns: Boolean = false): Relation =
         Relation
           .newBuilder()
           .setSetOp(
@@ -761,7 +803,8 @@ package object dsl {
               otherPlan,
               SetOpType.SET_OP_TYPE_UNION,
               isAll,
-              byName))
+              byName,
+              allowMissingColumns))
           .build()
 
       def coalesce(num: Integer): Relation =
@@ -888,8 +931,8 @@ package object dsl {
       def toDF(columnNames: String*): Relation =
         Relation
           .newBuilder()
-          .setRenameColumnsBySameLengthNames(
-            RenameColumnsBySameLengthNames
+          .setToDf(
+            ToDF
               .newBuilder()
               .setInput(logicalPlan)
               .addAllColumnNames(columnNames.asJava))
@@ -898,8 +941,8 @@ package object dsl {
       def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
         Relation
           .newBuilder()
-          .setRenameColumnsByNameToNameMap(
-            RenameColumnsByNameToNameMap
+          .setWithColumnsRenamed(
+            WithColumnsRenamed
               .newBuilder()
               .setInput(logicalPlan)
               .putAllRenameColumnsMap(renameColumnsMap.asJava))
@@ -920,6 +963,10 @@ package object dsl {
       }
 
       def hint(name: String, parameters: Any*): Relation = {
+        val expressions = parameters.map { parameter =>
+          proto.Expression.newBuilder().setLiteral(toConnectProtoValue(parameter)).build()
+        }
+
         Relation
           .newBuilder()
           .setHint(
@@ -927,7 +974,7 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .setName(name)
-              .addAllParameters(parameters.map(toConnectProtoValue).asJava))
+              .addAllParameters(expressions.asJava))
           .build()
       }
 
@@ -1016,7 +1063,8 @@ package object dsl {
           right: Relation,
           t: SetOpType,
           isAll: Boolean = true,
-          byName: Boolean = false): SetOperation.Builder = {
+          byName: Boolean = false,
+          allowMissingColumns: Boolean = false): SetOperation.Builder = {
         val setOp = SetOperation
           .newBuilder()
           .setLeftInput(left)
@@ -1024,6 +1072,7 @@ package object dsl {
           .setSetOpType(t)
           .setIsAll(isAll)
           .setByName(byName)
+          .setAllowMissingColumns(allowMissingColumns)
         setOp
       }
     }

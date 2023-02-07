@@ -829,6 +829,7 @@ object SparkConnect {
 
 object SparkConnectClient {
   import BuildCommons.protoVersion
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
   lazy val settings = Seq(
     // For some reason the resolution from the imported Maven build does not work for some
@@ -851,6 +852,15 @@ object SparkConnectClient {
       )
     },
 
+    buildTestDeps := {
+      (LocalProject("sql") / Compile / Keys.`package`).value
+      (LocalProject("connect") / assembly).value
+      (LocalProject("connect-client-jvm") / assembly).value
+    },
+
+    // Make sure the connect server assembly jar is available for testing.
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -870,6 +880,7 @@ object SparkConnectClient {
     },
 
     (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.grpc.@0").inAll,
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
       ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
       ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
@@ -930,7 +941,7 @@ object SparkProtobuf {
     },
 
     (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark-protobuf.protobuf.@1").inAll,
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark_protobuf.protobuf.@1").inAll,
     ),
 
     (assembly / assemblyMergeStrategy) := {

@@ -20,6 +20,7 @@ import importlib.util
 import glob
 import os
 import sys
+import ctypes
 from setuptools import setup
 from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
@@ -104,7 +105,15 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
 
 def _supports_symlinks():
     """Check if the system supports symlinks (e.g. *nix) or not."""
-    return getattr(os, "symlink", None) is not None
+    return hasattr(os, "symlink") and (
+        (not hasattr(ctypes, "windll"))  # Non-Windows
+        or (
+            # In some Windows, `os.symlink` works but only for admins.
+            hasattr(ctypes.windll, "shell32")
+            and hasattr(ctypes.windll.shell32, "IsUserAnAdmin")
+            and bool(ctypes.windll.shell32.IsUserAnAdmin())
+        )
+    )
 
 
 if in_spark:
@@ -256,6 +265,7 @@ try:
             "pyspark.data",
             "pyspark.licenses",
             "pyspark.resource",
+            "pyspark.errors",
             "pyspark.examples.src.main.python",
         ],
         include_package_data=True,

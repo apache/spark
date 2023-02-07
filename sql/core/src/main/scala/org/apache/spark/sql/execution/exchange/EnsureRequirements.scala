@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.collection.Utils
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -76,13 +76,17 @@ case class EnsureRequirements(
       case _ => false
     }.map(_._2)
 
-    // Special case: if all sides of the join are single partition
-    val allSinglePartition =
-      childrenIndexes.forall(children(_).outputPartitioning == SinglePartition)
+    // Special case: if all sides of the join are single partition and it's physical size less than
+    // or equal spark.sql.maxSinglePartitionBytes.
+    val preferSinglePartition = childrenIndexes.forall { i =>
+      children(i).outputPartitioning == SinglePartition &&
+        children(i).logicalLink
+          .forall(_.stats.sizeInBytes <= conf.getConf(SQLConf.MAX_SINGLE_PARTITION_BYTES))
+    }
 
     // If there are more than one children, we'll need to check partitioning & distribution of them
     // and see if extra shuffles are necessary.
-    if (childrenIndexes.length > 1 && !allSinglePartition) {
+    if (childrenIndexes.length > 1 && !preferSinglePartition) {
       val specs = childrenIndexes.map(i => {
         val requiredDist = requiredChildDistributions(i)
         assert(requiredDist.isInstanceOf[ClusteredDistribution],
@@ -194,15 +198,9 @@ case class EnsureRequirements(
                 // Check if the two children are partition keys compatible. If so, find the
                 // common set of partition values, and adjust the plan accordingly.
                 if (leftSpec.areKeysCompatible(rightSpec)) {
-                  assert(leftSpec.partitioning.partitionValuesOpt.isDefined)
-                  assert(rightSpec.partitioning.partitionValuesOpt.isDefined)
-
-                  val leftPartValues = leftSpec.partitioning.partitionValuesOpt.get
-                  val rightPartValues = rightSpec.partitioning.partitionValuesOpt.get
-
-                  val mergedPartValues = Utils.mergeOrdered(
-                    Seq(leftPartValues, rightPartValues))(leftSpec.ordering).toSeq.distinct
-
+                  val mergedPartValues = InternalRowComparableWrapper.mergePartitions(
+                    leftSpec.partitioning, rightSpec.partitioning,
+                    leftSpec.partitioning.expressions)
                   // Now we need to push-down the common partition key to the scan in each child
                   children = children.zipWithIndex.map {
                     case (child, idx) if childrenIndexes.contains(idx) =>

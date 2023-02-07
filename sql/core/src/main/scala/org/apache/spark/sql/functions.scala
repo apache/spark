@@ -4063,6 +4063,16 @@ object functions {
   }
 
   /**
+   * Adds an item into a given array at a specified position
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_insert(arr: Column, pos: Column, value: Column): Column = withExpr {
+    ArrayInsert(arr.expr, pos.expr, value.expr)
+  }
+
+  /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
    *
    * @group collection_funcs

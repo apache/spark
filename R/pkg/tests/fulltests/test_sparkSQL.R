@@ -495,7 +495,7 @@ test_that("SPARK-17902: collect() with stringsAsFactors enabled", {
   expect_equal(iris$Species, df$Species)
 })
 
-test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
+test_that("SPARK-17811, SPARK-18011: can create DataFrame containing NA as date and time", {
   df <- data.frame(
     id = 1:2,
     time = c(as.POSIXlt("2016-01-10"), NA),
