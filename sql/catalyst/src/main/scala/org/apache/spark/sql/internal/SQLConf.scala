@@ -2592,6 +2592,17 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val WINDOW_GROUP_LIMIT_HASH_TABLE_SIZE =
+    buildConf("spark.sql.execution.windowGroupLimit.hashTableSize")
+      .internal()
+      .doc("Size for hash table that cache the mapping relationship between grouping key and" +
+        " rank value before shuffle.")
+      .version("3.4.0")
+      .intConf
+      .checkValue(_ > 0, "The size of hash table that cache the mapping relationship between" +
+        " grouping key and rank value must be positive integer.")
+      .createWithDefault(10000)
+
   val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
       .internal()
@@ -4635,6 +4646,8 @@ class SQLConf extends Serializable with Logging {
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
+
+  def windowGroupLimitHashTableSize: Int = getConf(WINDOW_GROUP_LIMIT_HASH_TABLE_SIZE)
 
   def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
 
