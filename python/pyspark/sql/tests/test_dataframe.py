@@ -1038,17 +1038,17 @@ class DataFrameTestsMixin:
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
             self.assertRaisesRegex(
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.isCached("does_not_exist"),
             )
             self.assertRaisesRegex(
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.cacheTable("does_not_exist"),
             )
             self.assertRaisesRegex(
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.uncacheTable("does_not_exist"),
             )
