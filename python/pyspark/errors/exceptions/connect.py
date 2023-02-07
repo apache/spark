@@ -18,12 +18,12 @@
 from typing import Dict, Optional
 
 from pyspark.errors.exceptions.base import (
-    AnalysisException,
-    IllegalArgumentException,
-    ParseException,
+    AnalysisException as BaseAnalysisException,
+    IllegalArgumentException as BaseIllegalArgumentException,
+    ParseException as BaseParseException,
     PySparkException,
-    PythonException,
-    TempTableAlreadyExistsException,
+    PythonException as BasePythonException,
+    TempTableAlreadyExistsException as BaseTempTableAlreadyExistsException,
 )
 
 
@@ -56,7 +56,7 @@ class SparkConnectGrpcException(SparkConnectException):
         )
 
 
-class SparkConnectAnalysisException(SparkConnectGrpcException, AnalysisException):
+class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):
     """
     Failed to analyze a SQL query plan from Spark Connect server.
     """
@@ -81,27 +81,25 @@ class SparkConnectAnalysisException(SparkConnectGrpcException, AnalysisException
         )
 
 
-class SparkConnectTempTableAlreadyExistsException(
-    SparkConnectAnalysisException, TempTableAlreadyExistsException
-):
+class TempTableAlreadyExistsException(AnalysisException, BaseTempTableAlreadyExistsException):
     """
     Failed to create temp view from Spark Connect server since it is already exists.
     """
 
 
-class SparkConnectParseException(SparkConnectGrpcException, ParseException):
+class ParseException(SparkConnectGrpcException, BaseParseException):
     """
     Failed to parse a SQL command from Spark Connect server.
     """
 
 
-class SparkConnectIllegalArgumentException(SparkConnectGrpcException, IllegalArgumentException):
+class IllegalArgumentException(SparkConnectGrpcException, BaseIllegalArgumentException):
     """
     Passed an illegal or inappropriate argument from Spark Connect server.
     """
 
 
-class SparkConnectPythonException(SparkConnectGrpcException, PythonException):
+class PythonException(SparkConnectGrpcException, BasePythonException):
     """
     Exceptions thrown from Spark Connect server.
     """

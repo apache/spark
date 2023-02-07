@@ -23,15 +23,15 @@ from py4j.java_gateway import is_instance_of
 
 from pyspark import SparkContext
 from pyspark.errors.exceptions.base import (
-    AnalysisException,
-    IllegalArgumentException,
-    ParseException,
+    AnalysisException as BaseAnalysisException,
+    IllegalArgumentException as BaseIllegalArgumentException,
+    ParseException as BaseParseException,
     PySparkException,
-    PythonException,
-    QueryExecutionException,
-    SparkUpgradeException,
-    StreamingQueryException,
-    UnknownException,
+    PythonException as BasePythonException,
+    QueryExecutionException as BaseQueryExecutionException,
+    SparkUpgradeException as BaseSparkUpgradeException,
+    StreamingQueryException as BaseStreamingQueryException,
+    UnknownException as BaseUnknownException,
 )
 
 
@@ -114,18 +114,18 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
     gw = SparkContext._gateway
 
     if is_instance_of(gw, e, "org.apache.spark.sql.catalyst.parser.ParseException"):
-        return CapturedParseException(origin=e)
+        return ParseException(origin=e)
     # Order matters. ParseException inherits AnalysisException.
     elif is_instance_of(gw, e, "org.apache.spark.sql.AnalysisException"):
-        return CapturedAnalysisException(origin=e)
+        return AnalysisException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.sql.streaming.StreamingQueryException"):
-        return CapturedStreamingQueryException(origin=e)
+        return StreamingQueryException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.sql.execution.QueryExecutionException"):
-        return CapturedQueryExecutionException(origin=e)
+        return QueryExecutionException(origin=e)
     elif is_instance_of(gw, e, "java.lang.IllegalArgumentException"):
-        return CapturedIllegalArgumentException(origin=e)
+        return IllegalArgumentException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkUpgradeException"):
-        return CapturedSparkUpgradeException(origin=e)
+        return SparkUpgradeException(origin=e)
 
     c: Py4JJavaError = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
@@ -142,9 +142,9 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % c.getMessage()
         )
-        return CapturedPythonException(msg, stacktrace)
+        return PythonException(msg, stacktrace)
 
-    return CapturedUnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
+    return UnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
 
 
 def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -153,7 +153,7 @@ def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
             return f(*a, **kw)
         except Py4JJavaError as e:
             converted = convert_exception(e.java_exception)
-            if not isinstance(converted, CapturedUnknownException):
+            if not isinstance(converted, UnknownException):
                 # Hide where the exception came from that shows a non-Pythonic
                 # JVM exception message.
                 raise converted from None
@@ -181,49 +181,49 @@ def install_exception_handler() -> None:
     py4j.java_gateway.get_return_value = patched
 
 
-class CapturedAnalysisException(CapturedException, AnalysisException):
+class AnalysisException(CapturedException, BaseAnalysisException):
     """
     Failed to analyze a SQL query plan.
     """
 
 
-class CapturedParseException(CapturedException, ParseException):
+class ParseException(CapturedException, BaseParseException):
     """
     Failed to parse a SQL command.
     """
 
 
-class CapturedIllegalArgumentException(CapturedException, IllegalArgumentException):
+class IllegalArgumentException(CapturedException, BaseIllegalArgumentException):
     """
     Passed an illegal or inappropriate argument.
     """
 
 
-class CapturedStreamingQueryException(CapturedException, StreamingQueryException):
+class StreamingQueryException(CapturedException, BaseStreamingQueryException):
     """
     Exception that stopped a :class:`StreamingQuery`.
     """
 
 
-class CapturedQueryExecutionException(CapturedException, QueryExecutionException):
+class QueryExecutionException(CapturedException, BaseQueryExecutionException):
     """
     Failed to execute a query.
     """
 
 
-class CapturedPythonException(CapturedException, PythonException):
+class PythonException(CapturedException, BasePythonException):
     """
     Exceptions thrown from Python workers.
     """
 
 
-class CapturedUnknownException(CapturedException, UnknownException):
+class UnknownException(CapturedException, BaseUnknownException):
     """
     None of the above exceptions.
     """
 
 
-class CapturedSparkUpgradeException(CapturedException, SparkUpgradeException):
+class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
     Exception thrown because of Spark upgrade.
     """
