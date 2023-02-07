@@ -1163,23 +1163,34 @@ class PythonUDF(google.protobuf.message.Message):
     OUTPUT_TYPE_FIELD_NUMBER: builtins.int
     EVAL_TYPE_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
+    PYTHON_VER_FIELD_NUMBER: builtins.int
     output_type: builtins.str
     """(Required) Output type of the Python UDF"""
     eval_type: builtins.int
     """(Required) EvalType of the Python UDF"""
     command: builtins.bytes
     """(Required) The encoded commands of the Python UDF"""
+    python_ver: builtins.str
+    """(Required) Python version being used in the client."""
     def __init__(
         self,
         *,
         output_type: builtins.str = ...,
         eval_type: builtins.int = ...,
         command: builtins.bytes = ...,
+        python_ver: builtins.str = ...,
     ) -> None: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "eval_type", b"eval_type", "output_type", b"output_type"
+            "command",
+            b"command",
+            "eval_type",
+            b"eval_type",
+            "output_type",
+            b"output_type",
+            "python_ver",
+            b"python_ver",
         ],
     ) -> None: ...
 
