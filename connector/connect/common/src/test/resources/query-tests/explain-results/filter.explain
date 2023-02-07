@@ -1,0 +1,2 @@
+'Filter '`=`('id, 10)
++- LocalRelation <empty>, [id#9L, a#10, b#11]

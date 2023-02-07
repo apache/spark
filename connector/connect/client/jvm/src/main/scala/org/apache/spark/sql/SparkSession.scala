@@ -149,7 +149,7 @@ object SparkSession extends Logging {
   }
 
   class Builder() extends Logging {
-    private var _client = SparkConnectClient.builder().build()
+    private var _client: SparkConnectClient = _
 
     def client(client: SparkConnectClient): Builder = {
       _client = client
@@ -157,6 +157,9 @@ object SparkSession extends Logging {
     }
 
     def build(): SparkSession = {
+      if (_client == null) {
+        _client = SparkConnectClient.builder().build()
+      }
       new SparkSession(_client, cleaner)
     }
   }
