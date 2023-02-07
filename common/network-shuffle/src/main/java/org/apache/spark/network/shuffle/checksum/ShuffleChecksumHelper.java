@@ -125,6 +125,7 @@ public class ShuffleChecksumHelper {
       ManagedBuffer partitionData,
       long checksumByReader) {
     Cause cause;
+    long duration = -1L;
     try {
       long diagnoseStartNs = System.nanoTime();
       // Try to get the checksum instance before reading the checksum file so that
@@ -133,9 +134,7 @@ public class ShuffleChecksumHelper {
       Checksum checksumAlgo = getChecksumByAlgorithm(algorithm);
       long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
       long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
-      long duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - diagnoseStartNs);
-      logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}",
-        duration, checksumFile.getAbsolutePath());
+      duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - diagnoseStartNs);
       if (checksumByWriter != checksumByReCalculation) {
         cause = Cause.DISK_ISSUE;
       } else if (checksumByWriter != checksumByReader) {
@@ -153,6 +152,8 @@ public class ShuffleChecksumHelper {
       logger.warn("Unable to diagnose shuffle block corruption", e);
       cause = Cause.UNKNOWN_ISSUE;
     }
+    logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}",
+            duration, checksumFile.getAbsolutePath(), cause);
     return cause;
   }
 }
