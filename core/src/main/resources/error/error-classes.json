@@ -78,7 +78,7 @@
   },
   "CANNOT_MODIFY_CONFIG" : {
     "message" : [
-      "Cannot modify the value of a Spark config: <key>.",
+      "Cannot modify the value of the Spark config: <key>.",
       "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'."
     ],
     "sqlState" : "46110"
