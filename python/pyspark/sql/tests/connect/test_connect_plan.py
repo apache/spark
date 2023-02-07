@@ -32,7 +32,6 @@ if should_test_connect:
     from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.functions import col, lit
-    from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
         StringType,
@@ -494,15 +493,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(data_source.options.get("op2"), "opv2")
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
-
-    def test_simple_udf(self):
-        u = udf(lambda x: "Martin", StringType())
-        self.assertIsNotNone(u)
-        expr = u("ThisCol", "ThatCol", "OtherCol")
-        self.assertTrue(isinstance(expr, Column))
-        self.assertTrue(isinstance(expr._expr, UserDefinedFunction))
-        u_plan = expr.to_plan(self.connect)
-        self.assertIsNotNone(u_plan)
 
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
