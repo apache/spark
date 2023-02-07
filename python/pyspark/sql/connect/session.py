@@ -453,9 +453,6 @@ class SparkSession:
         """
         return self._client
 
-    def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
-        return self._client.register_udf(function, return_type)
-
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
         """

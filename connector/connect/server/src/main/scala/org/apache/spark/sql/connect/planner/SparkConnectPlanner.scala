@@ -24,7 +24,7 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
@@ -44,7 +44,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
-import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.functions.{col, expr}
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._

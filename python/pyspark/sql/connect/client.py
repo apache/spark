@@ -58,8 +58,6 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-import pyspark.sql.types
-from pyspark import cloudpickle
 from pyspark.errors import (
     SparkConnectException,
     SparkConnectGrpcException,
