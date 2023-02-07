@@ -32,6 +32,8 @@ object CSVUtils {
     // Note that this was separately made by SPARK-18362. Logically, this should be the same
     // with the one below, `filterCommentAndEmpty` but execution path is different. One of them
     // might have to be removed in the near future if possible.
+    //
+    // SPARK-XXXXX: This performs a different functionality now.
     import lines.sqlContext.implicits._
     val aliased = lines.toDF("value")
     val nonEmptyLines = aliased.filter(length(trim($"value")) > 0)
