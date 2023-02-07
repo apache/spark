@@ -2577,6 +2577,22 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).collect(),
         )
 
+    def test_simple_udt(self):
+        from pyspark.ml.linalg import MatrixUDT, VectorUDT
+
+        for schema in [
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", MapType(LongType(), PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("vec", VectorUDT()),
+            StructType().add("key", LongType()).add("mat", MatrixUDT()),
+        ]:
+            cdf = self.connect.createDataFrame(data=[], schema=schema)
+            sdf = self.spark.createDataFrame(data=[], schema=schema)
+
+            self.assertEqual(cdf.schema, sdf.schema)
+
     def test_simple_udt_from_read(self):
         from pyspark.ml.linalg import Matrices, Vectors
 
