@@ -3106,6 +3106,50 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("array_insert functions") {
+    val fiveShort: Short = 5
+
+    val df1 = Seq((Array[Integer](3, 2, 5, 1, 2), 6, 3)).toDF("a", "b", "c")
+    val df2 = Seq((Array[Short](1, 2, 3, 4), 5, fiveShort)).toDF("a", "b", "c")
+    val df3 = Seq((Array[Double](3.0, 2.0, 5.0, 1.0, 2.0), 2, 3.0)).toDF("a", "b", "c")
+    val df4 = Seq((Array[Boolean](true, false), 3, false)).toDF("a", "b", "c")
+    val df5 = Seq((Array[String]("a", "b", "c"), 0, "d")).toDF("a", "b", "c")
+    val df6 = Seq((Array[String]("a", null, "b", "c"), 5, "d")).toDF("a", "b", "c")
+
+    checkAnswer(df1.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
+    checkAnswer(df2.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq[Short](1, 2, 3, 4, 5))))
+    checkAnswer(
+      df3.selectExpr("array_insert(a, b, c)"),
+      Seq(Row(Seq[Double](3.0, 3.0, 2.0, 5.0, 1.0, 2.0)))
+    )
+    checkAnswer(df4.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(true, false, false))))
+    checkAnswer(df5.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("d", "a", "b", "c"))))
+    checkAnswer(df5.select(
+      array_insert(col("a"), lit(1), col("c"))),
+      Seq(Row(Seq("d", "a", "b", "c")))
+    )
+    // null checks
+    checkAnswer(df6.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("a", null, "b", "c", "d"))))
+    checkAnswer(df5.select(
+      array_insert(col("a"), col("b"), lit(null).cast("string"))),
+      Seq(Row(Seq(null, "a", "b", "c")))
+    )
+    checkAnswer(df6.select(
+      array_insert(col("a"), col("b"), lit(null).cast("string"))),
+      Seq(Row(Seq("a", null, "b", "c", null)))
+    )
+    checkAnswer(
+      df5.select(array_insert(col("a"), lit(null).cast("integer"), col("c"))),
+      Seq(Row(null))
+    )
+    checkAnswer(
+      df5.select(array_insert(lit(null).cast("array<string>"), col("b"), col("c"))),
+      Seq(Row(null))
+    )
+    checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+  }
+
   test("transform function - array for primitive type not containing null") {
     val df = Seq(
       Seq(1, 9, 8, 7),

@@ -1921,6 +1921,9 @@ class DataFrameWriterV2:
     to external storage using the v2 API.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, df: "DataFrame", table: str):

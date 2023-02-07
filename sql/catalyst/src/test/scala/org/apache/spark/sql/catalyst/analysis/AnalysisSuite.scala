@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util._
@@ -949,36 +949,65 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       AttributeReference("c", IntegerType)(),
       AttributeReference("d", TimestampType)())
 
-    val r1 = Union(firstTable, secondTable)
-    val r2 = Union(firstTable, thirdTable)
-    val r3 = Union(firstTable, fourthTable)
-    val r4 = Except(firstTable, secondTable, isAll = false)
-    val r5 = Intersect(firstTable, secondTable, isAll = false)
+    assertAnalysisErrorClass(
+      Union(firstTable, secondTable),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r1,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Union(firstTable, thirdTable),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "third",
+        "dataType2" -> "\"INT\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r2,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The third column of the second table is timestamp type which is not compatible " +
-        "with int at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Union(firstTable, fourthTable),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "4th",
+        "dataType2" -> "\"FLOAT\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r3,
-      Seq("Union can only be performed on tables with compatible column types. " +
-        "The 4th column of the second table is timestamp type which is not compatible " +
-        "with float at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Except(firstTable, secondTable, isAll = false),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "EXCEPT",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
 
-    assertAnalysisError(r4,
-      Seq("Except can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
-
-    assertAnalysisError(r5,
-      Seq("Intersect can only be performed on tables with compatible column types. " +
-        "The second column of the second table is timestamp type which is not compatible " +
-        "with double at the same column of the first table"))
+    assertAnalysisErrorClass(
+      Intersect(firstTable, secondTable, isAll = false),
+      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedMessageParameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "second",
+        "dataType2" -> "\"DOUBLE\"",
+        "operator" -> "INTERSECT",
+        "hint" -> "",
+        "dataType1" -> "\"TIMESTAMP\"")
+    )
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
@@ -1386,5 +1415,22 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(cg.rightOrder.flatMap(_.references).forall(cg.right.output.contains))
       assert(!cg.rightOrder.flatMap(_.references).exists(cg.left.output.contains))
     }
+  }
+
+  test("SPARK-40149: add metadata column with no extra project") {
+    val t1 = LocalRelation($"key".int, $"value".string).as("t1")
+    val t2 = LocalRelation($"key".int, $"value".string).as("t2")
+    val query =
+      Project(Seq($"t1.key", $"t2.key"),
+        Join(t1, t2, UsingJoin(FullOuter, Seq("key")), None, JoinHint.NONE))
+    checkAnalysis(
+      query,
+      Project(Seq($"t1.key", $"t2.key"),
+        Project(Seq(coalesce($"t1.key", $"t2.key").as("key"),
+          $"t1.value", $"t2.value", $"t1.key", $"t2.key"),
+          Join(t1, t2, FullOuter, Some($"t1.key" === $"t2.key"), JoinHint.NONE)
+        )
+      ).analyze
+    )
   }
 }

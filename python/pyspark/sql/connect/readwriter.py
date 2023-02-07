@@ -22,17 +22,18 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Any
 from typing import TYPE_CHECKING
 
-from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation
+from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 from pyspark.sql.readwriter import (
     DataFrameWriter as PySparkDataFrameWriter,
     DataFrameReader as PySparkDataFrameReader,
+    DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
@@ -601,6 +602,83 @@ class DataFrameWriter(OptionUtils):
 
     def jdbc(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("jdbc() not supported for DataFrameWriter")
+
+
+class DataFrameWriterV2(OptionUtils):
+    def __init__(self, plan: "LogicalPlan", session: "SparkSession", table: str):
+        self._df: "LogicalPlan" = plan
+        self._spark: "SparkSession" = session
+        self._table_name: str = table
+        self._write: "WriteOperationV2" = WriteOperationV2(self._df, self._table_name)
+
+    def using(self, provider: str) -> "DataFrameWriterV2":
+        self._write.provider = provider
+        return self
+
+    using.__doc__ = PySparkDataFrameWriterV2.using.__doc__
+
+    def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriterV2":
+        self._write.options[key] = to_str(value)
+        return self
+
+    option.__doc__ = PySparkDataFrameWriterV2.option.__doc__
+
+    def options(self, **options: "OptionalPrimitiveType") -> "DataFrameWriterV2":
+        for k in options:
+            self._write.options[k] = to_str(options[k])
+        return self
+
+    options.__doc__ = PySparkDataFrameWriterV2.options.__doc__
+
+    def tableProperty(self, property: str, value: str) -> "DataFrameWriterV2":
+        self._write.table_properties[property] = value
+        return self
+
+    tableProperty.__doc__ = PySparkDataFrameWriterV2.tableProperty.__doc__
+
+    def partitionedBy(self, col: "ColumnOrName", *cols: "ColumnOrName") -> "DataFrameWriterV2":
+        self._write.partitioning_columns = [col]
+        self._write.partitioning_columns.extend(cols)
+        return self
+
+    partitionedBy.__doc__ = PySparkDataFrameWriterV2.partitionedBy.__doc__
+
+    def create(self) -> None:
+        self._write.mode = "create"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    create.__doc__ = PySparkDataFrameWriterV2.create.__doc__
+
+    def replace(self) -> None:
+        self._write.mode = "replace"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    replace.__doc__ = PySparkDataFrameWriterV2.replace.__doc__
+
+    def createOrReplace(self) -> None:
+        self._write.mode = "create_or_replace"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    createOrReplace.__doc__ = PySparkDataFrameWriterV2.createOrReplace.__doc__
+
+    def append(self) -> None:
+        self._write.mode = "append"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    append.__doc__ = PySparkDataFrameWriterV2.append.__doc__
+
+    def overwrite(self, condition: "ColumnOrName") -> None:
+        self._write.mode = "overwrite"
+        self._write.overwrite_condition = condition
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    overwrite.__doc__ = PySparkDataFrameWriterV2.overwrite.__doc__
+
+    def overwritePartitions(self) -> None:
+        self._write.mode = "overwrite_partitions"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    overwritePartitions.__doc__ = PySparkDataFrameWriterV2.overwritePartitions.__doc__
 
 
 def _test() -> None:

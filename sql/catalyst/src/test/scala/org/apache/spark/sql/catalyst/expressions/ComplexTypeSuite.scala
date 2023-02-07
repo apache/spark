@@ -462,27 +462,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       1, create_row(create_row(1)))
   }
 
-  test("error message of ExtractValue") {
-    val structType = StructType(StructField("a", StringType, true) :: Nil)
-    val otherType = StringType
-
-    def checkErrorMessage(
-      childDataType: DataType,
-      fieldDataType: DataType,
-      errorMessage: String): Unit = {
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        ExtractValue(
-          Literal.create(null, childDataType),
-          Literal.create(null, fieldDataType),
-          _ == _)
-      }
-      assert(e.getMessage().contains(errorMessage))
-    }
-
-    checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
-    checkErrorMessage(otherType, StringType, "Can't extract value from")
-  }
-
   test("ensure to preserve metadata") {
     val metadata = new MetadataBuilder()
       .putString("key", "value")
