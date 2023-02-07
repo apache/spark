@@ -178,7 +178,7 @@ private case object OracleDialect extends JdbcDialect {
   override def getLimitClause(limit: Integer): String = {
     // Oracle doesn't support LIMIT clause.
     // We can use rownum <= n to limit the number of rows in the result set.
-    if (limit > 0 ) s"WHERE rownum <= $limit" else ""
+    if (limit > 0) s"WHERE rownum <= $limit" else ""
   }
 
   class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
