@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.csv.CSVExprUtils
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.functions._
@@ -29,17 +29,23 @@ object CSVUtils {
    * This is currently being used in CSV schema inference.
    */
   def filterCommentAndEmpty(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
-    // Note that this was separately made by SPARK-18362. Logically, this should be the same
-    // with the one below, `filterCommentAndEmpty` but execution path is different. One of them
-    // might have to be removed in the near future if possible.
+    val nonEmptyLines = filterEmpty(lines)
+    filterComment(nonEmptyLines, options)
+  }
+
+  def filterComment(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
+    import lines.sqlContext.implicits._
+    lines.rdd.mapPartitions(
+      CSVExprUtils.filterComment(_, options)).toDS()
+  }
+
+  /**
+   * Filter empty lines from dataset. This is currently being used in CSV schema inference.
+   */
+  private def filterEmpty(lines: Dataset[String]): Dataset[String] = {
     import lines.sqlContext.implicits._
     val aliased = lines.toDF("value")
-    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0)
-    if (options.isCommentSet) {
-      nonEmptyLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
-    } else {
-      nonEmptyLines.as[String]
-    }
+    aliased.filter(length(trim($"value")) > 0).as[String]
   }
 
   /**
@@ -127,7 +133,4 @@ object CSVUtils {
       csv.sample(withReplacement = false, options.samplingRatio, 1)
     }
   }
-
-  def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] =
-    CSVExprUtils.filterComment(iter, options)
 }

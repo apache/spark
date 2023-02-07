@@ -108,7 +108,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-    val maybeFirstLine = CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
+    val maybeFirstLine = CSVUtils.filterComment(csv, parsedOptions).take(1).headOption
     inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
   }
 
@@ -126,10 +126,10 @@ object TextInputCSVDataSource extends CSVDataSource {
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
         val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
-        val tokenRDD = sampled.rdd.mapPartitions { iter =>
-          val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
+        val filteredLines = CSVUtils.filterCommentAndEmpty(sampled, parsedOptions)
+        val tokenRDD = filteredLines.rdd.mapPartitions { iter =>
           val linesWithoutHeader =
-            CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
+            CSVUtils.filterHeaderLine(iter, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
           linesWithoutHeader.map(parser.parseLine)
         }
