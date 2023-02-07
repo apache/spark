@@ -42,6 +42,9 @@ import java.util.Set;
 @Evolving
 public interface Table {
 
+  /** The metadata key for saving a generation expression in a generated column's metadata */
+  String GENERATION_EXPRESSION_METADATA_KEY = "generationExpression";
+
   /**
    * A name to identify this table. Implementations should provide a meaningful name, like the
    * database and table name from catalog, or the location of files for this table.

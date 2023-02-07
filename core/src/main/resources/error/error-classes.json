@@ -1358,6 +1358,12 @@
       }
     }
   },
+  "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
+    "message" : [
+      "Cannot create generated column <fieldName> with generation expression <expressionStr> because it cannot be converted to a V2 expression."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"

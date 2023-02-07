@@ -174,7 +174,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
-      val newSchema: StructType =
+      var newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
 
@@ -183,6 +183,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
           throw QueryCompilationErrors.generatedColumnsUnsupported(ident.asMultipartIdentifier)
         }
+        newSchema = GeneratedColumn.verifyAndConvertToV2ExpressionSQL(
+          session, newSchema, "CREATE TABLE")
       }
 
       CreateTableExec(catalog.asTableCatalog, ident, newSchema,
@@ -205,7 +207,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(ResolvedIdentifier(catalog, ident), schema, parts, tableSpec, orCreate) =>
-      val newSchema: StructType =
+      var newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
 
@@ -214,6 +216,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
           throw QueryCompilationErrors.generatedColumnsUnsupported(ident.asMultipartIdentifier)
         }
+        newSchema = GeneratedColumn.verifyAndConvertToV2ExpressionSQL(
+          session, newSchema, "CREATE TABLE")
       }
 
       catalog match {
