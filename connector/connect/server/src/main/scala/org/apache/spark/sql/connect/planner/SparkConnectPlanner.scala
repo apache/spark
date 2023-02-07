@@ -1403,8 +1403,6 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(command: proto.Command): Unit = {
     command.getCommandTypeCase match {
-      case proto.Command.CommandTypeCase.CREATE_FUNCTION =>
-        handleCreateScalarFunction(command.getCreateFunction)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
@@ -1427,40 +1425,6 @@ class SparkConnectPlanner(val session: SparkSession) {
       .find(_.nonEmpty)
       .flatten
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
-  }
-
-  /**
-   * This is a helper function that registers a new Python function in the SparkSession.
-   *
-   * Right now this function is very rudimentary and bare-bones just to showcase how it is
-   * possible to remotely serialize a Python function and execute it on the Spark cluster. If the
-   * Python version on the client and server diverge, the execution of the function that is
-   * serialized will most likely fail.
-   *
-   * @param cf
-   */
-  private def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
-    val function = SimplePythonFunction(
-      cf.getSerializedFunction.toByteArray,
-      // Empty environment variables
-      Maps.newHashMap(),
-      // No imported Python libraries
-      Lists.newArrayList(),
-      pythonExec,
-      "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
-      // Empty broadcast variables
-      Lists.newArrayList(),
-      // Null accumulator
-      null)
-
-    val udf = UserDefinedPythonFunction(
-      cf.getPartsList.asScala.head,
-      function,
-      StringType,
-      PythonEvalType.SQL_BATCHED_UDF,
-      udfDeterministic = false)
-
-    session.udf.registerPython(cf.getPartsList.asScala.head, udf)
   }
 
   private def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {

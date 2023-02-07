@@ -31,7 +31,6 @@ option java_package = "org.apache.spark.connect.proto";
 // produce a relational result.
 message Command {
   oneof command_type {
-    CreateScalarFunction create_function = 1;
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
     WriteOperationV2 write_operation_v2 = 4;
@@ -40,45 +39,6 @@ message Command {
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
 
-  }
-}
-
-// Simple message that is used to create a scalar function based on the provided function body.
-//
-// This message is used to register for example a Python UDF in the session catalog by providing
-// the serialized method body.
-//
-// TODO(SPARK-40532) It is required to add the interpreter / language version to the command
-//   parameters.
-message CreateScalarFunction {
-  // (Required) Fully qualified name of the function including the catalog / schema names.
-  repeated string parts = 1;
-
-  // (Required) the function language.
-  FunctionLanguage language = 2;
-
-  // (Required) if this is a temporary function.
-  bool temporary = 3;
-
-  // (Optional) A list of argument types. Can be empty when the function does not take an argument.
-  repeated DataType argument_types = 4;
-
-  // (Required) the return type of the function.
-  DataType return_type = 5;
-
-  // How the function body is defined:
-  oneof function_definition {
-    // As a raw string serialized:
-    bytes serialized_function = 6;
-    // As a code literal
-    string literal_string = 7;
-  }
-
-  enum FunctionLanguage {
-    FUNCTION_LANGUAGE_UNSPECIFIED = 0;
-    FUNCTION_LANGUAGE_SQL = 1;
-    FUNCTION_LANGUAGE_PYTHON = 2;
-    FUNCTION_LANGUAGE_SCALA = 3;
   }
 }
 
