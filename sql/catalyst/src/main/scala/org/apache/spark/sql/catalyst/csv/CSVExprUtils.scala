@@ -27,7 +27,7 @@ object CSVExprUtils {
   def filterComment(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.dropWhile(_.startsWith(commentPrefix))
+      iter.filter(!_.startsWith(commentPrefix))
     } else {
       iter
     }
