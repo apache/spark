@@ -26,6 +26,8 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -33,8 +35,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Limit, LocalRela
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -301,6 +305,11 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
       assert(result(0).getLong(0) == 101L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 201L)
       assert(result(2).getLong(0) == 301L)
+
+      withTempPath { path =>
+        val e = intercept[Exception](df.write.parquet(path.getCanonicalPath))
+        assert(e.getMessage == "columnar write")
+      }
     }
   }
 
@@ -790,6 +799,27 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     new ColumnarProjectExec(projectList, newChild)
 }
 
+class ColumnarWriteExec(
+    child: SparkPlan,
+    fileFormat: FileFormat,
+    partitionColumns: Seq[Attribute],
+    bucketSpec: Option[BucketSpec],
+    options: Map[String, String],
+    staticPartitions: TablePartitionSpec) extends WriteFilesExec(
+  child, fileFormat, partitionColumns, bucketSpec, options, staticPartitions) {
+
+  override def supportsColumnar(): Boolean = true
+
+  override def doExecuteWrite(writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {
+    assert(child.supportsColumnar)
+    throw new Exception("columnar write")
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WriteFilesExec =
+    new ColumnarWriteExec(
+      newChild, fileFormat, partitionColumns, bucketSpec, options, staticPartitions)
+}
+
 /**
  * A version of add that supports columnar processing for longs.  This version is broken
  * on purpose so it adds the numbers plus 1 so that the tests can show that it was replaced.
@@ -897,6 +927,14 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
           new ColumnarProjectExec(plan.projectList.map((exp) =>
             replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
             replaceWithColumnarPlan(plan.child))
+        case write: WriteFilesExec =>
+          new ColumnarWriteExec(
+            replaceWithColumnarPlan(write.child),
+            write.fileFormat,
+            write.partitionColumns,
+            write.bucketSpec,
+            write.options,
+            write.staticPartitions)
         case p =>
           logWarning(s"Columnar processing for ${p.getClass} is not currently supported.")
           p.withNewChildren(p.children.map(replaceWithColumnarPlan))
