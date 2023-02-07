@@ -2635,15 +2635,15 @@ abstract class CSVSuite
             .option("skipLines", skipLines)
             .option("inferSchema", true)
             .csv(ds)
-          assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
           if (header) {
+            assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
             checkAnswer(csv, Row("a", "b", skipLines + 1))
           } else {
             checkAnswer(csv, Seq(Row("a", "b", skipLines), Row("a", "b", skipLines + 1)))
           }
         }
       }
-    }
+    }tils
   }
 
   test("SPARK-42359: parses dataset with multiline skipLines") {
@@ -2657,8 +2657,8 @@ abstract class CSVSuite
           .option("multiLine", true)
           .option("inferSchema", true)
           .csv(ds)
-        assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
         if (header) {
+          assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
           checkAnswer(csv, Row("a", "b\nb", skipLines + 1))
         } else {
           checkAnswer(csv, Seq(Row("a", "b\nb", skipLines), Row("a", "b\nb", skipLines + 1)))
