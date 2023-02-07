@@ -26,7 +26,7 @@ import org.apache.spark.sql.functions._
 object CSVUtils {
   /**
    * Filter ignorable rows for CSV dataset (lines empty and starting with `comment`).
-   * This is currently being used in CSV schema inference.
+   * This is currently being used in CSV schema inference and Dataset[String] reading path.
    */
   def filterCommentAndEmpty(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
     val nonEmptyLines = filterEmpty(lines)
