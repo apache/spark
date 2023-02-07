@@ -42,15 +42,36 @@ if have_pandas:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class MapInPandasTestsMixin:
-    def test_map_in_pandas(self):
+    @staticmethod
+    def identity_dataframes_iter(*columns: str):
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                assert pdf.columns == ["id"]
+                assert pdf.columns.tolist() == list(columns)
                 yield pdf
+        return func
 
+    @staticmethod
+    def dataframes_wo_column_names_iter(*columns: str):
+        def func(iterator):
+            for pdf in iterator:
+                assert isinstance(pdf, pd.DataFrame)
+                assert pdf.columns.tolist() == list(columns)
+                yield pdf.rename(columns=list(pdf.columns).index)
+        return func
+
+    @staticmethod
+    def dataframes_and_empty_dataframe_iter(*columns: str):
+        def func(iterator):
+            for pdf in iterator:
+                yield pdf
+            # after yielding all elements, also yield an empty dataframe with given columns
+            yield pd.DataFrame([], columns=list(columns))
+        return func
+
+    def test_map_in_pandas(self):
         df = self.spark.range(10, numPartitions=3)
-        actual = df.mapInPandas(func, "id long").collect()
+        actual = df.mapInPandas(self.identity_dataframes_iter("id"), "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
 
@@ -84,6 +105,18 @@ class MapInPandasTestsMixin:
             actual = df.mapInPandas(func, "str string, bin binary").collect()
             expected = df.collect()
             self.assertEqual(actual, expected)
+
+    def test_no_column_names(self):
+        data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
+        df = self.spark.createDataFrame(data, "a int, b string")
+
+        def func(iterator):
+            for pdf in iterator:
+                yield pdf.rename(columns=list(pdf.columns).index)
+
+        actual = df.mapInPandas(func, df.schema).collect()
+        expected = df.collect()
+        self.assertEqual(actual, expected)
 
     def test_different_output_length(self):
         def func(iterator):
@@ -119,6 +152,145 @@ class MapInPandasTestsMixin:
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
 
+    def test_dataframes_with_other_column_names(self):
+        def dataframes_with_other_column_names(iterator):
+            for pdf in iterator:
+                yield pdf.rename(columns={"id": "iid"})
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+                "specified schema. Missing: id. Unexpected: iid.\n",
+            ):
+                (
+                    self.spark.range(10, numPartitions=3)
+                    .withColumn("value", lit(0))
+                    .toDF("id", "value")
+                    .mapInPandas(dataframes_with_other_column_names, "id int, value int")
+                    .collect()
+                )
+
+    def test_dataframes_with_duplicate_column_names(self):
+        def dataframes_with_other_column_names(iterator):
+            for pdf in iterator:
+                yield pdf.rename(columns={"id2": "id"})
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+                "specified schema. Missing: id2.\n",
+            ):
+                (
+                    self.spark.range(10, numPartitions=3)
+                        .withColumn("id2", lit(0))
+                        .withColumn("value", lit(1))
+                        .toDF("id", "id2", "value")
+                        .mapInPandas(dataframes_with_other_column_names, "id int, id2 long, value int")
+                        .collect()
+                )
+
+    def test_dataframes_with_less_columns(self):
+        df = self.spark.range(10, numPartitions=3).withColumn("value", lit(0))
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+                "specified schema. Missing: id2.\n",
+            ):
+                f = self.identity_dataframes_iter("id", "value")
+                (
+                    df.mapInPandas(f, "id int, id2 long, value int")
+                    .collect()
+                )
+
+            with self.assertRaisesRegex(
+                PythonException,
+                "RuntimeError: Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 3 Actual: 2\n",
+            ):
+                f = self.dataframes_wo_column_names_iter("id", "value")
+                (
+                    df.mapInPandas(f, "id int, id2 long, value int")
+                    .collect()
+                )
+
+    def test_dataframes_with_more_columns(self):
+        df = (
+            self.spark.range(10, numPartitions=3)
+            .withColumn("id2", lit(0))
+            .withColumn("value", lit(1))
+            .toDF("id", "id2", "value")
+        )
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+                "specified schema. Unexpected: id2.\n",
+            ):
+                f = self.identity_dataframes_iter("id", "id2", "value")
+                (
+                    df.mapInPandas(f, "id int, value int")
+                    .collect()
+                )
+
+            with self.assertRaisesRegex(
+                PythonException,
+                "RuntimeError: Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 2 Actual: 3\n",
+            ):
+                f = self.dataframes_wo_column_names_iter("id", "id2", "value")
+                (
+                    df.mapInPandas(f, "id int, value int")
+                    .collect()
+                )
+
+    def test_dataframes_with_incompatible_types(self):
+        def func(iterator):
+            for pdf in iterator:
+                yield pdf.assign(id=pdf["id"].apply(str))
+
+        with QuietTest(self.sc):
+            for safely in [True, False]:
+                with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
+                    {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+                ):
+                    # sometimes we see ValueErrors
+                    with self.subTest(convert="string to double"):
+                        expected = (
+                            r"ValueError: Exception thrown when converting pandas.Series \(object\) "
+                            r"with name 'id' to Arrow Array \(double\)."
+                        )
+                        if safely:
+                            expected = expected + (
+                                " It can be caused by overflows or other "
+                                "unsafe conversions warned by Arrow. Arrow safe type check "
+                                "can be disabled by using SQL config "
+                                "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                            )
+                        with self.assertRaisesRegex(PythonException, expected + "\n"):
+                            (
+                                self.spark.range(10, numPartitions=3)
+                                .mapInPandas(func, "id double")
+                                .collect()
+                            )
+
+                    # sometimes we see TypeErrors
+                    with self.subTest(convert="double to string"):
+                        with self.assertRaisesRegex(
+                            PythonException,
+                            r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
+                            r"with name 'id' to Arrow Array \(string\).\n",
+                        ):
+                            (
+                                self.spark.range(10, numPartitions=3).select(col("id").cast("double"))
+                                .mapInPandas(self.identity_dataframes_iter("id"), "id string")
+                                .collect()
+                            )
+
     def test_empty_iterator(self):
         def empty_iter(_):
             return iter([])
@@ -134,16 +306,10 @@ class MapInPandasTestsMixin:
         self.assertEqual(mapped.count(), 0)
 
     def test_empty_dataframes_without_columns(self):
-        def empty_dataframes_wo_columns(iterator):
-            for pdf in iterator:
-                yield pdf
-            # after yielding all elements of the iterator, also yield one dataframe without columns
-            yield pd.DataFrame([])
-
         mapped = (
             self.spark.range(10, numPartitions=3)
             .toDF("id")
-            .mapInPandas(empty_dataframes_wo_columns, "id int")
+            .mapInPandas(self.dataframes_and_empty_dataframe_iter(), "id int")
         )
         self.assertEqual(mapped.count(), 10)
 
@@ -152,16 +318,38 @@ class MapInPandasTestsMixin:
             self.check_empty_dataframes_with_less_columns()
 
     def check_empty_dataframes_with_less_columns(self):
-        def empty_dataframes_with_less_columns(iterator):
-            for pdf in iterator:
-                yield pdf
-            # after yielding all elements of the iterator, also yield a dataframe with less columns
-            yield pd.DataFrame([(1,)], columns=["id"])
+        with self.assertRaisesRegex(
+            PythonException,
+            "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+            "specified schema. Missing: value.\n",
+        ):
+            f = self.dataframes_and_empty_dataframe_iter("id")
+            (
+                self.spark.range(10, numPartitions=3)
+                .withColumn("value", lit(0))
+                .toDF("id", "value")
+                .mapInPandas(f, "id int, value int")
+                .collect()
+            )
 
-        with self.assertRaisesRegex(PythonException, "KeyError: 'value'"):
-            self.spark.range(10, numPartitions=3).withColumn("value", lit(0)).toDF(
-                "id", "value"
-            ).mapInPandas(empty_dataframes_with_less_columns, "id int, value int").collect()
+    def test_empty_dataframes_with_other_columns(self):
+        def empty_dataframes_with_other_columns(iterator):
+            for pdf in iterator:
+                yield pdf.rename(columns={"id": "iid"})
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                    PythonException,
+                    "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+                    "specified schema. Missing: id. Unexpected: iid.\n",
+            ):
+                (
+                    self.spark.range(10, numPartitions=3)
+                        .withColumn("value", lit(0))
+                        .toDF("id", "value")
+                        .mapInPandas(empty_dataframes_with_other_columns, "id int, value int")
+                        .collect()
+                )
 
     def test_chain_map_partitions_in_pandas(self):
         def func(iterator):
