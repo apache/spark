@@ -3470,11 +3470,6 @@
       "Invalid partition transformation: <expr>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1317" : {
-    "message" : [
-      "Cannot resolve column name \"<colName>\" among (<fieldsStr>)<extraMsg>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1318" : {
     "message" : [
       "Unable to parse '<delayThreshold>'."
