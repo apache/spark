@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -155,6 +155,16 @@ abstract class LogicalPlan
       case (a1, a2) => a1.semanticEquals(a2)
     }
   }
+}
+
+object LogicalPlan {
+  // A dedicated tag for Spark Connect.
+  // If an expression (only support UnresolvedAttribute for now) was attached by this tag,
+  // the analyzer will extract the plan id, try to top-down traverse the query plan to find
+  // the plan node that was attached by the same tag, and then resolve this expression with
+  // the matching node.
+  // If can not find a matching node or any error occurs, analyzer fallbacks to the old code path.
+  private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
 }
 
 /**
