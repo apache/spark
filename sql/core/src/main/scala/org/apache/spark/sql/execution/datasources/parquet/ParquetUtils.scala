@@ -461,6 +461,10 @@ object ParquetUtils extends Logging {
       SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
       sqlConf.parquetFieldIdWriteEnabled.toString)
 
+    conf.set(
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
+      sqlConf.legacyParquetNanosAsLong.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 

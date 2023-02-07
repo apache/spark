@@ -25,10 +25,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Partitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.util.InternalRowSet
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read._
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -80,24 +79,24 @@ case class BatchScanExec(
                 "during runtime filtering: not all partitions implement HasPartitionKey after " +
                 "filtering")
           }
-
-          val newRows = new InternalRowSet(p.expressions.map(_.dataType))
-          newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
-
-          val oldRows = p.partitionValues.toSet
-          // We require the new number of partition keys to be equal or less than the old number
-          // of partition keys here. In the case of less than, empty partitions will be added for
-          // those missing keys that are not present in the new input partitions.
-          if (oldRows.size < newRows.size) {
+          val newPartitionValues = newPartitions.map(partition =>
+              InternalRowComparableWrapper(partition.asInstanceOf[HasPartitionKey], p.expressions))
+            .toSet
+          val oldPartitionValues = p.partitionValues
+            .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
+          // We require the new number of partition values to be equal or less than the old number
+          // of partition values here. In the case of less than, empty partitions will be added for
+          // those missing values that are not present in the new input partitions.
+          if (oldPartitionValues.size < newPartitionValues.size) {
             throw new SparkException("During runtime filtering, data source must either report " +
-                "the same number of partition keys, or a subset of partition keys from the " +
-                s"original. Before: ${oldRows.size} partition keys. After: ${newRows.size} " +
-                "partition keys")
+                "the same number of partition values, or a subset of partition values from the " +
+                s"original. Before: ${oldPartitionValues.size} partition values. " +
+                s"After: ${newPartitionValues.size} partition values")
           }
 
-          if (!newRows.forall(oldRows.contains)) {
+          if (!newPartitionValues.forall(oldPartitionValues.contains)) {
             throw new SparkException("During runtime filtering, data source must not report new " +
-                "partition keys that are not present in the original partitioning.")
+                "partition values that are not present in the original partitioning.")
           }
 
           groupPartitions(newPartitions).get.map(_._2)
@@ -132,11 +131,13 @@ case class BatchScanExec(
 
       outputPartitioning match {
         case p: KeyGroupedPartitioning =>
-          val partitionMapping = finalPartitions.map(s =>
-            s.head.asInstanceOf[HasPartitionKey].partitionKey() -> s).toMap
+          val partitionMapping = finalPartitions.map(s => InternalRowComparableWrapper(
+            s.head.asInstanceOf[HasPartitionKey], p.expressions) -> s)
+            .toMap
           finalPartitions = p.partitionValues.map { partValue =>
             // Use empty partition for those partition values that are not present
-            partitionMapping.getOrElse(partValue, Seq.empty)
+            partitionMapping.getOrElse(
+              InternalRowComparableWrapper(partValue, p.expressions), Seq.empty)
           }
         case _ =>
       }
