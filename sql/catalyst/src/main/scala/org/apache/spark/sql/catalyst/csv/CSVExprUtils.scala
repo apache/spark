@@ -27,7 +27,7 @@ object CSVExprUtils {
   def filterComment(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.dropWhile(_.startsWith(commentPrefix)
+      iter.dropWhile(_.startsWith(commentPrefix))
     } else {
       iter
     }
@@ -36,7 +36,7 @@ object CSVExprUtils {
   def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.dropWhile(_.startsWith(commentPrefix)
+      iter.dropWhile(_.startsWith(commentPrefix))
     } else {
       iter
     }
