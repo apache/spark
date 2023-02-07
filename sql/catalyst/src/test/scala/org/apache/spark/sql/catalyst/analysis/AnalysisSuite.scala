@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util._
@@ -1359,6 +1359,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       parsePlan("SELECT c FROM a WHERE c < 20"))
   }
 
+  test("SPARK-41489: type of filter expression should be a bool") {
+    assertAnalysisErrorClass(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id)
+         |SELECT *
+         |FROM t1
+         |WHERE 'true'""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
+      ,
+      queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
+  }
+
   test("SPARK-38591: resolve left and right CoGroup sort order on respective side only") {
     def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
       Iterator.empty
@@ -1403,17 +1417,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("SPARK-41489: type of filter expression should be a bool") {
-    assertAnalysisErrorClass(parsePlan(
-      s"""
-         |WITH t1 as (SELECT 1 user_id)
-         |SELECT *
-         |FROM t1
-         |WHERE 'true'""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
-      expectedMessageParameters = Map(
-        "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
-      ,
-      queryContext = Array(ExpectedContext("SELECT *\nFROM t1\nWHERE 'true'", 31, 59)))
+  test("SPARK-40149: add metadata column with no extra project") {
+    val t1 = LocalRelation($"key".int, $"value".string).as("t1")
+    val t2 = LocalRelation($"key".int, $"value".string).as("t2")
+    val query =
+      Project(Seq($"t1.key", $"t2.key"),
+        Join(t1, t2, UsingJoin(FullOuter, Seq("key")), None, JoinHint.NONE))
+    checkAnalysis(
+      query,
+      Project(Seq($"t1.key", $"t2.key"),
+        Project(Seq(coalesce($"t1.key", $"t2.key").as("key"),
+          $"t1.value", $"t2.value", $"t1.key", $"t2.key"),
+          Join(t1, t2, FullOuter, Some($"t1.key" === $"t2.key"), JoinHint.NONE)
+        )
+      ).analyze
+    )
   }
 }
