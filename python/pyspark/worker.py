@@ -156,6 +156,8 @@ def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
                 "Return type of the user-defined function should be "
                 "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
             )
+        if not is_arrow_iter:
+            verify_pandas_result(elem, return_type, True)
         return elem
 
     return lambda *iterator: map(
@@ -166,45 +168,52 @@ def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
 def verify_pandas_result(result, return_type, assign_cols_by_name):
     import pandas as pd
 
-    if not isinstance(result, pd.DataFrame):
-        raise TypeError(
-            "Return type of the user-defined function should be "
-            "pandas.DataFrame, but is {}".format(type(result))
-        )
-
-    # check the schema of the result only if it is not empty or has columns
-    if not result.empty or len(result.columns) != 0:
-        # if any column name of the result is a string
-        # the column names of the result have to match the return type
-        #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
-        field_names = set([field.name for field in return_type.fields])
-        column_names = set(result.columns)
-        if (
-            assign_cols_by_name
-            and any(isinstance(name, str) for name in result.columns)
-            and column_names != field_names
-        ):
-            missing = sorted(list(field_names.difference(column_names)))
-            missing = f" Missing: {', '.join(missing)}." if missing else ""
-
-            extra = sorted(list(column_names.difference(field_names)))
-            extra = f" Unexpected: {', '.join(extra)}." if extra else ""
-
-            raise PySparkRuntimeError(
-                error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
-                message_parameters={
-                    "missing": missing,
-                    "extra": extra,
-                },
+    if type(return_type) == StructType:
+        if not isinstance(result, pd.DataFrame):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "pandas.DataFrame, but is {}".format(type(result))
             )
-        # otherwise the number of columns of result have to match the return type
-        elif len(result.columns) != len(return_type):
-            raise PySparkRuntimeError(
-                error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
-                message_parameters={
-                    "expected": str(len(return_type)),
-                    "actual": str(len(result.columns)),
-                },
+
+        # check the schema of the result only if it is not empty or has columns
+        if not result.empty or len(result.columns) != 0:
+            # if any column name of the result is a string
+            # the column names of the result have to match the return type
+            #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
+            field_names = set([field.name for field in return_type.fields])
+            column_names = set(result.columns)
+            if (
+                assign_cols_by_name
+                and any(isinstance(name, str) for name in result.columns)
+                and column_names != field_names
+            ):
+                missing = sorted(list(field_names.difference(column_names)))
+                missing = f" Missing: {', '.join(missing)}." if missing else ""
+
+                extra = sorted(list(column_names.difference(field_names)))
+                extra = f" Unexpected: {', '.join(extra)}." if extra else ""
+
+                raise PySparkRuntimeError(
+                    error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
+                    message_parameters={
+                        "missing": missing,
+                        "extra": extra,
+                    },
+                )
+            # otherwise the number of columns of result have to match the return type
+            elif len(result.columns) != len(return_type):
+                raise PySparkRuntimeError(
+                    error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                    message_parameters={
+                        "expected": str(len(return_type)),
+                        "actual": str(len(result.columns)),
+                    },
+                )
+    else:
+        if not isinstance(result, pd.Series):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "Pandas.Series, but is {}".format(type(result))
             )
 
 
