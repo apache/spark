@@ -270,25 +270,22 @@ class Catalog:
 
     dropGlobalTempView.__doc__ = PySparkCatalog.dropGlobalTempView.__doc__
 
-    # TODO(SPARK-41612): Support Catalog.isCached
-    # def isCached(self, tableName: str) -> bool:
-    #     pdf = self._catalog_to_pandas(plan.IsCached(table_name=tableName))
-    #     assert pdf is not None
-    #     return pdf.iloc[0].iloc[0]
-    #
-    # isCached.__doc__ = PySparkCatalog.isCached.__doc__
-    #
-    # TODO(SPARK-41600): Support Catalog.cacheTable
-    # def cacheTable(self, tableName: str) -> None:
-    #     self._catalog_to_pandas(plan.CacheTable(table_name=tableName))
-    #
-    # cacheTable.__doc__ = PySparkCatalog.cacheTable.__doc__
-    #
-    # TODO(SPARK-41623): Support Catalog.uncacheTable
-    # def uncacheTable(self, tableName: str) -> None:
-    #     self._catalog_to_pandas(plan.UncacheTable(table_name=tableName))
-    #
-    # uncacheTable.__doc__ = PySparkCatalog.uncacheTable.__doc__
+    def isCached(self, tableName: str) -> bool:
+        pdf = self._catalog_to_pandas(plan.IsCached(table_name=tableName))
+        assert pdf is not None
+        return pdf.iloc[0].iloc[0]
+
+    isCached.__doc__ = PySparkCatalog.isCached.__doc__
+
+    def cacheTable(self, tableName: str) -> None:
+        self._catalog_to_pandas(plan.CacheTable(table_name=tableName))
+
+    cacheTable.__doc__ = PySparkCatalog.cacheTable.__doc__
+
+    def uncacheTable(self, tableName: str) -> None:
+        self._catalog_to_pandas(plan.UncacheTable(table_name=tableName))
+
+    uncacheTable.__doc__ = PySparkCatalog.uncacheTable.__doc__
 
     def clearCache(self) -> None:
         self._catalog_to_pandas(plan.ClearCache())
@@ -310,15 +307,6 @@ class Catalog:
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
 
-    def isCached(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("isCached() is not implemented.")
-
-    def cacheTable(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("cacheTable() is not implemented.")
-
-    def uncacheTable(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("uncacheTable() is not implemented.")
-
     def registerFunction(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("registerFunction() is not implemented.")
 
@@ -337,11 +325,7 @@ def _test() -> None:
         PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
     )
 
-    # TODO(SPARK-41612): Support Catalog.isCached
-    # TODO(SPARK-41600): Support Catalog.cacheTable
-    del pyspark.sql.connect.catalog.Catalog.clearCache.__doc__
-    del pyspark.sql.connect.catalog.Catalog.refreshTable.__doc__
-    del pyspark.sql.connect.catalog.Catalog.refreshByPath.__doc__
+    # TODO(SPARK-41818): java.lang.ClassNotFoundException) .DefaultSource
     del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
 
     (failure_count, test_count) = doctest.testmod(
