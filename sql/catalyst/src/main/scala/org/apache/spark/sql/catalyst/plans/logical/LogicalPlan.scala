@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -317,5 +318,27 @@ object LogicalPlanIntegrity {
  * A logical plan node that can generate metadata columns
  */
 trait ExposesMetadataColumns extends LogicalPlan {
+  protected def metadataOutputWithOutConflicts(
+      metadataOutput: Seq[AttributeReference]): Seq[AttributeReference] = {
+    // If `metadataColFromOutput` is not empty that means `AddMetadataColumns` merged
+    // metadata output into output. We should still return an available metadata output
+    // so that the rule `ResolveReferences` can resolve metadata column correctly.
+    val metadataColFromOutput = output.filter(_.isMetadataCol)
+    if (metadataColFromOutput.isEmpty) {
+      val resolve = conf.resolver
+      val outputNames = outputSet.map(_.name)
+
+      def isOutputColumn(col: AttributeReference): Boolean = {
+        outputNames.exists(name => resolve(col.name, name))
+      }
+      // filter out the metadata struct column if it has the name conflicting with output columns.
+      // if the file has a column "_metadata",
+      // then the data column should be returned not the metadata struct column
+      metadataOutput.filterNot(isOutputColumn)
+    } else {
+      metadataColFromOutput.asInstanceOf[Seq[AttributeReference]]
+    }
+  }
+
   def withMetadataColumns(): LogicalPlan
 }
