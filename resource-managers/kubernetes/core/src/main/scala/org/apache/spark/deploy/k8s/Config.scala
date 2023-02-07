@@ -49,7 +49,8 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_MASTER_URL =
     ConfigBuilder("spark.kubernetes.driver.master")
       .doc("The internal Kubernetes master (API server) address " +
-        "to be used for driver to request executors.")
+        "to be used for driver to request executors or " +
+        "'local[*]' for driver-only mode.")
       .version("3.0.0")
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
@@ -161,7 +162,8 @@ private[spark] object Config extends Logging {
         " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
       .version("3.1.0")
       .longConf
-      .createWithDefault(1572864) // 1.5 MiB
+      .checkValue(_ <= 1048576, "Must have at most 1048576 bytes")
+      .createWithDefault(1048576) // 1.0 MiB
 
   val EXECUTOR_ROLL_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.rollInterval")

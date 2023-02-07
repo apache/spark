@@ -161,6 +161,30 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
       assert(cause.getMessage.contains("Use `SHOW CREATE TABLE` without `AS SERDE` instead"))
     }
   }
+
+  test("show create table with default column values") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint DEFAULT 42,
+           |  c string DEFAULT 'abc, "def"' COMMENT 'comment'
+           |)
+           |USING parquet
+           |COMMENT 'This is a comment'
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(showDDL === Array(
+        s"CREATE TABLE $fullName (",
+        "a BIGINT,",
+        "b BIGINT DEFAULT 42,",
+        "c STRING DEFAULT 'abc, \"def\"' COMMENT 'comment')",
+        "USING parquet",
+        "COMMENT 'This is a comment'"
+      ))
+    }
+  }
 }
 
 /**

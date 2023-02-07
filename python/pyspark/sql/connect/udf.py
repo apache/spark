@@ -17,6 +17,10 @@
 """
 User-defined function related classes and functions
 """
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 import functools
 from typing import Callable, Any, TYPE_CHECKING, Optional
 
@@ -24,10 +28,11 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     PythonUDF,
-    ScalarInlineUserDefinedFunction,
+    CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.types import DataType, StringType
+from pyspark.sql.utils import is_remote
 
 
 if TYPE_CHECKING:
@@ -90,7 +95,24 @@ class UserDefinedFunction:
             )
 
         self.func = func
-        self._returnType = returnType
+
+        if isinstance(returnType, str):
+            # Currently we don't have a way to have a current Spark session in Spark Connect, and
+            # pyspark.sql.SparkSession has a centralized logic to control the session creation.
+            # So uses pyspark.sql.SparkSession for now. Should replace this to using the current
+            # Spark session for Spark Connect in the future.
+            from pyspark.sql import SparkSession as PySparkSession
+
+            assert is_remote()
+            return_type_schema = (  # a workaround to parse the DataType from DDL strings
+                PySparkSession.builder.getOrCreate()
+                .createDataFrame(data=[], schema=returnType)
+                .schema
+            )
+            assert len(return_type_schema.fields) == 1, "returnType should be singular"
+            self._returnType = return_type_schema.fields[0].dataType
+        else:
+            self._returnType = returnType
         self._name = name or (
             func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
         )
@@ -111,7 +133,7 @@ class UserDefinedFunction:
             command=CloudPickleSerializer().dumps((self.func, self._returnType)),
         )
         return Column(
-            ScalarInlineUserDefinedFunction(
+            CommonInlineUserDefinedFunction(
                 function_name=self._name,
                 deterministic=self.deterministic,
                 arguments=arg_exprs,

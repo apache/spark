@@ -14,8 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
 
+check_dependencies(__name__, __file__)
+
+import array
 import datetime
+import decimal
 
 import pyarrow as pa
 
@@ -30,6 +35,8 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     NullType,
+    DecimalType,
+    StringType,
 )
 
 from pyspark.sql.connect.types import to_arrow_schema
@@ -65,6 +72,12 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always truncate
+            return True
+        elif isinstance(dataType, DecimalType):
+            # Convert Decimal('NaN') to None
+            return True
+        elif isinstance(dataType, StringType):
+            # Coercion to StringType is allowed
             return True
         else:
             return False
@@ -122,7 +135,7 @@ class LocalDataToArrowConversion:
                 if value is None:
                     return None
                 else:
-                    assert isinstance(value, list)
+                    assert isinstance(value, (list, array.array))
                     return [element_conv(v) for v in value]
 
             return convert_array
@@ -167,6 +180,48 @@ class LocalDataToArrowConversion:
                     return value.astimezone(datetime.timezone.utc)
 
             return convert_timestample
+
+        elif isinstance(dataType, DecimalType):
+
+            def convert_decimal(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, decimal.Decimal)
+                    return None if value.is_nan() else value
+
+            return convert_decimal
+
+        elif isinstance(dataType, StringType):
+
+            def convert_string(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    # only atomic types are supported
+                    assert isinstance(
+                        value,
+                        (
+                            bool,
+                            int,
+                            float,
+                            str,
+                            bytes,
+                            bytearray,
+                            decimal.Decimal,
+                            datetime.date,
+                            datetime.datetime,
+                            datetime.timedelta,
+                        ),
+                    )
+                    if isinstance(value, bool):
+                        # To match the PySpark which convert bool to string in
+                        # the JVM side (python.EvaluatePython.makeFromJava)
+                        return str(value).lower()
+                    else:
+                        return str(value)
+
+            return convert_string
 
         else:
 

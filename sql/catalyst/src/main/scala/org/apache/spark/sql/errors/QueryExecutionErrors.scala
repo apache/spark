@@ -1039,10 +1039,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("n" -> n.toString(), "jdbcNumPartitions" -> jdbcNumPartitions))
   }
 
-  def transactionUnsupportedByJdbcServerError(): Throwable = {
+  def multiActionAlterError(tableName: String): Throwable = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "UNSUPPORTED_FEATURE.JDBC_TRANSACTION",
-      messageParameters = Map.empty[String, String])
+      errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): SparkUnsupportedOperationException = {
@@ -1431,11 +1431,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "dataType" -> dataType.toString()))
   }
 
-  def failToParseEmptyStringForDataTypeError(dataType: DataType): SparkRuntimeException = {
+  def emptyJsonFieldValueError(dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2135",
-      messageParameters = Map(
-        "dataType" -> dataType.catalogString))
+      errorClass = "EMPTY_JSON_FIELD_VALUE",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 
   def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
@@ -1737,23 +1736,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "plan" -> sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")))
   }
 
-  def structuralIntegrityOfInputPlanIsBrokenInClassError(
-      className: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2173",
-      messageParameters = Map(
-        "className" -> className))
-  }
-
-  def structuralIntegrityIsBrokenAfterApplyingRuleError(
-      ruleName: String, batchName: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2174",
-      messageParameters = Map(
-        "ruleName" -> ruleName,
-        "batchName" -> batchName))
-  }
-
   def ruleIdNotFoundForRuleError(ruleName: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2175",
@@ -1861,10 +1843,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def cannotRecognizeHiveTypeError(
       e: ParseException, fieldType: String, fieldName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2188",
+      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
       messageParameters = Map(
-        "fieldType" -> fieldType,
-        "fieldName" -> fieldName),
+        "fieldType" -> toSQLType(fieldType),
+        "fieldName" -> toSQLId(fieldName)),
       cause = e)
   }
 
@@ -2619,10 +2601,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def repeatedPivotsUnsupportedError(): Throwable = {
+  def repeatedPivotsUnsupportedError(clause: String, operation: String): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_FEATURE.REPEATED_PIVOT",
-      messageParameters = Map.empty[String, String])
+      errorClass = "REPEATED_CLAUSE",
+      messageParameters = Map("clause" -> clause, "operation" -> operation))
   }
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {

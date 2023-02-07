@@ -151,8 +151,12 @@ class ParquetFileFormat
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
     hadoopConf.setBoolean(
-      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
-      sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled)
+    hadoopConf.setBoolean(
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
+      sparkSession.sessionState.conf.legacyParquetNanosAsLong)
+
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -357,7 +361,8 @@ object ParquetFileFormat extends Logging {
     val converter = new ParquetToSparkSchemaConverter(
       sparkSession.sessionState.conf.isParquetBinaryAsString,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp,
-      timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
+      inferTimestampNTZ = sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled,
+      nanosAsLong = sparkSession.sessionState.conf.legacyParquetNanosAsLong)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -453,14 +458,16 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-    val timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled
+    val inferTimestampNTZ = sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled
+    val nanosAsLong = sparkSession.sessionState.conf.legacyParquetNanosAsLong
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
         assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-        timestampNTZEnabled = timestampNTZEnabled)
+        inferTimestampNTZ = inferTimestampNTZ,
+        nanosAsLong = nanosAsLong)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))

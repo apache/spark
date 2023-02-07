@@ -140,8 +140,8 @@ object FunctionRegistryBase {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params.length)
+          throw QueryCompilationErrors.wrongNumArgsError(
+            name, validParametersCount, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -534,6 +534,7 @@ object FunctionRegistry {
     expression[Length]("length"),
     expression[Length]("len", setAlias = true, Some("3.4.0")),
     expression[Levenshtein]("levenshtein"),
+    expression[Luhncheck]("luhn_check"),
     expression[Like]("like"),
     expression[ILike]("ilike"),
     expression[Lower]("lower"),
@@ -661,6 +662,7 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
     expression[ArraysOverlap]("arrays_overlap"),
+    expression[ArrayInsert]("array_insert"),
     expression[ArrayIntersect]("array_intersect"),
     expression[ArrayJoin]("array_join"),
     expression[ArrayPosition]("array_position"),
@@ -904,7 +906,7 @@ object FunctionRegistry {
     val builder = (args: Seq[Expression]) => {
       val argSize = args.size
       if (argSize != 1) {
-        throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", argSize)
+        throw QueryCompilationErrors.wrongNumArgsError(name, Seq(1), argSize)
       }
       Cast(args.head, dataType)
     }

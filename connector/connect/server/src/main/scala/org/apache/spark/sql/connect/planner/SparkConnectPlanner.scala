@@ -29,6 +29,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connect.common.UdfPacket
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -43,6 +45,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.functions.{col, expr}
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -742,8 +745,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformWindowExpression(exp.getWindow)
       case proto.Expression.ExprTypeCase.EXTENSION =>
         transformExpressionPlugin(exp.getExtension)
-      case proto.Expression.ExprTypeCase.SCALAR_INLINE_USER_DEFINED_FUNCTION =>
-        transformScalarInlineUserDefinedFunction(exp.getScalarInlineUserDefinedFunction)
+      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
+        transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -826,15 +829,40 @@ class SparkConnectPlanner(val session: SparkSession) {
    * @return
    *   Expression.
    */
-  private def transformScalarInlineUserDefinedFunction(
-      fun: proto.ScalarInlineUserDefinedFunction): Expression = {
+  private def transformCommonInlineUserDefinedFunction(
+      fun: proto.CommonInlineUserDefinedFunction): Expression = {
     fun.getFunctionCase match {
-      case proto.ScalarInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         transformPythonUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+        transformScalarScalaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
+  }
+
+  /**
+   * Translates a Scalar Scala user-defined function from proto to the Catalyst expression.
+   *
+   * @param fun
+   *   Proto representation of the Scalar Scalar user-defined function.
+   * @return
+   *   ScalaUDF.
+   */
+  private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
+    val udf = fun.getScalarScalaUdf
+    val udfPacket =
+      Utils.deserialize[UdfPacket](udf.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+    ScalaUDF(
+      function = udfPacket.function,
+      dataType = udfPacket.outputEncoder.dataType,
+      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+      inputEncoders = udfPacket.inputEncoders.map(e => Option(ExpressionEncoder(e))),
+      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
+      udfName = Option(fun.getFunctionName),
+      nullable = udf.getNullable,
+      udfDeterministic = fun.getDeterministic)
   }
 
   /**
@@ -845,7 +873,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    * @return
    *   PythonUDF.
    */
-  private def transformPythonUDF(fun: proto.ScalarInlineUserDefinedFunction): PythonUDF = {
+  private def transformPythonUDF(fun: proto.CommonInlineUserDefinedFunction): PythonUDF = {
     val udf = fun.getPythonUdf
     PythonUDF(
       name = fun.getFunctionName,
@@ -1381,6 +1409,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         handleCreateViewCommand(command.getCreateDataframeView)
+      case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
+        handleWriteOperationV2(command.getWriteOperationV2)
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
@@ -1516,6 +1546,73 @@ class SparkConnectPlanner(val session: SparkSession) {
         throw new UnsupportedOperationException(
           "WriteOperation:SaveTypeCase not supported "
             + s"${writeOperation.getSaveTypeCase.getNumber}")
+    }
+  }
+
+  /**
+   * Transforms the write operation and executes it.
+   *
+   * The input write operation contains a reference to the input plan and transforms it to the
+   * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
+   * parameters of the WriteOperation into the corresponding methods calls.
+   *
+   * @param writeOperation
+   */
+  def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+    // Transform the input plan into the logical plan.
+    val planner = new SparkConnectPlanner(session)
+    val plan = planner.transformRelation(writeOperation.getInput)
+    // And create a Dataset from the plan.
+    val dataset = Dataset.ofRows(session, logicalPlan = plan)
+
+    val w = dataset.writeTo(table = writeOperation.getTableName)
+
+    if (writeOperation.getOptionsCount > 0) {
+      writeOperation.getOptionsMap.asScala.foreach { case (key, value) => w.option(key, value) }
+    }
+
+    if (writeOperation.getTablePropertiesCount > 0) {
+      writeOperation.getTablePropertiesMap.asScala.foreach { case (key, value) =>
+        w.tableProperty(key, value)
+      }
+    }
+
+    if (writeOperation.getPartitioningColumnsCount > 0) {
+      val names = writeOperation.getPartitioningColumnsList.asScala
+        .map(transformExpression)
+        .map(Column(_))
+        .toSeq
+      w.partitionedBy(names.head, names.tail.toSeq: _*)
+    }
+
+    writeOperation.getMode match {
+      case proto.WriteOperationV2.Mode.MODE_CREATE =>
+        if (writeOperation.getProvider != null) {
+          w.using(writeOperation.getProvider).create()
+        } else {
+          w.create()
+        }
+      case proto.WriteOperationV2.Mode.MODE_OVERWRITE =>
+        w.overwrite(Column(transformExpression(writeOperation.getOverwriteCondition)))
+      case proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS =>
+        w.overwritePartitions()
+      case proto.WriteOperationV2.Mode.MODE_APPEND =>
+        w.append()
+      case proto.WriteOperationV2.Mode.MODE_REPLACE =>
+        if (writeOperation.getProvider != null) {
+          w.using(writeOperation.getProvider).replace()
+        } else {
+          w.replace()
+        }
+      case proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE =>
+        if (writeOperation.getProvider != null) {
+          w.using(writeOperation.getProvider).createOrReplace()
+        } else {
+          w.createOrReplace()
+        }
+      case _ =>
+        throw new UnsupportedOperationException(
+          "WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
     }
   }
 

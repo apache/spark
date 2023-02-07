@@ -51,15 +51,15 @@ on:
 jobs:
   precondition:
     name: Check changes
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: >-
         ${{
-          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
-          || 'dongjoon/apache-spark-github-action-image:20220207'
+          ((inputs.branch == 'branch-3.2' || inputs.branch == 'branch-3.3') && 'dongjoon/apache-spark-github-action-image:20220207')
+          || steps.infra-image-outputs.outputs.image_url
         }}
     steps:
     - name: Checkout Spark repository
@@ -127,8 +127,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).build == 'true'
-    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -269,12 +268,12 @@ jobs:
   infra-image:
     name: "Base image build"
     needs: precondition
-    # Currently, only enable docker build from cache for `master` branch jobs
+    # Currently, enable docker build from cache for `master` and branch (since 3.4) jobs
     if: >-
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
-      inputs.branch == 'master'
+      (inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3')
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -319,7 +318,7 @@ jobs:
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
     if: always() && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     strategy:
@@ -428,7 +427,7 @@ jobs:
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
     if: always() && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     env:
@@ -500,12 +499,13 @@ jobs:
     # always run if lint == 'true', even infra-image is skip (such as non-master job)
     if: always() && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, dependencies and documentation generation
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
+      GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     steps:
@@ -521,6 +521,7 @@ jobs:
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
@@ -576,7 +577,7 @@ jobs:
     - name: Install dependencies for Python code generation check
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.12.0/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.13.1/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
@@ -623,6 +624,12 @@ jobs:
       run: ./dev/lint-r
     - name: Run documentation build
       run: |
+        if [ -f "./dev/is-changed.py" ]; then
+          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
+          pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
+          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
+        fi
         cd docs
         bundle exec jekyll build
 
@@ -636,7 +643,7 @@ jobs:
         java:
           - 11
           - 17
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -686,7 +693,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).scala-213 == 'true'
     name: Scala 2.13 build with SBT
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -733,6 +740,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
+    # Pin to 'Ubuntu 20.04' due to 'databricks/tpcds-kit' compilation
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
@@ -831,7 +839,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -896,7 +904,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v3

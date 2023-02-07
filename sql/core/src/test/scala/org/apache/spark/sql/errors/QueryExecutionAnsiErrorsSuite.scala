@@ -18,7 +18,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark._
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.ByteType
@@ -176,6 +176,41 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
             "columnName" -> "`i`")
         )
       }
+    }
+  }
+
+  test("SPARK-42286: CheckOverflowInTableInsert with CaseWhen should throw an exception") {
+    val caseWhen = CaseWhen(
+      Seq((Literal(true), Cast(Literal.apply(12345678901234567890D), ByteType))), None)
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        CheckOverflowInTableInsert(caseWhen, "col").eval(null)
+      }.asInstanceOf[SparkThrowable],
+      errorClass = "CAST_OVERFLOW",
+      parameters = Map("value" -> "1.2345678901234567E19D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> ("\"TINYINT\""),
+        "ansiConfig" -> ansiConf)
+    )
+  }
+
+  test("SPARK-42286: End-to-end query with Case When throwing CAST_OVERFLOW exception") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (x double) USING parquet")
+      sql("insert into t1 values (1.2345678901234567E19D)")
+      sql("CREATE TABLE t2 (x tinyint) USING parquet")
+      val insertCmd = "insert into t2 select 0 - (case when x = 1.2345678901234567E19D " +
+        "then 1.2345678901234567E19D else x end) from t1 where x = 1.2345678901234567E19D;"
+      checkError(
+        exception = intercept[SparkException] {
+          sql(insertCmd).collect()
+        }.getCause.getCause.asInstanceOf[SparkThrowable],
+        errorClass = "CAST_OVERFLOW",
+        parameters = Map("value" -> "-1.2345678901234567E19D",
+          "sourceType" -> "\"DOUBLE\"",
+          "targetType" -> "\"TINYINT\"",
+          "ansiConfig" -> ansiConf),
+        sqlState = "22003")
     }
   }
 

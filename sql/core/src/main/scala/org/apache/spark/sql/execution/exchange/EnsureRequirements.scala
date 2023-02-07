@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.collection.Utils
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -198,12 +198,9 @@ case class EnsureRequirements(
                 // Check if the two children are partition keys compatible. If so, find the
                 // common set of partition values, and adjust the plan accordingly.
                 if (leftSpec.areKeysCompatible(rightSpec)) {
-                  val leftPartValues = leftSpec.partitioning.partitionValues
-                  val rightPartValues = rightSpec.partitioning.partitionValues
-
-                  val mergedPartValues = Utils.mergeOrdered(
-                    Seq(leftPartValues, rightPartValues))(leftSpec.ordering).toSeq.distinct
-
+                  val mergedPartValues = InternalRowComparableWrapper.mergePartitions(
+                    leftSpec.partitioning, rightSpec.partitioning,
+                    leftSpec.partitioning.expressions)
                   // Now we need to push-down the common partition key to the scan in each child
                   children = children.zipWithIndex.map {
                     case (child, idx) if childrenIndexes.contains(idx) =>

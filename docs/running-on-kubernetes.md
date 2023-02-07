@@ -590,7 +590,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.master</code></td>
   <td><code>https://kubernetes.default.svc</code></td>
   <td>
-    The internal Kubernetes master (API server) address to be used for driver to request executors.
+    The internal Kubernetes master (API server) address to be used for driver to request executors or
+    'local[*]' for driver-pod-only mode.
   </td>
   <td>3.0.0</td>
 </tr>

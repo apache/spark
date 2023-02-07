@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import org.antlr.v4.runtime.ParserRuleContext
 
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -111,13 +113,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
   }
 
-  def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
-      messageParameters = Map.empty,
-      ctx)
-  }
-
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
@@ -165,10 +160,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def naturalCrossJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
+  def incompatibleJoinTypesError(
+      joinType1: String, joinType2: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
-      messageParameters = Map.empty,
+      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      messageParameters = Map(
+        "joinType1" -> joinType1.toUpperCase(Locale.ROOT),
+        "joinType2" -> joinType2.toUpperCase(Locale.ROOT)),
       ctx = ctx)
   }
 
@@ -290,6 +288,27 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
       ctx)
+  }
+
+  def nestedTypeMissingElementTypeError(
+      dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+    dataType match {
+      case "array" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+          messageParameters = Map("elementType" -> "<INT>"),
+          ctx)
+      case "struct" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+          messageParameters = Map.empty,
+          ctx)
+      case "map" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+          messageParameters = Map.empty,
+          ctx)
+    }
   }
 
   def partitionTransformNotExpectedError(

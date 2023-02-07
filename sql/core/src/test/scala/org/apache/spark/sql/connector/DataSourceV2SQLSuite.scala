@@ -2890,6 +2890,33 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("DESCRIBE TABLE EXTENDED of a V2 table with a default column value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("t") {
+        spark.sql(s"CREATE TABLE t (id bigint default 42) USING $v2Source")
+        val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
+        assert(descriptionDf.schema.map { field =>
+          (field.name, field.dataType)
+        } === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
+        QueryTest.checkAnswer(
+          descriptionDf.filter(
+            "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
+              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
+              "'Type', '_partition', ''))"),
+          Seq(
+            Row("# Detailed Table Information", "", ""),
+            Row("# Column Default Values", "", ""),
+            Row("# Metadata Columns", "", ""),
+            Row("id", "bigint", "42"),
+            Row("id", "bigint", null)
+          ))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     checkError(
       exception = intercept[AnalysisException] {

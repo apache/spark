@@ -14,45 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
-import tempfile
 
 from pyspark.errors import PySparkTypeError
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.utils import ReusedPySparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.errors import SparkConnectAnalysisException, SparkConnectException
 
-if should_test_connect:
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
-
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectFuncTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
-    """Parent test fixture class for all Spark Connect related
-    test cases."""
+class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
+    """These test cases exercise the interface to the proto plan
+    generation but do not call Spark."""
 
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        cls.hive_available = True
-        # Create the new Spark Session
-        cls.spark = SparkSession(cls.sc)
-        # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
+        super(SparkConnectFunctionTests, cls).setUpClass()
+        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
+        # PySpark libraries.
+        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark sesion.
+        cls.spark = PySparkSession._instantiatedSession
+        assert cls.spark is not None
 
     @classmethod
     def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-
-
-class SparkConnectFunctionTests(SparkConnectFuncTestCase):
-    """These test cases exercise the interface to the proto plan
-    generation but do not call Spark."""
+        cls.spark = cls.connect  # Stopping Spark Connect closes the session in JVM at the server.
+        super(SparkConnectFunctionTests, cls).setUpClass()
+        del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.dataframe import DataFrame as SDF
@@ -170,6 +162,15 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             CF.broadcast(cdf1).join(CF.broadcast(cdf2), on="a").toPandas(),
             SF.broadcast(sdf1).join(SF.broadcast(sdf2), on="a").toPandas(),
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.broadcast(cdf.a)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_DATAFRAME",
+            message_parameters={"arg_name": "df", "arg_type": "Column"},
         )
 
     def test_normal_functions(self):
@@ -1176,6 +1177,24 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.slice(sdf.a, 1, 2), SF.slice("c", 2, 3)).toPandas(),
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.slice(cdf.a, 1.0, 2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "start", "arg_type": "float"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.slice(cdf.a, 1, 2.0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "length", "arg_type": "float"},
+        )
+
         # test sort_array
         self.assert_eq(
             cdf.select(CF.sort_array(cdf.a, True), CF.sort_array("c", False)).toPandas(),
@@ -1767,6 +1786,15 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.from_json("a", s_schema, {"mode": "FAILFAST"})),
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.from_json("a", [c_schema])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_DATATYPE_OR_STRING",
+            message_parameters={"arg_name": "schema", "arg_type": "list"},
+        )
+
         # test get_json_object
         self.assert_eq(
             cdf.select(
@@ -2163,6 +2191,24 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             truncate=100,
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.window("date", "15 seconds", 10, "5 seconds")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "slideDuration", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.window("date", "15 seconds", "10 seconds", 5)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "startTime", "arg_type": "int"},
+        )
+
         # test session_window
         self.compare_by_show(
             cdf.select(CF.session_window("date", "15 seconds")),
@@ -2306,6 +2352,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.withColumn("A", CF.udf(lambda x: x + 1)(cdf.a)).toPandas(),
             sdf.withColumn("A", SF.udf(lambda x: x + 1)(sdf.a)).toPandas(),
+        )
+        self.assert_eq(  # returnType as DDL strings
+            cdf.withColumn("C", CF.udf(lambda x: len(x), "int")(cdf.c)).toPandas(),
+            sdf.withColumn("C", SF.udf(lambda x: len(x), "int")(sdf.c)).toPandas(),
+        )
+        self.assert_eq(  # returnType as DataType
+            cdf.withColumn("C", CF.udf(lambda x: len(x), IntegerType())(cdf.c)).toPandas(),
+            sdf.withColumn("C", SF.udf(lambda x: len(x), IntegerType())(sdf.c)).toPandas(),
         )
 
         # as a decorator

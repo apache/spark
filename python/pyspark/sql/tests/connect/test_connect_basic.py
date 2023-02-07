@@ -17,12 +17,14 @@
 
 import array
 import datetime
+import os
 import unittest
 import shutil
 import tempfile
+from collections import defaultdict
 
-from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.sql import SparkSession, Row
+from pyspark.errors import PySparkTypeError
+from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -33,9 +35,19 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
-from pyspark.testing.utils import ReusedPySparkTestCase
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+
+from pyspark.testing.sqlutils import (
+    SQLTestUtils,
+    PythonOnlyUDT,
+    ExamplePoint,
+    PythonOnlyPoint,
+)
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    ReusedConnectTestCase,
+    connect_requirement_message,
+)
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.errors import (
     SparkConnectException,
     SparkConnectAnalysisException,
@@ -50,29 +62,34 @@ if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
+    from pyspark.sql.connect.client import Retrying
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
+class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        cls.hive_available = True
-        # Create the new Spark Session
-        cls.spark = SparkSession(cls.sc)
+        super(SparkConnectSQLTestCase, cls).setUpClass()
+        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
+        # PySpark libraries.
+        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
+
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
+        cls.spark = PySparkSession._instantiatedSession
+        assert cls.spark is not None
+
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.testDataStr = [Row(key=str(i)) for i in range(100)]
-        cls.df = cls.sc.parallelize(cls.testData).toDF()
-        cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
+        cls.df = cls.spark.sparkContext.parallelize(cls.testData).toDF()
+        cls.df_text = cls.spark.sparkContext.parallelize(cls.testDataStr).toDF()
 
         cls.tbl_name = "test_connect_basic_table_1"
         cls.tbl_name2 = "test_connect_basic_table_2"
@@ -87,13 +104,16 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
 
     @classmethod
     def tearDownClass(cls):
-        cls.spark_connect_clean_up_test_data()
-        ReusedPySparkTestCase.tearDownClass()
+        try:
+            cls.spark_connect_clean_up_test_data()
+            # Stopping Spark Connect closes the session in JVM at the server.
+            cls.spark = cls.connect
+            del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
+        finally:
+            super(SparkConnectSQLTestCase, cls).tearDownClass()
 
     @classmethod
     def spark_connect_load_test_data(cls):
-        # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
@@ -698,6 +718,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_dataframe_with_coercion(self):
+        data1 = [[1.33, 1], ["2.1", 1]]
+        data2 = [[True, 1], ["false", 1]]
+
+        for data in [data1, data2]:
+            cdf = self.connect.createDataFrame(data, ["a", "b"])
+            sdf = self.spark.createDataFrame(data, ["a", "b"])
+
+            self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_nested_type_create_from_rows(self):
         data1 = [Row(a=1, b=Row(c=2, d=Row(e=3, f=Row(g=4, h=Row(i=5)))))]
@@ -1745,8 +1776,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
-        with self.assertRaisesRegex(TypeError, "key must be float, int, or string"):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.stat.sampleBy(cdf.key, fractions={0: 0.1, None: 0.2}, seed=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+            message_parameters={
+                "arg_name": "fractions",
+                "arg_type": "dict",
+                "allowed_types": "float, int, str",
+                "return_type": "NoneType",
+            },
+        )
 
         with self.assertRaises(SparkConnectException):
             cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 1.2}, seed=0).show()
@@ -1940,6 +1982,27 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         ndf = self.connect.read.table("parquet_test")
         self.assertEqual(set(df.collect()), set(ndf.collect()))
+
+    def test_writeTo_operations(self):
+        # SPARK-42002: Implement DataFrameWriterV2
+        import datetime
+        from pyspark.sql.connect.functions import col, years, months, days, hours, bucket
+
+        df = self.connect.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
+        )
+        writer = df.writeTo("table1")
+        self.assertIsInstance(writer.option("property", "value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.options(property="value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.tableProperty("foo", "bar"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(years("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(months("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(days("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours("ts")), DataFrameWriterV2)
 
     def test_agg_with_avg(self):
         # SPARK-41325: groupby.avg()
@@ -2514,6 +2577,62 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).collect(),
         )
 
+    def test_simple_udt_from_read(self):
+        from pyspark.ml.linalg import Matrices, Vectors
+
+        with tempfile.TemporaryDirectory() as d:
+            path1 = f"{d}/df1.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
+                schema=StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            ).write.parquet(path1)
+
+            path2 = f"{d}/df2.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, [PythonOnlyPoint(float(i), float(i))]) for i in range(10)],
+                schema=StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT())),
+            ).write.parquet(path2)
+
+            path3 = f"{d}/df3.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, {i % 3: PythonOnlyPoint(float(i + 1), float(i + 1))}) for i in range(10)],
+                schema=StructType()
+                .add("key", LongType())
+                .add("val", MapType(LongType(), PythonOnlyUDT())),
+            ).write.parquet(path3)
+
+            path4 = f"{d}/df4.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
+                schema=StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            ).write.parquet(path4)
+
+            path5 = f"{d}/df5.parquet"
+            self.spark.createDataFrame(
+                [Row(label=1.0, point=ExamplePoint(1.0, 2.0))]
+            ).write.parquet(path5)
+
+            path6 = f"{d}/df6.parquet"
+            self.spark.createDataFrame(
+                [(Vectors.dense(1.0, 2.0, 3.0),), (Vectors.sparse(3, {1: 1.0, 2: 5.5}),)],
+                ["vec"],
+            ).write.parquet(path6)
+
+            path7 = f"{d}/df7.parquet"
+            self.spark.createDataFrame(
+                [
+                    (Matrices.dense(3, 2, [0, 1, 4, 5, 9, 10]),),
+                    (Matrices.sparse(1, 1, [0, 1], [0], [2.0]),),
+                ],
+                ["mat"],
+            ).write.parquet(path7)
+
+            for path in [path1, path2, path3, path4, path5, path6, path7]:
+                self.assertEqual(
+                    self.connect.read.parquet(path).schema,
+                    self.spark.read.parquet(path).schema,
+                )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
@@ -2532,7 +2651,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "_repr_html_",
             "semanticHash",
             "sameSemantics",
-            "writeTo",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
@@ -2584,7 +2702,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_unsupported_io_functions(self):
         # SPARK-41964: Disable unsupported functions.
-        # DataFrameWriterV2 is also not implemented yet
         df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
 
         for f in ("jdbc",):
@@ -2597,7 +2714,119 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class ChannelBuilderTests(ReusedPySparkTestCase):
+class ClientTests(unittest.TestCase):
+    def test_retry_error_handling(self):
+        # Helper class for wrapping the test.
+        class TestError(grpc.RpcError, Exception):
+            def __init__(self, code: grpc.StatusCode):
+                self._code = code
+
+            def code(self):
+                return self._code
+
+        def stub(retries, w, code):
+            w["attempts"] += 1
+            if w["attempts"] < retries:
+                w["raised"] += 1
+                raise TestError(code)
+
+        # Check that max_retries 1 is only one retry so two attempts.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=1,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(2, call_wrap["attempts"])
+        self.assertEqual(1, call_wrap["raised"])
+
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: True,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
+        # Exceed the retries.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: True,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+                initial_backoff=50,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertTrue(call_wrap["attempts"] < 5)
+        self.assertEqual(call_wrap["raised"], 3)
+
+        # Check that only specific exceptions are retried.
+        # Check that if we have less than 4 retries all is ok.
+        call_wrap = defaultdict(int)
+        for attempt in Retrying(
+            can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+            max_retries=4,
+            backoff_multiplier=1,
+            initial_backoff=1,
+            max_backoff=10,
+        ):
+            with attempt:
+                stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 1)
+
+        # Exceed the retries.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=2,
+                max_backoff=50,
+                backoff_multiplier=1,
+                initial_backoff=50,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
+
+        self.assertTrue(call_wrap["attempts"] < 4)
+        self.assertEqual(call_wrap["raised"], 3)
+
+        # Test that another error is always thrown.
+        call_wrap = defaultdict(int)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(
+                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
+                max_retries=4,
+                backoff_multiplier=1,
+                initial_backoff=1,
+                max_backoff=10,
+            ):
+                with attempt:
+                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(call_wrap["attempts"], 1)
+        self.assertEqual(call_wrap["raised"], 1)
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ChannelBuilderTests(unittest.TestCase):
     def test_invalid_connection_strings(self):
         invalid = [
             "scc://host:12",

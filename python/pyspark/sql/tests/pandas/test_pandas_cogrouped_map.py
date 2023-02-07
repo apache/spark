@@ -18,8 +18,9 @@
 import unittest
 from typing import cast
 
-from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
+from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf, sum
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
+from pyspark.sql.window import Window
 from pyspark.errors import IllegalArgumentException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -364,6 +365,57 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         row = row.join(row).first()
 
         self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
+
+    def test_with_window_function(self):
+        # SPARK-42168: a window function with same partition keys but differing key order
+        ids = 2
+        days = 100
+        vals = 10000
+        parts = 10
+
+        id_df = self.spark.range(ids)
+        day_df = self.spark.range(days).withColumnRenamed("id", "day")
+        vals_df = self.spark.range(vals).withColumnRenamed("id", "value")
+        df = id_df.join(day_df).join(vals_df)
+
+        left_df = df.withColumnRenamed("value", "left").repartition(parts).cache()
+        # SPARK-42132: this bug requires us to alias all columns from df here
+        right_df = (
+            df.select(col("id").alias("id"), col("day").alias("day"), col("value").alias("right"))
+            .repartition(parts)
+            .cache()
+        )
+
+        # note the column order is different to the groupBy("id", "day") column order below
+        window = Window.partitionBy("day", "id")
+
+        left_grouped_df = left_df.groupBy("id", "day")
+        right_grouped_df = right_df.withColumn("day_sum", sum(col("day")).over(window)).groupBy(
+            "id", "day"
+        )
+
+        def cogroup(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+            return pd.DataFrame(
+                [
+                    {
+                        "id": left["id"][0]
+                        if not left.empty
+                        else (right["id"][0] if not right.empty else None),
+                        "day": left["day"][0]
+                        if not left.empty
+                        else (right["day"][0] if not right.empty else None),
+                        "lefts": len(left.index),
+                        "rights": len(right.index),
+                    }
+                ]
+            )
+
+        df = left_grouped_df.cogroup(right_grouped_df).applyInPandas(
+            cogroup, schema="id long, day long, lefts integer, rights integer"
+        )
+
+        actual = df.orderBy("id", "day").take(days)
+        self.assertEqual(actual, [Row(0, day, vals, vals) for day in range(days)])
 
     @staticmethod
     def _test_with_key(left, right, isLeft):
