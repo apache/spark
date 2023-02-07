@@ -40,7 +40,7 @@ object functions {
    * Returns a [[Column]] based on the given column name.
    *
    * @group normal_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def col(colName: String): Column = Column(colName)
 
