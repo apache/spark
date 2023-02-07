@@ -71,6 +71,9 @@ class Catalog(google.protobuf.message.Message):
     DROP_TEMP_VIEW_FIELD_NUMBER: builtins.int
     DROP_GLOBAL_TEMP_VIEW_FIELD_NUMBER: builtins.int
     RECOVER_PARTITIONS_FIELD_NUMBER: builtins.int
+    IS_CACHED_FIELD_NUMBER: builtins.int
+    CACHE_TABLE_FIELD_NUMBER: builtins.int
+    UNCACHE_TABLE_FIELD_NUMBER: builtins.int
     CLEAR_CACHE_FIELD_NUMBER: builtins.int
     REFRESH_TABLE_FIELD_NUMBER: builtins.int
     REFRESH_BY_PATH_FIELD_NUMBER: builtins.int
@@ -112,14 +115,13 @@ class Catalog(google.protobuf.message.Message):
     @property
     def recover_partitions(self) -> global___RecoverPartitions: ...
     @property
-    def clear_cache(self) -> global___ClearCache:
-        """TODO(SPARK-41612): Support Catalog.isCached
-        IsCached is_cached = 18;
-        TODO(SPARK-41600): Support Catalog.cacheTable
-        CacheTable cache_table = 19;
-        TODO(SPARK-41623): Support Catalog.uncacheTable
-        UncacheTable uncache_table = 20;
-        """
+    def is_cached(self) -> global___IsCached: ...
+    @property
+    def cache_table(self) -> global___CacheTable: ...
+    @property
+    def uncache_table(self) -> global___UncacheTable: ...
+    @property
+    def clear_cache(self) -> global___ClearCache: ...
     @property
     def refresh_table(self) -> global___RefreshTable: ...
     @property
@@ -150,6 +152,9 @@ class Catalog(google.protobuf.message.Message):
         drop_temp_view: global___DropTempView | None = ...,
         drop_global_temp_view: global___DropGlobalTempView | None = ...,
         recover_partitions: global___RecoverPartitions | None = ...,
+        is_cached: global___IsCached | None = ...,
+        cache_table: global___CacheTable | None = ...,
+        uncache_table: global___UncacheTable | None = ...,
         clear_cache: global___ClearCache | None = ...,
         refresh_table: global___RefreshTable | None = ...,
         refresh_by_path: global___RefreshByPath | None = ...,
@@ -160,6 +165,8 @@ class Catalog(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "cache_table",
+            b"cache_table",
             "cat_type",
             b"cat_type",
             "clear_cache",
@@ -186,6 +193,8 @@ class Catalog(google.protobuf.message.Message):
             b"get_function",
             "get_table",
             b"get_table",
+            "is_cached",
+            b"is_cached",
             "list_catalogs",
             b"list_catalogs",
             "list_columns",
@@ -208,11 +217,15 @@ class Catalog(google.protobuf.message.Message):
             b"set_current_database",
             "table_exists",
             b"table_exists",
+            "uncache_table",
+            b"uncache_table",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "cache_table",
+            b"cache_table",
             "cat_type",
             b"cat_type",
             "clear_cache",
@@ -239,6 +252,8 @@ class Catalog(google.protobuf.message.Message):
             b"get_function",
             "get_table",
             b"get_table",
+            "is_cached",
+            b"is_cached",
             "list_catalogs",
             b"list_catalogs",
             "list_columns",
@@ -261,6 +276,8 @@ class Catalog(google.protobuf.message.Message):
             b"set_current_database",
             "table_exists",
             b"table_exists",
+            "uncache_table",
+            b"uncache_table",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -283,6 +300,9 @@ class Catalog(google.protobuf.message.Message):
         "drop_temp_view",
         "drop_global_temp_view",
         "recover_partitions",
+        "is_cached",
+        "cache_table",
+        "uncache_table",
         "clear_cache",
         "refresh_table",
         "refresh_by_path",
@@ -855,30 +875,65 @@ class RecoverPartitions(google.protobuf.message.Message):
 
 global___RecoverPartitions = RecoverPartitions
 
+class IsCached(google.protobuf.message.Message):
+    """See `spark.catalog.isCached`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
+
+global___IsCached = IsCached
+
+class CacheTable(google.protobuf.message.Message):
+    """See `spark.catalog.cacheTable`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
+
+global___CacheTable = CacheTable
+
+class UncacheTable(google.protobuf.message.Message):
+    """See `spark.catalog.uncacheTable`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
+
+global___UncacheTable = UncacheTable
+
 class ClearCache(google.protobuf.message.Message):
-    """TODO(SPARK-41612): Support Catalog.isCached
-    // See `spark.catalog.isCached`
-    message IsCached {
-     // (Required)
-     string table_name = 1;
-    }
-
-    TODO(SPARK-41600): Support Catalog.cacheTable
-    // See `spark.catalog.cacheTable`
-    message CacheTable {
-     // (Required)
-     string table_name = 1;
-    }
-
-    TODO(SPARK-41623): Support Catalog.uncacheTable
-    // See `spark.catalog.uncacheTable`
-    message UncacheTable {
-     // (Required)
-     string table_name = 1;
-    }
-
-    See `spark.catalog.clearCache`
-    """
+    """See `spark.catalog.clearCache`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
