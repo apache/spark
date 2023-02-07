@@ -99,6 +99,12 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_RECOGNIZE_HIVE_TYPE" : {
+    "message" : [
+      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
+    ],
+    "sqlState" : "429BB"
+  },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
@@ -500,6 +506,12 @@
     ],
     "sqlState" : "22003"
   },
+  "EMPTY_JSON_FIELD_VALUE" : {
+    "message" : [
+      "Failed to parse an empty string for data type <dataType>."
+    ],
+    "sqlState" : "42604"
+  },
   "ENCODER_NOT_FOUND" : {
     "message" : [
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at https://spark.apache.org/docs/latest/sql-ref-datatypes.html."
@@ -592,6 +604,12 @@
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
     ],
     "sqlState" : "42818"
+  },
+  "INCOMPATIBLE_COLUMN_TYPE" : {
+    "message" : [
+      "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
+    ],
+    "sqlState" : "42825"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
@@ -4231,11 +4249,6 @@
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2135" : {
-    "message" : [
-      "Failed to parse an empty string for data type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2138" : {
     "message" : [
       "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
@@ -4468,11 +4481,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2188" : {
-    "message" : [
-      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2189" : {
@@ -5236,11 +5244,6 @@
   "_LEGACY_ERROR_TEMP_2428" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2430" : {
-    "message" : [
-      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2431" : {

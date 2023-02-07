@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -133,18 +133,21 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
         // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
         None
       } else {
-        val partKeyType = expressions.map(_.dataType)
-
-        val groupedPartitions = results.groupBy(_._1).toSeq.map { case (key, s) =>
-          (key, s.map(_._2))
-        }
+        val groupedPartitions = inputPartitions.map(p =>
+            (InternalRowComparableWrapper(p.asInstanceOf[HasPartitionKey], expressions), p))
+          .groupBy(_._1)
+          .toSeq
+          .map {
+            case (key, s) => (key.row, s.map(_._2))
+          }
 
         // also sort the input partitions according to their partition key order. This ensures
         // a canonical order from both sides of a bucketed join, for example.
-        val keyOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
-          RowOrdering.createNaturalAscendingOrdering(partKeyType).on(_._1)
+        val partitionDataTypes = expressions.map(_.dataType)
+        val partitionOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
+          RowOrdering.createNaturalAscendingOrdering(partitionDataTypes).on(_._1)
         }
-        Some(groupedPartitions.sorted(keyOrdering))
+        Some(groupedPartitions.sorted(partitionOrdering))
       }
     }
   }

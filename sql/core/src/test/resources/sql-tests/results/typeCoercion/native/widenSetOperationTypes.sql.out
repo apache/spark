@@ -86,14 +86,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "tinyint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -112,14 +113,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "tinyint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -138,14 +140,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "tinyint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -164,14 +167,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "tinyint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"TINYINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -262,14 +266,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "smallint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -288,14 +293,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "smallint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -314,14 +320,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "smallint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -340,14 +347,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "smallint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"SMALLINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -438,14 +446,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "int",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -464,14 +473,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "int",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -490,14 +500,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "int",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -516,14 +527,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "int",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -614,14 +626,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "bigint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -640,14 +653,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "bigint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -666,14 +680,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "bigint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -692,14 +707,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "bigint",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BIGINT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -790,14 +806,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "float",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -816,14 +833,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "float",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -842,14 +860,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "float",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -868,14 +887,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "float",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"FLOAT\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -966,14 +986,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "double",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -992,14 +1013,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "double",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1018,14 +1040,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "double",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1044,14 +1067,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "double",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"DOUBLE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1142,14 +1166,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "decimal(10,0)",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1168,14 +1193,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "decimal(10,0)",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1194,14 +1220,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "decimal(10,0)",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1220,14 +1247,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "decimal(10,0)",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1318,14 +1346,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "string",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"STRING\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1344,14 +1373,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "string",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"STRING\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1388,14 +1418,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "tinyint",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1414,14 +1445,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "smallint",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1440,14 +1472,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "int",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1466,14 +1499,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "bigint",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1492,14 +1526,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "float",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1518,14 +1553,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "double",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1544,14 +1580,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "decimal(10,0)",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1570,14 +1607,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "string",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1605,14 +1643,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1631,14 +1670,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1657,14 +1697,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "binary",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BINARY\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1683,14 +1724,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "tinyint",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1709,14 +1751,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "smallint",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1735,14 +1778,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "int",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1761,14 +1805,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "bigint",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1787,14 +1832,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "float",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1813,14 +1859,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "double",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1839,14 +1886,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "decimal(10,0)",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1865,14 +1913,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "string",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1891,14 +1940,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1925,14 +1975,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "timestamp",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1951,14 +2002,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "date",
-    "dt2" : "boolean",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BOOLEAN\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1977,14 +2029,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "tinyint",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2003,14 +2056,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "smallint",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2029,14 +2083,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "int",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2055,14 +2110,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "bigint",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2081,14 +2137,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "float",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2107,14 +2164,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "double",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2133,14 +2191,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "decimal(10,0)",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2168,14 +2227,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2194,14 +2254,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "timestamp",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"TIMESTAMP\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2238,14 +2299,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "tinyint",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2264,14 +2326,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "smallint",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2290,14 +2353,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "int",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2316,14 +2380,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "bigint",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2342,14 +2407,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "float",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2368,14 +2434,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "double",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2394,14 +2461,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "decimal(10,0)",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2429,14 +2497,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "binary",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2455,14 +2524,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "boolean",
-    "dt2" : "date",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DATE\"",
     "hint" : "",
     "operator" : "UNION",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",

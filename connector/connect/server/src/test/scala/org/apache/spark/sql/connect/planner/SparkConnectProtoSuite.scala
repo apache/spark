@@ -18,14 +18,17 @@ package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
 
+import scala.collection.JavaConverters._
+
 import com.google.protobuf.ByteString
 
 import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -34,9 +37,13 @@ import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, Metadata, ShortType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -644,6 +651,185 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     combinations.foreach { a =>
       assert(DataTypeProtoConverter.toSaveModeProto(a._1) == a._2)
       assert(DataTypeProtoConverter.toSaveMode(a._2) == a._1)
+    }
+  }
+
+  test("WriteTo with create") {
+    withTable("testcat.table_name") {
+      spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+
+      val rows = Seq(
+        new GenericInternalRow(Array(1L, UTF8String.fromString("a"))),
+        new GenericInternalRow(Array(2L, UTF8String.fromString("b"))),
+        new GenericInternalRow(Array(3L, UTF8String.fromString("c"))))
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+      val inputRows = rows.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+
+      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+
+      val cmd = localRelationV2.writeV2(
+        tableName = Some("testcat.table_name"),
+        mode = Some("MODE_CREATE"))
+      transform(cmd)
+
+      val outputRows = spark.table("testcat.table_name").collect()
+      assert(outputRows.length == 3)
+    }
+  }
+
+  test("WriteTo with create and using") {
+    val defaultOwnership = Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
+    withTable("testcat.table_name") {
+      spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+
+      val rows = Seq(
+        new GenericInternalRow(Array(1L, UTF8String.fromString("a"))),
+        new GenericInternalRow(Array(2L, UTF8String.fromString("b"))),
+        new GenericInternalRow(Array(3L, UTF8String.fromString("c"))))
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+      val inputRows = rows.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+
+      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+
+      val cmd = localRelationV2.writeV2(
+        tableName = Some("testcat.table_name"),
+        provider = Some("foo"),
+        mode = Some("MODE_CREATE"))
+      transform(cmd)
+
+      val outputRows = spark.table("testcat.table_name").collect()
+      assert(outputRows.length == 3)
+      val table = spark.sessionState.catalogManager
+        .catalog("testcat")
+        .asTableCatalog
+        .loadTable(Identifier.of(Array(), "table_name"))
+      assert(table.name === "testcat.table_name")
+      assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+      assert(table.partitioning.isEmpty)
+      assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
+    }
+  }
+
+  test("WriteTo with append") {
+    withTable("testcat.table_name") {
+      spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+
+      val rows = Seq(
+        new GenericInternalRow(Array(1L, UTF8String.fromString("a"))),
+        new GenericInternalRow(Array(2L, UTF8String.fromString("b"))),
+        new GenericInternalRow(Array(3L, UTF8String.fromString("c"))))
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+      val inputRows = rows.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+
+      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+
+      spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+
+      assert(spark.table("testcat.table_name").collect().isEmpty)
+
+      val cmd = localRelationV2.writeV2(
+        tableName = Some("testcat.table_name"),
+        mode = Some("MODE_APPEND"))
+      transform(cmd)
+
+      val outputRows = spark.table("testcat.table_name").collect()
+      assert(outputRows.length == 3)
+    }
+  }
+
+  test("WriteTo with overwrite") {
+    withTable("testcat.table_name") {
+      spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+
+      val rows1 = (1L to 3L).map { i =>
+        new GenericInternalRow(Array(i, UTF8String.fromString("" + (i - 1 + 'a').toChar)))
+      }
+      val rows2 = (4L to 7L).map { i =>
+        new GenericInternalRow(Array(i, UTF8String.fromString("" + (i - 1 + 'a').toChar)))
+      }
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+      val inputRows1 = rows1.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+      val inputRows2 = rows2.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+
+      val localRelation1V2 = createLocalRelationProto(schema.toAttributes, inputRows1)
+      val localRelation2V2 = createLocalRelationProto(schema.toAttributes, inputRows2)
+
+      spark.sql(
+        "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
+
+      assert(spark.table("testcat.table_name").collect().isEmpty)
+
+      val cmd1 = localRelation1V2.writeV2(
+        tableName = Some("testcat.table_name"),
+        mode = Some("MODE_APPEND"))
+      transform(cmd1)
+
+      val outputRows1 = spark.table("testcat.table_name").collect()
+      assert(outputRows1.length == 3)
+
+      val overwriteCondition = Expression
+        .newBuilder()
+        .setLiteral(Expression.Literal.newBuilder().setBoolean(true))
+        .build()
+
+      val cmd2 = localRelation2V2.writeV2(
+        tableName = Some("testcat.table_name"),
+        mode = Some("MODE_OVERWRITE"),
+        overwriteCondition = Some(overwriteCondition))
+      transform(cmd2)
+
+      val outputRows2 = spark.table("testcat.table_name").collect()
+      assert(outputRows2.length == 4)
+    }
+  }
+
+  test("WriteTo with overwritePartitions") {
+    withTable("testcat.table_name") {
+      spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+
+      val rows = (4L to 7L).map { i =>
+        new GenericInternalRow(Array(i, UTF8String.fromString("" + (i - 1 + 'a').toChar)))
+      }
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+      val inputRows = rows.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+
+      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+
+      spark.sql(
+        "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
+
+      assert(spark.table("testcat.table_name").collect().isEmpty)
+
+      val cmd = localRelationV2.writeV2(
+        tableName = Some("testcat.table_name"),
+        mode = Some("MODE_OVERWRITE_PARTITIONS"))
+      transform(cmd)
+
+      val outputRows = spark.table("testcat.table_name").collect()
+      assert(outputRows.length == 4)
     }
   }
 
