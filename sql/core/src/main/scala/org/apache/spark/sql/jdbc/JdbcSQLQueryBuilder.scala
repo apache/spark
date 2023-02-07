@@ -104,11 +104,9 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   /**
    * Constructs the GROUP BY clause that following dialect's SQL syntax.
    */
-  def withGroupByColumns(groupByColumns: Option[Array[String]]): JdbcSQLQueryBuilder = {
-    if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
-      // The GROUP BY columns should already be quoted by the caller side.
-      groupByClause = s"GROUP BY ${groupByColumns.get.mkString(", ")}"
-    }
+  def withGroupByColumns(groupByColumns: Array[String]): JdbcSQLQueryBuilder = {
+    // The GROUP BY columns should already be quoted by the caller side.
+    groupByClause = s"GROUP BY ${groupByColumns.mkString(", ")}"
 
     this
   }
@@ -151,6 +149,9 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
+  /**
+   * Build the final SQL query that following dialect's SQL syntax.
+   */
   def build(): String = {
     // Constructs the LIMIT clause that following dialect's SQL syntax.
     val limitClause = dialect.getLimitClause(limit)

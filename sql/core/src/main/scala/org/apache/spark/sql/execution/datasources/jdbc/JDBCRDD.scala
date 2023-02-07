@@ -255,12 +255,13 @@ private[jdbc] class JDBCRDD(
       .getJdbcSQLQueryBuilder(options)
       .withColumns(columns)
       .withPredicates(predicates, part)
-      .withGroupByColumns(groupByColumns)
       .withSortOrders(sortOrders)
       .withLimit(limit)
       .withOffset(offset)
 
-    val sqlText = sample.map(builder.withTableSample).getOrElse(builder).build()
+    val sqlText = groupByColumns.map(builder.withGroupByColumns).getOrElse(
+      sample.map(builder.withTableSample).getOrElse(builder)).build()
+
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
