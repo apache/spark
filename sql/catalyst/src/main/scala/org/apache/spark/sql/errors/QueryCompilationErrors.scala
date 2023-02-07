@@ -2915,14 +2915,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("expr" -> expr.sql))
   }
 
-  def cannotResolveColumnNameAmongFieldsError(
-      colName: String, fieldsStr: String, extraMsg: String): AnalysisException = {
+  def unresolvedColumnWithSuggestionError(
+      objectName: String, suggestion: String): AnalysisException = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1317",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       messageParameters = Map(
-        "colName" -> colName,
-        "fieldsStr" -> fieldsStr,
-        "extraMsg" -> extraMsg))
+        "objectName" -> toSQLId(objectName),
+        "proposal" -> suggestion
+      )
+    )
   }
 
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {

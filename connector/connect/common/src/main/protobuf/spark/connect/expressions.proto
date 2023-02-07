@@ -318,6 +318,8 @@ message PythonUDF {
   int32 eval_type = 2;
   // (Required) The encoded commands of the Python UDF
   bytes command = 3;
+  // (Required) Python version being used in the client.
+  string python_ver = 4;
 }
 
 message ScalarScalaUDF {
