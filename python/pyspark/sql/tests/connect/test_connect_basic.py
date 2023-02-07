@@ -62,6 +62,7 @@ if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql.connect.function_builder import udf
@@ -1982,6 +1983,27 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ndf = self.connect.read.table("parquet_test")
         self.assertEqual(set(df.collect()), set(ndf.collect()))
 
+    def test_writeTo_operations(self):
+        # SPARK-42002: Implement DataFrameWriterV2
+        import datetime
+        from pyspark.sql.connect.functions import col, years, months, days, hours, bucket
+
+        df = self.connect.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
+        )
+        writer = df.writeTo("table1")
+        self.assertIsInstance(writer.option("property", "value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.options(property="value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.tableProperty("foo", "bar"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(years("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(months("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(days("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours("ts")), DataFrameWriterV2)
+
     def test_agg_with_avg(self):
         # SPARK-41325: groupby.avg()
         df = (
@@ -2629,7 +2651,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "_repr_html_",
             "semanticHash",
             "sameSemantics",
-            "writeTo",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
@@ -2681,7 +2702,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_unsupported_io_functions(self):
         # SPARK-41964: Disable unsupported functions.
-        # DataFrameWriterV2 is also not implemented yet
         df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
 
         for f in ("jdbc",):

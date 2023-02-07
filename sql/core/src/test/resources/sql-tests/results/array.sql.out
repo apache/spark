@@ -432,6 +432,104 @@ NULL
 
 
 -- !query
+select array_insert(array(1, 2, 3), 3, 4)
+-- !query schema
+struct<array_insert(array(1, 2, 3), 3, 4):array<int>>
+-- !query output
+[1,2,4,3]
+
+
+-- !query
+select array_insert(array(2, 3, 4), 0, 1)
+-- !query schema
+struct<array_insert(array(2, 3, 4), 0, 1):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_insert(array(2, 3, 4), 1, 1)
+-- !query schema
+struct<array_insert(array(2, 3, 4), 1, 1):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_insert(array(1, 3, 4), -2, 2)
+-- !query schema
+struct<array_insert(array(1, 3, 4), -2, 2):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_insert(array(1, 2, 3), 3, "4")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"ARRAY\"",
+    "functionName" : "`array_insert`",
+    "leftType" : "\"ARRAY<INT>\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"array_insert(array(1, 2, 3), 3, 4)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "array_insert(array(1, 2, 3), 3, \"4\")"
+  } ]
+}
+
+
+-- !query
+select array_insert(cast(NULL as ARRAY<INT>), 1, 1)
+-- !query schema
+struct<array_insert(NULL, 1, 1):array<int>>
+-- !query output
+NULL
+
+
+-- !query
+select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4)
+-- !query schema
+struct<array_insert(array(1, 2, 3, NULL), CAST(NULL AS INT), 4):array<int>>
+-- !query output
+NULL
+
+
+-- !query
+select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT))
+-- !query schema
+struct<array_insert(array(1, 2, 3, NULL), 4, CAST(NULL AS INT)):array<int>>
+-- !query output
+[1,2,3,null,null]
+
+
+-- !query
+select array_insert(array(2, 3, NULL, 4), 5, 5)
+-- !query schema
+struct<array_insert(array(2, 3, NULL, 4), 5, 5):array<int>>
+-- !query output
+[2,3,null,4,5]
+
+
+-- !query
+select array_insert(array(2, 3, NULL, 4), -5, 1)
+-- !query schema
+struct<array_insert(array(2, 3, NULL, 4), -5, 1):array<int>>
+-- !query output
+[1,null,2,3,null,4]
+
+
+-- !query
 select array_compact(id) from values (1) as t(id)
 -- !query schema
 struct<>
