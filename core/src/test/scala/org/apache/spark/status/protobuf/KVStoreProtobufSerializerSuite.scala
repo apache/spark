@@ -1450,7 +1450,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("FsHistoryProviderMetadata") {
-    Seq( "file:/tmp/spark-events", null).foreach { logDir =>
+    Seq("file:/tmp/spark-events", null).foreach { logDir =>
       val input = FsHistoryProviderMetadata(
         version = 1L,
         uiVersion = 2L,
