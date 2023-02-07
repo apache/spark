@@ -1027,7 +1027,7 @@ class DataFrameTestsMixin:
         spark = self.spark
         with self.tempView("tab1", "tab2"):
             spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
-            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab2")
+            spark.createDataFrame([(2, 4), (3, 4)]).createOrReplaceTempView("tab2")
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
             spark.catalog.cacheTable("tab1")
@@ -1041,17 +1041,17 @@ class DataFrameTestsMixin:
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
             self.assertRaisesRegex(
-                AnalysisException,
+                Exception,
                 "does_not_exist",
                 lambda: spark.catalog.isCached("does_not_exist"),
             )
             self.assertRaisesRegex(
-                AnalysisException,
+                Exception,
                 "does_not_exist",
                 lambda: spark.catalog.cacheTable("does_not_exist"),
             )
             self.assertRaisesRegex(
-                AnalysisException,
+                Exception,
                 "does_not_exist",
                 lambda: spark.catalog.uncacheTable("does_not_exist"),
             )

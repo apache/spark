@@ -42,7 +42,6 @@ import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
-import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
 
@@ -60,13 +59,10 @@ class Command(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    CREATE_FUNCTION_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
     CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_V2_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
-    @property
-    def create_function(self) -> global___CreateScalarFunction: ...
     @property
     def write_operation(self) -> global___WriteOperation: ...
     @property
@@ -81,7 +77,6 @@ class Command(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        create_function: global___CreateScalarFunction | None = ...,
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
         write_operation_v2: global___WriteOperationV2 | None = ...,
@@ -94,8 +89,6 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
-            "create_function",
-            b"create_function",
             "extension",
             b"extension",
             "write_operation",
@@ -111,8 +104,6 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
-            "create_function",
-            b"create_function",
             "extension",
             b"extension",
             "write_operation",
@@ -124,130 +115,10 @@ class Command(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
     ) -> typing_extensions.Literal[
-        "create_function",
-        "write_operation",
-        "create_dataframe_view",
-        "write_operation_v2",
-        "extension",
+        "write_operation", "create_dataframe_view", "write_operation_v2", "extension"
     ] | None: ...
 
 global___Command = Command
-
-class CreateScalarFunction(google.protobuf.message.Message):
-    """Simple message that is used to create a scalar function based on the provided function body.
-
-    This message is used to register for example a Python UDF in the session catalog by providing
-    the serialized method body.
-
-    TODO(SPARK-40532) It is required to add the interpreter / language version to the command
-      parameters.
-    """
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class _FunctionLanguage:
-        ValueType = typing.NewType("ValueType", builtins.int)
-        V: typing_extensions.TypeAlias = ValueType
-
-    class _FunctionLanguageEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
-            CreateScalarFunction._FunctionLanguage.ValueType
-        ],
-        builtins.type,
-    ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        FUNCTION_LANGUAGE_UNSPECIFIED: CreateScalarFunction._FunctionLanguage.ValueType  # 0
-        FUNCTION_LANGUAGE_SQL: CreateScalarFunction._FunctionLanguage.ValueType  # 1
-        FUNCTION_LANGUAGE_PYTHON: CreateScalarFunction._FunctionLanguage.ValueType  # 2
-        FUNCTION_LANGUAGE_SCALA: CreateScalarFunction._FunctionLanguage.ValueType  # 3
-
-    class FunctionLanguage(_FunctionLanguage, metaclass=_FunctionLanguageEnumTypeWrapper): ...
-    FUNCTION_LANGUAGE_UNSPECIFIED: CreateScalarFunction.FunctionLanguage.ValueType  # 0
-    FUNCTION_LANGUAGE_SQL: CreateScalarFunction.FunctionLanguage.ValueType  # 1
-    FUNCTION_LANGUAGE_PYTHON: CreateScalarFunction.FunctionLanguage.ValueType  # 2
-    FUNCTION_LANGUAGE_SCALA: CreateScalarFunction.FunctionLanguage.ValueType  # 3
-
-    PARTS_FIELD_NUMBER: builtins.int
-    LANGUAGE_FIELD_NUMBER: builtins.int
-    TEMPORARY_FIELD_NUMBER: builtins.int
-    ARGUMENT_TYPES_FIELD_NUMBER: builtins.int
-    RETURN_TYPE_FIELD_NUMBER: builtins.int
-    SERIALIZED_FUNCTION_FIELD_NUMBER: builtins.int
-    LITERAL_STRING_FIELD_NUMBER: builtins.int
-    @property
-    def parts(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """(Required) Fully qualified name of the function including the catalog / schema names."""
-    language: global___CreateScalarFunction.FunctionLanguage.ValueType
-    """(Required) the function language."""
-    temporary: builtins.bool
-    """(Required) if this is a temporary function."""
-    @property
-    def argument_types(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.types_pb2.DataType
-    ]:
-        """(Optional) A list of argument types. Can be empty when the function does not take an argument."""
-    @property
-    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-        """(Required) the return type of the function."""
-    serialized_function: builtins.bytes
-    """As a raw string serialized:"""
-    literal_string: builtins.str
-    """As a code literal"""
-    def __init__(
-        self,
-        *,
-        parts: collections.abc.Iterable[builtins.str] | None = ...,
-        language: global___CreateScalarFunction.FunctionLanguage.ValueType = ...,
-        temporary: builtins.bool = ...,
-        argument_types: collections.abc.Iterable[pyspark.sql.connect.proto.types_pb2.DataType]
-        | None = ...,
-        return_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        serialized_function: builtins.bytes = ...,
-        literal_string: builtins.str = ...,
-    ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "function_definition",
-            b"function_definition",
-            "literal_string",
-            b"literal_string",
-            "return_type",
-            b"return_type",
-            "serialized_function",
-            b"serialized_function",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "argument_types",
-            b"argument_types",
-            "function_definition",
-            b"function_definition",
-            "language",
-            b"language",
-            "literal_string",
-            b"literal_string",
-            "parts",
-            b"parts",
-            "return_type",
-            b"return_type",
-            "serialized_function",
-            b"serialized_function",
-            "temporary",
-            b"temporary",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["function_definition", b"function_definition"]
-    ) -> typing_extensions.Literal["serialized_function", "literal_string"] | None: ...
-
-global___CreateScalarFunction = CreateScalarFunction
 
 class CreateDataFrameViewCommand(google.protobuf.message.Message):
     """A command that can create DataFrame global temp view or local temp view."""

@@ -122,7 +122,6 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
 
-        cls.connect.set_hook("register_udf", cls._udf_mock)
         cls.connect.set_hook("readTable", cls._read_table)
         cls.connect.set_hook("range", cls._session_range)
         cls.connect.set_hook("sql", cls._session_sql)
@@ -130,7 +129,6 @@ class PlanOnlyTestFixture(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.connect.drop_hook("register_udf")
         cls.connect.drop_hook("readTable")
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")

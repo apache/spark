@@ -818,7 +818,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan2 = DummySparkPlan(
       outputPartitioning = PartitioningCollection(Seq(
         KeyGroupedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4),
-        HashPartitioning(exprA :: exprC :: Nil, 4))
+        KeyGroupedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4))
       )
     )
     smjExec = SortMergeJoinExec(
