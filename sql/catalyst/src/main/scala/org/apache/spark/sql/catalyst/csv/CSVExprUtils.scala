@@ -21,28 +21,24 @@ import org.apache.commons.lang3.StringUtils
 
 object CSVExprUtils {
   /**
-   * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).
+   * Filter ignorable rows starting with `comment`.
    * This is currently being used in CSV reading path and CSV schema inference.
    */
-  def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+  def filterComment(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.filter { line =>
-        line.trim.nonEmpty && !line.startsWith(commentPrefix)
-      }
+      iter.dropWhile(_.startsWith(commentPrefix)
     } else {
-      iter.filter(_.trim.nonEmpty)
+      iter
     }
   }
 
   def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.dropWhile { line =>
-        line.trim.isEmpty || line.startsWith(commentPrefix)
-      }
+      iter.dropWhile(_.startsWith(commentPrefix)
     } else {
-      iter.dropWhile(_.trim.isEmpty)
+      iter
     }
   }
 
@@ -50,9 +46,9 @@ object CSVExprUtils {
    * Extracts header and moves iterator forward so that only data remains in it
    */
   def extractHeader(iter: Iterator[String], options: CSVOptions): Option[String] = {
-    val nonEmptyLines = skipComments(iter, options)
-    if (nonEmptyLines.hasNext) {
-      Some(nonEmptyLines.next())
+    val nonCommentLines = skipComments(iter, options)
+    if (nonCommentLines.hasNext) {
+      Some(nonCommentLines.next())
     } else {
       None
     }
