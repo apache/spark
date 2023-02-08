@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -677,7 +677,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         messageParameters = Map(
           "functionName" -> toSQLId(name),
           "expectedNum" -> expectedNumberOfParameters,
-          "actualNum" -> actualNumber.toString))
+          "actualNum" -> actualNumber.toString,
+          "docroot" -> SPARK_DOC_ROOT))
     } else {
       new AnalysisException(
         errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
@@ -2986,10 +2987,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("key" -> key))
   }
 
-  def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
+  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key)))
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {

@@ -22,6 +22,7 @@ import java.util.TimeZone
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
@@ -207,7 +208,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException](sql("RESET spark.executor.cores")),
       errorClass = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.executor.cores\"")
+      parameters = Map("key" -> "\"spark.executor.cores\"", "docroot" -> SPARK_DOC_ROOT)
     )
 
     // user defined settings

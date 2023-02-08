@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.errors
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -677,7 +678,8 @@ class QueryCompilationErrorsSuite
       parameters = Map(
         "functionName" -> "`cast`",
         "expectedNum" -> "0",
-        "actualNum" -> "1"),
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }
