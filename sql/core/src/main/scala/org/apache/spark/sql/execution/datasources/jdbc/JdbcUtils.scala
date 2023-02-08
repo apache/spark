@@ -947,7 +947,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         metaData.getDatabaseMajorVersion)(0))
     } else {
       if (!metaData.supportsTransactions) {
-        throw QueryExecutionErrors.transactionUnsupportedByJdbcServerError()
+        throw QueryExecutionErrors.multiActionAlterError(tableName)
       } else {
         conn.setAutoCommit(false)
         val statement = conn.createStatement

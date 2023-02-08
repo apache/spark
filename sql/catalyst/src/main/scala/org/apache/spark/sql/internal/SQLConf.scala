@@ -304,6 +304,14 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val PLAN_CHANGE_VALIDATION = buildConf("spark.sql.planChangeValidation")
+    .internal()
+    .doc("If true, Spark will validate all the plan changes made by analyzer/optimizer and other " +
+      "catalyst rules, to make sure every rule returns a valid plan")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
@@ -434,6 +442,16 @@ object SQLConf {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
+    buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
+      .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
+        " It can preserve the output partitioning and ordering." +
+        " Negative value means disable this optimization.")
+      .internal()
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(100)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
@@ -1111,13 +1129,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PARQUET_TIMESTAMP_NTZ_ENABLED =
-    buildConf("spark.sql.parquet.timestampNTZ.enabled")
-      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
-        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
-        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
-        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
-        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
+  val PARQUET_INFER_TIMESTAMP_NTZ_ENABLED =
+    buildConf("spark.sql.parquet.inferTimestampNTZ.enabled")
+      .doc("When enabled, Parquet timestamp columns with annotation isAdjustedToUTC = false " +
+        "are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet " +
+        "timestamp columns are inferred as TIMESTAMP_LTZ types. Note that Spark writes the " +
+        "output schema into Parquet's footer metadata on file writing and leverages it on file " +
+        "reading. Thus this configuration only affects the schema inference on Parquet files " +
+        "which are not written by Spark.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -1397,6 +1416,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
+    buildConf("spark.sql.sources.timestampNTZTypeInference.enabled")
+      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
+        "this config determines whether to choose the TimestampNTZ type if a column can be " +
+        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
+        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_ENABLED = buildConf("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
     .version("2.0.0")
@@ -1420,6 +1449,19 @@ object SQLConf {
         "values, Spark will calculate a superset of partition values and pushdown that info to " +
         "scan nodes, which will use empty partitions for the missing partition values on either " +
         "side. This could help to eliminate unnecessary shuffles")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
+      .doc("During a storage-partitioned join, whether to allow input partitions to be " +
+        "partially clustered, when both sides of the join are of KeyGroupedPartitioning. At " +
+        "planning time, Spark will pick the side with less data size based on table " +
+        "statistics, group and replicate them to match the other side. This is an optimization " +
+        "on skew join and can help to reduce data skewness when certain partitions are assigned " +
+        s"large amount of data. This config requires both ${V2_BUCKETING_ENABLED.key} and " +
+        s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be enabled")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -3745,6 +3787,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PARQUET_NANOS_AS_LONG = buildConf("spark.sql.legacy.parquet.nanosAsLong")
+    .internal()
+    .doc("When true, the Parquet's nanos precision timestamps are converted to SQL long values.")
+    .version("3.2.3")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_INT96_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.parquet.int96RebaseModeInWrite")
       .internal()
@@ -4591,6 +4640,9 @@ class SQLConf extends Serializable with Logging {
   def v2BucketingPushPartValuesEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
 
+  def v2BucketingPartiallyClusteredDistributionEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -4787,6 +4839,18 @@ class SQLConf extends Serializable with Logging {
       TimestampNTZType
   }
 
+  def inferTimestampNTZInDataSources: Boolean = getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)
+
+  // Preferred timestamp type in schema reference when a column can be either Timestamp type or
+  // TimestampNTZ type.
+  def timestampTypeInSchemaInference: AtomicType = {
+    if (getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)) {
+      TimestampNTZType
+    } else {
+      TimestampType
+    }
+  }
+
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
   def serializerNestedSchemaPruningEnabled: Boolean =
@@ -4902,7 +4966,9 @@ class SQLConf extends Serializable with Logging {
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
-  def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
+  def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
+
+  def parquetInferTimestampNTZEnabled: Boolean = getConf(PARQUET_INFER_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

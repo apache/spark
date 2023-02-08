@@ -42,6 +42,7 @@ Classes
     SparkConnectGrpcException
     SparkConnectParseException
     SparkConnectTempTableAlreadyExistsException
+    SparkConnectIllegalArgumentException
 
 
 Methods

@@ -2070,8 +2070,10 @@ class DataSourceV2SQLSuiteV1Filter
         // the session catalog, not the `global_temp` v2 catalog.
         sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1117",
-      parameters = Map("sessionCatalog" -> "spark_catalog", "ns" -> "[global_temp, ns1, ns2]"))
+      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "namespace" -> "`global_temp`.`ns1`.`ns2`"))
   }
 
   test("table name same as catalog can be used") {
@@ -2104,8 +2106,8 @@ class DataSourceV2SQLSuiteV1Filter
         def verify(sql: String): Unit = {
           checkError(
             exception = intercept[AnalysisException](spark.sql(sql)),
-            errorClass = "_LEGACY_ERROR_TEMP_1117",
-            parameters = Map("sessionCatalog" -> "spark_catalog", "ns" -> "[]"))
+            errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+            parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> ""))
         }
 
         verify(s"select * from $t")
@@ -2887,6 +2889,33 @@ class DataSourceV2SQLSuiteV1Filter
         assert(stats.rowCount.get == 5)
         assert(stats.attributeStats ==
           toAttributeMap(expectedColumnStats, df.queryExecution.optimizedPlan))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED of a V2 table with a default column value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("t") {
+        spark.sql(s"CREATE TABLE t (id bigint default 42) USING $v2Source")
+        val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
+        assert(descriptionDf.schema.map { field =>
+          (field.name, field.dataType)
+        } === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
+        QueryTest.checkAnswer(
+          descriptionDf.filter(
+            "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
+              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
+              "'Type', '_partition', ''))"),
+          Seq(
+            Row("# Detailed Table Information", "", ""),
+            Row("# Column Default Values", "", ""),
+            Row("# Metadata Columns", "", ""),
+            Row("id", "bigint", "42"),
+            Row("id", "bigint", null)
+          ))
+      }
     }
   }
 

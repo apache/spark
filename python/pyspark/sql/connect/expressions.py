@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import (
     TYPE_CHECKING,
@@ -132,7 +135,7 @@ class CaseWhen(Expression):
 
 
 class ColumnAlias(Expression):
-    def __init__(self, parent: Expression, alias: list[str], metadata: Any):
+    def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
 
         self._alias = alias
         self._metadata = metadata
@@ -488,27 +491,31 @@ class PythonUDF:
         output_type: str,
         eval_type: int,
         command: bytes,
+        python_ver: str,
     ) -> None:
         self._output_type = output_type
         self._eval_type = eval_type
         self._command = command
+        self._python_ver = python_ver
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
         expr = proto.PythonUDF()
         expr.output_type = self._output_type
         expr.eval_type = self._eval_type
         expr.command = self._command
+        expr.python_ver = self._python_ver
         return expr
 
     def __repr__(self) -> str:
         return (
             f"{self._output_type}, {self._eval_type}, "
-            f"{self._command}"  # type: ignore[str-bytes-safe]
+            f"{self._command}, f{self._python_ver}"  # type: ignore[str-bytes-safe]
         )
 
 
-class ScalarInlineUserDefinedFunction(Expression):
-    """Represents a scalar inline user-defined function of any programming languages."""
+class CommonInlineUserDefinedFunction(Expression):
+    """Represents a user-defined function with an inlined defined function body of any programming
+    languages."""
 
     def __init__(
         self,
@@ -524,13 +531,13 @@ class ScalarInlineUserDefinedFunction(Expression):
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         expr = proto.Expression()
-        expr.scalar_inline_user_defined_function.function_name = self._function_name
-        expr.scalar_inline_user_defined_function.deterministic = self._deterministic
+        expr.common_inline_user_defined_function.function_name = self._function_name
+        expr.common_inline_user_defined_function.deterministic = self._deterministic
         if len(self._arguments) > 0:
-            expr.scalar_inline_user_defined_function.arguments.extend(
+            expr.common_inline_user_defined_function.arguments.extend(
                 [arg.to_plan(session) for arg in self._arguments]
             )
-        expr.scalar_inline_user_defined_function.python_udf.CopyFrom(
+        expr.common_inline_user_defined_function.python_udf.CopyFrom(
             self._function.to_plan(session)
         )
         return expr

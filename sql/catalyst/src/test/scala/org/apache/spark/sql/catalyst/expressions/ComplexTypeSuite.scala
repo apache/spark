@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -317,14 +318,16 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // expects a positive even number of arguments
     val map3 = CreateMap(Seq(Literal(1), Literal(2), Literal(3)))
-    assert(map3.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> "`map`",
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> "3")
-      )
+    checkError(
+      exception = intercept[AnalysisException] {
+        map3.checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`map`",
+        "expectedNum" -> "2n (n > 0)",
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     // The given keys of function map should all be the same type
@@ -434,14 +437,16 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // expects a positive even number of arguments
     val namedStruct1 = CreateNamedStruct(Seq(Literal(1), Literal(2), Literal(3)))
-    assert(namedStruct1.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> "`named_struct`",
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> "3")
-      )
+    checkError(
+      exception = intercept[AnalysisException] {
+        namedStruct1.checkInputDataTypes()
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`named_struct`",
+        "expectedNum" -> "2n (n > 0)",
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 
@@ -457,27 +462,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       "b", create_row(Seq("a", "b")))
     checkEvaluation(quickResolve($"c".struct($"a".int).at(0).getField("a")),
       1, create_row(create_row(1)))
-  }
-
-  test("error message of ExtractValue") {
-    val structType = StructType(StructField("a", StringType, true) :: Nil)
-    val otherType = StringType
-
-    def checkErrorMessage(
-      childDataType: DataType,
-      fieldDataType: DataType,
-      errorMessage: String): Unit = {
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        ExtractValue(
-          Literal.create(null, childDataType),
-          Literal.create(null, fieldDataType),
-          _ == _)
-      }
-      assert(e.getMessage().contains(errorMessage))
-    }
-
-    checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
-    checkErrorMessage(otherType, StringType, "Can't extract value from")
   }
 
   test("ensure to preserve metadata") {

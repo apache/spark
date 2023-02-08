@@ -231,3 +231,29 @@ CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat
 SELECT to_binary('abc', fmtField) FROM fmtTable;
 -- Clean up
 DROP VIEW IF EXISTS fmtTable;
+-- luhn_check
+-- basic cases
+select luhn_check('4111111111111111');
+select luhn_check('5500000000000004');
+select luhn_check('340000000000009');
+select luhn_check('6011000000000004');
+select luhn_check('6011000000000005');
+select luhn_check('378282246310006');
+select luhn_check('0');
+-- spaces in the beginning/middle/end
+select luhn_check('4111111111111111    ');
+select luhn_check('4111111 111111111');
+select luhn_check(' 4111111111111111');
+-- space
+select luhn_check('');
+select luhn_check('  ');
+-- non-digits
+select luhn_check('510B105105105106');
+select luhn_check('ABCDED');
+-- null
+select luhn_check(null);
+-- non string (test implicit cast)
+select luhn_check(6011111111111117);
+select luhn_check(6011111111111118);
+select luhn_check(123.456);
+

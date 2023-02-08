@@ -716,8 +716,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.partitioning === Seq(IdentityTransform(FieldReference(Array("ts", "timezone")))))
     checkAnswer(spark.table(table.name), data)
     assert(table.dataMap.toArray.length == 2)
-    assert(table.dataMap(Seq(UTF8String.fromString("America/Los_Angeles"))).rows.size == 2)
-    assert(table.dataMap(Seq(UTF8String.fromString("America/New_York"))).rows.size == 1)
+    assert(table.dataMap(Seq(UTF8String.fromString("America/Los_Angeles"))).head.rows.size == 2)
+    assert(table.dataMap(Seq(UTF8String.fromString("America/New_York"))).head.rows.size == 1)
 
     // TODO: `DataSourceV2Strategy` can not translate nested fields into source filter yet
     // so the following sql will fail.

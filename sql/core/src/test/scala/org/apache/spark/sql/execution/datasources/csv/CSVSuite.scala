@@ -1047,7 +1047,7 @@ abstract class CSVSuite
         .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .save(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
         val res = spark.read
           .format("csv")
           .option("inferSchema", "true")
@@ -1070,7 +1070,7 @@ abstract class CSVSuite
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .save(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "false") {
         val res = spark.read
           .format("csv")
           .option("inferSchema", "true")
@@ -1117,15 +1117,15 @@ abstract class CSVSuite
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
         SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
 
-      for (timestampType <- timestampTypes) {
-        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+      Seq(true, false).foreach { inferTimestampNTZ =>
+        withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
           val res = spark.read
             .format("csv")
             .option("inferSchema", "true")
             .option("header", "true")
             .load(path.getAbsolutePath)
 
-          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+          if (inferTimestampNTZ) {
             checkAnswer(res, exp)
           } else {
             checkAnswer(
@@ -3081,6 +3081,23 @@ abstract class CSVSuite
           checkAnswer(df, Seq(Row(null)))
         }
       }
+    }
+  }
+
+  test("SPARK-42237: change binary to unsupported dataType") {
+    withTempPath { path =>
+      val colName: String = "value"
+      val exception = intercept[AnalysisException] {
+        Seq(Array[Byte](1, 2))
+          .toDF(colName)
+          .write
+          .csv(path.getCanonicalPath)
+      }
+      checkError(
+        exception = exception,
+        errorClass = "_LEGACY_ERROR_TEMP_1150",
+        parameters = Map("field" -> colName, "fieldType" -> "binary", "format" -> "CSV")
+      )
     }
   }
 

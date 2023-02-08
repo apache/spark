@@ -752,10 +752,13 @@ class DataFrameSuite extends QueryTest
     val df2 = df1.withMetadata("x", metadata)
     assert(df2.schema(0).metadata === metadata)
 
-    val err = intercept[AnalysisException] {
-      df1.withMetadata("x1", metadata)
-    }
-    assert(err.getMessage.contains("Cannot resolve column name"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.withMetadata("x1", metadata)
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`x1`", "proposal" -> "`x`")
+    )
   }
 
   test("replace column using withColumn") {
@@ -3583,6 +3586,11 @@ class DataFrameSuite extends QueryTest
       assert(row.getInt(0).toString == row.getString(2))
       assert(row.getInt(0).toString == row.getString(3))
     }
+  }
+
+  test("SPARK-41219: IntegralDivide use decimal(1, 0) to represent 0") {
+    val df = Seq("0.5944910").toDF("a")
+    checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
 }
 

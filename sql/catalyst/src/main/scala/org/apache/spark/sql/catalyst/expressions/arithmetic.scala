@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -865,7 +865,9 @@ case class IntegralDivide(
     // This follows division rule
     val intDig = p1 - s1 + s2
     // No precision loss can happen as the result scale is 0.
-    DecimalType.bounded(intDig, 0)
+    // If intDig is 0 that means the result data is 0, to be safe we use decimal(1, 0)
+    // to represent 0.
+    DecimalType.bounded(if (intDig == 0) 1 else intDig, 0)
   }
 
   override def sqlOperator: String = "div"
@@ -1208,12 +1210,9 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 1",
-          "actualNum" -> children.length.toString))
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
@@ -1299,12 +1298,9 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 1",
-          "actualNum" -> children.length.toString))
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
