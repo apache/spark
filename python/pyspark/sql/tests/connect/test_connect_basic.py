@@ -62,9 +62,9 @@ if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
-    from pyspark.sql.connect.function_builder import udf
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.client import Retrying
@@ -419,15 +419,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .withColumnsRenamed({"id": "id_new", "name": "name_new"})
             .schema,
         )
-
-    def test_simple_udf(self):
-        def conv_udf(x) -> str:
-            return "Martin"
-
-        u = udf(conv_udf)
-        df = self.connect.read.table(self.tbl_name)
-        result = df.select(u(df.id)).toPandas()
-        self.assertIsNotNone(result)
 
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
@@ -1982,6 +1973,27 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ndf = self.connect.read.table("parquet_test")
         self.assertEqual(set(df.collect()), set(ndf.collect()))
 
+    def test_writeTo_operations(self):
+        # SPARK-42002: Implement DataFrameWriterV2
+        import datetime
+        from pyspark.sql.connect.functions import col, years, months, days, hours, bucket
+
+        df = self.connect.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
+        )
+        writer = df.writeTo("table1")
+        self.assertIsInstance(writer.option("property", "value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.options(property="value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.tableProperty("foo", "bar"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(years("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(months("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(days("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours("ts")), DataFrameWriterV2)
+
     def test_agg_with_avg(self):
         # SPARK-41325: groupby.avg()
         df = (
@@ -2555,6 +2567,22 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).collect(),
         )
 
+    def test_simple_udt(self):
+        from pyspark.ml.linalg import MatrixUDT, VectorUDT
+
+        for schema in [
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", MapType(LongType(), PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("vec", VectorUDT()),
+            StructType().add("key", LongType()).add("mat", MatrixUDT()),
+        ]:
+            cdf = self.connect.createDataFrame(data=[], schema=schema)
+            sdf = self.spark.createDataFrame(data=[], schema=schema)
+
+            self.assertEqual(cdf.schema, sdf.schema)
+
     def test_simple_udt_from_read(self):
         from pyspark.ml.linalg import Matrices, Vectors
 
@@ -2629,7 +2657,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "_repr_html_",
             "semanticHash",
             "sameSemantics",
-            "writeTo",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
@@ -2670,18 +2697,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_unsupported_catalog_functions(self):
         # SPARK-41939: Disable unsupported functions.
 
-        for f in (
-            "isCached",
-            "cacheTable",
-            "uncacheTable",
-            "registerFunction",
-        ):
+        for f in ("registerFunction",):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.catalog, f)()
 
     def test_unsupported_io_functions(self):
         # SPARK-41964: Disable unsupported functions.
-        # DataFrameWriterV2 is also not implemented yet
         df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
 
         for f in ("jdbc",):

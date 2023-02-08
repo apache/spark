@@ -21,7 +21,7 @@ import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtil
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, struct, sum, udf}
+import org.apache.spark.sql.functions.{array, from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
@@ -714,6 +714,73 @@ class QueryCompilationErrorsSuite
         parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
       )
     }
+  }
+
+  test("AMBIGUOUS_REFERENCE_TO_FIELDS: select ambiguous field from struct") {
+    val data = Seq(
+      Row(Row("test1", "test1")),
+      Row(Row("test2", "test2")))
+
+    val schema = new StructType()
+      .add("name",
+        new StructType()
+          .add("firstname", StringType)
+          .add("firstname", StringType))
+
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"name.firstname")
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`firstname`", "count" -> "2")
+    )
+  }
+
+  test("INVALID_EXTRACT_BASE_FIELD_TYPE: select ambiguous field from struct") {
+    val df = Seq("test").toDF("firstname")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"firstname.test_field")
+      },
+      errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
+      sqlState = "42000",
+      parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""))
+  }
+
+  test("INVALID_EXTRACT_FIELD_TYPE: extract not string literal field") {
+    val structureData = Seq(
+      Row(Row(Row("test1", "test1"))),
+      Row(Row(Row("test2", "test2"))))
+
+    val structureSchema = new StructType()
+      .add("name",
+        new StructType()
+          .add("inner",
+            new StructType()
+              .add("firstname", StringType)
+              .add("lastname", StringType)))
+
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(structureData), structureSchema)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(struct($"name"(struct("test"))))
+      },
+      errorClass = "INVALID_EXTRACT_FIELD_TYPE",
+      sqlState = "42000",
+      parameters = Map("extraction" -> "\"struct(test)\""))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"name"(array("test")))
+      },
+      errorClass = "INVALID_EXTRACT_FIELD_TYPE",
+      sqlState = "42000",
+      parameters = Map("extraction" -> "\"array(test)\""))
   }
 }
 

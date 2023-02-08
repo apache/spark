@@ -992,7 +992,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         if (metaCols.isEmpty) {
           node
         } else {
-          val newNode = addMetadataCol(node, metaCols.map(_.exprId).toSet)
+          val newNode = node.mapChildren(addMetadataCol(_, metaCols.map(_.exprId).toSet))
           // We should not change the output schema of the plan. We should project away the extra
           // metadata columns if necessary.
           if (newNode.sameOutput(node)) {

@@ -147,6 +147,7 @@ Equivalent to ``{equiv}``
 Parameters
 ----------
 other : Series or scalar value
+fill_value : Scalar value, default None
 
 Returns
 -------
@@ -496,7 +497,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return [self.index]
 
     # Arithmetic Operators
-    def add(self, other: Any) -> "Series":
+    def add(self, other: Any, fill_value: Union[int, str, float] = None) -> "Series":
+        if fill_value is not None:
+            if isinstance(other, (int, str, float)):
+                scol = self.spark.column
+                scol = F.when(scol.isNull() | F.isnan(scol), fill_value).otherwise(scol)
+                self = self._with_new_scol(scol)
+            else:
+                raise NotImplementedError(
+                    "`fill_value` currently only works when type of `other` is in (int, str, float)"
+                )
+
         return self + other
 
     add.__doc__ = _flex_doc_SERIES.format(
@@ -507,7 +518,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         series_examples=_add_example_SERIES,
     )
 
-    def radd(self, other: Any) -> "Series":
+    def radd(self, other: Any, fill_value: Union[int, str, float] = None) -> "Series":
+        if fill_value is not None:
+            if isinstance(other, (int, str, float)):
+                scol = self.spark.column
+                scol = F.when(scol.isNull() | F.isnan(scol), fill_value).otherwise(scol)
+                self = self._with_new_scol(scol)
+            else:
+                raise NotImplementedError(
+                    "`fill_value` currently only works when type of `other` is in (int, str, float)"
+                )
+
         return other + self
 
     radd.__doc__ = _flex_doc_SERIES.format(
