@@ -229,7 +229,8 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "errors" -> ("Cannot write nullable values to non-null column 'x'" +
+        "errors" -> ("Cannot safely cast 'x': double to float" +
+          "\n- Cannot write nullable values to non-null column 'x'" +
           "\n- Cannot find data for output column 'y'"))
     )
   }
