@@ -432,7 +432,7 @@ object ParquetFileFormat extends Logging {
           logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
           None
         } else {
-          throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile, e)
+          throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile.getPath, e)
         }
       }
     }.flatten

@@ -99,6 +99,11 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_READ_FILE_FOOTER" : {
+    "message" : [
+      "Could not read footer for file: <file>."
+    ]
+  },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
@@ -4039,16 +4044,6 @@
   "_LEGACY_ERROR_TEMP_2090" : {
     "message" : [
       "The input filter of <owner> should be fully convertible."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2091" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2092" : {
-    "message" : [
-      "Could not read footer for file: <file>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2093" : {
