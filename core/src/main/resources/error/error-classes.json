@@ -1388,6 +1388,12 @@
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ]
   },
+  "UNABLE_TO_INFER_SCHEMA" : {
+    "message" : [
+      "Unable to infer schema for <format>. It must be specified manually."
+    ],
+    "sqlState" : "42KD9"
+  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
@@ -2618,11 +2624,6 @@
   "_LEGACY_ERROR_TEMP_1128" : {
     "message" : [
       "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1129" : {
-    "message" : [
-      "Unable to infer schema for <format>. It must be specified manually."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
