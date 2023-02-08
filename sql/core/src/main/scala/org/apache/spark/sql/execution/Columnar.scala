@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
@@ -541,10 +543,19 @@ case class ApplyColumnarRulesAndInsertTransitions(
       // `outputsColumnar` is false but the plan only outputs columnar format, so add a
       // to-row transition here.
       ColumnarToRowExec(insertRowToColumnar(plan))
-    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
-      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar = false)))
-    } else {
+    } else if (plan.isInstanceOf[ColumnarToRowTransition]) {
       plan
+    } else {
+      val outputsColumnar = plan match {
+        // With planned write, the write command invokes child plan's `executeWrite` which is
+        // neither columnar nor row-based.
+        case write: DataWritingCommandExec
+            if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
+          write.child.supportsColumnar
+        case _ =>
+          false
+      }
+      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
     }
   }
 

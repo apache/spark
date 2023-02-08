@@ -52,7 +52,7 @@ from pyspark.sql.dataframe import (
 from pyspark.errors import PySparkTypeError
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
-from pyspark.sql.connect.readwriter import DataFrameWriter
+from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
@@ -146,7 +146,7 @@ class DataFrame:
     def colRegex(self, colName: str) -> Column:
         if not isinstance(colName, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
             )
         return Column(UnresolvedRegex(colName))
@@ -235,7 +235,7 @@ class DataFrame:
             )
         else:
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
@@ -436,6 +436,8 @@ class DataFrame:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot join when other._plan is empty.")
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
 
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
@@ -577,7 +579,7 @@ class DataFrame:
     def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
@@ -590,12 +592,12 @@ class DataFrame:
     ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
-                error_class="NOT_AN_INTEGER",
+                error_class="NOT_INT",
                 message_parameters={"arg_name": "n", "arg_type": type(n).__name__},
             )
         if not isinstance(vertical, bool):
             raise PySparkTypeError(
-                error_class="NOT_A_BOOLEAN",
+                error_class="NOT_BOOL",
                 message_parameters={"arg_name": "vertical", "arg_type": type(vertical).__name__},
             )
 
@@ -607,7 +609,7 @@ class DataFrame:
                 _truncate = int(truncate)
             except ValueError:
                 raise PySparkTypeError(
-                    error_class="NOT_A_BOOLEAN",
+                    error_class="NOT_BOOL",
                     message_parameters={
                         "arg_name": "truncate",
                         "arg_type": type(truncate).__name__,
@@ -839,7 +841,7 @@ class DataFrame:
     def where(self, condition: Union[Column, str]) -> "DataFrame":
         if not isinstance(condition, (str, Column)):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
             )
         return self.filter(condition)
@@ -859,7 +861,7 @@ class DataFrame:
     ) -> "DataFrame":
         if not isinstance(value, (float, int, str, bool, dict)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
                 message_parameters={"arg_name": "value", "arg_type": type(value).__name__},
             )
         if isinstance(value, dict):
@@ -946,7 +948,7 @@ class DataFrame:
                 _cols = list(subset)
             else:
                 raise PySparkTypeError(
-                    error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+                    error_class="NOT_LIST_OR_STR_OR_TUPLE",
                     message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
                 )
 
@@ -1000,7 +1002,7 @@ class DataFrame:
         valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict,)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
                 message_parameters={
                     "arg_name": "to_replace",
                     "arg_type": type(to_replace).__name__,
@@ -1100,12 +1102,12 @@ class DataFrame:
     def cov(self, col1: str, col2: str) -> float:
         if not isinstance(col1, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col1", "arg_type": type(col1).__name__},
             )
         if not isinstance(col2, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
         pdf = DataFrame.withPlan(
@@ -1227,12 +1229,12 @@ class DataFrame:
             col = Column(ColumnReference(col))
         elif not isinstance(col, Column):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
             )
         if not isinstance(fractions, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
             )
         for k, v in fractions.items():
@@ -1551,8 +1553,11 @@ class DataFrame:
     def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("sameSemantics() is not implemented.")
 
-    def writeTo(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("writeTo() is not implemented.")
+    def writeTo(self, table: str) -> "DataFrameWriterV2":
+        assert self._plan is not None
+        return DataFrameWriterV2(self._plan, self._session, table)
+
+    writeTo.__doc__ = PySparkDataFrame.writeTo.__doc__
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":

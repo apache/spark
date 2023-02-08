@@ -242,6 +242,44 @@ package object dsl {
               .setInput(logicalPlan))
           .build()
       }
+
+      def writeV2(
+          tableName: Option[String] = None,
+          provider: Option[String] = None,
+          options: Map[String, String] = Map.empty,
+          tableProperties: Map[String, String] = Map.empty,
+          partitionByCols: Seq[Expression] = Seq.empty,
+          mode: Option[String] = None,
+          overwriteCondition: Option[Expression] = None): Command = {
+        val writeOp = WriteOperationV2.newBuilder()
+        writeOp.setInput(logicalPlan)
+        tableName.foreach(writeOp.setTableName)
+        provider.foreach(writeOp.setProvider)
+        partitionByCols.foreach(writeOp.addPartitioningColumns)
+        options.foreach { case (k, v) =>
+          writeOp.putOptions(k, v)
+        }
+        tableProperties.foreach { case (k, v) =>
+          writeOp.putTableProperties(k, v)
+        }
+        mode.foreach { m =>
+          if (m == "MODE_CREATE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE)
+          } else if (m == "MODE_OVERWRITE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE)
+            overwriteCondition.foreach(writeOp.setOverwriteCondition)
+          } else if (m == "MODE_OVERWRITE_PARTITIONS") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS)
+          } else if (m == "MODE_APPEND") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_APPEND)
+          } else if (m == "MODE_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_REPLACE)
+          } else if (m == "MODE_CREATE_OR_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
+          }
+        }
+        Command.newBuilder().setWriteOperationV2(writeOp.build()).build()
+      }
     }
   }
 

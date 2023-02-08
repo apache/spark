@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -677,7 +677,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         messageParameters = Map(
           "functionName" -> toSQLId(name),
           "expectedNum" -> expectedNumberOfParameters,
-          "actualNum" -> actualNumber.toString))
+          "actualNum" -> actualNumber.toString,
+          "docroot" -> SPARK_DOC_ROOT))
     } else {
       new AnalysisException(
         errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
@@ -1239,12 +1240,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new TableAlreadyExistsException(ident.asMultipartIdentifier)
   }
 
-  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+  def requiresSinglePartNamespaceError(namespace: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1117",
+      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(
         "sessionCatalog" -> CatalogManager.SESSION_CATALOG_NAME,
-        "ns" -> ns.mkString("[", ", ", "]")))
+        "namespace" -> toSQLId(namespace)))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -1393,7 +1394,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataSchemaNotSpecifiedError(format: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1129",
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
       messageParameters = Map("format" -> format))
   }
 
@@ -2915,14 +2916,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("expr" -> expr.sql))
   }
 
-  def cannotResolveColumnNameAmongFieldsError(
-      colName: String, fieldsStr: String, extraMsg: String): AnalysisException = {
+  def unresolvedColumnWithSuggestionError(
+      objectName: String, suggestion: String): AnalysisException = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1317",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       messageParameters = Map(
-        "colName" -> colName,
-        "fieldsStr" -> fieldsStr,
-        "extraMsg" -> extraMsg))
+        "objectName" -> toSQLId(objectName),
+        "proposal" -> suggestion
+      )
+    )
   }
 
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
@@ -2985,10 +2987,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("key" -> key))
   }
 
-  def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
+  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1326",
-      messageParameters = Map("key" -> key))
+      messageParameters = Map("key" -> key, "docroot" -> docroot))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {

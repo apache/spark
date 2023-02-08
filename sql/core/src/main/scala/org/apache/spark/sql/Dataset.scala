@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
@@ -250,11 +251,8 @@ class Dataset[T] private[sql](
   }
 
   private def resolveException(colName: String, fields: Array[String]): AnalysisException = {
-    val extraMsg = if (fields.exists(sparkSession.sessionState.analyzer.resolver(_, colName))) {
-      s"; did you mean to quote the `$colName` column?"
-    } else ""
-    val fieldsStr = fields.mkString(", ")
-    QueryCompilationErrors.cannotResolveColumnNameAmongFieldsError(colName, fieldsStr, extraMsg)
+    QueryCompilationErrors.unresolvedColumnWithSuggestionError(
+      colName, fields.map(toSQLId).mkString(", "))
   }
 
   private[sql] def numericColumns: Seq[Expression] = {

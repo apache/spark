@@ -934,6 +934,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -975,6 +978,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -1009,6 +1015,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -1028,7 +1037,7 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.uncacheTable("not_existing_table")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> spark.catalog.uncacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...

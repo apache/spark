@@ -60,7 +60,7 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.errors.exceptions import install_exception_handler
+from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
 
 if TYPE_CHECKING:

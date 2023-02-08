@@ -99,6 +99,17 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_READ_FILE_FOOTER" : {
+    "message" : [
+      "Could not read footer for file: <file>."
+    ]
+  },
+  "CANNOT_RECOGNIZE_HIVE_TYPE" : {
+    "message" : [
+      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
+    ],
+    "sqlState" : "429BB"
+  },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
@@ -500,9 +511,15 @@
     ],
     "sqlState" : "22003"
   },
+  "EMPTY_JSON_FIELD_VALUE" : {
+    "message" : [
+      "Failed to parse an empty string for data type <dataType>."
+    ],
+    "sqlState" : "42604"
+  },
   "ENCODER_NOT_FOUND" : {
     "message" : [
-      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at https://spark.apache.org/docs/latest/sql-ref-datatypes.html."
+      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
   "FAILED_EXECUTE_UDF" : {
@@ -593,6 +610,12 @@
     ],
     "sqlState" : "42818"
   },
+  "INCOMPATIBLE_COLUMN_TYPE" : {
+    "message" : [
+      "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
+    ],
+    "sqlState" : "42825"
+  },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
@@ -641,7 +664,7 @@
       "DATETIME_PATTERN_RECOGNITION" : {
         "message" : [
           "Spark >= 3.0:",
-          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html."
+          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
@@ -1244,6 +1267,12 @@
     ],
     "sqlState" : "42614"
   },
+  "REQUIRES_SINGLE_PART_NAMESPACE" : {
+    "message" : [
+      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+    ],
+    "sqlState" : "42K05"
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the function <routineName> because it already exists.",
@@ -1363,6 +1392,12 @@
     "message" : [
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ]
+  },
+  "UNABLE_TO_INFER_SCHEMA" : {
+    "message" : [
+      "Unable to infer schema for <format>. It must be specified manually."
+    ],
+    "sqlState" : "42KD9"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
@@ -1831,7 +1866,7 @@
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
-          "Please, refer to 'https://spark.apache.org/docs/latest/sql-ref-functions.html' for a fix."
+          "Please, refer to '<docroot>/sql-ref-functions.html' for a fix."
         ]
       },
       "WITH_SUGGESTION" : {
@@ -2546,11 +2581,6 @@
       "Sources support continuous: <continuousSources>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1117" : {
-    "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <ns>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1119" : {
     "message" : [
       "<cmd> is not supported in JDBC catalog."
@@ -2599,11 +2629,6 @@
   "_LEGACY_ERROR_TEMP_1128" : {
     "message" : [
       "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1129" : {
-    "message" : [
-      "Unable to infer schema for <format>. It must be specified manually."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
@@ -3445,11 +3470,6 @@
       "Invalid partition transformation: <expr>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1317" : {
-    "message" : [
-      "Cannot resolve column name \"<colName>\" among (<fieldsStr>)<extraMsg>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1318" : {
     "message" : [
       "Unable to parse '<delayThreshold>'."
@@ -3493,7 +3513,7 @@
   "_LEGACY_ERROR_TEMP_1326" : {
     "message" : [
       "Cannot modify the value of a Spark config: <key>.",
-      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'."
+      "See also '<docroot>/sql-migration-guide.html#ddl-statements'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1327" : {
@@ -4026,16 +4046,6 @@
       "The input filter of <owner> should be fully convertible."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2091" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2092" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2093" : {
     "message" : [
       "Found duplicate field(s) \"<requiredFieldName>\": <matchedOrcFields> in case-insensitive mode."
@@ -4208,7 +4218,7 @@
   },
   "_LEGACY_ERROR_TEMP_2130" : {
     "message" : [
-      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html."
+      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2131" : {
@@ -4229,11 +4239,6 @@
   "_LEGACY_ERROR_TEMP_2134" : {
     "message" : [
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2135" : {
-    "message" : [
-      "Failed to parse an empty string for data type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2138" : {
@@ -4468,11 +4473,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2188" : {
-    "message" : [
-      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2189" : {
@@ -5236,11 +5236,6 @@
   "_LEGACY_ERROR_TEMP_2428" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2430" : {
-    "message" : [
-      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2431" : {
