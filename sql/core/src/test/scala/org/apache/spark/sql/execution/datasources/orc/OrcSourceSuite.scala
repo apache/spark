@@ -448,14 +448,18 @@ abstract class OrcSuite
           spark.read.orc(basePath).columns.length
         }.getCause
 
-        val innerMessage = orcImp match {
-          case "native" => exception.getMessage
-          case "hive" => exception.getCause.getMessage
+        val innerException = orcImp match {
+          case "native" => exception
+          case "hive" => exception.getCause
           case impl =>
             throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
         }
 
-        assert(innerMessage.contains("Failed to merge incompatible data types"))
+        checkError(
+          exception = innerException.asInstanceOf[SparkException],
+          errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+          parameters = Map("left" -> "\"BIGINT\"", "right" -> "\"STRING\"")
+        )
       }
 
       // it is ok if no schema merging
