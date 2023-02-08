@@ -816,3 +816,7 @@ message StreamingQueryProgress {
 message StreamingQueryProgressWrapper {
   StreamingQueryProgress progress = 1;
 }
+
+message RockDBTypeAliases {
+  map<string, bytes> aliases = 1;
+}

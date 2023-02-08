@@ -431,6 +431,9 @@ public class RocksDB implements KVStore {
       this(null);
     }
 
+    public static TypeAliases of(Map<String, byte[]> aliases) {
+      return new TypeAliases(aliases);
+    }
   }
 
   private static class PrefixCache {

@@ -19,6 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
 
@@ -31,6 +32,7 @@ import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 import org.apache.spark.util.Utils.tryWithResource
+import org.apache.spark.util.kvstore.RocksDB
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -1445,6 +1447,26 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       val result = serializer.deserialize(bytes, classOf[PoolData])
       assert(result.name == input.name)
       assert(result.stageIds == input.stageIds)
+    }
+  }
+
+  test("RocksDB.TypeAliases") {
+    val inputMap = Map(
+      this.getClass.getName -> "0".getBytes("UTF-8"),
+      classOf[RocksDB.TypeAliases].getName -> "1".getBytes("UTF-8")
+    ).asJava
+    Seq(inputMap, null).foreach { aliases =>
+      val input = RocksDB.TypeAliases.of(aliases)
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[RocksDB.TypeAliases])
+      if (aliases == null) {
+        assert(result.aliases.isEmpty)
+      } else {
+        assert(result.aliases.size() == input.aliases.size())
+        result.aliases.forEach((k: String, v: Array[Byte]) => {
+          input.aliases.get(k) sameElements v
+        })
+      }
     }
   }
 
