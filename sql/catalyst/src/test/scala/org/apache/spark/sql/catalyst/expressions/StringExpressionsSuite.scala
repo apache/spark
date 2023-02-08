@@ -440,7 +440,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("Mask with null input") {
+  test("SPARK-42384: Mask with null input") {
     val NULL_LITERAL = Literal(null, StringType)
     checkEvaluation(
       new Mask(NULL_LITERAL, Literal('Q'), Literal('q'), Literal('d')), null)

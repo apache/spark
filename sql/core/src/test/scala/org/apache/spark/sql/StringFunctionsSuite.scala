@@ -703,7 +703,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("null input to mask") {
+  test("SPARK-42384: mask with null input") {
     val df = Seq(
       ("AbCD123-@$#"),
       (null)
