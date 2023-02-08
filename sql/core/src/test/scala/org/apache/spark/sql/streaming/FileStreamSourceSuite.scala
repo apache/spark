@@ -411,11 +411,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDir { src =>
       withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
-        val e = intercept[AnalysisException] {
-          createFileStreamSourceAndGetSchema(
-            format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
-        }
-        assert("Unable to infer schema for JSON. It must be specified manually." === e.getMessage)
+        checkError(
+          exception = intercept[AnalysisException] {
+            createFileStreamSourceAndGetSchema(
+              format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+          },
+          errorClass = "UNABLE_TO_INFER_SCHEMA",
+          parameters = Map("format" -> "JSON")
+        )
       }
     }
   }

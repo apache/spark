@@ -17,23 +17,10 @@
 # limitations under the License.
 #
 
-# This script generates the build info for spark and places it into the spark-version-info.properties file.
-# Arguments:
-#   build_tgt_directory - The target directory where properties file would be created. [./core/target/extra-resources]
-#   spark_version - The current version of spark
+# Stops the connect server on the machine this script is executed on.
 
-RESOURCE_DIR="$1"
-mkdir -p "$RESOURCE_DIR"
-SPARK_BUILD_INFO="${RESOURCE_DIR%/}"/spark-version-info.properties
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-echo_build_properties() {
-  echo version=$1
-  echo user=$USER
-  echo revision=$(git rev-parse HEAD)
-  echo branch=$(git rev-parse --abbrev-ref HEAD)
-  echo date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  echo url=$(git config --get remote.origin.url |  sed 's|https://\(.*\)@\(.*\)|https://\2|')
-  echo docroot=https://spark.apache.org/docs/latest
-}
-
-echo_build_properties $2 > "$SPARK_BUILD_INFO"
+"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.sql.connect.service.SparkConnectServer 1

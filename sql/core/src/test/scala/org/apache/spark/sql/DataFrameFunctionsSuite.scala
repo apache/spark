@@ -24,7 +24,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
@@ -4947,7 +4947,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> toSQLId("zip_with"),
         "expectedNum" -> "3",
-        "actualNum" -> "4"),
+        "actualNum" -> "4",
+        "docroot" -> SPARK_DOC_ROOT),
       context = ExpectedContext(
         fragment = "zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)",
         start = 0,
@@ -5046,7 +5047,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5058,7 +5060,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5070,7 +5073,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5082,7 +5086,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5094,7 +5099,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5106,7 +5112,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5118,7 +5125,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5130,7 +5138,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5142,7 +5151,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
@@ -5154,7 +5164,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 

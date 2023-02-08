@@ -266,6 +266,7 @@ try:
             "pyspark.licenses",
             "pyspark.resource",
             "pyspark.errors",
+            "pyspark.errors.exceptions",
             "pyspark.examples.src.main.python",
         ],
         include_package_data=True,

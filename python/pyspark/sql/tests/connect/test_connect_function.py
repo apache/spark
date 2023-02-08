@@ -23,7 +23,7 @@ from pyspark.sql.types import StringType, StructType, StructField, ArrayType, In
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.errors import SparkConnectAnalysisException, SparkConnectException
+from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
 
 
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
@@ -169,7 +169,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_DATAFRAME",
+            error_class="NOT_DATAFRAME",
             message_parameters={"arg_name": "df", "arg_type": "Column"},
         )
 
@@ -370,7 +370,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": "bool"},
         )
 
@@ -899,7 +899,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             cdf.select(CF.rank().over(cdf.a))
 
         # invalid window function
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(cdf.b.over(CW.orderBy("b"))).show()
 
         # invalid window frame
@@ -913,34 +913,34 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             CF.lead("c", 1),
             CF.ntile(1),
         ]:
-            with self.assertRaises(SparkConnectAnalysisException):
+            with self.assertRaises(AnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectAnalysisException):
+            with self.assertRaises(AnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectAnalysisException):
+            with self.assertRaises(AnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.unboundedPreceding, CW.currentRow))
                 ).show()
 
         # Function 'cume_dist' requires Windowframe(RangeFrame, UnboundedPreceding, CurrentRow)
         ccol = CF.cume_dist()
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow))
             ).show()
@@ -1182,7 +1182,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "start", "arg_type": "float"},
         )
 
@@ -1191,7 +1191,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "length", "arg_type": "float"},
         )
 
@@ -1791,7 +1791,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_DATATYPE_OR_STRING",
+            error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": "list"},
         )
 
@@ -2196,7 +2196,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "slideDuration", "arg_type": "int"},
         )
 
@@ -2205,7 +2205,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "startTime", "arg_type": "int"},
         )
 

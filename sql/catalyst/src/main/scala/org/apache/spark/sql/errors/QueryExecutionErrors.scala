@@ -1065,16 +1065,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def cannotReadFooterForFileError(file: Path, e: IOException): Throwable = {
+  def cannotReadFooterForFileError(file: Path, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2091",
-      messageParameters = Map("file" -> file.toString()),
-      cause = e)
-  }
-
-  def cannotReadFooterForFileError(file: FileStatus, e: RuntimeException): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2092",
+      errorClass = "CANNOT_READ_FILE_FOOTER",
       messageParameters = Map("file" -> file.toString()),
       cause = e)
   }
@@ -1365,19 +1358,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       e)
   }
 
-  def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
+  def failToRecognizePatternAfterUpgradeError(
+      pattern: String, e: Throwable, docroot: String): Throwable = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
       messageParameters = Map(
         "pattern" -> toSQLValue(pattern, StringType),
-        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key),
+        "docroot" -> docroot),
       e)
   }
 
-  def failToRecognizePatternError(pattern: String, e: Throwable): SparkRuntimeException = {
+  def failToRecognizePatternError(
+      pattern: String, e: Throwable, docroot: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2130",
-      messageParameters = Map("pattern" -> toSQLValue(pattern, StringType)),
+      messageParameters = Map(
+        "pattern" -> toSQLValue(pattern, StringType),
+        "docroot" -> docroot),
       cause = e)
   }
 
@@ -1466,11 +1464,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "walkedTypePath" -> walkedTypePath.toString()))
   }
 
-  def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
+  def cannotFindEncoderForTypeError(
+      typeName: String, docroot: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "ENCODER_NOT_FOUND",
       messageParameters = Map(
-        "typeName" -> typeName))
+        "typeName" -> typeName,
+        "docroot" -> docroot))
   }
 
   def attributesForTypeUnsupportedError(schema: Schema): SparkUnsupportedOperationException = {

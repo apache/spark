@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
@@ -106,7 +106,8 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -116,7 +117,8 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     assert(CallMethodViaReflection(
       Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==

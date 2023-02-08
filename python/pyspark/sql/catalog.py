@@ -959,7 +959,7 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.isCached("not_existing_table")  # doctest: +SKIP
+        >>> spark.catalog.isCached("not_existing_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -997,7 +997,7 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.cacheTable("not_existing_table")  # doctest: +SKIP
+        >>> spark.catalog.cacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -1037,7 +1037,7 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.uncacheTable("not_existing_table")  # doctest: +SKIP
+        >>> spark.catalog.uncacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...

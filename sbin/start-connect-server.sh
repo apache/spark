@@ -17,23 +17,25 @@
 # limitations under the License.
 #
 
-# This script generates the build info for spark and places it into the spark-version-info.properties file.
-# Arguments:
-#   build_tgt_directory - The target directory where properties file would be created. [./core/target/extra-resources]
-#   spark_version - The current version of spark
+# Enter posix mode for bash 
+set -o posix 
 
-RESOURCE_DIR="$1"
-mkdir -p "$RESOURCE_DIR"
-SPARK_BUILD_INFO="${RESOURCE_DIR%/}"/spark-version-info.properties
+# Shell script for starting the Spark Connect server
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-echo_build_properties() {
-  echo version=$1
-  echo user=$USER
-  echo revision=$(git rev-parse HEAD)
-  echo branch=$(git rev-parse --abbrev-ref HEAD)
-  echo date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  echo url=$(git config --get remote.origin.url |  sed 's|https://\(.*\)@\(.*\)|https://\2|')
-  echo docroot=https://spark.apache.org/docs/latest
-}
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
+CLASS="org.apache.spark.sql.connect.service.SparkConnectServer"
 
-echo_build_properties $2 > "$SPARK_BUILD_INFO"
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  echo "Usage: ./sbin/start-connect-server.sh [options]"
+
+  "${SPARK_HOME}"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 1
+fi
+
+. "${SPARK_HOME}/bin/load-spark-env.sh"
+
+exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Spark Connect server" "$@"

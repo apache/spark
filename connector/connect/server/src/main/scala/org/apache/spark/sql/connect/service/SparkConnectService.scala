@@ -224,7 +224,7 @@ object SparkConnectService {
   // different or complex type easily.
   private type SessionCacheKey = (String, String)
 
-  private var server: Server = _
+  private[connect] var server: Server = _
 
   // For testing purpose, it's package level private.
   private[connect] lazy val localPort = {

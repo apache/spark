@@ -135,6 +135,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "0",
     "functionName" : "`curdate`"
   },

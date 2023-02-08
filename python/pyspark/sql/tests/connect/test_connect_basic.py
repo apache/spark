@@ -37,6 +37,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark.testing.sqlutils import (
+    MyObject,
     SQLTestUtils,
     PythonOnlyUDT,
     ExamplePoint,
@@ -48,11 +49,11 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.errors import (
+from pyspark.errors.exceptions.connect import (
+    AnalysisException,
+    ParseException,
     SparkConnectException,
-    SparkConnectAnalysisException,
-    SparkConnectParseException,
-    SparkConnectTempTableAlreadyExistsException,
+    TempTableAlreadyExistsException,
 )
 
 if should_test_connect:
@@ -222,7 +223,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_error_handling(self):
         # SPARK-41533 Proper error handling for Spark Connect
         df = self.connect.range(10).select("id2")
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             df.collect()
 
     def test_simple_read(self):
@@ -471,7 +472,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectParseException):
+        with self.assertRaises(ParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -517,7 +518,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectParseException):
+        with self.assertRaises(ParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -840,6 +841,22 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(cdf.schema, sdf.schema)
             self.assertEqual(cdf.collect(), sdf.collect())
 
+    def test_create_df_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+
+        # +---+-----+
+        # |key|value|
+        # +---+-----+
+        # |  1|    1|
+        # |  2|    2|
+        # +---+-----+
+
+        cdf = self.connect.createDataFrame(data)
+        sdf = self.spark.createDataFrame(data)
+
+        self.assertEqual(cdf.schema, sdf.schema)
+        self.assertEqual(cdf.collect(), sdf.collect())
+
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df._explain_string()
@@ -988,7 +1005,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # incompatible field nullability
         schema = StructType([StructField("id", LongType(), False)])
         self.assertRaisesRegex(
-            SparkConnectAnalysisException,
+            AnalysisException,
             "NULLABLE_COLUMN_OR_FIELD",
             lambda: cdf.to(schema).toPandas(),
         )
@@ -996,7 +1013,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # field cannot upcast
         schema = StructType([StructField("name", LongType())])
         self.assertRaisesRegex(
-            SparkConnectAnalysisException,
+            AnalysisException,
             "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
             lambda: cdf.to(schema).toPandas(),
         )
@@ -1008,7 +1025,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ]
         )
         self.assertRaisesRegex(
-            SparkConnectAnalysisException,
+            AnalysisException,
             "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
             lambda: cdf.to(schema).toPandas(),
         )
@@ -1227,7 +1244,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
+            with self.assertRaises(TempTableAlreadyExistsException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -1239,7 +1256,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
+            with self.assertRaises(TempTableAlreadyExistsException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -1349,6 +1366,35 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_select_star(self):
+        data = [Row(a=1, b=Row(c=2, d=Row(e=3)))]
+
+        # +---+--------+
+        # |  a|       b|
+        # +---+--------+
+        # |  1|{2, {3}}|
+        # +---+--------+
+
+        cdf = self.connect.createDataFrame(data=data)
+        sdf = self.spark.createDataFrame(data=data)
+
+        self.assertEqual(
+            cdf.select("*").collect(),
+            sdf.select("*").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "*").collect(),
+            sdf.select("a", "*").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "b").collect(),
+            sdf.select("a", "b").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "b.*").collect(),
+            sdf.select("a", "b.*").collect(),
+        )
+
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
@@ -1453,7 +1499,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
             self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
 
-        with self.assertRaises(SparkConnectAnalysisException) as context:
+        with self.assertRaises(AnalysisException) as context:
             self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
             self.assertIn(
                 """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
@@ -1561,7 +1607,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # Hint with unsupported parameter values
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
@@ -1575,7 +1621,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).toPandas()
 
         # Hint with wrong combination
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_join_hint(self):
@@ -1904,7 +1950,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartition with unsupported parameter values
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).repartition("id+1").toPandas()
 
     def test_repartition_by_range(self) -> None:
@@ -1928,7 +1974,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartitionByRange with unsupported parameter values
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).repartitionByRange("id+1").toPandas()
 
     def test_agg_with_two_agg_exprs(self) -> None:
