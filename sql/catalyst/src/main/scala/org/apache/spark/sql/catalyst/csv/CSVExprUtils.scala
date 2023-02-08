@@ -21,30 +21,38 @@ import org.apache.commons.lang3.StringUtils
 
 object CSVExprUtils {
   /**
-   * Filter ignorable rows for CSV dataset (lines empty, configured to skip, and starting with
-   * `comment`). This is currently being used in CSV reading path and CSV schema inference.
+   * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).
+   * This is currently being used in CSV reading path and CSV schema inference.
    */
-  def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+  def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.filter(_.trim.nonEmpty)
-      iter.drop(options.skipLines)
-      iter.filter(!_.startsWith(commentPrefix))
+      iter.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(commentPrefix)
+      }
     } else {
-      iter.drop(options.skipLines)
       iter.filter(_.trim.nonEmpty)
     }
+  }
+
+  /**
+   * Skips the number of lines specified in options from the start of the file. Then blank entries
+   * (and comments if set) are removed. This function is currently only used for non-multiline CSV
+   * parsing.
+   */
+  def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+    val skippedLines = iter.drop(options.skipLines)
+    filterCommentAndEmpty(skippedLines, options)
   }
 
   def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.dropWhile(_.trim.isEmpty)
-      iter.drop(options.skipLines)
-      iter.dropWhile(_.startsWith(commentPrefix))
+      iter.dropWhile { line =>
+        line.trim.isEmpty || line.startsWith(commentPrefix)
+      }
     } else {
       iter.dropWhile(_.trim.isEmpty)
-      iter.drop(options.skipLines)
     }
   }
 
