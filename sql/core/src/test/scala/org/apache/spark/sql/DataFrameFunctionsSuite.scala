@@ -2664,13 +2664,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(null, null, null)))
     checkAnswer(
       df.select(array_prepend($"a", $"d")),
-      Seq(Row(Seq(2, 2, 3, 4)), Row(Seq(2)), Row(null)))
+      Seq(
+        Row(Seq(2, 2, 3, 4)),
+        Row(Seq(2)),
+        Row(null)))
     checkAnswer(
       df.selectExpr("array_prepend(a, d)"),
-      Seq(Row(Seq(2, 2, 3, 4)), Row(Seq(2)), Row(null)))
+      Seq(
+        Row(Seq(2, 2, 3, 4)),
+        Row(Seq(2)),
+        Row(null)))
     checkAnswer(
       OneRowRelation().selectExpr("array_prepend(array(1, 2), 1.23D)"),
-      Seq(Row(Seq(1.23, 1.0, 2.0))))
+      Seq(
+        Row(Seq(1.23, 1.0, 2.0))
+      )
+    )
     checkAnswer(
       df.selectExpr("array_prepend(a, 1)", "array_prepend(b, \"a\")", "array_prepend(c, \"\")"),
       Seq(
