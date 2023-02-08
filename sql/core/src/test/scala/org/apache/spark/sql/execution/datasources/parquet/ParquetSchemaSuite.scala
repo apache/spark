@@ -27,6 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.functions.desc
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -41,14 +42,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       messageType: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      nanosAsLong: Boolean = false): Unit = {
     testSchema(
       testName,
       StructType.fromAttributes(ScalaReflection.attributesFor[T]),
       messageType,
       binaryAsString,
       int96AsTimestamp,
-      writeLegacyParquetFormat)
+      writeLegacyParquetFormat,
+      nanosAsLong = nanosAsLong)
   }
 
   protected def testParquetToCatalyst(
@@ -56,10 +59,12 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       sqlSchema: StructType,
       parquetSchema: String,
       binaryAsString: Boolean,
-      int96AsTimestamp: Boolean): Unit = {
+      int96AsTimestamp: Boolean,
+      nanosAsLong: Boolean = false): Unit = {
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
-      assumeInt96IsTimestamp = int96AsTimestamp)
+      assumeInt96IsTimestamp = int96AsTimestamp,
+      nanosAsLong = nanosAsLong)
 
     test(s"sql <= parquet: $testName") {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
@@ -100,7 +105,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
-        SQLConf.ParquetOutputTimestampType.INT96): Unit = {
+        SQLConf.ParquetOutputTimestampType.INT96,
+      nanosAsLong: Boolean = false): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -114,11 +120,25 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       sqlSchema,
       parquetSchema,
       binaryAsString,
-      int96AsTimestamp)
+      int96AsTimestamp,
+      nanosAsLong = nanosAsLong)
   }
 }
 
 class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
+  testSchemaInference[Tuple1[Long]](
+    "timestamp nanos",
+    """
+      |message root {
+      |  required int64 _1 (TIMESTAMP(NANOS,true));
+      |}
+          """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true,
+    nanosAsLong = true
+  )
+
   testSchemaInference[(Boolean, Int, Long, Float, Double, Array[Byte])](
     "basic types",
     """
@@ -454,6 +474,24 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         assert(errMsg.endsWith("Column: [a], Expected: string, Found: INT32"))
       }
     }
+  }
+
+  test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with nanosAsLong=true)") {
+    val tsAttribute = "birthday"
+    withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
+      val testDataPath = testFile("test-data/timestamp-nanos.parquet")
+      val data = spark.read.parquet(testDataPath).select(tsAttribute)
+      assert(data.schema.fields.head.dataType == LongType)
+      assert(data.orderBy(desc(tsAttribute)).take(1).head.getAs[Long](0) == 1668537129123534758L)
+    }
+  }
+
+  test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
+    val testDataPath = testFile("test-data/timestamp-nanos.parquet")
+    val e = intercept[SparkException] {
+      spark.read.parquet(testDataPath).collect()
+    }
+    assert(e.getCause.getMessage.contains("Illegal Parquet type: INT64 (TIMESTAMP(NANOS,true))"))
   }
 
   // =======================================================
