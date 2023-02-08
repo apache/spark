@@ -167,15 +167,10 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_register_java_udaf(self):
         super().test_register_java_udaf()
 
-    # TODO(SPARK-42267): support left_outer join type
+    # TODO(SPARK-42210): implement `spark.udf`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_in_left_outer_join_condition(self):
         super().test_udf_in_left_outer_join_condition()
-
-    # TODO(SPARK-42267): support left_outer join type
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_in_filter_on_top_of_outer_join(self):
-        super().test_udf_in_filter_on_top_of_outer_join()
 
     # TODO(SPARK-42269): support return type as a collection DataType in DDL strings
     @unittest.skip("Fails in Spark Connect, should enable.")
