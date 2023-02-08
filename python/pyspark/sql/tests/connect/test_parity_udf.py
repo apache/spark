@@ -27,6 +27,9 @@ if should_test_connect:  # test_udf_with_partial_function
 
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.errors.exceptions import SparkConnectAnalysisException
+from pyspark.sql.connect.functions import udf
+from pyspark.sql.types import BooleanType, IntegerType
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
@@ -138,11 +141,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_with_array_type(self):
         super().test_udf_with_array_type()
-
-    # TODO(SPARK-42210): implement `spark.udf`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_non_existed_udaf(self):
-        super().test_non_existed_udaf()
 
     # TODO(SPARK-42210): implement `spark.udf`
     @unittest.skip("Fails in Spark Connect, should enable.")
