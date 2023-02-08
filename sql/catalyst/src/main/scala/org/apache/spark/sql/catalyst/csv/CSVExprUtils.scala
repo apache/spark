@@ -22,7 +22,7 @@ import org.apache.commons.lang3.StringUtils
 object CSVExprUtils {
   /**
    * Filter ignorable rows for CSV dataset (lines empty, configured to skip, and starting with
-   * `comment`). This is currently being used in CSV reading path.
+   * `comment`). This is currently being used in CSV reading path and CSV schema inference.
    */
   def filterUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
@@ -33,21 +33,6 @@ object CSVExprUtils {
     } else {
       iter.filter(_.trim.nonEmpty)
       iter.drop(options.skipLines)
-    }
-  }
-
-  /**
-   * Filter empty lines and lines starting with `comment`.
-   * This is currently being used in CSV schema inference.
-   */
-  def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
-    if (options.isCommentSet) {
-      val commentPrefix = options.comment.toString
-      iter.filter { line =>
-        line.trim.nonEmpty && !line.startsWith(commentPrefix)
-      }
-    } else {
-      iter.filter(_.trim.nonEmpty)
     }
   }
 
