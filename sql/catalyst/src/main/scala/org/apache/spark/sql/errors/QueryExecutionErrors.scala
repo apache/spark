@@ -1340,7 +1340,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "DUPLICATED_MAP_KEY",
       messageParameters = Map(
         "key" -> key.toString(),
-        "mapKeyDedupPolicy" -> toSQLConfVal(SQLConf.MAP_KEY_DEDUP_POLICY.key)))
+        "mapKeyDedupPolicy" -> toSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key)))
   }
 
   def mapDataKeyArrayLengthDiffersFromValueArrayLengthError(): SparkRuntimeException = {
