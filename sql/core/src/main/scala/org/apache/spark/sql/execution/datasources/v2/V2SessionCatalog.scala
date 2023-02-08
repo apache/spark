@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
@@ -94,6 +94,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   override def createTable(
       ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
+  }
+
+  // TODO: remove it when no tests calling this deprecated method.
+  override def createTable(
+      ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
@@ -150,8 +159,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(
-      catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
+    val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
     val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)

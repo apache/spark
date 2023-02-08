@@ -17,19 +17,21 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Literal, MetadataAttribute, NamedExpression, UnaryExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
-import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue}
+import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
@@ -391,9 +393,18 @@ case class WriteDelta(
 
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {
-  def tableName: Identifier
+  def name: LogicalPlan
+  def tableSpec: TableSpec
   def partitioning: Seq[Transform]
-  def tableSchema: StructType
+  def columns: Seq[Column]
+  def tableSchema: StructType = StructType(columns.map { col =>
+    // Schema only cares about the tree structure with name and data type.
+    StructField(col.name, col.dataType, col.nullable)
+  })
+  def resolvedName: ResolvedIdentifier = {
+    assert(childrenResolved)
+    name.asInstanceOf[ResolvedIdentifier]
+  }
 
   /**
    * Creates a copy of this node with the new partitioning transforms. This method is used to
@@ -403,21 +414,64 @@ trait V2CreateTablePlan extends LogicalPlan {
 }
 
 /**
+ * A fake expression to hold the column default value expression and its original SQL text.
+ */
+case class DefaultValueExpression(child: Expression, originalSQL: String)
+  extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+
+  // Convert the default expression to ColumnDefaultValue, which is required by DS v2 APIs.
+  def toV2: ColumnDefaultValue = child match {
+    case Literal(value, dataType) =>
+      new ColumnDefaultValue(originalSQL, LiteralValue(value, dataType))
+    // Analyzer makes sure the column default value is a constant.
+    case other => throw SparkException.internalError(
+      "Default value must be a literal, but got " + other)
+  }
+}
+
+/**
+ * Column definition for tables. This is an expression so that analyzer can resolve the default
+ * value expression in DDL commands automatically.
+ */
+case class Column(
+    name: String,
+    dataType: DataType,
+    nullable: Boolean = true,
+    comment: Option[String] = None,
+    defaultValue: Option[DefaultValueExpression] = None,
+    metadataInJSON: Option[String] = None) extends Expression with Unevaluable {
+  override def children: Seq[Expression] = defaultValue.toSeq
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(defaultValue = newChildren.headOption.map(_.asInstanceOf[DefaultValueExpression]))
+  }
+
+  def toV2Column: V2Column = {
+    ColumnImpl(
+      name,
+      dataType,
+      nullable,
+      comment.orNull,
+      defaultValue.map(_.toV2).orNull,
+      metadataInJSON.orNull)
+  }
+}
+
+/**
  * Create a new table with a v2 catalog.
  */
 case class CreateTable(
     name: LogicalPlan,
-    tableSchema: StructType,
+    columns: Seq[Column],
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
-
-  override def tableName: Identifier = {
-    assert(child.resolved)
-    child.asInstanceOf[ResolvedIdentifier].identifier
-  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
     copy(name = newChild)
@@ -440,14 +494,10 @@ case class CreateTableAsSelect(
     analyzedQuery: Option[LogicalPlan] = None)
   extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
 
+  override def columns: Seq[Column] = query.schema.toColumns
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
   override def right: LogicalPlan = query
-
-  override def tableName: Identifier = {
-    assert(left.resolved)
-    left.asInstanceOf[ResolvedIdentifier].identifier
-  }
 
   override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
@@ -479,17 +529,12 @@ case class CreateTableAsSelect(
  */
 case class ReplaceTable(
     name: LogicalPlan,
-    tableSchema: StructType,
+    columns: Seq[Column],
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
-
-  override def tableName: Identifier = {
-    assert(child.resolved)
-    child.asInstanceOf[ResolvedIdentifier].identifier
-  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
     copy(name = newChild)
@@ -515,6 +560,7 @@ case class ReplaceTableAsSelect(
     analyzedQuery: Option[LogicalPlan] = None)
   extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
 
+  override def columns: Seq[Column] = query.schema.toColumns
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
   override def right: LogicalPlan = query
@@ -524,11 +570,6 @@ case class ReplaceTableAsSelect(
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
     references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
-  }
-
-  override def tableName: Identifier = {
-    assert(name.resolved)
-    name.asInstanceOf[ResolvedIdentifier].identifier
   }
 
   override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))

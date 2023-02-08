@@ -23,8 +23,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.IdentityTransform
 
 case class DescribeTableExec(
@@ -37,6 +38,7 @@ case class DescribeTableExec(
     addPartitioning(rows)
 
     if (isExtended) {
+      addColumnDefaultValue(rows)
       addMetadataColumns(rows)
       addTableDetails(rows)
     }
@@ -68,17 +70,23 @@ case class DescribeTableExec(
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")
     rows += toCatalystRow("Table Properties", properties, "")
-
-    // If any columns have default values, append them to the result.
-    ResolveDefaultColumns.getDescribeMetadata(table.schema).foreach { row =>
-      rows += toCatalystRow(row._1, row._2, row._3)
-    }
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows ++= table.schema.map{ column =>
+    rows ++= table.columns.map { column =>
       toCatalystRow(
-        column.name, column.dataType.simpleString, column.getComment().orNull)
+        column.name, column.dataType.simpleString, column.comment())
+    }
+  }
+
+  private def addColumnDefaultValue(rows: ArrayBuffer[InternalRow]): Unit = {
+    if (table.columns().exists(_.defaultValue() != null)) {
+      rows += emptyRow()
+      rows += toCatalystRow("# Column Default Values", "", "")
+      rows ++= table.columns.filter(_.defaultValue() != null).map { column =>
+        toCatalystRow(
+          column.name, column.dataType.simpleString, column.defaultValue().getSql)
+      }
     }
   }
 
@@ -104,10 +112,11 @@ case class DescribeTableExec(
         rows ++= table.partitioning
           .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
           .map { fieldNames =>
-            val nestedField = table.schema.findNestedField(fieldNames)
+            val schema = table.columns().asSchema
+            val nestedField = schema.findNestedField(fieldNames)
             assert(nestedField.isDefined,
               s"Not found the partition column ${fieldNames.map(quoteIfNeeded).mkString(".")} " +
-              s"in the table schema ${table.schema().catalogString}.")
+              s"in the table schema ${schema.catalogString}.")
             nestedField.get
           }.map { case (path, field) =>
             toCatalystRow(

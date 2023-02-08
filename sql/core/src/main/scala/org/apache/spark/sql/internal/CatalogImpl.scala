@@ -313,9 +313,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedTable(_, _, table, _) =>
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
         val (partitionColumnNames, bucketSpecOpt) = table.partitioning.toSeq.convertTransforms
         val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
-        schemaToColumns(table.schema(), partitionColumnNames.contains, bucketColumnNames.contains)
+        schemaToColumns(
+          table.columns.asSchema, partitionColumnNames.contains, bucketColumnNames.contains)
 
       case ResolvedPersistentView(_, _, schema) =>
         schemaToColumns(schema)
@@ -630,7 +632,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     val plan = CreateTable(
       name = UnresolvedIdentifier(ident),
-      tableSchema = schema,
+      columns = schema.toColumns,
       partitioning = Seq(),
       tableSpec = tableSpec,
       ignoreIfExists = false)

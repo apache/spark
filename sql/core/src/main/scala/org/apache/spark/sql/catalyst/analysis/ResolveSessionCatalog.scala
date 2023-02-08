@@ -23,10 +23,10 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultColumnUtil}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -50,16 +50,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
-      cols.foreach { c =>
+    case a @ AddColumns(ResolvedV1TableIdentifier(ident), colsToAdd) if a.resolved =>
+      colsToAdd.foreach { c =>
         if (c.name.length > 1) {
           throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
             Seq(ident.catalog.get, ident.database.get, ident.table),
             "ADD COLUMN with qualified column")
         }
-        if (!c.nullable) {
+        if (!c.column.nullable) {
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
+      }
+      // Check default values before converting to v1 command.
+      DefaultColumnUtil.checkDefaultValuesInPlan(a, isForV1 = true)
+      val cols = if (colsToAdd.exists(_.column.defaultValue.isDefined)) {
+        // Do a constant-folding, as we need to store the expression SQL string which should be in
+        // its simplest form.
+        ConstantFolding(a).asInstanceOf[AddColumns].columnsToAdd.map(_.column)
+      } else {
+        colsToAdd.map(_.column)
       }
       AlterTableAddColumnsCommand(ident, cols.map(convertToStructField))
 
@@ -69,7 +78,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         "REPLACE COLUMNS")
 
     case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
-        if isSessionCatalog(catalog) =>
+        if isSessionCatalog(catalog) && a.resolved =>
       if (a.column.name.length > 1) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
           Seq(catalog.name, ident.namespace()(0), ident.name),
@@ -95,14 +104,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
               quoteIfNeeded(colName), table)
           }
       }
-      // Add the current default column value string (if any) to the column metadata.
-      a.setDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, c) }
       val newColumn = StructField(
         colName,
         dataType,
         nullable = true,
         builder.build())
-      AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
+      // Check default values before converting to v1 command.
+      DefaultColumnUtil.checkDefaultValuesInPlan(a, isForV1 = true)
+      val defaultValue = if (a.defaultExpression.isDefined) {
+        // Do a constant-folding, as we need to store the expression SQL string which should be in
+        // its simplest form.
+        ConstantFolding(a).asInstanceOf[AlterColumn].defaultExpression
+      } else {
+        a.defaultExpression
+      }
+      AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn, defaultValue)
 
     case RenameColumn(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
@@ -167,12 +183,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, _, _) =>
+    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, _, _) if c.resolved =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (!isV2Provider(provider)) {
-        constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
+        // Check default values before converting to v1 command.
+        DefaultColumnUtil.checkDefaultValuesInPlan(c, isForV1 = true)
+        val cols = if (c.columns.exists(_.defaultValue.isDefined)) {
+          // Do a constant-folding, as we need to store the expression SQL string which should be in
+          // its simplest form.
+          ConstantFolding(c).asInstanceOf[CreateTable].columns
+        } else {
+          c.columns
+        }
+        constructV1TableCmd(None, c.tableSpec, ident,
+          StructType(cols.map(convertToStructField)), c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         c
@@ -599,13 +625,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  private def convertToStructField(col: QualifiedColType): StructField = {
-    val builder = new MetadataBuilder
-    col.comment.foreach(builder.putString("comment", _))
-    col.default.map {
-      value: String => builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
-    }
-    StructField(col.name.head, col.dataType, nullable = true, builder.build())
+  private def convertToStructField(col: Column): StructField = {
+    assert(col.resolved)
+    CatalogV2Util.v2ColumnToStructField(col.toV2Column)
   }
 
   private def isV2Provider(provider: String): Boolean = {

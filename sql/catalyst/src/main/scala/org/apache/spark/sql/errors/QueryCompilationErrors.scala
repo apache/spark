@@ -3148,28 +3148,40 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "defaultValue" -> defaultValue))
   }
 
-  def defaultReferencesNotAllowedInDataSource(
-      statementType: String, dataSource: String): Throwable = {
+  def defaultReferencesNotAllowedInDataSource(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1345",
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map(
-        "statementType" -> statementType,
-        "dataSource" -> dataSource))
+        "tableName" -> tableName,
+        "operation" -> "column default value"))
   }
 
-  def addNewDefaultColumnToExistingTableNotAllowed(
-      statementType: String, dataSource: String): Throwable = {
+  def notConstantDefaultValueError(
+      tableName: String,
+      colName: Seq[String],
+      defaultValue: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1346",
+      errorClass = "INVALID_COLUMN_DEFAULT_VALUE.NOT_CONSTANT",
       messageParameters = Map(
-        "statementType" -> statementType,
-        "dataSource" -> dataSource))
+        "tableName" -> tableName,
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue))
   }
 
-  def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
+  def incompatibleTypeDefaultValueError(
+      tableName: String,
+      colName: Seq[String],
+      colType: DataType,
+      defaultExpression: Expression,
+      defaultValue: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1347",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_COLUMN_DEFAULT_VALUE.INCOMPATIBLE_DATA_TYPE",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue,
+        "defaultValueType" -> toSQLType(defaultExpression.dataType),
+        "colType" -> toSQLType(colType)))
   }
 
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {

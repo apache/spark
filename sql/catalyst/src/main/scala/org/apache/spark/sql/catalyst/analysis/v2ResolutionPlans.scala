@@ -102,6 +102,7 @@ sealed trait FieldName extends LeafExpression with Unevaluable {
 }
 
 case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
+  assert(name.length > 0)
   override lazy val resolved = false
 }
 
@@ -181,7 +182,7 @@ object ResolvedTable {
       catalog: TableCatalog,
       identifier: Identifier,
       table: Table): ResolvedTable = {
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
     ResolvedTable(catalog, identifier, table, schema.toAttributes)
   }
 }
@@ -193,6 +194,10 @@ case class ResolvedPartitionSpec(
 
 case class ResolvedFieldName(path: Seq[String], field: StructField) extends FieldName {
   def name: Seq[String] = path :+ field.name
+}
+
+case object RootTableSchema extends FieldName {
+  def name: Seq[String] = Nil
 }
 
 case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
@@ -246,6 +251,7 @@ case class ResolvedIdentifier(
     catalog: CatalogPlugin,
     identifier: Identifier) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
+  def name: String = (catalog.name +: identifier.namespace() :+ identifier.name()).quoted
 }
 
 // A fake v2 catalog to hold temp views.

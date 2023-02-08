@@ -1249,7 +1249,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
             SubqueryAlias(
               catalog.name +: ident.asMultipartIdentifier,
-              StreamingRelationV2(None, table.name, table, options, table.schema.toAttributes,
+              StreamingRelationV2(None, table.name, table, options, table.columns.toAttributes,
                 Some(catalog), Some(ident), v1Fallback))
           } else {
             SubqueryAlias(
@@ -3683,7 +3683,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
         }
 
-      case a @ AddColumns(r: ResolvedTable, cols) if !a.resolved =>
+      case a @ AddColumns(r: ResolvedTable, cols) =>
         // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
         // normalized parent name of fields to field names that belong to the parent.
         // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
@@ -3703,40 +3703,40 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                     ResolvedFieldPosition(ColumnPosition.after(colName))
                   case None =>
                     throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(
-                      col.colName, allFields)
+                      col.column.name, allFields)
                 }
               case _ => ResolvedFieldPosition(u.position)
             }
             case resolved => resolved
           }
-          colsToAdd(resolvedParentName) = fieldsAdded :+ col.colName
+          colsToAdd(resolvedParentName) = fieldsAdded :+ col.column.name
           resolvedPosition
         }
-        val schema = r.table.schema
+        val schema = r.table.columns.asSchema
         val resolvedCols = cols.map { col =>
           col.path match {
-            case Some(parent: UnresolvedFieldName) =>
-              // Adding a nested field, need to resolve the parent column and position.
-              val resolvedParent = resolveFieldNames(r, parent.name, parent)
-              val parentSchema = resolvedParent.field.dataType match {
+            case RootTableSchema =>
+              // Adding to the root. Just need to resolve position.
+              val resolvedPosition = resolvePosition(col, schema, Nil)
+              col.copy(position = resolvedPosition)
+            case parent: ResolvedFieldName =>
+              val parentSchema = parent.field.dataType match {
                 case s: StructType => s
                 case _ => throw QueryCompilationErrors.invalidFieldName(
                   col.name, parent.name, parent.origin)
               }
-              val resolvedPosition = resolvePosition(col, parentSchema, resolvedParent.name)
-              col.copy(path = Some(resolvedParent), position = resolvedPosition)
-            case _ =>
-              // Adding to the root. Just need to resolve position.
-              val resolvedPosition = resolvePosition(col, schema, Nil)
+              val resolvedPosition = resolvePosition(col, parentSchema, parent.name)
               col.copy(position = resolvedPosition)
+            // This should not happen. All `UnresolvedFieldName` should have been resolved before.
+            case _ => col
           }
         }
         val resolved = a.copy(columnsToAdd = resolvedCols)
         resolved.copyTagsFrom(a)
         resolved
 
-      case a @ AlterColumn(
-          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position, _) =>
+      case a @ AlterColumn(table: ResolvedTable,
+          ResolvedFieldName(path, field), dataType, _, _, position, _) =>
         val newDataType = dataType.flatMap { dt =>
           // Hive style syntax provides the column type, even if it may not have changed.
           val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)

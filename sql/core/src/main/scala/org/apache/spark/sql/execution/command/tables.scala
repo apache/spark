@@ -231,19 +231,17 @@ case class AlterTableAddColumnsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
-    val colsWithProcessedDefaults =
-      constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
 
     CommandUtils.uncacheTableOrView(sparkSession, table.quotedString)
     catalog.refreshTable(table)
 
     SchemaUtils.checkColumnNameDuplication(
-      (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
+      (colsToAdd ++ catalogTable.schema).map(_.name),
       conf.caseSensitiveAnalysis)
-    DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
+    DDLUtils.checkTableColumns(catalogTable, StructType(colsToAdd))
 
     val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
-    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsWithProcessedDefaults))
+    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsToAdd))
     Seq.empty[Row]
   }
 
@@ -278,24 +276,6 @@ case class AlterTableAddColumnsCommand(
       }
     }
     catalogTable
-  }
-
-  /**
-   * ALTER TABLE ADD COLUMNS commands may optionally specify a DEFAULT expression for any column.
-   * In that case, this method evaluates its originally specified value and then stores the result
-   * in a separate column metadata entry, then returns the updated column definitions.
-   */
-  private def constantFoldCurrentDefaultsToExistDefaults(
-      sparkSession: SparkSession, tableProvider: Option[String]): Seq[StructField] = {
-    colsToAdd.map { col: StructField =>
-      if (col.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-        val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          StructType(Array(col)), tableProvider, "ALTER TABLE ADD COLUMNS", true)
-        foldedStructType.fields(0)
-      } else {
-        col
-      }
-    }
   }
 }
 

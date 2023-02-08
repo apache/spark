@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedTable, RootTableSchema}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
  * The base trait for commands that need to alter a v2 table with [[TableChange]]s.
@@ -31,6 +33,10 @@ trait AlterTableCommand extends UnaryCommand {
   def changes: Seq[TableChange]
   def table: LogicalPlan
   final override def child: LogicalPlan = table
+  def resolvedTable: ResolvedTable = {
+    assert(childrenResolved)
+    table.asInstanceOf[ResolvedTable]
+  }
 }
 
 /**
@@ -97,30 +103,52 @@ case class UnsetTableProperties(
 }
 
 /**
+ * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
+ */
+case class QualifiedColType(
+    path: FieldName,
+    column: Column,
+    position: Option[FieldPosition] = None) extends Expression with Unevaluable {
+  def name: Seq[String] = path.name :+ column.name
+  override def children: Seq[Expression] = path +: column +: position.toSeq
+
+  override def dataType: DataType = throw SparkException.internalError(
+    "QualifiedColType.dataType should not be called.")
+  override def nullable: Boolean = throw SparkException.internalError(
+    "QualifiedColType.nullable should not be called.")
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+    copy(
+      newChildren(0).asInstanceOf[FieldName],
+      newChildren(1).asInstanceOf[Column],
+      newChildren.drop(2).headOption.map(_.asInstanceOf[FieldPosition]))
+  }
+}
+
+/**
  * The logical plan of the ALTER TABLE ... ADD COLUMNS command.
  */
 case class AddColumns(
     table: LogicalPlan,
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
   columnsToAdd.foreach { c =>
-    TypeUtils.failWithIntervalType(c.dataType)
+    TypeUtils.failWithIntervalType(c.column.dataType)
   }
-
-  override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
 
   override def changes: Seq[TableChange] = {
     columnsToAdd.map { col =>
-      require(col.path.forall(_.resolved),
+      require(col.path.resolved,
         "FieldName should be resolved before it's converted to TableChange.")
       require(col.position.forall(_.resolved),
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.addColumn(
         col.name.toArray,
-        col.dataType,
-        col.nullable,
-        col.comment.orNull,
+        col.column.dataType,
+        col.column.nullable,
+        col.column.comment.orNull,
         col.position.map(_.position).orNull,
-        col.default.orNull)
+        col.column.defaultValue.map(_.toV2).orNull)
     }
   }
 
@@ -135,10 +163,8 @@ case class ReplaceColumns(
     table: LogicalPlan,
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
   columnsToAdd.foreach { c =>
-    TypeUtils.failWithIntervalType(c.dataType)
+    TypeUtils.failWithIntervalType(c.column.dataType)
   }
-
-  override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
 
   override def changes: Seq[TableChange] = {
     // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
@@ -148,15 +174,15 @@ case class ReplaceColumns(
       TableChange.deleteColumn(Array(name), false /* ifExists */)
     }
     val addChanges = columnsToAdd.map { col =>
-      assert(col.path.isEmpty)
+      assert(col.path == RootTableSchema)
       assert(col.position.isEmpty)
       TableChange.addColumn(
         col.name.toArray,
-        col.dataType,
-        col.nullable,
-        col.comment.orNull,
+        col.column.dataType,
+        col.column.nullable,
+        col.column.comment.orNull,
         null,
-        col.default.orNull)
+        col.column.defaultValue.map(_.toV2).orNull)
     }
     deleteChanges ++ addChanges
   }
@@ -199,6 +225,12 @@ case class RenameColumn(
     copy(table = newChild)
 }
 
+// A fake expression to indicate a drop column default value action in `AlterColumn`.
+case object DropDefaultColumnValue extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = true
+  override def dataType: DataType = NullType
+}
+
 /**
  * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
  */
@@ -209,7 +241,9 @@ case class AlterColumn(
     nullable: Option[Boolean],
     comment: Option[String],
     position: Option[FieldPosition],
-    setDefaultExpression: Option[String]) extends AlterTableCommand {
+    defaultExpression: Option[Expression]) extends AlterTableCommand {
+  assert(column != RootTableSchema, "AlterTable.column must be a real (nested) column.")
+
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     val colName = column.name.toArray
@@ -227,8 +261,13 @@ case class AlterColumn(
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
-    val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
-      TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+    val defaultValueChange = defaultExpression.map {
+      case DropDefaultColumnValue =>
+        TableChange.updateColumnDefaultValue(colName, null)
+      case d: DefaultValueExpression =>
+        TableChange.updateColumnDefaultValue(colName, d.originalSQL)
+      case other => throw SparkException.internalError(
+        "Unexpected expression in AlterColumn.defaultExpression: " + other)
     }
     typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
   }

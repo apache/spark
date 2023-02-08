@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -1048,37 +1047,11 @@ abstract class CatalogTestUtils {
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
       storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
-      schema = if (defaultColumns) {
-        new StructType()
-          .add("col1", "int")
-          .add("col2", "string")
-          .add("a", IntegerType, nullable = true,
-            new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
-              .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "41").build())
-          .add("b", StringType, nullable = false,
-            new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
-          // The default value fails to parse.
-          .add("c", LongType, nullable = false,
-            new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "_@#$%").build())
-          // The default value fails to resolve.
-          .add("d", LongType, nullable = false,
-            new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
-              "(select min(x) from badtable)").build())
-          // The default value fails to coerce to the required type.
-          .add("e", BooleanType, nullable = false,
-            new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1").build())
-      } else {
-        new StructType()
-          .add("col1", "int")
-          .add("col2", "string")
-          .add("a", "int")
-          .add("b", "string")
-      },
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "string"),
       provider = Some(defaultProvider),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.{Map => JMap}
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
@@ -25,11 +27,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -68,77 +69,9 @@ object ResolveDefaultColumns {
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
 
   /**
-   * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
-   *
-   * The results are stored in the "exists default" metadata of the same columns. For example, in
-   * the event of this statement:
-   *
-   * CREATE TABLE T(a INT, b INT DEFAULT 5 + 5)
-   *
-   * This method constant-folds the "current default" value, stored in the CURRENT_DEFAULT metadata
-   * of the "b" column, to "10", storing the result in the "exists default" value within the
-   * EXISTS_DEFAULT metadata of that same column. Meanwhile the "current default" metadata of this
-   * "b" column retains its original value of "5 + 5".
-   *
-   * The reason for constant-folding the EXISTS_DEFAULT is to make the end-user visible behavior the
-   * same, after executing an ALTER TABLE ADD COLUMNS command with DEFAULT value, as if the system
-   * had performed an exhaustive backfill of the provided value to all previously existing rows in
-   * the table instead. We choose to avoid doing such a backfill because it would be a
-   * time-consuming and costly operation. Instead, we elect to store the EXISTS_DEFAULT in the
-   * column metadata for future reference when querying data out of the data source. In turn, each
-   * data source then takes responsibility to provide the constant-folded value in the
-   * EXISTS_DEFAULT metadata for such columns where the value is not present in storage.
-   *
-   * @param tableSchema   represents the names and types of the columns of the statement to process.
-   * @param tableProvider provider of the target table to store default values for, if any.
-   * @param statementType name of the statement being processed, such as INSERT; useful for errors.
-   * @param addNewColumnToExistingTable true if the statement being processed adds a new column to
-   *                                    a table that already exists.
-   * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
-   */
-  def constantFoldCurrentDefaultsToExistDefaults(
-      tableSchema: StructType,
-      tableProvider: Option[String],
-      statementType: String,
-      addNewColumnToExistingTable: Boolean): StructType = {
-    if (SQLConf.get.enableDefaultColumns) {
-      val keywords: Array[String] =
-        SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
-          .toLowerCase().split(",").map(_.trim)
-      val allowedTableProviders: Array[String] =
-        keywords.map(_.stripSuffix("*"))
-      val addColumnExistingTableBannedProviders: Array[String] =
-        keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
-      val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
-      val newFields: Seq[StructField] = tableSchema.fields.map { field =>
-        if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          // Make sure that the target table has a provider that supports default column values.
-          if (!allowedTableProviders.contains(givenTableProvider)) {
-            throw QueryCompilationErrors
-              .defaultReferencesNotAllowedInDataSource(statementType, givenTableProvider)
-          }
-          if (addNewColumnToExistingTable &&
-            givenTableProvider.nonEmpty &&
-            addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
-            throw QueryCompilationErrors
-              .addNewDefaultColumnToExistingTableNotAllowed(statementType, givenTableProvider)
-          }
-          val analyzed: Expression = analyze(field, statementType)
-          val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
-          field.copy(metadata = newMetadata)
-        } else {
-          field
-        }
-      }
-      StructType(newFields)
-    } else {
-      tableSchema
-    }
-  }
-
-  /**
-   * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
+   * Parses and analyzes the DEFAULT column text in `field`. The default value has already been
+   * validated in CREATE/REPLACE/ALTER TABLE commands. We don't need to validate it again when
+   * reading it out.
    *
    * @param field         represents the DEFAULT column value whose "default" metadata to parse
    *                      and analyze.
@@ -153,46 +86,19 @@ object ResolveDefaultColumns {
       metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
     // Parse the expression.
     val colText: String = field.metadata.getString(metadataKey)
-    lazy val parser = new CatalystSqlParser()
-    val parsed: Expression = try {
-      parser.parseExpression(colText)
-    } catch {
-      case ex: ParseException =>
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"${field.name} has a DEFAULT value of $colText which fails to parse as a valid " +
-            s"expression: ${ex.getMessage}")
-    }
-    // Check invariants before moving on to analysis.
-    if (parsed.containsPattern(PLAN_EXPRESSION)) {
-      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions()
-    }
+    val parser = new CatalystSqlParser()
+    val parsed: Expression = parser.parseExpression(colText)
     // Analyze the parse result.
-    val plan = try {
-      val analyzer: Analyzer = DefaultColumnAnalyzer
-      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, field.name)()), OneRowRelation()))
-      analyzer.checkAnalysis(analyzed)
-      ConstantFolding(analyzed)
-    } catch {
-      case ex: AnalysisException =>
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"${field.name} has a DEFAULT value of $colText which fails to resolve as a valid " +
-            s"expression: ${ex.getMessage}")
-    }
+    val analyzer: Analyzer = DefaultColumnAnalyzer
+    val plan = analyzer.execute(Project(Seq(Alias(parsed, field.name)()), OneRowRelation()))
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
     // Perform implicit coercion from the provided expression type to the required column type.
     if (field.dataType == analyzed.dataType) {
       analyzed
-    } else if (Cast.canUpCast(analyzed.dataType, field.dataType)) {
-      Cast(analyzed, field.dataType)
     } else {
-      throw new AnalysisException(
-        s"Failed to execute $statementType command because the destination table column " +
-          s"${field.name} has a DEFAULT value with type ${field.dataType}, but the " +
-          s"statement provided a value of incompatible type ${analyzed.dataType}")
+      Cast(analyzed, field.dataType)
     }
   }
   /**
@@ -282,6 +188,100 @@ object ResolveDefaultColumns {
       }
     }
     rows.toSeq
+  }
+
+  def checkDefaultValuesInPlan(plan: LogicalPlan, isForV1: Boolean = false): Unit = {
+    plan match {
+      // Do not check anything if the children are not resolved yet.
+      case _ if !plan.childrenResolved =>
+      case AlterColumn(t: ResolvedTable, col: ResolvedFieldName, _, _, _, _,
+          Some(default: DefaultValueExpression)) =>
+        checkTableProvider(t.catalog, t.name, getTableProviderFromProp(t.table.properties()))
+        checkDefaultValue(default, t.name, col.name, col.field.dataType, isForV1)
+
+      case cmd: V2CreateTablePlan if cmd.columns.exists(_.defaultValue.isDefined) =>
+        val ident = cmd.resolvedName
+        checkTableProvider(ident.catalog, ident.name, cmd.tableSpec.provider)
+        cmd.columns.filter(_.defaultValue.isDefined).foreach { col =>
+          val Column(name, dataType, _, _, Some(default), _) = col
+          // CREATE/REPLACE TABLE only has top-level columns
+          val colName = Seq(name)
+          checkDefaultValue(default, ident.name, colName, dataType, isForV1)
+        }
+
+      case cmd: AlterTableCommand =>
+        val table = cmd.resolvedTable
+        cmd.transformExpressionsDown {
+          case q @ QualifiedColType(path, Column(name, dataType, _, _, Some(default), _), _)
+            if path.resolved =>
+            checkTableProvider(
+              table.catalog, table.name, getTableProviderFromProp(table.table.properties()))
+            checkDefaultValue(
+              default,
+              table.name,
+              path.name :+ name,
+              dataType,
+              isForV1)
+            q
+        }
+
+      case _ =>
+    }
+  }
+
+  private def getTableProviderFromProp(props: JMap[String, String]): Option[String] = {
+    Option(props.get(TableCatalog.PROP_PROVIDER))
+  }
+
+  private def checkTableProvider(
+      catalog: CatalogPlugin,
+      tableName: String,
+      provider: Option[String]): Unit = {
+    // We only need to check table provider for the session catalog. Other custom v2 catalogs
+    // can check table providers in their implementations of createTable, alterTable, etc.
+    if (CatalogV2Util.isSessionCatalog(catalog)) {
+      val conf = SQLConf.get
+      val allowedProviders: Array[String] = conf.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+        .toLowerCase().split(",").map(_.trim)
+      val providerName = provider.getOrElse(conf.defaultDataSourceName).toLowerCase()
+      if (!allowedProviders.contains(providerName)) {
+        throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(tableName)
+      }
+    }
+  }
+
+  private def checkDefaultValue(
+      default: DefaultValueExpression,
+      tblName: String,
+      colName: Seq[String],
+      targetType: DataType,
+      isForV1: Boolean): Unit = {
+    if (default.resolved) {
+      if (!default.child.foldable) {
+        throw QueryCompilationErrors.notConstantDefaultValueError(
+          tblName, colName, default.originalSQL)
+      }
+      if (!Cast.canUpCast(default.child.dataType, targetType)) {
+        throw QueryCompilationErrors.incompatibleTypeDefaultValueError(
+          tblName, colName, targetType, default.child, default.originalSQL)
+      }
+    } else {
+      // Ideally we should let the rest of `CheckAnalysis` to report errors about why the default
+      // expression is unresolved. But we should report a better error here if the default
+      // expression references columns or contains subquery expressions, which means it's not a
+      // constant for sure.
+      if (default.references.nonEmpty || default.containsPattern(PLAN_EXPRESSION)) {
+        throw QueryCompilationErrors.notConstantDefaultValueError(
+          tblName, colName, default.originalSQL)
+      }
+      // When converting to v1 commands, the plan is not fully resolved and we can't do a complete
+      // analysis check. There is no "rest of CheckAnalysis" to report better errors and we must
+      // fail here. This is temporary and we can remove it when using v2 commands by default.
+      if (isForV1) {
+        throw QueryCompilationErrors.notConstantDefaultValueError(
+          tblName, colName, default.originalSQL)
+      }
+    }
   }
 
   /**

@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.DataType
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -119,22 +117,6 @@ object SerdeInfo {
       throw QueryExecutionErrors.cannotSafelyMergeSerdePropertiesError(props1, props2, conflictKeys)
     }
   }
-}
-
-/**
- * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
- */
-case class QualifiedColType(
-    path: Option[FieldName],
-    colName: String,
-    dataType: DataType,
-    nullable: Boolean,
-    comment: Option[String],
-    position: Option[FieldPosition],
-    default: Option[String]) {
-  def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
-
-  def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
 }
 
 /**
