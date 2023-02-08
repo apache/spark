@@ -684,8 +684,8 @@ class GroupedApplyInPandasTests(ReusedSQLTestCase):
             .orderBy("id")
             .collect()
         )
-        for r in result:
-            self.assertListEqual(expected[r[0]], r[1])
+
+        self.assertListEqual([Row(id=key, result=val) for key, val in expected.items()], result)
 
     def test_grouped_over_window_with_key(self):
 
@@ -751,8 +751,7 @@ class GroupedApplyInPandasTests(ReusedSQLTestCase):
             .collect()
         )
 
-        for r in result:
-            self.assertListEqual(expected[r[0]], r[1])
+        self.assertListEqual([Row(id=key, result=val) for key, val in expected.items()], result)
 
     def test_case_insensitive_grouping_column(self):
         # SPARK-31915: case-insensitive grouping column should work.
