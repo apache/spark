@@ -2982,18 +2982,20 @@ class HiveDDLSuite
       withView("v") {
         spark.range(1).createTempView("v")
         withTempPath { path =>
-          val e = intercept[SparkException] {
-            spark.sql(
-              s"""
-                 |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
-                 |STORED AS PARQUET
-                 |SELECT
-                 |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
-                 |FROM v
+          checkError(
+            exception = intercept[SparkException] {
+              spark.sql(
+                s"""
+                   |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
+                   |STORED AS PARQUET
+                   |SELECT
+                   |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
+                   |FROM v
                """.stripMargin)
-          }.getCause.getMessage
-          assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains invalid character(s). " +
-            "Please use alias to rename it."))
+            }.getCause.asInstanceOf[AnalysisException],
+            errorClass = "INVALID_COLUMN_NAME",
+            parameters = Map("columnName" -> "`IF(ID=1,ID,0)`")
+          )
         }
       }
     }
