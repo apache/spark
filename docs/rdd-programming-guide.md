@@ -442,7 +442,7 @@ Apart from text files, Spark's Python API also supports several other data forma
 
 **Writable Support**
 
-PySpark SequenceFile support loads an RDD of key-value pairs within Java, converts Writables to base Java types, and pickles the
+PySpark SequenceFile support loads an RDD of key-value pairs within Java, converts [Writables](https://hadoop.apache.org/docs/current/api/org/apache/hadoop/io/Writable.html) to base Java types, and pickles the
 resulting Java objects using [pickle](https://github.com/irmen/pickle/). When saving an RDD of key-value pairs to SequenceFile,
 PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
