@@ -230,10 +230,14 @@ abstract class OrcSuite
   protected def testMergeSchemasInParallel(
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
     testMergeSchemasInParallel(true, schemaReader)
-    val exception = intercept[SparkException] {
-      testMergeSchemasInParallel(false, schemaReader)
-    }.getCause
-    assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+    checkError(
+      exception = intercept[SparkException] {
+        testMergeSchemasInParallel(false, schemaReader)
+      }.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "CANNOT_READ_FILE_FOOTER",
+      parameters = Map("file" -> "file:.*"),
+      matchPVals = true
+    )
   }
 
   test("create temporary orc table") {
@@ -476,10 +480,14 @@ abstract class OrcSuite
 
         // don't ignore corrupt files
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          val exception = intercept[SparkException] {
-            spark.read.orc(basePath).columns.length
-          }.getCause
-          assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+          checkError(
+            exception = intercept[SparkException] {
+              spark.read.orc(basePath).columns.length
+            }.getCause.getCause.asInstanceOf[SparkException],
+            errorClass = "CANNOT_READ_FILE_FOOTER",
+            parameters = Map("file" -> "file:.*"),
+            matchPVals = true
+          )
         }
       }
     }
