@@ -3832,7 +3832,7 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
     v = value._jc if isinstance(value, Column) else value
@@ -5470,7 +5470,7 @@ def window(
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
@@ -5589,7 +5589,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
@@ -5853,7 +5853,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
 
@@ -5893,7 +5893,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
 
@@ -6435,12 +6435,12 @@ def overlay(
     """
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
@@ -8381,7 +8381,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
         col = _to_java_column(json)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
@@ -8428,7 +8428,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
         col = _to_java_column(csv)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
@@ -9163,7 +9163,7 @@ def from_csv(
         schema = _to_java_column(schema)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
@@ -9974,7 +9974,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     """
     if not isinstance(numBuckets, (int, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER",
+            error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": type(numBuckets).__name__},
         )
 
