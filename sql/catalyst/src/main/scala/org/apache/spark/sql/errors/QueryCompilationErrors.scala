@@ -2989,8 +2989,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1326",
-      messageParameters = Map("key" -> key, "docroot" -> docroot))
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
