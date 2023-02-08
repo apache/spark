@@ -126,16 +126,14 @@ public class ShuffleChecksumHelper {
       long checksumByReader) {
     Cause cause;
     long duration = -1L;
-    long checksumByWriter = -1L;
-    long checksumByReCalculation = -1L;
     try {
       long diagnoseStartNs = System.nanoTime();
       // Try to get the checksum instance before reading the checksum file so that
       // `UnsupportedOperationException` can be thrown first before `FileNotFoundException`
       // when the checksum algorithm isn't supported.
       Checksum checksumAlgo = getChecksumByAlgorithm(algorithm);
-      checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
-      checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
+      long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
+      long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
       duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - diagnoseStartNs);
       if (checksumByWriter != checksumByReCalculation) {
         cause = Cause.DISK_ISSUE;
@@ -154,10 +152,8 @@ public class ShuffleChecksumHelper {
       logger.warn("Unable to diagnose shuffle block corruption", e);
       cause = Cause.UNKNOWN_ISSUE;
     }
-    logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}, " +
-      "checksumByReader {}, checksumByWriter {}, checksumByReCalculation {}",
-      duration, checksumFile.getAbsolutePath(), cause,
-      checksumByReader, checksumByWriter, checksumByReCalculation);
+    logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}",
+            duration, checksumFile.getAbsolutePath(), cause);
     return cause;
   }
 }
