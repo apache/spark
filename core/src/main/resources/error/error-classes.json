@@ -506,6 +506,12 @@
     ],
     "sqlState" : "22012"
   },
+  "DUPLICATED_MAP_KEY" : {
+    "message" : [
+      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
+    ],
+    "sqlState" : "23505"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -4195,11 +4201,6 @@
   "_LEGACY_ERROR_TEMP_2126" : {
     "message" : [
       "Unsuccessful attempt to build maps with <size> elements due to exceeding the map size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2127" : {
-    "message" : [
-      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to <lastWin> so that the key inserted at last takes precedence."
     ]
   },
   "_LEGACY_ERROR_TEMP_2128" : {

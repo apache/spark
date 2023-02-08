@@ -1330,11 +1330,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def duplicateMapKeyFoundError(key: Any): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2127",
+      errorClass = "DUPLICATED_MAP_KEY",
       messageParameters = Map(
         "key" -> key.toString(),
-        "mapKeyDedupPolicy" -> toSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key),
-        "lastWin" -> toSQLConf(SQLConf.MapKeyDedupPolicy.LAST_WIN.toString())))
+        "mapKeyDedupPolicy" -> toSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key)))
   }
 
   def mapDataKeyArrayLengthDiffersFromValueArrayLengthError(): SparkRuntimeException = {
