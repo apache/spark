@@ -1349,6 +1349,35 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_select_star(self):
+        data = [Row(a=1, b=Row(c=2, d=Row(e=3)))]
+
+        # +---+--------+
+        # |  a|       b|
+        # +---+--------+
+        # |  1|{2, {3}}|
+        # +---+--------+
+
+        cdf = self.connect.createDataFrame(data=data)
+        sdf = self.spark.createDataFrame(data=data)
+
+        self.assertEqual(
+            cdf.select("*").collect(),
+            sdf.select("*").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "*").collect(),
+            sdf.select("a", "*").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "b").collect(),
+            sdf.select("a", "b").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "b.*").collect(),
+            sdf.select("a", "b.*").collect(),
+        )
+
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
