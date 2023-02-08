@@ -14,37 +14,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-"""
-PySpark exceptions.
-"""
-from pyspark.errors.exceptions.base import (  # noqa: F401
-    PySparkException,
-    AnalysisException,
-    TempTableAlreadyExistsException,
-    ParseException,
-    IllegalArgumentException,
-    StreamingQueryException,
-    QueryExecutionException,
-    PythonException,
-    UnknownException,
-    SparkUpgradeException,
-    PySparkTypeError,
-    PySparkValueError,
-)
-
-
-__all__ = [
-    "PySparkException",
-    "AnalysisException",
-    "TempTableAlreadyExistsException",
-    "ParseException",
-    "IllegalArgumentException",
-    "StreamingQueryException",
-    "QueryExecutionException",
-    "PythonException",
-    "UnknownException",
-    "SparkUpgradeException",
-    "PySparkTypeError",
-    "PySparkValueError",
-]

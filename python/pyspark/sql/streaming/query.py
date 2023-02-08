@@ -22,6 +22,9 @@ from typing import Any, Dict, List, Optional
 from py4j.java_gateway import JavaObject, java_import
 
 from pyspark.errors import StreamingQueryException
+from pyspark.errors.exceptions.captured import (
+    StreamingQueryException as CapturedStreamingQueryException,
+)
 from pyspark.sql.streaming.listener import StreamingQueryListener
 
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
@@ -387,7 +390,7 @@ class StreamingQuery:
             je = self._jsq.exception().get()
             msg = je.toString().split(": ", 1)[1]  # Drop the Java StreamingQueryException type info
             stackTrace = "\n\t at ".join(map(lambda x: x.toString(), je.getStackTrace()))
-            return StreamingQueryException(msg, stackTrace, je.getCause())
+            return CapturedStreamingQueryException(msg, stackTrace, je.getCause())
         else:
             return None
 

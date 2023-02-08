@@ -37,10 +37,7 @@ from typing import (
 
 import numpy as np
 
-from pyspark.errors.exceptions import (
-    PySparkTypeError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
