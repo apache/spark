@@ -17,6 +17,9 @@
 # limitations under the License.
 #
 
+# Enter posix mode for bash 
+set -o posix 
+
 # Shell script for starting the Spark Connect server
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
@@ -35,4 +38,4 @@ fi
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
-exec "${SPARK_HOME}/sbin"/spark-daemon.sh submit $CLASS 1 "$@"
+exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Spark Connect server" "$@"

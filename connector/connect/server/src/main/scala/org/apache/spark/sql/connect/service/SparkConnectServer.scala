@@ -17,17 +17,26 @@
 
 package org.apache.spark.sql.connect.service
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 
 /**
  * The Spark Connect server
  */
-object SparkConnectServer {
+object SparkConnectServer extends Logging {
   def main(args: Array[String]): Unit = {
     // Set the active Spark Session, and starts SparkEnv instance (via Spark Context)
+    logInfo("Starting Spark session.")
     val session = SparkSession.builder.getOrCreate()
     try {
-      SparkConnectService.start()
+      try {
+        SparkConnectService.start()
+        logInfo("Spark Connect server started.")
+      } catch {
+        case e: Exception =>
+          logError("Error starting Spark Connect server", e)
+          System.exit(-1)
+      }
       SparkConnectService.server.awaitTermination()
     } finally {
       session.stop()
