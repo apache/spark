@@ -514,7 +514,7 @@
   },
   "ENCODER_NOT_FOUND" : {
     "message" : [
-      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at https://spark.apache.org/docs/latest/sql-ref-datatypes.html."
+      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
   "FAILED_EXECUTE_UDF" : {
@@ -659,7 +659,7 @@
       "DATETIME_PATTERN_RECOGNITION" : {
         "message" : [
           "Spark >= 3.0:",
-          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html."
+          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
@@ -1849,7 +1849,7 @@
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
-          "Please, refer to 'https://spark.apache.org/docs/latest/sql-ref-functions.html' for a fix."
+          "Please, refer to '<docroot>/sql-ref-functions.html' for a fix."
         ]
       },
       "WITH_SUGGESTION" : {
@@ -3506,7 +3506,7 @@
   "_LEGACY_ERROR_TEMP_1326" : {
     "message" : [
       "Cannot modify the value of a Spark config: <key>.",
-      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'."
+      "See also '<docroot>/sql-migration-guide.html#ddl-statements'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1327" : {
@@ -4221,7 +4221,7 @@
   },
   "_LEGACY_ERROR_TEMP_2130" : {
     "message" : [
-      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html."
+      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2131" : {

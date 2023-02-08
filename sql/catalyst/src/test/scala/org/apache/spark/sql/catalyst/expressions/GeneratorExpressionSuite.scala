@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -86,7 +86,8 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -96,7 +97,8 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     assert(Stack(Seq(Literal(1), Literal(1), Literal(1.0))).checkInputDataTypes().isSuccess)
     assert(Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes() ==

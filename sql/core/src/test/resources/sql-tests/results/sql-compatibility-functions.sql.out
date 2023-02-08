@@ -98,6 +98,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "1",
     "functionName" : "`string`"
   },

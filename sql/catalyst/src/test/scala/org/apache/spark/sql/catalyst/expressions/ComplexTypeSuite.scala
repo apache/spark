@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
@@ -326,7 +326,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
-        "actualNum" -> "3")
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     // The given keys of function map should all be the same type
@@ -444,7 +445,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",
-        "actualNum" -> "3")
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 
