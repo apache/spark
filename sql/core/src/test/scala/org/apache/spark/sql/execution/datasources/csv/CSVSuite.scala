@@ -2623,7 +2623,7 @@ abstract class CSVSuite
     assert(errMsg1.contains("'skipLines' must be equal to or greater than 0."))
   }
 
-  test("SPARK-42359: parses dataset with skipLines") {
+  test("SPARK-42359: parses dataset with skipLines, comments, and blanks") {
       Seq(true, false).foreach { multiline =>
         val ds = Seq("", "1,2,3", "# comment", "4,5,6", "a,b,c", "d,e,f").toDS()
         val csv = spark.read

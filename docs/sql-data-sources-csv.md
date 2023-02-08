@@ -105,7 +105,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>skipLines</code></td>
     <td>0</td>
-    <td>Sets a number of non-empty lines to skip before parsing each of the CSV files. If the <code>header</code> option is set to <code>true</code>, the first line after the number of <code>skipLines</code> will be taken as the header.</td>
+    <td>Sets a number of non-empty, uncommented lines to skip before parsing each of the CSV files. If the <code>header</code> option is set to <code>true</code>, the first line after the number of <code>skipLines</code> will be taken as the header.</td>
     <td>read</td>
   </tr>
   <tr>
