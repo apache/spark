@@ -108,7 +108,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-    val maybeFirstLine = CSVUtils.filterUnwantedLines(csv, parsedOptions).take(1).headOption
+    val maybeFirstLine = CSVUtils.skipUnwantedLines(csv, parsedOptions).take(1).headOption
     inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
   }
 
@@ -127,7 +127,8 @@ object TextInputCSVDataSource extends CSVDataSource {
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
         val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
         val tokenRDD = sampled.rdd.mapPartitions { iter =>
-          val filteredLines = CSVUtils.filterUnwantedLines(iter, parsedOptions)
+          // TODO (tedcj): need to be careful that skiplines doesn't cause an issue here
+          val filteredLines = CSVUtils.skipUnwantedLines(iter, parsedOptions)
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)

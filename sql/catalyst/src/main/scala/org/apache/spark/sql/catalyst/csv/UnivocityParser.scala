@@ -456,7 +456,7 @@ private[sql] object UnivocityParser {
       schema: StructType): Iterator[InternalRow] = {
     val options = parser.options
 
-    val filteredLines: Iterator[String] = CSVExprUtils.filterUnwantedLines(lines, options)
+    val filteredLines: Iterator[String] = CSVExprUtils.skipUnwantedLines(lines, options)
 
     headerChecker.checkHeaderColumnNames(lines, parser.tokenizer)
 

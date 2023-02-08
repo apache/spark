@@ -24,19 +24,19 @@ object CSVExprUtils {
    * Filter ignorable rows for CSV dataset (lines empty, configured to skip, and starting with
    * `comment`). This is currently being used in CSV reading path and CSV schema inference.
    */
-  def filterUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+  def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.filter(_.trim.nonEmpty)
       iter.drop(options.skipLines)
       iter.filter(!_.startsWith(commentPrefix))
     } else {
-      iter.filter(_.trim.nonEmpty)
       iter.drop(options.skipLines)
+      iter.filter(_.trim.nonEmpty)
     }
   }
 
-  def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+  def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.dropWhile(_.trim.isEmpty)
@@ -52,7 +52,7 @@ object CSVExprUtils {
    * Extracts header and moves iterator forward so that only data remains in it
    */
   def extractHeader(iter: Iterator[String], options: CSVOptions): Option[String] = {
-    val nonEmptyLines = skipUnwantedLines(iter, options)
+    val nonEmptyLines = skipComments(iter, options)
     if (nonEmptyLines.hasNext) {
       Some(nonEmptyLines.next())
     } else {
