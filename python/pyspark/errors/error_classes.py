@@ -26,7 +26,7 @@ ERROR_CLASSES_JSON = """
   },
   "COLUMN_IN_LIST": {
     "message": [
-      "<func_name> does not allow a Column in a list."
+      "`<func_name>` does not allow a Column in a list."
     ]
   },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
@@ -96,7 +96,7 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_DATAFRAME" : {
     "message" : [
-      "Argument `<arg_name>` must be a DataFrame, got <arg_type>."
+      "Argument `<arg_name>` should be a DataFrame, got <arg_type>."
     ]
   },
   "NOT_DICT" : {
