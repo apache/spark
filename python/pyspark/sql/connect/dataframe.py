@@ -436,6 +436,8 @@ class DataFrame:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot join when other._plan is empty.")
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
 
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
