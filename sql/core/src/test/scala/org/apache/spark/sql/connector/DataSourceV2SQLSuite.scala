@@ -36,6 +36,8 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -49,7 +51,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase {
+  with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
+  with AdaptiveSparkPlanHelper {
 
   protected val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -2915,6 +2918,51 @@ class DataSourceV2SQLSuiteV1Filter
             Row("id", "bigint", "42"),
             Row("id", "bigint", null)
           ))
+      }
+    }
+  }
+
+  test("SPARK-40045: Move the post-Scan Filters to the far right") {
+    val t1 = s"${catalogAndNamespace}table"
+    withUserDefinedFunction("udfStrLen" -> true) {
+      withTable(t1) {
+        spark.udf.register("udfStrLen", (str: String) => str.length)
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+        val filterBefore = spark.sql(
+          s"""
+             |SELECT id, data FROM $t1
+             |WHERE udfStrLen(data) = 1
+             |and id = 2
+             |""".stripMargin
+        )
+        val conditionBefore =
+          find(filterBefore.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+            .head.asInstanceOf[FilterExec]
+            .condition
+        val expressionsBefore = splitConjunctivePredicates(conditionBefore)
+        assert(expressionsBefore.length == 3
+          && expressionsBefore(0).toString.trim.startsWith("isnotnull(id")
+          && expressionsBefore(1).toString.trim.startsWith("(id")
+          && expressionsBefore(2).toString.trim.startsWith("(udfStrLen(data"))
+
+        val filterAfter = spark.sql(
+          s"""
+             |SELECT id, data FROM $t1
+             |WHERE id = 2
+             |and udfStrLen(data) = 1
+             |""".stripMargin
+        )
+        val conditionAfter =
+          find(filterAfter.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+            .head.asInstanceOf[FilterExec]
+            .condition
+        val expressionsAfter = splitConjunctivePredicates(conditionAfter)
+        assert(expressionsAfter.length == 3
+          && expressionsAfter(0).toString.trim.startsWith("isnotnull(id")
+          && expressionsAfter(1).toString.trim.startsWith("(id")
+          && expressionsAfter(2).toString.trim.startsWith("(udfStrLen(data"))
       }
     }
   }
