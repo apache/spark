@@ -1,2 +1,2 @@
 'Project [unresolvedalias('`+`('a, 'b), None)]
-+- LocalRelation <empty>, [id#52L, a#53, b#54]
++- LocalRelation <empty>, [none#0L, none#1, none#2]

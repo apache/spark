@@ -1,2 +1,2 @@
-'Project ['a AS b#42]
-+- LocalRelation <empty>, [id#39L, a#40, b#41]
+'Project ['a AS #0]
++- LocalRelation <empty>, [none#0L, none#1, none#2]
