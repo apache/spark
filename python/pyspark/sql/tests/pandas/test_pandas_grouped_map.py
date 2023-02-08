@@ -73,7 +73,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class GroupedMapInPandasTests(ReusedSQLTestCase):
+class GroupedApplyInPandasTests(ReusedSQLTestCase):
     @property
     def data(self):
         return (
@@ -289,17 +289,17 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         return pd.DataFrame([key + (pdf.v.mean(),)])
 
     def test_apply_in_pandas_returning_column_names(self):
-        self._test_apply_in_pandas(GroupedMapInPandasTests.stats_with_column_names)
+        self._test_apply_in_pandas(GroupedApplyInPandasTests.stats_with_column_names)
 
     def test_apply_in_pandas_returning_no_column_names(self):
-        self._test_apply_in_pandas(GroupedMapInPandasTests.stats_with_no_column_names)
+        self._test_apply_in_pandas(GroupedApplyInPandasTests.stats_with_no_column_names)
 
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
             if key[0] % 2:
-                return GroupedMapInPandasTests.stats_with_column_names(key, pdf)
+                return GroupedApplyInPandasTests.stats_with_column_names(key, pdf)
             else:
-                return GroupedMapInPandasTests.stats_with_no_column_names(key, pdf)
+                return GroupedApplyInPandasTests.stats_with_no_column_names(key, pdf)
 
         self._test_apply_in_pandas(stats)
 
@@ -681,6 +681,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             df.groupby("group", window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
+            .orderBy("id")
             .collect()
         )
         for r in result:
@@ -746,6 +747,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             df.groupby("group", window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
+            .orderBy("id")
             .collect()
         )
 
@@ -781,7 +783,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
         def stats(key, pdf):
             if key[0] % 2 == 0:
-                return GroupedMapInPandasTests.stats_with_no_column_names(key, pdf)
+                return GroupedApplyInPandasTests.stats_with_no_column_names(key, pdf)
             return empty_df
 
         result = (
