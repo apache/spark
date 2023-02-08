@@ -2051,9 +2051,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1204",
+      errorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
       messageParameters = Map(
-        "tableName" -> tableName,
+        "tableName" -> toSQLId(tableName),
         "errors" -> errors.mkString("\n- ")))
   }
 

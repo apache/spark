@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, LessThanOrEqual, Literal}
@@ -142,6 +143,23 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       super.assertAnalysisError(inputPlan, expectedErrors, caseSensitive)
     }
   }
+
+  override def assertAnalysisErrorClass(
+      inputPlan: LogicalPlan,
+      expectedErrorClass: String,
+      expectedMessageParameters: Map[String, String],
+      queryContext: Array[QueryContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
+      super.assertAnalysisErrorClass(
+        inputPlan,
+        expectedErrorClass,
+        expectedMessageParameters,
+        queryContext,
+        caseSensitive
+      )
+    }
+  }
 }
 
 abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
@@ -163,13 +181,35 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     }
   }
 
+  override def assertAnalysisErrorClass(
+      inputPlan: LogicalPlan,
+      expectedErrorClass: String,
+      expectedMessageParameters: Map[String, String],
+      queryContext: Array[QueryContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
+      super.assertAnalysisErrorClass(
+        inputPlan,
+        expectedErrorClass,
+        expectedMessageParameters,
+        queryContext,
+        caseSensitive
+      )
+    }
+  }
+
   test("byName: fail canWrite check") {
     val parsedPlan = byName(table, widerTable)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "double to float"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> ("Cannot safely cast 'x': double to float" +
+          "\n- Cannot safely cast 'y': double to float"))
+    )
   }
 
   test("byName: multiple field errors are reported") {
@@ -184,11 +224,14 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val parsedPlan = byName(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot safely cast", "'x'", "double to float",
-      "Cannot write nullable values to non-null column", "'x'",
-      "Cannot find data for output column", "'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> ("Cannot write nullable values to non-null column 'x'" +
+          "\n- Cannot find data for output column 'y'"))
+    )
   }
 
   test("byPosition: fail canWrite check") {
@@ -199,9 +242,14 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val parsedPlan = byPosition(table, widerTable)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "double to float"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> ("Cannot safely cast 'x': double to float" +
+          "\n- Cannot safely cast 'y': double to float"))
+    )
   }
 
   test("byPosition: multiple field errors are reported") {
@@ -216,10 +264,14 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val parsedPlan = byPosition(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column", "'x'",
-      "Cannot safely cast", "'x'", "double to float"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> ("Cannot safely cast 'x': double to float" +
+          "\n- Cannot write nullable values to non-null column 'x'"))
+    )
   }
 }
 
@@ -325,9 +377,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'", "'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> ("Cannot find data for output column 'x'" +
+          "\n- Cannot find data for output column 'y'"))
+    )
   }
 
   test("byName: case sensitive column resolution") {
@@ -338,10 +395,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'"),
-      caseSensitive = true)
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> "Cannot find data for output column 'x'"
+      )
+    )
   }
 
   test("byName: case insensitive column resolution") {
@@ -380,9 +441,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byName: fail nullable data written to required columns") {
     val parsedPlan = byName(requiredTable, table)
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column", "'x'", "'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> ("Cannot write nullable values to non-null column 'x'" +
+          "\n- Cannot write nullable values to non-null column 'y'"))
+    )
   }
 
   test("byName: allow required data written to nullable columns") {
@@ -399,9 +465,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(requiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> "Cannot find data for output column 'x'"
+      )
+    )
   }
 
   test("byName: missing optional columns cause failure and are identified by name") {
@@ -412,9 +483,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> "Cannot find data for output column 'x'"
+      )
+    )
   }
 
   test("byName: insert safe cast") {
@@ -453,9 +529,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val query = TestRelation(Seq($"b".struct($"y".int, $"x".int, $"z".int), $"a".int))
 
     val writePlan = byName(table, query)
-    assertAnalysisError(writePlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'b': 'z'"))
+    assertAnalysisErrorClass(
+      writePlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> "Cannot write extra fields to struct 'b': 'z'"
+      )
+    )
   }
 
   test("byPosition: basic behavior") {
@@ -502,9 +583,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byPosition: fail nullable data written to required columns") {
     val parsedPlan = byPosition(requiredTable, table)
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column", "'x'", "'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "errors" -> ("Cannot write nullable values to non-null column 'x'" +
+          "\n- Cannot write nullable values to non-null column 'y'"))
+    )
   }
 
   test("byPosition: allow required data written to nullable columns") {
@@ -613,10 +699,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     withClue("byName") {
       val parsedPlan = byName(tableWithStructCol, query)
       assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write incompatible data to table", "'table-name'",
-        "Cannot find data for output column 'col.a'",
-        "Cannot find data for output column 'col.b'"))
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "errors" -> ("Cannot find data for output column 'col.a'" +
+            "\n- Cannot find data for output column 'col.b'"))
+      )
     }
 
     withClue("byPosition") {

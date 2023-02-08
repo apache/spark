@@ -116,6 +116,12 @@
       "<details>"
     ]
   },
+  "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE" : {
+    "message" : [
+      "Cannot write incompatible data to table <tableName>:",
+      "- <errors>."
+    ]
+  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -2977,12 +2983,6 @@
       "Cannot write to '<tableName>', not enough data columns:",
       "Table columns: <tableColumns>.",
       "Data columns: <dataColumns>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1204" : {
-    "message" : [
-      "Cannot write incompatible data to table '<tableName>':",
-      "- <errors>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1205" : {
