@@ -2624,18 +2624,16 @@ abstract class CSVSuite
   }
 
   test("SPARK-42359: parses dataset with skipLines") {
-    Seq(0, 1, 2, 10, 100).foreach { skipLines =>
       Seq(true, false).foreach { multiline =>
-        val ds = Seq("", "# comment", "a,b,c", "d,e,f").toDS()
+        val ds = Seq("", "1,2,3", "# comment", "4,5,6", "a,b,c", "d,e,f").toDS()
         val csv = spark.read
           .option("multiLine", multiline)
-          .option("skipLines", skipLines)
+          .option("skipLines", 2)
           .option("inferSchema", true)
           .option("comment", "#")
           .csv(ds)
         checkAnswer(csv, Seq(Row("a", "b", "c"), Row("d", "e", "f")))
       }
-    }
   }
 
   test("SPARK-42359: parses dataset with skipLines") {
