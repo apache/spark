@@ -294,7 +294,9 @@ class SparkSession:
                 # For dictionaries, we sort the schema in alphabetical order.
                 _data = [dict(sorted(d.items())) for d in _data]
 
-            elif not isinstance(_data[0], (Row, tuple, list, dict)):
+            elif not isinstance(_data[0], (Row, tuple, list, dict)) and not hasattr(
+                _data[0], "__dict__"
+            ):
                 # input data can be [1, 2, 3]
                 # we need to convert it to [[1], [2], [3]] to be able to infer schema.
                 _data = [[d] for d in _data]

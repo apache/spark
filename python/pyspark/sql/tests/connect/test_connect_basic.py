@@ -37,6 +37,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark.testing.sqlutils import (
+    MyObject,
     SQLTestUtils,
     PythonOnlyUDT,
     ExamplePoint,
@@ -839,6 +840,22 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             self.assertEqual(cdf.schema, sdf.schema)
             self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_df_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+
+        # +---+-----+
+        # |key|value|
+        # +---+-----+
+        # |  1|    1|
+        # |  2|    2|
+        # +---+-----+
+
+        cdf = self.connect.createDataFrame(data)
+        sdf = self.spark.createDataFrame(data)
+
+        self.assertEqual(cdf.schema, sdf.schema)
+        self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
