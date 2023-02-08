@@ -58,8 +58,6 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-import pyspark.sql.types
-from pyspark import cloudpickle
 from pyspark.errors import (
     SparkConnectException,
     SparkConnectGrpcException,
@@ -428,23 +426,6 @@ class SparkConnectClient(object):
         self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
         # Configure logging for the SparkConnect client.
-
-    def register_udf(
-        self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
-    ) -> str:
-        """Create a temporary UDF in the session catalog on the other side. We generate a
-        temporary name for it."""
-        name = f"fun_{uuid.uuid4().hex}"
-        fun = pb2.CreateScalarFunction()
-        fun.parts.append(name)
-        logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
-        fun.serialized_function = cloudpickle.dumps((function, return_type))
-
-        req = self._execute_plan_request_with_metadata()
-        req.plan.command.create_function.CopyFrom(fun)
-
-        self._execute(req)
-        return name
 
     def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
         return [
