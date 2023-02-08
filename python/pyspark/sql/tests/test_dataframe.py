@@ -46,8 +46,6 @@ from pyspark.sql.types import (
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
-    SparkConnectException,
-    SparkConnectAnalysisException,
     PySparkTypeError,
 )
 from pyspark.testing.sqlutils import (
@@ -948,8 +946,7 @@ class DataFrameTestsMixin:
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample(seed="abc"))
 
         self.assertRaises(
-            (IllegalArgumentException, SparkConnectException),
-            lambda: self.spark.range(1).sample(-1.0).count(),
+            IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
         )
 
     def test_toDF_with_schema_string(self):
@@ -1041,17 +1038,17 @@ class DataFrameTestsMixin:
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
             self.assertRaisesRegex(
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.isCached("does_not_exist"),
             )
             self.assertRaisesRegex(
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.cacheTable("does_not_exist"),
             )
             self.assertRaisesRegex(
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.uncacheTable("does_not_exist"),
             )
@@ -1595,17 +1592,13 @@ class DataFrameTestsMixin:
         # incompatible field nullability
         schema4 = StructType([StructField("j", LongType(), False)])
         self.assertRaisesRegex(
-            (AnalysisException, SparkConnectAnalysisException),
-            "NULLABLE_COLUMN_OR_FIELD",
-            lambda: df.to(schema4).count(),
+            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4).count()
         )
 
         # field cannot upcast
         schema5 = StructType([StructField("i", LongType())])
         self.assertRaisesRegex(
-            (AnalysisException, SparkConnectAnalysisException),
-            "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
-            lambda: df.to(schema5).count(),
+            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5).count()
         )
 
     def test_repartition(self):

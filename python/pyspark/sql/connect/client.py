@@ -58,13 +58,14 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-from pyspark.errors import (
+from pyspark.errors.exceptions.connect import (
+    AnalysisException,
+    ParseException,
+    PythonException,
     SparkConnectException,
     SparkConnectGrpcException,
-    SparkConnectAnalysisException,
-    SparkConnectParseException,
-    SparkConnectTempTableAlreadyExistsException,
-    SparkConnectIllegalArgumentException,
+    TempTableAlreadyExistsException,
+    IllegalArgumentException,
 )
 from pyspark.sql.types import (
     DataType,
@@ -672,22 +673,26 @@ class SparkConnectClient(object):
                     d.Unpack(info)
                     reason = info.reason
                     if reason == "org.apache.spark.sql.AnalysisException":
-                        raise SparkConnectAnalysisException(
+                        raise AnalysisException(
                             info.metadata["message"], plan=info.metadata["plan"]
                         ) from None
                     elif reason == "org.apache.spark.sql.catalyst.parser.ParseException":
-                        raise SparkConnectParseException(info.metadata["message"]) from None
+                        raise ParseException(info.metadata["message"]) from None
                     elif (
                         reason
                         == "org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException"
                     ):
-                        raise SparkConnectTempTableAlreadyExistsException(
+                        raise TempTableAlreadyExistsException(
                             info.metadata["message"], plan=info.metadata["plan"]
                         ) from None
                     elif reason == "java.lang.IllegalArgumentException":
                         message = info.metadata["message"]
                         message = message if message != "" else status.message
-                        raise SparkConnectIllegalArgumentException(message) from None
+                        raise IllegalArgumentException(message) from None
+                    elif reason == "org.apache.spark.api.python.PythonException":
+                        message = info.metadata["message"]
+                        message = message if message != "" else status.message
+                        raise PythonException(message) from None
                     else:
                         raise SparkConnectGrpcException(
                             status.message, reason=info.reason
