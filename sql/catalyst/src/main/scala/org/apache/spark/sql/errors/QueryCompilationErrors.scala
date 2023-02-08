@@ -2253,14 +2253,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "precision" -> precision.toString))
   }
 
-  def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1229",
-      messageParameters = Map(
-        "decimalType" -> decimalType,
-        "precision" -> precision.toString))
-  }
-
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
       s" Set the config ${toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)}" +
