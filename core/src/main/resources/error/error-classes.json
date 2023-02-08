@@ -79,7 +79,8 @@
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
       "Failed to merge incompatible data types <left> and <right>."
-    ]
+    ],
+    "sqlState" : "42825"
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
