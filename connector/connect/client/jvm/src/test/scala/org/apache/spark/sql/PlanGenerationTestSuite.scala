@@ -140,7 +140,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     // Write the json file for verification.
     val jsonPath = path.getParent.resolve(
       path.getFileName.toString.stripSuffix(".proto") + ".json")
-    Files.writeString(jsonPath, printer.print(relation))
+    val writer = Files.newBufferedWriter(jsonPath)
+    try writer.write(printer.print(relation)) finally {
+      writer.close()
+    }
   }
 
   private val simpleSchema = new StructType()

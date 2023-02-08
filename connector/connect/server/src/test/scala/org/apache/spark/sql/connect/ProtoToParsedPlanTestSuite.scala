@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
 import java.nio.file.attribute.BasicFileAttributes
 
@@ -82,7 +83,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       val catalystPlan = planner.transformRelation(relation)
       val actual = catalystPlan.treeString
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
-      Try(Files.readString(goldenFile)) match {
+      Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual =>
           // Test passes.
         case Success(_) if regenerateGoldenFiles =>
@@ -116,7 +117,14 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
+  private def readGoldenFile(path: Path): String = {
+    new String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+  }
+
   private def writeGoldenFile(path: Path, value: String): Unit = {
-    Files.writeString(path, value)
+    val writer = Files.newBufferedWriter(path)
+    try writer.write(value) finally {
+      writer.close()
+    }
   }
 }
