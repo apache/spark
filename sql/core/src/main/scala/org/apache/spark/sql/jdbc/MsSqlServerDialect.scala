@@ -24,8 +24,9 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -63,6 +64,20 @@ private object MsSqlServerDialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
+    override def visitSortOrder(
+        sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
+      (sortDirection, nullOrdering) match {
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) =>
+          s"$sortKey $sortDirection"
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_LAST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 1 ELSE 0 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_FIRST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 0 ELSE 1 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) =>
+          s"$sortKey $sortDirection"
+      }
+    }
+
     override def dialectFunctionName(funcName: String): String = funcName match {
       case "VAR_POP" => "VARP"
       case "VAR_SAMP" => "VAR"
@@ -168,7 +183,7 @@ private object MsSqlServerDialect extends JdbcDialect {
   }
 
   override def getLimitClause(limit: Integer): String = {
-    ""
+    if (limit > 0) s"TOP $limit" else ""
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {
@@ -181,4 +196,20 @@ private object MsSqlServerDialect extends JdbcDialect {
       case _ => super.classifyException(message, e)
     }
   }
+
+  class MsSqlServerSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
+    override def build(): String = {
+      val limitClause = dialect.getLimitClause(limit)
+
+      options.prepareQuery +
+        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s" $whereClause $groupByClause $orderByClause"
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new MsSqlServerSQLQueryBuilder(this, options)
 }
