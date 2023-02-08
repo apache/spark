@@ -224,8 +224,8 @@ case class Mask(
     val resultCode =
       f(firstGen.value, secondGen.value, thirdGen.value, fourthGen.value, fifthGen.value)
     if (nullable) {
-      // this function is somewhat like a `UnaryExpression`, in that the only the first child
-      // affects whether the result is null
+      // this function is somewhat like a `UnaryExpression`, in that only the first child
+      // determines whether the result is null
       val nullSafeEval = ctx.nullSafeExec(children(0).nullable, firstGen.isNull)(resultCode)
       ev.copy(code = code"""
         ${firstGen.code}
