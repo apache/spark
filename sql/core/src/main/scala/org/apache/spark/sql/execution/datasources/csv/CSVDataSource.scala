@@ -127,7 +127,7 @@ object TextInputCSVDataSource extends CSVDataSource {
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
         val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
         val tokenRDD = sampled.rdd.mapPartitions { iter =>
-          val filteredLines = CSVUtils.filterUnwantedLines(iter, parsedOptions)
+          val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)

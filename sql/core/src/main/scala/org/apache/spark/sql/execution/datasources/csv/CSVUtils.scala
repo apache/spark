@@ -131,6 +131,6 @@ object CSVUtils {
     }
   }
 
-  def filterUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] =
-    CSVExprUtils.filterUnwantedLines(iter, options)
+  def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] =
+    CSVExprUtils.filterCommentAndEmpty(iter, options)
 }
