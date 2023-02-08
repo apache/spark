@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import (
     Any,
@@ -217,40 +220,27 @@ GroupedData.__doc__ = PySparkGroupedData.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.group
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.group.__dict__.copy()
 
-    if should_test_connect:
-        import pyspark.sql.connect.group
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
+    )
 
-        globs = pyspark.sql.connect.group.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.group,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
 
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.group tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.group,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.group doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

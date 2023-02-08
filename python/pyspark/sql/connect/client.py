@@ -14,6 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+__all__ = [
+    "ChannelBuilder",
+    "SparkConnectClient",
+]
+
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 import logging
 import os
 import random
@@ -49,8 +58,6 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-import pyspark.sql.types
-from pyspark import cloudpickle
 from pyspark.errors import (
     SparkConnectException,
     SparkConnectGrpcException,
@@ -109,7 +116,33 @@ class ChannelBuilder:
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
 
-    DEFAULT_PORT = 15002
+    @staticmethod
+    def default_port() -> int:
+        if "SPARK_TESTING" in os.environ:
+            from pyspark.sql.session import SparkSession as PySparkSession
+
+            # In the case when Spark Connect uses the local mode, it starts the regular Spark
+            # session that starts Spark Connect server that sets `SparkSession._instantiatedSession`
+            # via SparkSession.__init__.
+            #
+            # We are getting the actual server port from the Spark session via Py4J to address
+            # the case when the server port is set to 0 (in which allocates an ephemeral port).
+            #
+            # This is only used in the test/development mode.
+            session = PySparkSession._instantiatedSession
+
+            # 'spark.local.connect' is set when we use the local mode in Spark Connect.
+            if session is not None and session.conf.get("spark.local.connect", "0") == "1":
+
+                jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
+                return getattr(
+                    getattr(
+                        jvm.org.apache.spark.sql.connect.service,  # type: ignore[union-attr]
+                        "SparkConnectService$",
+                    ),
+                    "MODULE$",
+                ).localPort()
+        return 15002
 
     def __init__(self, url: str, channelOptions: Optional[List[Tuple[str, Any]]] = None) -> None:
         """
@@ -150,7 +183,7 @@ class ChannelBuilder:
         netloc = self.url.netloc.split(":")
         if len(netloc) == 1:
             self.host = netloc[0]
-            self.port = ChannelBuilder.DEFAULT_PORT
+            self.port = ChannelBuilder.default_port()
         elif len(netloc) == 2:
             self.host = netloc[0]
             self.port = int(netloc[1])
@@ -393,23 +426,6 @@ class SparkConnectClient(object):
         self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
         # Configure logging for the SparkConnect client.
-
-    def register_udf(
-        self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
-    ) -> str:
-        """Create a temporary UDF in the session catalog on the other side. We generate a
-        temporary name for it."""
-        name = f"fun_{uuid.uuid4().hex}"
-        fun = pb2.CreateScalarFunction()
-        fun.parts.append(name)
-        logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
-        fun.serialized_function = cloudpickle.dumps((function, return_type))
-
-        req = self._execute_plan_request_with_metadata()
-        req.plan.command.create_function.CopyFrom(fun)
-
-        self._execute(req)
-        return name
 
     def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
         return [
@@ -813,9 +829,3 @@ class Retrying:
                 time.sleep(backoff / 1000.0)
 
             yield AttemptManager(self._can_retry, retry_state)
-
-
-__all__ = [
-    "ChannelBuilder",
-    "SparkConnectClient",
-]

@@ -238,7 +238,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
-        ResolveGroupByAll.checkAnalysis(operator)
+        ResolveReferencesInAggregate.checkUnresolvedGroupByAll(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -320,8 +320,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
               case other =>
                 other.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2412",
-                  messageParameters = Map("sqlExpr" -> other.toString))
+                  errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+                  messageParameters = Map("sqlExpr" -> toSQLExpr(other)))
             }
 
           case s: SubqueryExpression =>
@@ -422,6 +422,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   errorClass = "_LEGACY_ERROR_TEMP_2423",
                   messageParameters = Map("sqlExpr" -> s.sql))
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
+              // There should be no Window in Aggregate - this case will fail later check anyway.
+              // Perform this check for special case of lateral column alias, when the window
+              // expression is not eligible to propagate to upper plan because it is not valid,
+              // containing non-group-by or non-aggregate-expressions.
+              case WindowExpression(function, spec) =>
+                function.children.foreach(checkValidAggregateExpression)
+                checkValidAggregateExpression(spec)
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
@@ -570,13 +577,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 // SPARK-18058: we shall not care about the nullability of columns
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   e.failAnalysis(
-                    errorClass = "_LEGACY_ERROR_TEMP_2430",
+                    errorClass = "INCOMPATIBLE_COLUMN_TYPE",
                     messageParameters = Map(
                       "operator" -> toSQLStmt(operator.nodeName),
-                      "ci" -> ordinalNumber(ci),
-                      "ti" -> ordinalNumber(ti + 1),
-                      "dt1" -> dt1.catalogString,
-                      "dt2" -> dt2.catalogString,
+                      "columnOrdinalNumber" -> ordinalNumber(ci),
+                      "tableOrdinalNumber" -> ordinalNumber(ti + 1),
+                      "dataType1" -> toSQLType(dt1),
+                      "dataType2" -> toSQLType(dt2),
                       "hint" -> extraHintForAnsiTypeCoercionPlan(operator)))
                 }
               }
@@ -743,6 +750,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   summary = lcaRef.origin.context.summary)
             })
 
+          case w @ Window(pList, _, _, _)
+            if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) && w.resolved =>
+            pList.foreach(_.transformDownWithPruning(
+              _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+              case lcaRef: LateralColumnAliasReference =>
+                throw SparkException.internalError(
+                  s"Referencing lateral column alias ${toSQLId(lcaRef.nameParts)} is not " +
+                    s"supported in this Window query case yet. \nDebugging information: plan: $w",
+                  context = lcaRef.origin.getQueryContext,
+                  summary = lcaRef.origin.context.summary)
+            })
+
           case _ => // Analysis successful!
         }
     }
@@ -762,8 +781,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   private def getAllExpressions(plan: LogicalPlan): Seq[Expression] = {
     plan match {
-      // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
-      // feature. We should check errors in `aggregateExpressions` first.
+      // We only resolve `groupingExpressions` if `aggregateExpressions` is resolved first (See
+      // `ResolveReferencesInAggregate`). We should check errors in `aggregateExpressions` first.
       case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
       case _ => plan.expressions
     }

@@ -44,12 +44,9 @@ message Catalog {
     DropTempView drop_temp_view = 15;
     DropGlobalTempView drop_global_temp_view = 16;
     RecoverPartitions recover_partitions = 17;
-    // TODO(SPARK-41612): Support Catalog.isCached
-    // IsCached is_cached = 18;
-    // TODO(SPARK-41600): Support Catalog.cacheTable
-    // CacheTable cache_table = 19;
-    // TODO(SPARK-41623): Support Catalog.uncacheTable
-    // UncacheTable uncache_table = 20;
+    IsCached is_cached = 18;
+    CacheTable cache_table = 19;
+    UncacheTable uncache_table = 20;
     ClearCache clear_cache = 21;
     RefreshTable refresh_table = 22;
     RefreshByPath refresh_by_path = 23;
@@ -185,26 +182,23 @@ message RecoverPartitions {
   string table_name = 1;
 }
 
-// TODO(SPARK-41612): Support Catalog.isCached
-//// See `spark.catalog.isCached`
-//message IsCached {
-//  // (Required)
-//  string table_name = 1;
-//}
-//
-// TODO(SPARK-41600): Support Catalog.cacheTable
-//// See `spark.catalog.cacheTable`
-//message CacheTable {
-//  // (Required)
-//  string table_name = 1;
-//}
-//
-// TODO(SPARK-41623): Support Catalog.uncacheTable
-//// See `spark.catalog.uncacheTable`
-//message UncacheTable {
-//  // (Required)
-//  string table_name = 1;
-//}
+// See `spark.catalog.isCached`
+message IsCached {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.cacheTable`
+message CacheTable {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.uncacheTable`
+message UncacheTable {
+  // (Required)
+  string table_name = 1;
+}
 
 // See `spark.catalog.clearCache`
 message ClearCache { }

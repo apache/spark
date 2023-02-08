@@ -169,7 +169,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_DATAFRAME",
+            error_class="NOT_DATAFRAME",
             message_parameters={"arg_name": "df", "arg_type": "Column"},
         )
 
@@ -370,7 +370,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": "bool"},
         )
 
@@ -1182,7 +1182,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "start", "arg_type": "float"},
         )
 
@@ -1191,7 +1191,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "length", "arg_type": "float"},
         )
 
@@ -1791,7 +1791,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_DATATYPE_OR_STRING",
+            error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": "list"},
         )
 
@@ -2196,7 +2196,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "slideDuration", "arg_type": "int"},
         )
 
@@ -2205,7 +2205,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "startTime", "arg_type": "int"},
         )
 

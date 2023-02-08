@@ -218,7 +218,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "col", "arg_type": "int"},
         )
 
@@ -227,7 +227,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_DICT",
+            error_class="NOT_DICT",
             message_parameters={"arg_name": "fractions", "arg_type": "list"},
         )
 
@@ -255,7 +255,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "col1", "arg_type": "int"},
         )
 
@@ -264,7 +264,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "col2", "arg_type": "bool"},
         )
 
@@ -764,7 +764,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "pos", "arg_type": "float"},
         )
 
@@ -773,7 +773,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "len", "arg_type": "float"},
         )
 
@@ -1076,7 +1076,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": "int"},
         )
 
@@ -1096,7 +1096,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
         )
 
@@ -1280,7 +1280,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": "int"},
         )
 
@@ -1290,7 +1290,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": "int"},
         )
 
@@ -1301,7 +1301,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": "int"},
         )
 
@@ -1322,7 +1322,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": "str"},
         )
 
@@ -1332,7 +1332,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "windowDuration", "arg_type": "int"},
         )
 
@@ -1342,7 +1342,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
         )
 
@@ -1352,7 +1352,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER",
+            error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
 

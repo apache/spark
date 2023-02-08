@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import (
     TYPE_CHECKING,
@@ -132,7 +135,7 @@ class CaseWhen(Expression):
 
 
 class ColumnAlias(Expression):
-    def __init__(self, parent: Expression, alias: list[str], metadata: Any):
+    def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
 
         self._alias = alias
         self._metadata = metadata
@@ -488,22 +491,25 @@ class PythonUDF:
         output_type: str,
         eval_type: int,
         command: bytes,
+        python_ver: str,
     ) -> None:
         self._output_type = output_type
         self._eval_type = eval_type
         self._command = command
+        self._python_ver = python_ver
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
         expr = proto.PythonUDF()
         expr.output_type = self._output_type
         expr.eval_type = self._eval_type
         expr.command = self._command
+        expr.python_ver = self._python_ver
         return expr
 
     def __repr__(self) -> str:
         return (
             f"{self._output_type}, {self._eval_type}, "
-            f"{self._command}"  # type: ignore[str-bytes-safe]
+            f"{self._command}, f{self._python_ver}"  # type: ignore[str-bytes-safe]
         )
 
 

@@ -18,7 +18,7 @@
 import unittest
 
 from pyspark.sql.functions import udf
-from pyspark.sql.tests.test_udf import BaseUDFTests
+from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -31,7 +31,7 @@ from pyspark.testing.sqlutils import (
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class PythonUDFArrowTests(BaseUDFTests, ReusedSQLTestCase):
+class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super(PythonUDFArrowTests, cls).setUpClass()

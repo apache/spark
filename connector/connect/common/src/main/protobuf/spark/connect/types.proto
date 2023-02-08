@@ -61,6 +61,9 @@ message DataType {
     Array array = 20;
     Struct struct = 21;
     Map map = 22;
+
+    // UserDefinedType
+    UDT udt = 23;
   }
 
   message Boolean {
@@ -171,5 +174,13 @@ message DataType {
     DataType value_type = 2;
     bool value_contains_null = 3;
     uint32 type_variation_reference = 4;
+  }
+
+  message UDT {
+    string type = 1;
+    optional string jvm_class = 2;
+    optional string python_class = 3;
+    optional string serialized_python_class = 4;
+    DataType sql_type = 5;
   }
 }

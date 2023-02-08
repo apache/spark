@@ -158,10 +158,7 @@ case class JDBCScanBuilder(
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      val compiledOrders = orders.flatMap { order =>
-        dialect.compileExpression(order.expression())
-          .map(sortKey => s"$sortKey ${order.direction()} ${order.nullOrdering()}")
-      }
+      val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit
       sortOrders = compiledOrders
