@@ -2673,7 +2673,7 @@ abstract class CSVSuite
         val cars = spark
           .read
           .format("csv")
-          .option("skipLines", 3)
+          .option("skipLines", 2)
           .option("multiLine", multiline)
           .option("header", header)
           .option("comment", "#")
@@ -2689,7 +2689,7 @@ abstract class CSVSuite
       val cars = spark
         .read
         .format("csv")
-        .option("skipLines", 3)
+        .option("skipLines", 2)
         .option("multiLine", true)
         .option("header", header)
         .option("comment", "#")
@@ -3187,7 +3187,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 38)
+    assert(CSVOptions.getAllOptions.size == 39)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))

@@ -41,11 +41,11 @@ object CSVExprUtils {
    * parsing.
    */
   def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
-    val skippedLines = iter.drop(options.skipLines)
-    filterCommentAndEmpty(skippedLines, options)
+    val filteredLines = filterCommentAndEmpty(iter, options)
+    filteredLines.drop(options.skipLines)
   }
 
-  def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+  def skipCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.dropWhile { line =>
@@ -60,7 +60,7 @@ object CSVExprUtils {
    * Extracts header and moves iterator forward so that only data remains in it
    */
   def extractHeader(iter: Iterator[String], options: CSVOptions): Option[String] = {
-    val nonEmptyLines = skipComments(iter, options)
+    val nonEmptyLines = skipCommentAndEmpty(iter, options)
     if (nonEmptyLines.hasNext) {
       Some(nonEmptyLines.next())
     } else {

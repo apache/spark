@@ -48,11 +48,11 @@ object CSVUtils {
    */
   def skipUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
     import lines.sqlContext.implicits._
-    val skippedLines = lines.rdd.zipWithIndex().toDF("value", "order")
+    val filteredLines = filterCommentAndEmpty(lines, options)
+    filteredLines.rdd.zipWithIndex().toDF("value", "order")
       .filter($"order" >= options.skipLines)
       .drop("order")
       .as[String]
-    filterCommentAndEmpty(skippedLines, options)
   }
 
   /**
