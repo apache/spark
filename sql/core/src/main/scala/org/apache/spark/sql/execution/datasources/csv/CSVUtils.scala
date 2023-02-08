@@ -28,7 +28,7 @@ object CSVUtils {
    * Filter ignorable rows for CSV dataset (lines empty, configured to skip, and starting with
    * `comment`). This is currently being used in CSV schema inference.
    */
-  def skipUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
+  def filterUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
     // Note that this was separately made by SPARK-18362. Logically, this should be the same
     // with the one below, `filterCommentAndEmpty` but execution path is different. One of them
     // might have to be removed in the near future if possible.
@@ -131,6 +131,6 @@ object CSVUtils {
     }
   }
 
-  def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] =
-    CSVExprUtils.skipUnwantedLines(iter, options)
+  def filterUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] =
+    CSVExprUtils.filterUnwantedLines(iter, options)
 }
