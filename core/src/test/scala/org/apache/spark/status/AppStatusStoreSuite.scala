@@ -230,22 +230,26 @@ class AppStatusStoreSuite extends SparkFunSuite {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val statusStore = AppStatusStore.createLiveStore(conf)
 
-    val listener = statusStore.listener.get
+    try {
+      val listener = statusStore.listener.get
 
-    // Simulate a stage in job progress listener
-    val stageInfo = new StageInfo(stageId = 0, attemptId = 0, name = "dummy", numTasks = 1,
-      rddInfos = Seq.empty, parentIds = Seq.empty, details = "details",
-      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    (1 to 2).foreach {
-      taskId =>
-        val taskInfo = new TaskInfo(
-          taskId, taskId, 0, taskId, 0, "0", "localhost", TaskLocality.ANY,
-          false)
-        listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
-        listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
+      // Simulate a stage in job progress listener
+      val stageInfo = new StageInfo(stageId = 0, attemptId = 0, name = "dummy", numTasks = 1,
+        rddInfos = Seq.empty, parentIds = Seq.empty, details = "details",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      (1 to 2).foreach {
+        taskId =>
+          val taskInfo = new TaskInfo(
+            taskId, taskId, 0, taskId, 0, "0", "localhost", TaskLocality.ANY,
+            false)
+          listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+          listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
+      }
+
+      assert(statusStore.speculationSummary(0, 0).isEmpty)
+    } finally {
+      statusStore.close()
     }
-
-    assert(statusStore.speculationSummary(0, 0).isEmpty)
   }
 
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
