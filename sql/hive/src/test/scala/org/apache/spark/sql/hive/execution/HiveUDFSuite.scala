@@ -724,6 +724,17 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
       }
     }
+    withUserDefinedFunction("MultiArgsGenericUDF" -> false) {
+      sql(s"CREATE FUNCTION MultiArgsGenericUDF AS '${classOf[GenericUDFConcat].getName}'")
+      withTable("MultiArgsGenericUDFTable") {
+        sql("create table MultiArgsGenericUDFTable as " +
+          "select 'Deep-going studying' as x, 'Spark SQL' as y")
+        val df = sql("SELECT MultiArgsGenericUDF(x, ' ', y) from MultiArgsGenericUDFTable")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec])
+        checkAnswer(df, Seq(Row("Deep-going studying Spark SQL")))
+      }
+    }
   }
 
   test("SPARK-42051: HiveGenericUDF Codegen Support w/ execution failure") {

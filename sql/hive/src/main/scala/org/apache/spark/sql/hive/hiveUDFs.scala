@@ -33,10 +33,11 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.Obje
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{RuntimeReplaceable, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 
@@ -131,10 +132,21 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataTyp
 
 private[hive] case class HiveGenericUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression
+  extends RuntimeReplaceable
   with HiveInspectors
   with Logging
   with UserDefinedExpression {
+
+  override lazy val replacement: Expression = {
+    Invoke(
+      targetObject = Literal.fromObject(new HiveGenericUDFInvokeAdapter(
+        funcWrapper, dataType, children)),
+      functionName = "evaluate",
+      dataType = dataType,
+      arguments = children,
+      isVarargs = true
+    )
+  }
 
   override def nullable: Boolean = true
 
@@ -144,7 +156,7 @@ private[hive] case class HiveGenericUDF(
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
 
   @transient
-  lazy val function = funcWrapper.createFunction[GenericUDF]()
+  private lazy val function = funcWrapper.createFunction[GenericUDF]()
 
   @transient
   private lazy val argumentInspectors = children.map(toInspector)
@@ -154,37 +166,13 @@ private[hive] case class HiveGenericUDF(
     function.initializeAndFoldConstants(argumentInspectors.toArray)
   }
 
-  // Visible for codegen
-  @transient
-  lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
-
   @transient
   private lazy val isUDFDeterministic = {
     val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
     udfType != null && udfType.deterministic() && !udfType.stateful()
   }
 
-  // Visible for codegen
-  @transient
-  lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
-    case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
-  }.toArray[DeferredObject]
-
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
-
-  override def eval(input: InternalRow): Any = {
-    returnInspector // Make sure initialized.
-
-    var i = 0
-    val length = children.length
-    while (i < length) {
-      val idx = i
-      deferredObjects(i).asInstanceOf[DeferredObjectAdapter]
-        .set(children(idx).eval(input))
-      i += 1
-    }
-    unwrapper(function.evaluate(deferredObjects))
-  }
 
   override def prettyName: String = name
 
@@ -194,47 +182,52 @@ private[hive] case class HiveGenericUDF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val refTerm = ctx.addReferenceObj("this", this)
-    val childrenEvals = children.map(_.genCode(ctx))
 
-    val setDeferredObjects = childrenEvals.zipWithIndex.map {
-      case (eval, i) =>
-        val deferredObjectAdapterClz = classOf[DeferredObjectAdapter].getCanonicalName
-        s"""
-           |if (${eval.isNull}) {
-           |  (($deferredObjectAdapterClz) $refTerm.deferredObjects()[$i]).set(null);
-           |} else {
-           |  (($deferredObjectAdapterClz) $refTerm.deferredObjects()[$i]).set(${eval.value});
-           |}
-           |""".stripMargin
+  override lazy val canonicalized: Expression = {
+    withNewChildren(children.map(_.canonicalized)).asInstanceOf[HiveGenericUDF]
+  }
+}
+
+class HiveGenericUDFInvokeAdapter(
+    funcWrapper: HiveFunctionWrapper, dataType: DataType, children: Seq[Expression])
+  extends HiveInspectors with Serializable {
+
+  @transient
+  private lazy val function = funcWrapper.createFunction[GenericUDF]()
+
+  @transient
+  private lazy val argumentInspectors = children.map(toInspector)
+
+  @transient
+  private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
+    case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
+  }.toArray[DeferredObject]
+
+  @transient
+  private lazy val returnInspector = {
+    function.initializeAndFoldConstants(argumentInspectors.toArray)
+  }
+
+  @transient
+  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
+
+  def evaluate(params: Array[Object]): Any = {
+    returnInspector // Make sure initialized.
+    params.zipWithIndex.map {
+      case (param, i) =>
+        deferredObjects(i).asInstanceOf[DeferredObjectAdapter].set(param)
     }
-
-    val resultType = CodeGenerator.boxedType(dataType)
-    val resultTerm = ctx.freshName("result")
-    ev.copy(code =
-      code"""
-         |${childrenEvals.map(_.code).mkString("\n")}
-         |${setDeferredObjects.mkString("\n")}
-         |$resultType $resultTerm = null;
-         |boolean ${ev.isNull} = false;
-         |try {
-         |  $resultTerm = ($resultType) $refTerm.unwrapper().apply(
-         |    $refTerm.function().evaluate($refTerm.deferredObjects()));
-         |  ${ev.isNull} = $resultTerm == null;
-         |} catch (Throwable e) {
-         |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "${funcWrapper.functionClassName}",
-         |    "${children.map(_.dataType.catalogString).mkString(", ")}",
-         |    "${dataType.catalogString}",
-         |    e);
-         |}
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $resultTerm;
-         |}
-         |""".stripMargin
-    )
+    try {
+      val ret = function.evaluate(deferredObjects)
+      unwrapper(ret)
+    } catch {
+      case e: Throwable =>
+        throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
+          s"${funcWrapper.functionClassName}",
+          s"${children.map(_.dataType.catalogString).mkString(", ")}",
+          s"${dataType.catalogString}",
+          e)
+    }
   }
 }
 

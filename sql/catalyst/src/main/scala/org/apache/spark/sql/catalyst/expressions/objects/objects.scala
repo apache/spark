@@ -48,6 +48,8 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   def arguments: Seq[Expression]
 
+  def isVarargs: Boolean
+
   def propagateNull: Boolean
 
   // InvokeLike is stateful because of the evaluatedArgs Array
@@ -130,7 +132,13 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
     }
     val argCode = ctx.splitExpressionsWithCurrentInputs(argCodes)
 
-    (argCode, argValues.mkString(", "), resultIsNull)
+    val argString = if (isVarargs) {
+      "new Object[] {" + argValues.mkString(", ") + "}"
+    } else {
+      argValues.mkString(", ")
+    }
+
+    (argCode, argString, resultIsNull)
   }
 
   /**
@@ -157,7 +165,12 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       null
     } else {
       val ret = try {
-        method.invoke(obj, evaluatedArgs: _*)
+        if (isVarargs) {
+          method.invoke(obj, evaluatedArgs)
+        } else {
+          method.invoke(obj, evaluatedArgs: _*)
+        }
+
       } catch {
         // Re-throw the original exception.
         case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
@@ -264,7 +277,8 @@ case class StaticInvoke(
     inputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable: Boolean = true,
-    isDeterministic: Boolean = true) extends InvokeLike {
+    isDeterministic: Boolean = true,
+    isVarargs: Boolean = false) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -359,6 +373,7 @@ case class StaticInvoke(
  *                       non-null value.
  * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
  *                        will not apply certain optimizations such as constant folding.
+ * @param isVarargs When true, the search method parameter type is Array [Object]
  */
 case class Invoke(
     targetObject: Expression,
@@ -368,7 +383,8 @@ case class Invoke(
     methodInputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable : Boolean = true,
-    isDeterministic: Boolean = true) extends InvokeLike {
+    isDeterministic: Boolean = true,
+    isVarargs: Boolean = false) extends InvokeLike {
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
@@ -387,6 +403,8 @@ case class Invoke(
   private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 
   @transient lazy val method = targetObject.dataType match {
+    case ObjectType(cls) if isVarargs =>
+      Some(findMethod(cls, encodedFunctionName, Seq(classOf[Array[Any]])))
     case ObjectType(cls) =>
       Some(findMethod(cls, encodedFunctionName, argClasses))
     case _ => None
@@ -491,7 +509,17 @@ object NewInstance {
       arguments: Seq[Expression],
       dataType: DataType,
       propagateNull: Boolean = true): NewInstance =
-    new NewInstance(cls, arguments, inputTypes = Nil, propagateNull, dataType, None)
+    new NewInstance(cls, arguments, inputTypes = Nil, propagateNull, dataType, None, false)
+
+  def apply(
+      cls: Class[_],
+      arguments: Seq[Expression],
+      inputTypes: Seq[AbstractDataType],
+      propagateNull: Boolean,
+      dataType: DataType,
+      outerPointer: Option[() => AnyRef]): NewInstance =
+    new NewInstance(cls, arguments, inputTypes = inputTypes,
+      propagateNull, dataType, outerPointer, false)
 }
 
 /**
@@ -523,7 +551,8 @@ case class NewInstance(
     inputTypes: Seq[AbstractDataType],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef]) extends InvokeLike {
+    outerPointer: Option[() => AnyRef],
+    isVarargs: Boolean) extends InvokeLike {
   private val className = cls.getName
 
   override def nullable: Boolean = needNullCheck
