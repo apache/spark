@@ -136,15 +136,15 @@ class RankLimitIterator(
     val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
 
   var count = 0
-  var currentRank: UnsafeRow = null
+  var currentRankRow: UnsafeRow = null
 
   override def increaseRank(): Unit = {
     if (count == 0) {
-      currentRank = nextRow.copy()
+      currentRankRow = nextRow.copy()
     } else {
-      if (ordering.compare(currentRank, nextRow) != 0) {
+      if (ordering.compare(currentRankRow, nextRow) != 0) {
         rank = count
-        currentRank = nextRow.copy()
+        currentRankRow = nextRow.copy()
       }
     }
     count += 1
@@ -157,21 +157,21 @@ class DenseRankLimitIterator(
     val orderSpec: Seq[SortOrder],
     val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
 
-  var currentRank: UnsafeRow = null
+  var currentRankRow: UnsafeRow = null
 
   override def increaseRank(): Unit = {
-    if (currentRank == null) {
-      currentRank = nextRow.copy()
+    if (currentRankRow == null) {
+      currentRankRow = nextRow.copy()
     } else {
-      if (ordering.compare(currentRank, nextRow) != 0) {
+      if (ordering.compare(currentRankRow, nextRow) != 0) {
         rank += 1
-        currentRank = nextRow.copy()
+        currentRankRow = nextRow.copy()
       }
     }
   }
 }
 
-abstract class WindowIterator extends BaseLimitIterator {
+trait WindowIterator extends BaseLimitIterator {
 
   def partitionSpec: Seq[Expression]
 
@@ -271,13 +271,10 @@ abstract class WindowIterator extends BaseLimitIterator {
 
 case class SimpleGroupLimitIterator(
     partitionSpec: Seq[Expression],
-    output: Seq[Attribute],
-    input: Iterator[InternalRow],
-    limit: Int) extends WindowIterator {
-
-  override def increaseRank(): Unit = {
-    rank += 1
-  }
+    override val output: Seq[Attribute],
+    override val input: Iterator[InternalRow],
+    override val limit: Int)
+  extends SimpleLimitIterator(output, input, limit) with WindowIterator {
 
   override def clearRank(): Unit = {
     rank = 0
@@ -286,25 +283,11 @@ case class SimpleGroupLimitIterator(
 
 case class RankGroupLimitIterator(
     partitionSpec: Seq[Expression],
-    output: Seq[Attribute],
-    input: Iterator[InternalRow],
-    orderSpec: Seq[SortOrder],
-    limit: Int) extends WindowIterator {
-  val ordering = GenerateOrdering.generate(orderSpec, output)
-  var count = 0
-  var currentRankRow: UnsafeRow = null
-
-  override def increaseRank(): Unit = {
-    if (count == 0) {
-      currentRankRow = nextRow.copy()
-    } else {
-      if (ordering.compare(currentRankRow, nextRow) != 0) {
-        rank = count
-        currentRankRow = nextRow.copy()
-      }
-    }
-    count += 1
-  }
+    override val output: Seq[Attribute],
+    override val input: Iterator[InternalRow],
+    override val orderSpec: Seq[SortOrder],
+    override val limit: Int)
+  extends RankLimitIterator(output, input, orderSpec, limit) with WindowIterator {
 
   override def clearRank(): Unit = {
     count = 0
@@ -315,23 +298,11 @@ case class RankGroupLimitIterator(
 
 case class DenseRankGroupLimitIterator(
     partitionSpec: Seq[Expression],
-    output: Seq[Attribute],
-    input: Iterator[InternalRow],
-    orderSpec: Seq[SortOrder],
-    limit: Int) extends WindowIterator {
-  val ordering = GenerateOrdering.generate(orderSpec, output)
-  var currentRankRow: UnsafeRow = null
-
-  override def increaseRank(): Unit = {
-    if (currentRankRow == null) {
-      currentRankRow = nextRow.copy()
-    } else {
-      if (ordering.compare(currentRankRow, nextRow) != 0) {
-        rank += 1
-        currentRankRow = nextRow.copy()
-      }
-    }
-  }
+    override val output: Seq[Attribute],
+    override val input: Iterator[InternalRow],
+    override val orderSpec: Seq[SortOrder],
+    override val limit: Int)
+  extends DenseRankLimitIterator(output, input, orderSpec, limit) with WindowIterator {
 
   override def clearRank(): Unit = {
     rank = 0
