@@ -120,7 +120,7 @@ abstract class SparkFunSuite
             logWarning(s"The number of UI dirs not cleaned after the test is $remainingSize")
             Utils.deleteRecursively(dir)
           }
-        } else if (exists) {
+        } else if (exists && (!dir.isDirectory || dir.listFiles().nonEmpty)) {
           Utils.deleteRecursively(dir)
         }
       case _ => // do nothing
