@@ -88,6 +88,7 @@ abstract class SparkFunSuite
 
   protected override def beforeAll(): Unit = {
     System.setProperty(IS_TESTING.key, "true")
+    cleanupUIDirIfNecessary(audit = false)
     if (enableAutoThreadAudit) {
       doThreadPreAudit()
     }
@@ -100,17 +101,28 @@ abstract class SparkFunSuite
       AccumulatorContext.clear()
     } finally {
       super.afterAll()
-      cleanupUIDirIfNecessary()
+      cleanupUIDirIfNecessary(audit = true)
       if (enableAutoThreadAudit) {
         doThreadPostAudit()
       }
     }
   }
 
-  protected def cleanupUIDirIfNecessary(): Unit = {
+  protected def cleanupUIDirIfNecessary(audit: Boolean): Unit = {
     // Delete ui path after the test when the env `LIVE_UI_LOCAL_STORE_DIR` is configured.
     sys.env.get("LIVE_UI_LOCAL_STORE_DIR") match {
-      case Some(rootDir) => Utils.deleteRecursively(new File(rootDir))
+      case Some(rootDir) =>
+        val dir = new File(rootDir)
+        val exists = dir.exists()
+        if (exists && audit) {
+          val remainingSize = dir.listFiles().length
+          if (remainingSize > 0) {
+            logWarning(s"The number of UI dirs not cleaned after the test is $remainingSize")
+            Utils.deleteRecursively(dir)
+          }
+        } else if (exists) {
+          Utils.deleteRecursively(dir)
+        }
       case _ => // do nothing
     }
   }
