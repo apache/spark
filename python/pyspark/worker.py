@@ -143,7 +143,7 @@ def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
     )
 
     def verify_result(result):
-        if not isinstance(result, Iterator):
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
             raise TypeError(
                 "Return type of the user-defined function should be "
                 "iterator of {}, but is {}".format(iter_type_label, type(result))
