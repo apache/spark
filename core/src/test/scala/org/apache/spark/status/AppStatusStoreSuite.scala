@@ -248,8 +248,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
 
       assert(statusStore.speculationSummary(0, 0).isEmpty)
     } finally {
-      // Call `AppStatusStore#close()` method to clean up the ui path
-      // when the env `LIVE_UI_LOCAL_STORE_DIR` is configured
       statusStore.close()
     }
   }
