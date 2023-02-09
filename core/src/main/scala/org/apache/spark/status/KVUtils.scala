@@ -132,6 +132,8 @@ private[spark] object KVUtils extends Logging {
         case ROCKSDB => "listing.rdb"
       }
 
+      // scalastyle:off
+      println(s"will create kvstore path $storePath")
       val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
       Utils.chmod700(dbPath)
 
