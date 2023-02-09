@@ -634,37 +634,6 @@ class QueryExecutionErrorsSuite
       sqlState = "0A000")
   }
 
-  test("FAILED_RENAME_PATH: rename when destination path already exists") {
-    withTempPath { p =>
-      withSQLConf(
-        "spark.sql.streaming.checkpointFileManagerClass" ->
-          classOf[FileSystemBasedCheckpointFileManager].getName,
-        "fs.file.impl" -> classOf[FakeFileSystemAlwaysExists].getName,
-        // FileSystem caching could cause a different implementation of fs.file to be used
-        "fs.file.impl.disable.cache" -> "true") {
-        val checkpointLocation = p.getAbsolutePath
-
-        val ds = spark.readStream.format("rate").load()
-        val e = intercept[SparkConcurrentModificationException] {
-          ds.writeStream
-            .option("checkpointLocation", checkpointLocation)
-            .queryName("_")
-            .format("memory")
-            .start()
-        }
-
-        val expectedPath = p.toURI
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkFileAlreadyExistsException],
-          errorClass = "FAILED_RENAME_PATH",
-          sqlState = Some("42K04"),
-          matchPVals = true,
-          parameters = Map("sourcePath" -> s"$expectedPath.+",
-            "targetPath" -> s"$expectedPath.+"))
-      }
-    }
-  }
-
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
     withTempPath { p =>
       withSQLConf(
@@ -803,10 +772,6 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
   override def setPermission(src: Path, permission: FsPermission): Unit = {
     throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
-}
-
-class FakeFileSystemAlwaysExists extends DebugFilesystem {
-  override def exists(f: Path): Boolean = true
 }
 
 class FakeFileSystemNeverExists extends DebugFilesystem {

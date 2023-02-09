@@ -256,12 +256,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
     fs.open(path)
   }
 
-  override def exists(path: Path): Boolean =
-    try {
-      fs.getFileStatus(path) != null
-    } catch {
-      case _: FileNotFoundException => false
-    }
+  override def exists(path: Path): Boolean = fs.exists(path)
 
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (!overwriteIfPossible && fs.exists(dstPath)) {

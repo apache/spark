@@ -169,8 +169,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
-    checkExceptionInExpression[RuntimeException](
-      MapConcat(Seq(m0, m1)), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapConcat(Seq(m0, m1)),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // overlapping maps should remove duplicated map keys w.r.t. last win policy.
       checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
@@ -324,8 +329,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
 
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(ai4), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapFromEntries(ai4),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
@@ -351,8 +361,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
 
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(as4), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapFromEntries(as4),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
@@ -2248,6 +2263,78 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
       Literal.create(Seq(1d, null), ArrayType(DoubleType))),
       Seq(2d))
+  }
+
+  test("Array Insert") {
+    val a1 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq(1, 2, null, 4, 5, null), ArrayType(IntegerType))
+    val a3 = Literal.create(Seq[Boolean](true, false, true), ArrayType(BooleanType))
+    val a4 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType))
+    val a5 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType))
+    val a6 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType))
+    val a7 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType))
+    val a8 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType))
+    val a9 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    val a10 = Literal.create(Seq("b", null, "a", "g", null), ArrayType(StringType, true))
+    val a11 = Literal.create(null, ArrayType(StringType))
+
+    // basic additions per type
+    checkEvaluation(ArrayInsert(a1, Literal(3), Literal(3)), Seq(1, 2, 3, 4))
+    checkEvaluation(
+      ArrayInsert(a3, Literal.create(3, IntegerType), Literal(true)),
+      Seq[Boolean](true, false, true, true)
+    )
+    checkEvaluation(
+      ArrayInsert(
+        a4,
+        Literal(3),
+        Literal.create(5.asInstanceOf[Byte], ByteType)),
+      Seq[Byte](1, 2, 5, 3, 2))
+
+    checkEvaluation(
+      ArrayInsert(
+        a5,
+        Literal(3),
+        Literal.create(3.asInstanceOf[Short], ShortType)),
+      Seq[Short](1, 2, 3, 3, 2))
+
+    checkEvaluation(
+      ArrayInsert(a7, Literal(4), Literal(4.4)),
+      Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
+    )
+
+    checkEvaluation(
+      ArrayInsert(a6, Literal(4), Literal(4.4F)),
+      Seq(1.1F, 2.2F, 3.3F, 4.4F, 2.2F)
+    )
+    checkEvaluation(ArrayInsert(a8, Literal(3), Literal(3L)), Seq(1L, 2L, 3L, 4L))
+    checkEvaluation(ArrayInsert(a9, Literal(3), Literal("d")), Seq("b", "a", "d", "c"))
+
+    // index edge cases
+    checkEvaluation(ArrayInsert(a1, Literal(2), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(0), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(1), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(4), Literal(3)), Seq(1, 2, 4, 3))
+    checkEvaluation(ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-3), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-4), Literal(3)), Seq(3, null, 1, 2, 4))
+    checkEvaluation(
+      ArrayInsert(a1, Literal(10), Literal(3)),
+      Seq(1, 2, 4, null, null, null, null, null, null, 3)
+    )
+    checkEvaluation(
+      ArrayInsert(a1, Literal(-10), Literal(3)),
+      Seq(3, null, null, null, null, null, null, null, 1, 2, 4)
+    )
+
+    // null handling
+    checkEvaluation(ArrayInsert(
+      a1, Literal(3), Literal.create(null, IntegerType)), Seq(1, 2, null, 4)
+    )
+    checkEvaluation(ArrayInsert(a2, Literal(3), Literal(3)), Seq(1, 2, 3, null, 4, 5, null))
+    checkEvaluation(ArrayInsert(a10, Literal(3), Literal("d")), Seq("b", null, "d", "a", "g", null))
+    checkEvaluation(ArrayInsert(a11, Literal(3), Literal("d")), null)
+    checkEvaluation(ArrayInsert(a10, Literal.create(null, IntegerType), Literal("d")), null)
   }
 
   test("Array Intersect") {

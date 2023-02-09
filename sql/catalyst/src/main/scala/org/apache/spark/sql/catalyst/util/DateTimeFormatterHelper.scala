@@ -25,6 +25,7 @@ import java.util.{Date, Locale}
 
 import com.google.common.cache.CacheBuilder
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -184,12 +185,13 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(
+        pattern, e, SPARK_DOC_ROOT)
   }
 
   protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
     case e: IllegalArgumentException =>
-      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e, SPARK_DOC_ROOT)
   }
 }
 

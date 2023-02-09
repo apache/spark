@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -179,7 +180,8 @@ class HiveUDAFSuite extends QueryTest
         parameters = Map(
           "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",
-          "actualNum" -> "1"),
+          "actualNum" -> "1",
+          "docroot" -> SPARK_DOC_ROOT),
         context = ExpectedContext(
           fragment = "longProductSum(100)",
           start = 7,

@@ -222,7 +222,10 @@ class CSVOptions(
    */
   val maxErrorContentLength = 1000
 
-  val isCommentSet = this.comment != '\u0000'
+  val isCommentSet = parameters.get(COMMENT) match {
+    case Some(value) if value.length == 1 => true
+    case _ => false
+  }
 
   val samplingRatio =
     parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)

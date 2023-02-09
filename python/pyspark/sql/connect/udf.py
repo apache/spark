@@ -21,6 +21,7 @@ from pyspark.sql.connect import check_dependencies
 
 check_dependencies(__name__, __file__)
 
+import sys
 import functools
 from typing import Callable, Any, TYPE_CHECKING, Optional
 
@@ -131,6 +132,7 @@ class UserDefinedFunction:
             output_type=data_type_str,
             eval_type=self.evalType,
             command=CloudPickleSerializer().dumps((self.func, self._returnType)),
+            python_ver="%d.%d" % sys.version_info[:2],
         )
         return Column(
             CommonInlineUserDefinedFunction(

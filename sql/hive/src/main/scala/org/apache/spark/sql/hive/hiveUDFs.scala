@@ -292,11 +292,11 @@ private[hive] case class HiveGenericUDTF(
   @transient
   private lazy val unwrapper = unwrapperFor(outputInspector)
 
+  @transient
+  private lazy val inputProjection = new InterpretedProjection(children)
+
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
-
-    val inputProjection = new InterpretedProjection(children)
-
     function.process(wrap(inputProjection(input), wrappers, udtInput, inputDataTypes))
     collector.collectRows()
   }

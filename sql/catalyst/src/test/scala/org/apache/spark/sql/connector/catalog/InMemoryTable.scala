@@ -39,9 +39,10 @@ class InMemoryTable(
     distribution: Distribution = Distributions.unspecified(),
     ordering: Array[SortOrder] = Array.empty,
     numPartitions: Option[Int] = None,
-    isDistributionStrictlyRequired: Boolean = true)
+    isDistributionStrictlyRequired: Boolean = true,
+    override val numRowsPerSplit: Int = Int.MaxValue)
   extends InMemoryBaseTable(name, schema, partitioning, properties, distribution,
-    ordering, numPartitions, isDistributionStrictlyRequired) with SupportsDelete {
+    ordering, numPartitions, isDistributionStrictlyRequired, numRowsPerSplit) with SupportsDelete {
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryTable.supportsFilters(filters)
@@ -62,8 +63,16 @@ class InMemoryTable(
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
-        .map(key -> _.withRow(row))
-        .getOrElse(key -> new BufferedRows(key).withRow(row))
+        .map { splits =>
+          val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
+            splits :+ new BufferedRows(key)
+          } else {
+            splits
+          }
+          newSplits.last.withRow(row)
+          key -> newSplits
+        }
+        .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
       addPartitionKey(key)
     })
     this

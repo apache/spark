@@ -41,7 +41,7 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
-from pyspark.errors import SparkConnectException
+from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 

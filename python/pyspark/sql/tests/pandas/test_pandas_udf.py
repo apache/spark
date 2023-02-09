@@ -171,9 +171,6 @@ class PandasUDFTestsMixin:
         def foo(x):
             raise StopIteration()
 
-        def foofoo(x, y):
-            raise StopIteration()
-
         exc_message = "Caught StopIteration thrown from user's code; failing the task"
         df = self.spark.range(0, 100)
 
@@ -189,6 +186,16 @@ class PandasUDFTestsMixin:
             df.withColumn("v", pandas_udf(foo, "double", PandasUDFType.SCALAR)("id")).collect,
         )
 
+    def test_stopiteration_in_grouped_map(self):
+        def foo(x):
+            raise StopIteration()
+
+        def foofoo(x, y):
+            raise StopIteration()
+
+        exc_message = "Caught StopIteration thrown from user's code; failing the task"
+        df = self.spark.range(0, 100)
+
         # pandas grouped map
         self.assertRaisesRegex(
             PythonException,
@@ -203,6 +210,13 @@ class PandasUDFTestsMixin:
             .apply(pandas_udf(foofoo, df.schema, PandasUDFType.GROUPED_MAP))
             .collect,
         )
+
+    def test_stopiteration_in_grouped_agg(self):
+        def foo(x):
+            raise StopIteration()
+
+        exc_message = "Caught StopIteration thrown from user's code; failing the task"
+        df = self.spark.range(0, 100)
 
         # pandas grouped agg
         self.assertRaisesRegex(
