@@ -25,22 +25,35 @@ import org.apache.spark.sql.functions._
 
 object CSVUtils {
   /**
-   * Filter blank lines, skip specified rows, and remove comments from a CSV iterator. Then blank
+   * Filter ignorable rows for CSV dataset (lines empty and starting with `comment`).
+   * This is currently being used in CSV schema inference.
+   */
+  def filterCommentAndEmpty(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
+    // Note that this was separately made by SPARK-18362. Logically, this should be the same
+    // with the one below, `filterCommentAndEmpty` but execution path is different. One of them
+    // might have to be removed in the near future if possible.
+    import lines.sqlContext.implicits._
+    val aliased = lines.toDF("value")
+    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0)
+    if (options.isCommentSet) {
+      nonEmptyLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
+    } else {
+      nonEmptyLines.as[String]
+    }
+  }
+
+  /**
+   * Filter blank lines, remove comments, and skip specified rows from a CSV iterator. Then blank
    * entries (and comments if set) are removed. This is currently being used in CSV schema
    * inference.
    */
   def filterUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
     import lines.sqlContext.implicits._
-    val aliased = lines.toDF("value")
-    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0).as[String]
-    val skippedLines = nonEmptyLines.rdd.zipWithIndex().toDF("value", "order")
+    val filteredLines = filterCommentAndEmpty(lines, options)
+    filteredLines.rdd.zipWithIndex().toDF("value", "order")
       .filter($"order" >= options.skipLines)
       .drop("order")
-    if (options.isCommentSet) {
-      skippedLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
-    } else {
-      skippedLines.as[String]
-    }
+      .as[String]
   }
 
   /**

@@ -2628,7 +2628,7 @@ abstract class CSVSuite
         val ds = Seq("", "1,2,3", "# comment", "4,5,6", "a,b,c", "d,e,f").toDS()
         val csv = spark.read
           .option("multiLine", multiline)
-          .option("skipLines", 3)
+          .option("skipLines", 2)
           .option("inferSchema", true)
           .option("comment", "#")
           .csv(ds)
@@ -2669,6 +2669,7 @@ abstract class CSVSuite
           .option("skipLines", skipLines)
           .option("multiLine", true)
           .option("inferSchema", true)
+          .option("header", header)
           .csv(ds)
         if (header) {
           assert(csv.schema.fieldNames === Seq("a", "b\nb", String.valueOf(skipLines)))
@@ -2686,7 +2687,7 @@ abstract class CSVSuite
         val cars = spark
           .read
           .format("csv")
-          .option("skipLines", 3)
+          .option("skipLines", 2)
           .option("multiLine", multiline)
           .option("header", header)
           .option("comment", "#")
@@ -2702,7 +2703,7 @@ abstract class CSVSuite
       val cars = spark
         .read
         .format("csv")
-        .option("skipLines", 3)
+        .option("skipLines", 2)
         .option("multiLine", true)
         .option("header", header)
         .option("comment", "#")
