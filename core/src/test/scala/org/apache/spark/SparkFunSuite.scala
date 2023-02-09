@@ -100,9 +100,23 @@ abstract class SparkFunSuite
       AccumulatorContext.clear()
     } finally {
       super.afterAll()
+      cleanupUIDirIfNecessary()
       if (enableAutoThreadAudit) {
         doThreadPostAudit()
       }
+    }
+  }
+
+  private def cleanupUIDirIfNecessary(): Unit = {
+    // When the env `LIVE_UI_LOCAL_STORE_DIR` is configured,
+    // clean its subdirectory after the test
+    sys.env.get("LIVE_UI_LOCAL_STORE_DIR") match {
+      case Some(rootDir) =>
+        val dir = new File(rootDir)
+        if (dir.exists() && dir.isDirectory) {
+          dir.listFiles().foreach(Utils.deleteRecursively)
+        }
+      case _ => // do nothing
     }
   }
 

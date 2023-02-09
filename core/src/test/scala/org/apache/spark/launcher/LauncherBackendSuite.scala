@@ -17,7 +17,6 @@
 
 package org.apache.spark.launcher
 
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
@@ -70,16 +69,6 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       }
     } finally {
       handle.kill()
-      // When the env `LIVE_UI_LOCAL_STORE_DIR` is configured,
-      // clean its subdirectory after the test
-      sys.env.get("LIVE_UI_LOCAL_STORE_DIR") match {
-        case Some(rootDir) =>
-          val dir = new File(rootDir)
-          if (dir.exists() && dir.isDirectory) {
-            dir.listFiles().foreach(Utils.deleteRecursively)
-          }
-        case _ => // do nothing
-      }
     }
   }
 
