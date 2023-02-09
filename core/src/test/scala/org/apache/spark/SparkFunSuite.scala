@@ -88,7 +88,7 @@ abstract class SparkFunSuite
 
   protected override def beforeAll(): Unit = {
     System.setProperty(IS_TESTING.key, "true")
-    cleanupUIDirIfNecessary(audit = false)
+    cleanupUIDirIfNecessary(checkRemaining = false)
     if (enableAutoThreadAudit) {
       doThreadPreAudit()
     }
@@ -101,27 +101,32 @@ abstract class SparkFunSuite
       AccumulatorContext.clear()
     } finally {
       super.afterAll()
-      cleanupUIDirIfNecessary(audit = true)
+      cleanupUIDirIfNecessary(checkRemaining = true)
       if (enableAutoThreadAudit) {
         doThreadPostAudit()
       }
     }
   }
 
-  protected def cleanupUIDirIfNecessary(audit: Boolean): Unit = {
+  protected def cleanupUIDirIfNecessary(checkRemaining: Boolean): Unit = {
     // Delete ui path after the test when the env `LIVE_UI_LOCAL_STORE_DIR` is configured.
     sys.env.get("LIVE_UI_LOCAL_STORE_DIR") match {
       case Some(rootDir) =>
         val dir = new File(rootDir)
         val exists = dir.exists()
-        if (exists && audit) {
-          val remainingSize = dir.listFiles().length
-          if (remainingSize > 0) {
-            logWarning(s"The number of UI dirs not cleaned after the test is $remainingSize")
+        if (exists) {
+          if (!dir.isDirectory) {
+            throw new IllegalArgumentException(
+              "`LIVE_UI_LOCAL_STORE_DIR` should be configured as a directory.")
+          } else if (checkRemaining) {
+            val remainingSize = dir.listFiles().length
+            if (remainingSize > 0) {
+              logWarning(s"The number of UI dirs not cleaned after the test is $remainingSize")
+              Utils.deleteRecursively(dir)
+            }
+          } else if (dir.listFiles().nonEmpty) {
             Utils.deleteRecursively(dir)
           }
-        } else if (exists && (!dir.isDirectory || dir.listFiles().nonEmpty)) {
-          Utils.deleteRecursively(dir)
         }
       case _ => // do nothing
     }
