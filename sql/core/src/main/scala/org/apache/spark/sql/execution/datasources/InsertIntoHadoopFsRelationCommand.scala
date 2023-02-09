@@ -120,7 +120,7 @@ case class InsertIntoHadoopFsRelationCommand(
       val pathExists = fs.exists(qualifiedOutputPath)
       (mode, pathExists) match {
         case (SaveMode.ErrorIfExists, true) =>
-          throw QueryCompilationErrors.outputPathAlreadyExistsError(qualifiedOutputPath)
+          throw QueryExecutionErrors.saveModeUnsupportedError(SaveMode.ErrorIfExists, true)
         case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
