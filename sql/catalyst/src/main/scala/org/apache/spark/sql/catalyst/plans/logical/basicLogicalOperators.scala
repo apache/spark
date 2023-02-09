@@ -1235,7 +1235,7 @@ case class WindowGroupLimit(
     orderSpec: Seq[SortOrder],
     rankLikeFunction: Expression,
     limit: Int,
-    child: LogicalPlan) extends OrderPreservingUnaryNode {
+    child: LogicalPlan) extends UnaryNode {
   assert(orderSpec.nonEmpty && limit > 0)
 
   override def output: Seq[Attribute] = child.output
