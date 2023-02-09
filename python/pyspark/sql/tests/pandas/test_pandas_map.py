@@ -73,8 +73,15 @@ class MapInPandasTestsMixin:
         return func
 
     def test_map_in_pandas(self):
+        # test returning iterator of DataFrames
         df = self.spark.range(10, numPartitions=3)
         actual = df.mapInPandas(self.identity_dataframes_iter("id"), "id long").collect()
+        expected = df.collect()
+        self.assertEqual(actual, expected)
+
+        # test returning list of DataFrames
+        df = self.spark.range(10, numPartitions=3)
+        actual = df.mapInPandas(lambda it: [pdf for pdf in it], "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
 
