@@ -709,15 +709,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Returns
         -------
         :class:`UDFRegistration`
 
         Examples
         --------
-        >>> spark.udf
-        <pyspark.sql.udf.UDFRegistration object ...>
-
         Register a Python UDF, and use it in SQL.
 
         >>> strlen = spark.udf.register("strlen", lambda x: len(x))

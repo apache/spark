@@ -477,6 +477,9 @@ class UDFRegistration:
 
         .. versionadded:: 1.3.1
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         name : str,
