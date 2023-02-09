@@ -48,17 +48,11 @@ object CSVUtils {
    */
   def skipUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
     import lines.sqlContext.implicits._
-    val aliased = lines.toDF("value")
-    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0).as[String]
-    val skippedLines = nonEmptyLines.rdd.zipWithIndex().toDF("value", "order")
+    val filteredLines = filterCommentAndEmpty(lines, options)
+    filteredLines.rdd.zipWithIndex().toDF("value", "order")
       .filter($"order" >= options.skipLines)
       .drop("order")
-      .as[String].toDF("value")
-    if (options.isCommentSet) {
-      skippedLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
-    } else {
-      skippedLines.as[String]
-    }
+      .as[String]
   }
 
   /**
