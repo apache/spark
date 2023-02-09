@@ -520,7 +520,8 @@ object SparkBuild extends PomBuild {
     } ++ Seq[Project](OldDeps.project)
   }
 
-  if (!sys.env.contains("SERIAL_SBT_TESTS") && !sys.env.contains("LIVE_UI_LOCAL_STORE_DIR") ) {
+  if (!sys.env.contains("SERIAL_SBT_TESTS") && !sys.env.contains("LIVE_UI_LOCAL_STORE_DIR")) {
+
     allProjects.foreach(enable(SparkParallelTestGrouping.settings))
   }
 }
