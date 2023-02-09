@@ -109,6 +109,13 @@ class SparkConnectService(debug: Boolean)
       val status = RPCStatus
         .newBuilder()
         .setCode(RPCCode.INTERNAL_VALUE)
+        .addDetails(
+          ProtoAny.pack(
+            ErrorInfo
+              .newBuilder()
+              .setReason(nf.getClass.getName)
+              .setDomain("org.apache.spark")
+              .build()))
         .setMessage(nf.getLocalizedMessage)
         .build()
       observer.onError(StatusProto.toStatusRuntimeException(status))
