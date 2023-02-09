@@ -718,9 +718,6 @@ class SparkSession(SparkConversionMixin):
 
         Examples
         --------
-        >>> spark.udf
-        <pyspark.sql.udf.UDFRegistration object ...>
-
         Register a Python UDF, and use it in SQL.
 
         >>> strlen = spark.udf.register("strlen", lambda x: len(x))
