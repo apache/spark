@@ -19,7 +19,7 @@ import unittest
 
 from pyspark.testing.connectutils import should_test_connect
 
-if should_test_connect:  # test_udf_with_partial_function
+if should_test_connect:
     from pyspark import sql
     from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -27,9 +27,7 @@ if should_test_connect:  # test_udf_with_partial_function
 
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors.exceptions import SparkConnectAnalysisException
-from pyspark.sql.connect.functions import udf
-from pyspark.sql.types import BooleanType, IntegerType
+from pyspark.sql.types import IntegerType
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
@@ -176,6 +174,15 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_in_subquery(self):
         super().test_udf_in_subquery()
+
+    def test_udf_registration_returns_udf(self):
+        df = self.spark.range(10)
+        add_three = self.spark.udf.register("add_three", lambda x: x + 3, IntegerType())
+
+        self.assertListEqual(
+            df.selectExpr("add_three(id) AS plus_three").collect(),
+            df.select(add_three("id").alias("plus_three")).collect(),
+        )
 
 
 if __name__ == "__main__":
