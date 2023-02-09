@@ -183,8 +183,9 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
             field_names = set([field.name for field in return_type.fields])
             # only the first len(field_names) result columns are considered
             # when truncating the return schema
-            result_columns = (result.columns[:len(field_names)]
-                              if truncate_return_schema else result.columns)
+            result_columns = (
+                result.columns[: len(field_names)] if truncate_return_schema else result.columns
+            )
             column_names = set(result_columns)
             if (
                 assign_cols_by_name
