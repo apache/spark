@@ -144,7 +144,8 @@ private[hive] case class HiveGenericUDF(
       functionName = "evaluate",
       dataType = dataType,
       arguments = children,
-      isVarargs = true
+      isDeterministic = deterministic,
+      isVarargs = true,
     )
   }
 
