@@ -53,7 +53,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class GroupedMapInPandasWithStateTests(ReusedSQLTestCase):
+class GroupedApplyInPandasWithStateTests(ReusedSQLTestCase):
     @classmethod
     def conf(cls):
         cfg = SparkConf()
