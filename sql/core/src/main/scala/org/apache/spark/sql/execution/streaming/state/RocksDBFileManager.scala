@@ -336,8 +336,7 @@ class RocksDBFileManager(
           logDebug(s"Deleted orphan file $dfsFileName")
         } else {
           logDebug(s"Deleted file $dfsFileName that was last used in version $maxUsedVersion")
-        }
-        logDebug(s"Deleted file $dfsFileName that was last used in version $maxUsedVersion")
+        })
       } catch {
         case e: Exception =>
           failedToDelete += 1
