@@ -70,6 +70,8 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       }
     } finally {
       handle.kill()
+      // When the env `LIVE_UI_LOCAL_STORE_DIR` is configured,
+      // clean its subdirectory after the test
       sys.env.get("LIVE_UI_LOCAL_STORE_DIR") match {
         case Some(rootDir) =>
           val dir = new File(rootDir)
