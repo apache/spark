@@ -557,6 +557,20 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new JdbcSQLQueryBuilder(this, options)
 
+  /**
+   * Returns ture if dialect supports LIMIT clause.
+   *
+   * Note: Some build-in dialect supports LIMIT clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
+   */
+  def supportsLimit: Boolean = true
+
+  /**
+   * Returns ture if dialect supports OFFSET clause.
+   */
+  def supportsOffset: Boolean = true
+
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =

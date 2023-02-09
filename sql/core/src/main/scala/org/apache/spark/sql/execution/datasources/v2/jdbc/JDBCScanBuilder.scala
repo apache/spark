@@ -135,7 +135,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit) {
+    if (jdbcOptions.pushDownLimit && JdbcDialects.get(jdbcOptions.url).supportsLimit) {
       pushedLimit = limit
       return true
     }
@@ -143,7 +143,8 @@ case class JDBCScanBuilder(
   }
 
   override def pushOffset(offset: Int): Boolean = {
-    if (jdbcOptions.pushDownOffset && !isPartiallyPushed) {
+    if (jdbcOptions.pushDownOffset && !isPartiallyPushed &&
+      JdbcDialects.get(jdbcOptions.url).supportsOffset) {
       // Spark pushes down LIMIT first, then OFFSET. In SQL statements, OFFSET is applied before
       // LIMIT. Here we need to adjust the LIMIT value to match SQL statements.
       if (pushedLimit > 0) {
