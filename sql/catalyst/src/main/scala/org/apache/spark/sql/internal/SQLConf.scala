@@ -3790,7 +3790,7 @@ object SQLConf {
   val LEGACY_PARQUET_NANOS_AS_LONG = buildConf("spark.sql.legacy.parquet.nanosAsLong")
     .internal()
     .doc("When true, the Parquet's nanos precision timestamps are converted to SQL long values.")
-    .version("3.2.3")
+    .version("3.2.4")
     .booleanConf
     .createWithDefault(false)
 
