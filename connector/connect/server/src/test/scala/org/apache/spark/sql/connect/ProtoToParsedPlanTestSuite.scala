@@ -72,11 +72,11 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
   private def createTest(file: Path): Unit = {
     val relativePath = inputFilePath.relativize(file)
     val fileName = relativePath.getFileName.toString
-    if (!fileName.endsWith(".proto")) {
+    if (!fileName.endsWith(".proto.bin")) {
       logError(s"Skipping $fileName")
       return
     }
-    val name = fileName.stripSuffix(".proto")
+    val name = fileName.stripSuffix(".proto.bin")
     test(name) {
       val relation = readRelation(file)
       val planner = new SparkConnectPlanner(spark)

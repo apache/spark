@@ -98,7 +98,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
     val actual = f.plan.getRoot
-    val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto")
+    val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
         // Ok!
@@ -139,7 +139,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     }
     // Write the json file for verification.
     val jsonPath = path.getParent.resolve(
-      path.getFileName.toString.stripSuffix(".proto") + ".json")
+      path.getFileName.toString.stripSuffix(".proto.bin") + ".json")
     val writer = Files.newBufferedWriter(jsonPath)
     try writer.write(printer.print(relation)) finally {
       writer.close()
