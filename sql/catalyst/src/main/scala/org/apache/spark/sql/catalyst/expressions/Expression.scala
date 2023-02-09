@@ -1374,10 +1374,6 @@ case class MultiCommutativeOp(
     }
   }
 
-  /**
-   * Returns the [[DataType]] of the result of evaluating this expression.  It is
-   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
-   */
   override def dataType: DataType = {
     originalRoot match {
       case _: Add | _: Multiply =>
@@ -1386,21 +1382,10 @@ case class MultiCommutativeOp(
     }
   }
 
-  /**
-   * Returns whether this node is nullable. This node is nullable if any of its children is
-   * nullable.
-   */
   override def nullable: Boolean = operands.exists(_.nullable)
 
-  /**
-   * Returns a Seq of the children of this node.
-   * Children should not change. Immutability required for containsChild optimization
-   */
   override def children: Seq[Expression] = operands
 
-  /**
-   * Replaces the children of this node by the given children.
-   */
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     this.copy(operands = newChildren)(originalRoot)
 }

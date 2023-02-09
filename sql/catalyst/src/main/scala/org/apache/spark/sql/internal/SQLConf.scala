@@ -243,11 +243,11 @@ object SQLConf {
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
-      .doc("The minimum number of consecutive non-commutative operands to" +
+      .doc("The minimum number of operands in a commutative expression tree to" +
         " invoke the MultiCommutativeOp memory optimization during canonicalization.")
       .version("3.4.0")
       .intConf
-      .createWithDefault(2)
+      .createWithDefault(3)
 
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
