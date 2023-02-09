@@ -2628,7 +2628,7 @@ abstract class CSVSuite
         val ds = Seq("", "1,2,3", "# comment", "4,5,6", "a,b,c", "d,e,f").toDS()
         val csv = spark.read
           .option("multiLine", multiline)
-          .option("skipLines", 2)
+          .option("skipLines", 3)
           .option("inferSchema", true)
           .option("comment", "#")
           .csv(ds)
@@ -2686,7 +2686,7 @@ abstract class CSVSuite
         val cars = spark
           .read
           .format("csv")
-          .option("skipLines", 2)
+          .option("skipLines", 3)
           .option("multiLine", multiline)
           .option("header", header)
           .option("comment", "#")
@@ -2702,7 +2702,7 @@ abstract class CSVSuite
       val cars = spark
         .read
         .format("csv")
-        .option("skipLines", 2)
+        .option("skipLines", 3)
         .option("multiLine", true)
         .option("header", header)
         .option("comment", "#")

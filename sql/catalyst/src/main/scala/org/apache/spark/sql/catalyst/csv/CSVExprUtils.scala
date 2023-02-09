@@ -25,24 +25,30 @@ object CSVExprUtils {
    * This is currently being used in CSV reading path and CSV schema inference.
    */
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+    val nonEmptyLines = iter.filter(_.trim.nonEmpty)
+    filterComment(nonEmptyLines, options)
+  }
+
+  /*
+   * Filter commented rows from CSV iterator.
+   */
+  def filterComment(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
-      iter.filter { line =>
-        line.trim.nonEmpty && !line.startsWith(commentPrefix)
-      }
+      iter.filter(!_.startsWith(commentPrefix))
     } else {
-      iter.filter(_.trim.nonEmpty)
+      iter
     }
   }
 
   /**
-   * Skips the number of lines specified in options from the start of the file. Then blank entries
-   * (and comments if set) are removed. This function is currently only used for non-multiline CSV
-   * parsing.
+   * Filter blank lines, skip specified rows, and remove comments from a CSV iterator. This is
+   * currently being used in CSV reading path and CSV schema inference.
    */
-  def skipUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
-    val filteredLines = filterCommentAndEmpty(iter, options)
-    filteredLines.drop(options.skipLines)
+  def filterUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+      val nonEmptyLines = iter.filter(_.trim.nonEmpty)
+      val skippedLines = nonEmptyLines.drop(options.skipLines)
+      filterComment(skippedLines, options)
   }
 
   def skipCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {

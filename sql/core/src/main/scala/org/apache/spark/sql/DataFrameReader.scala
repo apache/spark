@@ -469,7 +469,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val filteredLines: Dataset[String] =
-      CSVUtils.skipUnwantedLines(csvDataset, parsedOptions)
+      CSVUtils.filterUnwantedLines(csvDataset, parsedOptions)
 
     // For performance, short-circuit the collection of the first line when it won't be used:
     //   - TextInputCSVDataSource - Only uses firstLine to infer an unspecified schema
