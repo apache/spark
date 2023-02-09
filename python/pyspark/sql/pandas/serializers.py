@@ -163,7 +163,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
-    Serializes Pandas.Series as Arrow data with Arrow streaming format.
+    Serializes pandas.Series as Arrow data with Arrow streaming format.
 
     Parameters
     ----------
