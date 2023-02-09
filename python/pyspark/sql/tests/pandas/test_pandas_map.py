@@ -246,8 +246,8 @@ class MapInPandasTestsMixin:
                     # sometimes we see ValueErrors
                     with self.subTest(convert="string to double"):
                         expected = (
-                            r"ValueError: Exception thrown when converting pandas.Series \(object\) "
-                            r"with name 'id' to Arrow Array \(double\)."
+                            r"ValueError: Exception thrown when converting pandas.Series "
+                            r"\(object\) with name 'id' to Arrow Array \(double\)."
                         )
                         if safely:
                             expected = expected + (
@@ -267,8 +267,8 @@ class MapInPandasTestsMixin:
                     with self.subTest(convert="double to string"):
                         with self.assertRaisesRegex(
                             PythonException,
-                            r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                            r"with name 'id' to Arrow Array \(string\).\n",
+                            r"TypeError: Exception thrown when converting pandas.Series "
+                            r"\(float64\) with name 'id' to Arrow Array \(string\).\n",
                         ):
                             (
                                 self.spark.range(10, numPartitions=3)
