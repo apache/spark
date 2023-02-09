@@ -7630,10 +7630,12 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     return _invoke_function_over_columns("get", col, index)
 
+@try_remote_functions
 def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     """
-    Collection function: Returns an array containing value as well as all elements from array. 
-    The new element is positioned at the beginning of the array.
+    Collection function: Returns an array containing element as 
+    well as all elements from array. The new element is positioned 
+    at the beginning of the array.
 
     .. versionadded:: 3.4.0
 
