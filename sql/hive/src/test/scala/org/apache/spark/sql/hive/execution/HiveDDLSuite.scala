@@ -2965,12 +2965,17 @@ class HiveDDLSuite
         spark.range(1).createTempView("v")
         withTempPath { path =>
           Seq("PARQUET", "ORC").foreach { format =>
-            val e = intercept[SparkException] {
-              spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
-                s"STORED AS $format SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
-            }.getCause.getMessage
-            assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains" +
-              " invalid character(s). Please use alias to rename it."))
+            checkError(
+              exception = intercept[SparkException] {
+                spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+                  s"STORED AS $format SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+              }.getCause.asInstanceOf[AnalysisException],
+              errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+              parameters = Map(
+                "datasource" -> "HiveFileFormat",
+                "columnName" -> "`(IF((1 = 1), 1, 0))`"
+              )
+            )
           }
         }
       }
