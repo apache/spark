@@ -68,12 +68,18 @@ case class WindowGroupLimitExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = rankLikeFunction match {
+    case _: RowNumber if partitionSpec.isEmpty =>
+      child.execute().mapPartitionsInternal(new SimpleLimitIterator(output, _, limit))
     case _: RowNumber =>
       child.execute().mapPartitionsInternal(
         SimpleGroupLimitIterator(partitionSpec, output, _, limit))
+    case _: Rank if partitionSpec.isEmpty =>
+      child.execute().mapPartitionsInternal(new RankLimitIterator(output, _, orderSpec, limit))
     case _: Rank =>
       child.execute().mapPartitionsInternal(
         RankGroupLimitIterator(partitionSpec, output, _, orderSpec, limit))
+    case _: DenseRank if partitionSpec.isEmpty =>
+      child.execute().mapPartitionsInternal(new DenseRankLimitIterator(output, _, orderSpec, limit))
     case _: DenseRank =>
       child.execute().mapPartitionsInternal(
         DenseRankGroupLimitIterator(partitionSpec, output, _, orderSpec, limit))
@@ -83,9 +89,7 @@ case class WindowGroupLimitExec(
     copy(child = newChild)
 }
 
-abstract class WindowIterator extends Iterator[InternalRow] {
-
-  def partitionSpec: Seq[Expression]
+abstract class BaseLimitIterator extends Iterator[InternalRow] {
 
   def output: Seq[Attribute]
 
@@ -93,10 +97,87 @@ abstract class WindowIterator extends Iterator[InternalRow] {
 
   def limit: Int
 
+  var rank = 0
+
+  var nextRow: UnsafeRow = null
+
+  // Increase the rank value.
+  def increaseRank(): Unit
+
+  override def hasNext: Boolean = rank < limit && input.hasNext
+
+  override def next(): InternalRow = {
+    nextRow = input.next().asInstanceOf[UnsafeRow]
+    increaseRank()
+    nextRow
+  }
+}
+
+class SimpleLimitIterator(
+    val output: Seq[Attribute],
+    val input: Iterator[InternalRow],
+    val limit: Int) extends BaseLimitIterator {
+
+  override def increaseRank(): Unit = {
+    rank += 1
+  }
+}
+
+trait OrderSpecProvider {
+  def output: Seq[Attribute]
+  def orderSpec: Seq[SortOrder]
+  val ordering = GenerateOrdering.generate(orderSpec, output)
+}
+
+class RankLimitIterator(
+    val output: Seq[Attribute],
+    val input: Iterator[InternalRow],
+    val orderSpec: Seq[SortOrder],
+    val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
+
+  var count = 0
+  var currentRank: UnsafeRow = null
+
+  override def increaseRank(): Unit = {
+    if (count == 0) {
+      currentRank = nextRow.copy()
+    } else {
+      if (ordering.compare(currentRank, nextRow) != 0) {
+        rank = count
+        currentRank = nextRow.copy()
+      }
+    }
+    count += 1
+  }
+}
+
+class DenseRankLimitIterator(
+    val output: Seq[Attribute],
+    val input: Iterator[InternalRow],
+    val orderSpec: Seq[SortOrder],
+    val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
+
+  var currentRank: UnsafeRow = null
+
+  override def increaseRank(): Unit = {
+    if (currentRank == null) {
+      currentRank = nextRow.copy()
+    } else {
+      if (ordering.compare(currentRank, nextRow) != 0) {
+        rank += 1
+        currentRank = nextRow.copy()
+      }
+    }
+  }
+}
+
+abstract class WindowIterator extends BaseLimitIterator {
+
+  def partitionSpec: Seq[Expression]
+
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
   // Manage the stream and the grouping.
-  var nextRow: UnsafeRow = null
   var nextGroup: UnsafeRow = null
   var nextRowAvailable: Boolean = false
   protected[this] def fetchNextRow(): Unit = {
@@ -107,11 +188,6 @@ abstract class WindowIterator extends Iterator[InternalRow] {
     }
   }
   fetchNextRow()
-
-  var rank = 0
-
-  // Increase the rank value.
-  def increaseRank(): Unit
 
   // Clear the rank value.
   def clearRank(): Unit
