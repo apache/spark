@@ -64,13 +64,10 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val operands = orderCommutative({ case BitwiseAnd(l, r) => Seq(l, r) })
-    val reorderResult =
-      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
-        operands.reduce(BitwiseAnd)
-      } else {
-        MultiCommutativeOp(operands, this.getClass, None)(this)
-      }
+    val reorderResult = buildCanonicalizedPlan(
+      { case BitwiseAnd(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => BitwiseAnd(l, r)}
+    )
     reorderResult
   }
 }
@@ -115,13 +112,10 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     newLeft: Expression, newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val operands = orderCommutative({ case BitwiseOr(l, r) => Seq(l, r) })
-    val reorderResult =
-      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
-        operands.reduce(BitwiseOr)
-      } else {
-        MultiCommutativeOp(operands, this.getClass, None)(this)
-      }
+    val reorderResult = buildCanonicalizedPlan(
+      { case BitwiseOr(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => BitwiseOr(l, r)}
+    )
     reorderResult
   }
 }
@@ -166,13 +160,10 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val operands = orderCommutative({ case BitwiseXor(l, r) => Seq(l, r) })
-    val reorderResult =
-      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
-        operands.reduce(BitwiseXor)
-      } else {
-        MultiCommutativeOp(operands, this.getClass, None)(this)
-      }
+    val reorderResult = buildCanonicalizedPlan(
+      { case BitwiseXor(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => BitwiseXor(l, r)}
+    )
     reorderResult
   }
 }

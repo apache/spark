@@ -806,13 +806,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val operands = orderCommutative({ case And(l, r) => Seq(l, r) })
-    val reorderResult =
-      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
-        operands.reduce(And)
-      } else {
-        MultiCommutativeOp(operands, this.getClass, None)(this)
-      }
+    val reorderResult = buildCanonicalizedPlan(
+      { case And(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => And(l, r)}
+    )
     reorderResult
   }
 }
@@ -907,13 +904,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val operands = orderCommutative({ case Or(l, r) => Seq(l, r) })
-    val reorderResult =
-      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
-        operands.reduce(Or)
-      } else {
-        MultiCommutativeOp(operands, this.getClass, None)(this)
-      }
+    val reorderResult = buildCanonicalizedPlan(
+      { case Or(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Or(l, r)}
+    )
     reorderResult
   }
 }

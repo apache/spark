@@ -480,13 +480,11 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    val operands = orderCommutative({ case Add(l, r, _) => Seq(l, r) })
-    val reorderResult =
-      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
-        operands.reduce(Add(_, _, evalMode))
-      } else {
-        MultiCommutativeOp(operands, this.getClass, Some(evalMode))(this)
-      }
+    val reorderResult = buildCanonicalizedPlan(
+      { case Add(l, r, _) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
+      Some(evalMode)
+    )
     if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
       reorderResult
     } else {
@@ -638,13 +636,11 @@ case class Multiply(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
-    val operands = orderCommutative({ case Multiply(l, r, _) => Seq(l, r) })
-    val reorderResult =
-      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
-        operands.reduce(Multiply(_, _, evalMode))
-      } else {
-        MultiCommutativeOp(operands, this.getClass, Some(evalMode))(this)
-      }
+    val reorderResult = buildCanonicalizedPlan(
+      { case Multiply(l, r, _) => Seq(l, r) }
+      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
+      Some(evalMode)
+    )
     reorderResult
   }
 }
