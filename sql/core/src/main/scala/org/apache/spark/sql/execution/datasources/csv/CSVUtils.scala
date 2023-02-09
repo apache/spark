@@ -25,32 +25,25 @@ import org.apache.spark.sql.functions._
 
 object CSVUtils {
   /**
-   * Filter ignorable rows for CSV dataset (lines empty and starting with `comment`).
-   * This is currently being used in CSV schema inference.
-   */
-  def filterCommentAndEmpty(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
-    // Note that this was separately made by SPARK-18362. Logically, this should be the same
-    // with the one below, `filterCommentAndEmpty` but execution path is different. One of them
-    // might have to be removed in the near future if possible.
-    import lines.sqlContext.implicits._
-    val aliased = lines.toDF("value")
-    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0)
-    if (options.isCommentSet) {
-      nonEmptyLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
-    } else {
-      nonEmptyLines.as[String]
-    }
-  }
-
-  /**
    * Filter blank lines, remove comments, and skip specified rows from a CSV iterator. Then blank
    * entries (and comments if set) are removed. This is currently being used in CSV schema
    * inference.
    */
   def filterUnwantedLines(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
+    // Note that this was separately made by SPARK-18362. Logically, this should be the same
+    // with the one below, `filterUnwantedLines` but execution path is different. One of them
+    // might have to be removed in the near future if possible.
     import lines.sqlContext.implicits._
-    val filteredLines = filterCommentAndEmpty(lines, options)
-    filteredLines.rdd.zipWithIndex().toDF("value", "order")
+    val aliased = lines.toDF("value")
+    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0)
+    val commentFilteredLines = {
+      if (options.isCommentSet) {
+        nonEmptyLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
+      } else {
+        nonEmptyLines.as[String]
+      }
+    }
+    commentFilteredLines.rdd.zipWithIndex().toDF("value", "order")
       .filter($"order" >= options.skipLines)
       .drop("order")
       .as[String]
@@ -142,6 +135,6 @@ object CSVUtils {
     }
   }
 
-  def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] =
-    CSVExprUtils.filterCommentAndEmpty(iter, options)
+  def filterUnwantedLines(iter: Iterator[String], options: CSVOptions): Iterator[String] =
+    CSVExprUtils.filterUnwantedLines(iter, options)
 }
