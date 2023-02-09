@@ -542,6 +542,13 @@ class CommonInlineUserDefinedFunction(Expression):
         )
         return expr
 
+    def to_command(self, session: "SparkConnectClient") -> "proto.CommonInlineUserDefinedFunction":
+        expr = proto.CommonInlineUserDefinedFunction()
+        expr.function_name = self._function_name
+        expr.deterministic = self._deterministic
+        expr.python_udf.CopyFrom(self._function.to_plan(session))
+        return expr
+
     def __repr__(self) -> str:
         return (
             f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])}), "

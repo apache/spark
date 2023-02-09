@@ -31,6 +31,7 @@ option java_package = "org.apache.spark.connect.proto";
 // produce a relational result.
 message Command {
   oneof command_type {
+    CommonInlineUserDefinedFunction register_function = 1;
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
     WriteOperationV2 write_operation_v2 = 4;

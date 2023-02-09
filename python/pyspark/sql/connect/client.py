@@ -30,6 +30,7 @@ import time
 import urllib.parse
 import uuid
 import json
+import sys
 from types import TracebackType
 from typing import (
     Iterable,
@@ -67,11 +68,18 @@ from pyspark.errors.exceptions.connect import (
     TempTableAlreadyExistsException,
     IllegalArgumentException,
 )
+from pyspark.sql.connect.expressions import (
+    PythonUDF,
+    CommonInlineUserDefinedFunction,
+)
 from pyspark.sql.types import (
     DataType,
     StructType,
     StructField,
 )
+from pyspark.sql.utils import is_remote
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.rdd import PythonEvalType
 
 
 def _configure_logging() -> logging.Logger:
@@ -427,6 +435,57 @@ class SparkConnectClient(object):
         self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
         # Configure logging for the SparkConnect client.
+
+    def register_udf(
+        self,
+        function: Any,
+        return_type: Union[str, DataType],
+        name: Optional[str] = None,
+        eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
+        deterministic: bool = True,
+    ) -> str:
+        """Create a temporary UDF in the session catalog on the other side. We generate a
+        temporary name for it."""
+
+        from pyspark.sql import SparkSession as PySparkSession
+
+        if name is None:
+            name = f"fun_{uuid.uuid4().hex}"
+
+        # convert str return_type to DataType
+        if isinstance(return_type, str):
+
+            assert is_remote()
+            return_type_schema = (  # a workaround to parse the DataType from DDL strings
+                PySparkSession.builder.getOrCreate()
+                .createDataFrame(data=[], schema=return_type)
+                .schema
+            )
+            assert len(return_type_schema.fields) == 1, "returnType should be singular"
+            return_type = return_type_schema.fields[0].dataType
+
+        # construct a PythonUDF
+        py_udf = PythonUDF(
+            output_type=return_type.json(),
+            eval_type=eval_type,
+            command=CloudPickleSerializer().dumps((function, return_type)),
+            python_ver="%d.%d" % sys.version_info[:2],
+        )
+
+        # construct a CommonInlineUserDefinedFunction
+        fun = CommonInlineUserDefinedFunction(
+            function_name=name,
+            deterministic=deterministic,
+            arguments=[],
+            function=py_udf,
+        ).to_command(self)
+
+        # construct the request
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_function.CopyFrom(fun)
+
+        self._execute(req)
+        return name
 
     def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
         return [

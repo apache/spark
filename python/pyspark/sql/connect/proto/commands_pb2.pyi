@@ -59,10 +59,15 @@ class Command(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    REGISTER_FUNCTION_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
     CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_V2_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
+    @property
+    def register_function(
+        self,
+    ) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
     @property
     def write_operation(self) -> global___WriteOperation: ...
     @property
@@ -77,6 +82,8 @@ class Command(google.protobuf.message.Message):
     def __init__(
         self,
         *,
+        register_function: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
         write_operation_v2: global___WriteOperationV2 | None = ...,
@@ -91,6 +98,8 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "extension",
             b"extension",
+            "register_function",
+            b"register_function",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -106,6 +115,8 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "extension",
             b"extension",
+            "register_function",
+            b"register_function",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -115,7 +126,11 @@ class Command(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
     ) -> typing_extensions.Literal[
-        "write_operation", "create_dataframe_view", "write_operation_v2", "extension"
+        "register_function",
+        "write_operation",
+        "create_dataframe_view",
+        "write_operation_v2",
+        "extension",
     ] | None: ...
 
 global___Command = Command

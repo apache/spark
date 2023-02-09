@@ -2734,7 +2734,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "sparkContext",
             "streams",
             "readStream",
-            "udf",
             "version",
         ):
             with self.assertRaises(NotImplementedError):
