@@ -2631,10 +2631,9 @@ object SQLConf {
   val WINDOW_GROUP_LIMIT_THRESHOLD =
     buildConf("spark.sql.optimizer.windowGroupLimitThreshold")
       .internal()
-      .doc("Threshold for filter the dataset by the window group limit before" +
-        " window-based top-k computation. By setting this value to -1 window group limit can be" +
-        " disabled.")
-      .version("3.4.0")
+      .doc("Threshold for triggering `InsertWindowGroupLimit`. " +
+        "0 means the output results is empty. -1 means disabling the optimization.")
+      .version("3.5.0")
       .intConf
       .checkValue(_ >= -1,
         "The threshold of window group limit must be -1, 0 or positive integer.")

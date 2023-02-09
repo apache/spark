@@ -1416,11 +1416,11 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           )
         )
 
-        val multipleWindowsOne = df
+        val multipleWindows = df
           .withColumn("rn2", row_number().over(window2))
           .withColumn("rn", row_number().over(window))
           .where('rn < 2 && 'rn2 < 3)
-        checkAnswer(multipleWindowsOne,
+        checkAnswer(multipleWindows,
           Seq(
             Row("b", 1, "h", Double.NaN, 2, 1),
             Row("c", 2, null, 5.0, 1, 1)

@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
 
 /**
- * Optimize the filter based on rank-like window function by reduce not required rows.
- * This rule optimizes the following cases:
+ * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
+ * and the function results are further filtered by limit-like predicates. Example query:
  * {{{
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
@@ -72,18 +72,24 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
             extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction))
         }.flatten
 
-        // multiple different rank-like functions unsupported.
         if (limits.isEmpty) {
           filter
         } else {
-          limits.minBy(_._1) match {
+          val (rowNumberLimits, otherLimits) = limits.partition(_._2.isInstanceOf[RowNumber])
+          // Pick RowNumber first as it's cheaper to evaluate.
+          val selectedLimits = if (rowNumberLimits.isEmpty) {
+            otherLimits
+          } else {
+            rowNumberLimits
+          }
+          // Pick a rank-like function with the smallest limit
+          selectedLimits.minBy(_._1) match {
             case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold =>
               if (limit > 0) {
                 val windowGroupLimit =
                   WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
                 val newWindow = window.withNewChildren(Seq(windowGroupLimit))
-                val newFilter = filter.withNewChildren(Seq(newWindow))
-                newFilter
+                filter.withNewChildren(Seq(newWindow))
               } else {
                 LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
               }

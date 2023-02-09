@@ -135,7 +135,7 @@ abstract class WindowIterator extends Iterator[InternalRow] {
       fetchNextGroup()
     }
 
-    if (bufferIterator.hasNext) {
+    if (bufferIterator != null && bufferIterator.hasNext) {
       bufferIterator.next()
     } else {
       throw new NoSuchElementException
@@ -147,24 +147,25 @@ abstract class WindowIterator extends Iterator[InternalRow] {
       // Before we start to fetch new input rows, make a copy of nextGroup.
       val currentGroup = nextGroup.copy()
 
-      def hasNext: Boolean = {
+      def hasNext: Boolean = nextRowAvailable && rank < limit && nextGroup == currentGroup
+
+      def next(): InternalRow = {
         if (nextRowAvailable) {
           if (rank >= limit && nextGroup == currentGroup) {
             // Skip all the remaining rows in this group
             do {
               fetchNextRow()
             } while (nextRowAvailable && nextGroup == currentGroup)
-            false
+            throw new NoSuchElementException
           } else {
-            // Returns true if there are more rows in this group.
-            nextGroup == currentGroup
+            if (nextGroup != currentGroup) {
+              throw new NoSuchElementException
+            }
           }
         } else {
-          false
+          throw new NoSuchElementException
         }
-      }
 
-      def next(): InternalRow = {
         val currentRow = nextRow.copy()
         increaseRank()
         fetchNextRow()
@@ -197,15 +198,15 @@ case class RankGroupLimitIterator(
     limit: Int) extends WindowIterator {
   val ordering = GenerateOrdering.generate(orderSpec, output)
   var count = 0
-  var currentRank: UnsafeRow = null
+  var currentRankRow: UnsafeRow = null
 
   override def increaseRank(): Unit = {
     if (count == 0) {
-      currentRank = nextRow.copy()
+      currentRankRow = nextRow.copy()
     } else {
-      if (ordering.compare(currentRank, nextRow) != 0) {
+      if (ordering.compare(currentRankRow, nextRow) != 0) {
         rank = count
-        currentRank = nextRow.copy()
+        currentRankRow = nextRow.copy()
       }
     }
     count += 1
@@ -214,7 +215,7 @@ case class RankGroupLimitIterator(
   override def clearRank(): Unit = {
     count = 0
     rank = 0
-    currentRank = null
+    currentRankRow = null
   }
 }
 
@@ -225,21 +226,21 @@ case class DenseRankGroupLimitIterator(
     orderSpec: Seq[SortOrder],
     limit: Int) extends WindowIterator {
   val ordering = GenerateOrdering.generate(orderSpec, output)
-  var currentRank: UnsafeRow = null
+  var currentRankRow: UnsafeRow = null
 
   override def increaseRank(): Unit = {
-    if (currentRank == null) {
-      currentRank = nextRow.copy()
+    if (currentRankRow == null) {
+      currentRankRow = nextRow.copy()
     } else {
-      if (ordering.compare(currentRank, nextRow) != 0) {
+      if (ordering.compare(currentRankRow, nextRow) != 0) {
         rank += 1
-        currentRank = nextRow.copy()
+        currentRankRow = nextRow.copy()
       }
     }
   }
 
   override def clearRank(): Unit = {
     rank = 0
-    currentRank = null
+    currentRankRow = null
   }
 }
