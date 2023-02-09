@@ -158,7 +158,7 @@ def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
                 "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
             )
         if not is_arrow_iter:
-            verify_pandas_result(elem, return_type, True)
+            verify_pandas_result(elem, return_type, True, True)
         return elem
 
     return lambda *iterator: map(
@@ -166,7 +166,7 @@ def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
     )
 
 
-def verify_pandas_result(result, return_type, assign_cols_by_name):
+def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_return_schema):
     import pandas as pd
 
     if type(return_type) == StructType:
@@ -182,7 +182,11 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
             # the column names of the result have to match the return type
             #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
             field_names = set([field.name for field in return_type.fields])
-            column_names = set(result.columns)
+            # only the first len(field_names) result columns are considered
+            # when truncating the return schema
+            result_columns = (result.columns[:len(field_names)]
+                              if truncate_return_schema else result.columns)
+            column_names = set(result_columns)
             if (
                 assign_cols_by_name
                 and any(isinstance(name, str) for name in result.columns)
@@ -202,7 +206,7 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
                     },
                 )
             # otherwise the number of columns of result have to match the return type
-            elif len(result.columns) != len(return_type):
+            elif len(result_columns) != len(return_type):
                 raise PySparkRuntimeError(
                     error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
                     message_parameters={
@@ -233,7 +237,7 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             key_series = left_key_series if not left_df.empty else right_key_series
             key = tuple(s[0] for s in key_series)
             result = f(key, left_df, right_df)
-        verify_pandas_result(result, return_type, _assign_cols_by_name)
+        verify_pandas_result(result, return_type, _assign_cols_by_name, False)
 
         return result
 
@@ -251,7 +255,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         elif len(argspec.args) == 2:
             key = tuple(s[0] for s in key_series)
             result = f(key, pd.concat(value_series, axis=1))
-        verify_pandas_result(result, return_type, _assign_cols_by_name)
+        verify_pandas_result(result, return_type, _assign_cols_by_name, False)
 
         return result
 

@@ -52,7 +52,7 @@ class MapInPandasTestsMixin:
         return func
 
     @staticmethod
-    def dataframes_wo_column_names_iter(*columns: str):
+    def identity_dataframes_wo_column_names_iter(*columns: str):
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
@@ -209,7 +209,7 @@ class MapInPandasTestsMixin:
                 "RuntimeError: Number of columns of the returned pandas.DataFrame doesn't match "
                 "specified schema. Expected: 3 Actual: 2\n",
             ):
-                f = self.dataframes_wo_column_names_iter("id", "value")
+                f = self.identity_dataframes_wo_column_names_iter("id", "value")
                 (
                     df.mapInPandas(f, "id int, id2 long, value int")
                     .collect()
@@ -218,32 +218,17 @@ class MapInPandasTestsMixin:
     def test_dataframes_with_more_columns(self):
         df = (
             self.spark.range(10, numPartitions=3)
-            .withColumn("id2", lit(0))
-            .withColumn("value", lit(1))
+            .select("id", col("id").alias("value"), col("id").alias("extra"))
         )
+        expected = df.select("id", "value").collect()
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "RuntimeError: Column names of the returned pandas.DataFrame do not match "
-                "specified schema. Unexpected: id2.\n",
-            ):
-                f = self.identity_dataframes_iter("id", "id2", "value")
-                (
-                    df.mapInPandas(f, "id int, value int")
-                    .collect()
-                )
+        f = self.identity_dataframes_iter("id", "value", "extra")
+        actual = df.repartition(1).mapInPandas(f, "id long, value long").collect()
+        self.assertEqual(actual, expected)
 
-            with self.assertRaisesRegex(
-                PythonException,
-                "RuntimeError: Number of columns of the returned pandas.DataFrame doesn't match "
-                "specified schema. Expected: 2 Actual: 3\n",
-            ):
-                f = self.dataframes_wo_column_names_iter("id", "id2", "value")
-                (
-                    df.mapInPandas(f, "id int, value int")
-                    .collect()
-                )
+        f = self.identity_dataframes_wo_column_names_iter("id", "value", "extra")
+        actual = df.repartition(1).mapInPandas(f, "id long, value long").collect()
+        self.assertEqual(actual, expected)
 
     def test_dataframes_with_incompatible_types(self):
         def func(iterator):
@@ -326,6 +311,13 @@ class MapInPandasTestsMixin:
                 .mapInPandas(f, "id int, value int")
                 .collect()
             )
+
+    def test_empty_dataframes_with_more_columns(self):
+        mapped = (
+            self.spark.range(10, numPartitions=3)
+            .mapInPandas(self.dataframes_and_empty_dataframe_iter("id", "extra"), "id int")
+        )
+        self.assertEqual(mapped.count(), 10)
 
     def test_empty_dataframes_with_other_columns(self):
         def empty_dataframes_with_other_columns(iterator):
