@@ -121,7 +121,7 @@ abstract class SparkFunSuite
           } else if (checkRemaining) {
             val remainingSize = dir.listFiles().length
             if (remainingSize > 0) {
-              logWarning(s"The number of UI dirs not cleaned after the test is $remainingSize")
+              logWarning(s"The number of UI dirs not cleaned is $remainingSize")
               Utils.deleteRecursively(dir)
             }
           } else if (dir.listFiles().nonEmpty) {
