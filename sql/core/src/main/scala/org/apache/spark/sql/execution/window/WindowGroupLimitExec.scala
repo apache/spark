@@ -104,9 +104,6 @@ abstract class WindowIterator extends Iterator[InternalRow] {
     if (nextRowAvailable) {
       nextRow = input.next().asInstanceOf[UnsafeRow]
       nextGroup = grouping(nextRow)
-    } else {
-      nextRow = null
-      nextGroup = null
     }
   }
   fetchNextRow()
@@ -119,7 +116,7 @@ abstract class WindowIterator extends Iterator[InternalRow] {
   // Clear the rank value.
   def clearRank(): Unit
 
-  var bufferIterator: Iterator[InternalRow] = _
+  var bufferIterator: GroupIterator = _
 
   private[this] def fetchNextGroup(): Unit = {
     clearRank()
@@ -132,7 +129,15 @@ abstract class WindowIterator extends Iterator[InternalRow] {
   override final def next(): InternalRow = {
     // Load the next partition if we need to.
     if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
-      fetchNextGroup()
+      if (bufferIterator != null) {
+        bufferIterator.skipRemainingRows()
+      }
+      if (nextRowAvailable) {
+        fetchNextGroup()
+      } else {
+        // All input rows have been processed, returns the last row directly.
+        return nextRow
+      }
     }
 
     if (bufferIterator != null && bufferIterator.hasNext) {
@@ -142,36 +147,47 @@ abstract class WindowIterator extends Iterator[InternalRow] {
     }
   }
 
-  private def createGroupIterator(): Iterator[InternalRow] = {
-    new Iterator[InternalRow] {
-      // Before we start to fetch new input rows, make a copy of nextGroup.
-      val currentGroup = nextGroup.copy()
+  class GroupIterator() extends Iterator[InternalRow] {
+    // Before we start to fetch new input rows, make a copy of nextGroup.
+    val currentGroup = nextGroup.copy()
 
-      def hasNext: Boolean = nextRowAvailable && rank < limit && nextGroup == currentGroup
+    def hasNext: Boolean = nextRowAvailable && nextGroup == currentGroup && rank < limit
 
-      def next(): InternalRow = {
-        if (nextRowAvailable) {
-          if (rank >= limit && nextGroup == currentGroup) {
-            // Skip all the remaining rows in this group
-            do {
-              fetchNextRow()
-            } while (nextRowAvailable && nextGroup == currentGroup)
-            throw new NoSuchElementException
-          } else {
-            if (nextGroup != currentGroup) {
-              throw new NoSuchElementException
-            }
-          }
-        } else {
+    def next(): InternalRow = {
+      if (nextRowAvailable) {
+        if (rank >= limit && nextGroup == currentGroup) {
+          // Skip all the remaining rows in this group
+          do {
+            fetchNextRow()
+          } while (nextRowAvailable && nextGroup == currentGroup)
           throw new NoSuchElementException
+        } else {
+          if (nextGroup != currentGroup) {
+            throw new NoSuchElementException
+          }
         }
+      } else {
+        throw new NoSuchElementException
+      }
 
-        val currentRow = nextRow.copy()
-        increaseRank()
-        fetchNextRow()
-        currentRow
+      val currentRow = nextRow.copy()
+      increaseRank()
+      fetchNextRow()
+      currentRow
+    }
+
+    def skipRemainingRows(): Unit = {
+      if (nextRowAvailable && rank >= limit && nextGroup == currentGroup) {
+        // Skip all the remaining rows in this group
+        do {
+          fetchNextRow()
+        } while (nextRowAvailable && nextGroup == currentGroup)
       }
     }
+  }
+
+  private def createGroupIterator(): GroupIterator = {
+    new GroupIterator()
   }
 }
 
