@@ -69,7 +69,6 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       }
     } finally {
       handle.kill()
-      cleanupUIDirIfNecessary()
     }
   }
 
