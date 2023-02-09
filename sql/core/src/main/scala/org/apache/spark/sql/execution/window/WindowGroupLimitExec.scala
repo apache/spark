@@ -132,10 +132,12 @@ abstract class WindowIterator extends Iterator[InternalRow] {
       if (bufferIterator != null) {
         bufferIterator.skipRemainingRows()
       }
+
       if (nextRowAvailable) {
         fetchNextGroup()
       } else {
-        // All input rows have been processed, returns the last row directly.
+        // After skip remaining row in previous partition, all the input rows have been processed,
+        // so returns the last row directly.
         return nextRow
       }
     }
