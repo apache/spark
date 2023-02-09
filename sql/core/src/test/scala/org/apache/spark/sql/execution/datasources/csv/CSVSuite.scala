@@ -2661,7 +2661,7 @@ abstract class CSVSuite
 
   test("SPARK-42359: parses dataset with multiline skipLines") {
     Seq(0, 1, 2, 10, 100).foreach { skipLines =>
-      Seq(true, false).foreach { header =>
+      Seq(false, true).foreach { header =>
         val ds = spark.range(skipLines + 2)
           .selectExpr("concat('a,\"b\nb\",', id) AS `a.text`")
           .as[String]
@@ -2671,7 +2671,7 @@ abstract class CSVSuite
           .option("inferSchema", true)
           .csv(ds)
         if (header) {
-          assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
+          assert(csv.schema.fieldNames === Seq("a", "b\nb", String.valueOf(skipLines)))
           checkAnswer(csv, Row("a", "b\nb", skipLines + 1))
         } else {
           checkAnswer(csv, Seq(Row("a", "b\nb", skipLines), Row("a", "b\nb", skipLines + 1)))
