@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreeP
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -636,12 +635,11 @@ case class Multiply(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
-    val reorderResult = buildCanonicalizedPlan(
-      { case Multiply(l, r, _) => Seq(l, r) }
+    buildCanonicalizedPlan(
+      { case Multiply(l, r, _) => Seq(l, r) },
       { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
       Some(evalMode)
     )
-    reorderResult
   }
 }
 

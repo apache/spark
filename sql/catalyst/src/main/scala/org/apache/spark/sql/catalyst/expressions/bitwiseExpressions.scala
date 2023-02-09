@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 
 
@@ -64,11 +62,10 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val reorderResult = buildCanonicalizedPlan(
+    buildCanonicalizedPlan(
       { case BitwiseAnd(l, r) => Seq(l, r) },
       { case (l: Expression, r: Expression) => BitwiseAnd(l, r)}
     )
-    reorderResult
   }
 }
 
@@ -112,11 +109,10 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     newLeft: Expression, newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val reorderResult = buildCanonicalizedPlan(
+    buildCanonicalizedPlan(
       { case BitwiseOr(l, r) => Seq(l, r) },
       { case (l: Expression, r: Expression) => BitwiseOr(l, r)}
     )
-    reorderResult
   }
 }
 
@@ -160,11 +156,10 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val reorderResult = buildCanonicalizedPlan(
+    buildCanonicalizedPlan(
       { case BitwiseXor(l, r) => Seq(l, r) },
       { case (l: Expression, r: Expression) => BitwiseXor(l, r)}
     )
-    reorderResult
   }
 }
 

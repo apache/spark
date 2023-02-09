@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, Logical
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 
 /**
@@ -806,11 +805,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val reorderResult = buildCanonicalizedPlan(
+    buildCanonicalizedPlan(
       { case And(l, r) => Seq(l, r) },
       { case (l: Expression, r: Expression) => And(l, r)}
     )
-    reorderResult
   }
 }
 
@@ -904,11 +902,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val reorderResult = buildCanonicalizedPlan(
+    buildCanonicalizedPlan(
       { case Or(l, r) => Seq(l, r) },
       { case (l: Expression, r: Expression) => Or(l, r)}
     )
-    reorderResult
   }
 }
 
