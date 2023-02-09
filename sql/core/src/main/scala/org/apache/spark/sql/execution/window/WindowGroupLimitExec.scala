@@ -126,7 +126,9 @@ class SimpleLimitIterator(
 trait OrderSpecProvider {
   def output: Seq[Attribute]
   def orderSpec: Seq[SortOrder]
+
   val ordering = GenerateOrdering.generate(orderSpec, output)
+  var currentRankRow: UnsafeRow = null
 }
 
 class RankLimitIterator(
@@ -136,7 +138,6 @@ class RankLimitIterator(
     val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
 
   var count = 0
-  var currentRankRow: UnsafeRow = null
 
   override def increaseRank(): Unit = {
     if (count == 0) {
@@ -156,8 +157,6 @@ class DenseRankLimitIterator(
     val input: Iterator[InternalRow],
     val orderSpec: Seq[SortOrder],
     val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
-
-  var currentRankRow: UnsafeRow = null
 
   override def increaseRank(): Unit = {
     if (currentRankRow == null) {
