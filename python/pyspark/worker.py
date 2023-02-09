@@ -110,7 +110,7 @@ def wrap_scalar_pandas_udf(f, return_type):
 
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
-            pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
+            pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
             raise TypeError(
                 "Return type of the user-defined function should be "
                 "{}, but is {}".format(pd_type, type(result))
@@ -137,9 +137,9 @@ def wrap_scalar_pandas_udf(f, return_type):
 def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
     arrow_return_type = to_arrow_type(return_type)
     iter_type_label = (
-        "PyArrow.RecordBatch"
+        "pyarrow.RecordBatch"
         if is_arrow_iter
-        else ("Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series")
+        else ("pandas.DataFrame" if type(return_type) == StructType else "pandas.Series")
     )
 
     def verify_result(result):
@@ -213,7 +213,7 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
         if not isinstance(result, pd.Series):
             raise TypeError(
                 "Return type of the user-defined function should be "
-                "Pandas.Series, but is {}".format(type(result))
+                "pandas.Series, but is {}".format(type(result))
             )
 
 

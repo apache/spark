@@ -140,14 +140,14 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be iterator of Pandas.DataFrame, "
+            "Return type of the user-defined function should be iterator of pandas.DataFrame, "
             "but is <class 'int'>",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(no_iter, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be iterator of Pandas.DataFrame, "
+            "Return type of the user-defined function should be iterator of pandas.DataFrame, "
             "but is iterator of <class 'int'>",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
