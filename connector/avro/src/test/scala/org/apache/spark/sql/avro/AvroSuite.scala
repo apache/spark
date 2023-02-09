@@ -2227,8 +2227,9 @@ abstract class AvroSuite
                    |LOCATION '${dir}'
                    |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
             },
-            errorClass = "INVALID_COLUMN_NAME",
-            parameters = Map("columnName" -> "`(IF((ID = 1), 1, 0))`")
+            errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+            parameters = Map(
+              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
           )
         }
 
@@ -2306,8 +2307,9 @@ class AvroV1Suite extends AvroSuite {
             sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
               .format("avro").save(dir.getCanonicalPath)
           },
-          errorClass = "INVALID_COLUMN_NAME",
-          parameters = Map("columnName" -> "`(IF((ID = 1), 1, 0))`")
+          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          parameters = Map(
+            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
         )
       }
 
@@ -2318,8 +2320,9 @@ class AvroV1Suite extends AvroSuite {
               .write.mode(SaveMode.Overwrite)
               .format("avro").save(dir.getCanonicalPath)
           },
-          errorClass = "INVALID_COLUMN_NAME",
-          parameters = Map("columnName" -> "`(IF((ID = 1), 1, 0))`")
+          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          parameters = Map(
+            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
         )
       }
     }

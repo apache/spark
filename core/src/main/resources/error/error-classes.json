@@ -774,9 +774,9 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
-  "INVALID_COLUMN_NAME" : {
+  "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
-      "Column name <columnName> contains invalid character(s). Please use alias to rename it."
+      "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
     ],
     "sqlState" : "46121"
   },

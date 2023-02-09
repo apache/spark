@@ -2993,8 +2993,8 @@ class HiveDDLSuite
                    |FROM v
                """.stripMargin)
             }.getCause.asInstanceOf[AnalysisException],
-            errorClass = "INVALID_COLUMN_NAME",
-            parameters = Map("columnName" -> "`IF(ID=1,ID,0)`")
+            errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+            parameters = Map("datasource" -> "HiveFileFormat", "columnName" -> "`IF(ID=1,ID,0)`")
           )
         }
       }
