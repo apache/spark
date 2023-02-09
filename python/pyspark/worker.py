@@ -152,13 +152,25 @@ def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
         return result
 
     def verify_element(elem):
-        if not hasattr(elem, "__len__"):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
-            )
-        if not is_arrow_iter:
+        if is_arrow_iter:
+            import pyarrow as pa
+
+            if not isinstance(elem, pa.RecordBatch):
+                raise TypeError(
+                    "Return type of the user-defined function should be "
+                    "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
+                )
+        else:
+            import pandas as pd
+
+            if not isinstance(elem, pd.DataFrame if type(return_type) == StructType else pd.Series):
+                raise TypeError(
+                    "Return type of the user-defined function should be "
+                    "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
+                )
+
             verify_pandas_result(elem, return_type, True, True)
+
         return elem
 
     return lambda *iterator: map(
