@@ -42,7 +42,7 @@ object TableOutputResolver {
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
-      reorderColumnsByName(query.output, expected, conf, errors += _)
+      reorderColumnsByName(tableName, query.output, expected, conf, errors += _)
     } else {
       if (expected.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
@@ -51,12 +51,8 @@ object TableOutputResolver {
 
       query.output.zip(expected).flatMap {
         case (queryExpr, tableAttr) =>
-          checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
+          checkField(tableName, tableAttr, queryExpr, byName, conf, err => errors += err)
       }
-    }
-
-    if (errors.nonEmpty) {
-      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors.toSeq)
     }
 
     if (resolved == query.output) {
@@ -67,6 +63,7 @@ object TableOutputResolver {
   }
 
   private def reorderColumnsByName(
+      tableName: String,
       inputCols: Seq[NamedExpression],
       expectedCols: Seq[Attribute],
       conf: SQLConf,
@@ -77,11 +74,13 @@ object TableOutputResolver {
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
-        addError(s"Cannot find data for output column '${newColPath.quoted}'")
-        None
+        throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+          tableName, newColPath.quoted
+        )
       } else if (matched.length > 1) {
-        addError(s"Ambiguous column name in the input data: '${newColPath.quoted}'")
-        None
+        throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
+          tableName, newColPath.quoted
+        )
       } else {
         matchedCols += matched.head.name
         val expectedName = expectedCol.name
@@ -93,19 +92,22 @@ object TableOutputResolver {
         }
         (matchedCol.dataType, expectedCol.dataType) match {
           case (matchedType: StructType, expectedType: StructType) =>
-            checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
+            checkNullability(tableName, matchedCol, expectedCol, conf, addError, newColPath)
             resolveStructType(
-              matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
+              tableName, matchedCol, matchedType, expectedType,
+              expectedName, conf, addError, newColPath)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
-            checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
+            checkNullability(tableName, matchedCol, expectedCol, conf, addError, newColPath)
             resolveArrayType(
-              matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
+              tableName, matchedCol, matchedType, expectedType,
+              expectedName, conf, addError, newColPath)
           case (matchedType: MapType, expectedType: MapType) =>
-            checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
+            checkNullability(tableName, matchedCol, expectedCol, conf, addError, newColPath)
             resolveMapType(
-              matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
+              tableName, matchedCol, matchedType, expectedType,
+              expectedName, conf, addError, newColPath)
           case _ =>
-            checkField(expectedCol, matchedCol, byName = true, conf, addError)
+            checkField(tableName, expectedCol, matchedCol, byName = true, conf, addError)
         }
       }
     }
@@ -114,8 +116,9 @@ object TableOutputResolver {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
           .map(col => s"'${col.name}'").mkString(", ")
-        addError(s"Cannot write extra fields to struct '${colPath.quoted}': $extraCols")
-        Nil
+        throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+          tableName, colPath.quoted, extraCols
+        )
       } else {
         reordered
       }
@@ -125,6 +128,7 @@ object TableOutputResolver {
   }
 
   private def checkNullability(
+      tableName: String,
       input: Expression,
       expected: Attribute,
       conf: SQLConf,
@@ -132,11 +136,14 @@ object TableOutputResolver {
       colPath: Seq[String]): Unit = {
     if (input.nullable && !expected.nullable &&
       conf.storeAssignmentPolicy != StoreAssignmentPolicy.LEGACY) {
-      addError(s"Cannot write nullable values to non-null column '${colPath.quoted}'")
+      throw QueryCompilationErrors.incompatibleDataToTableNullableColumnError(
+        tableName, colPath.quoted
+      )
     }
   }
 
   private def resolveStructType(
+      tableName: String,
       input: NamedExpression,
       inputType: StructType,
       expectedType: StructType,
@@ -147,7 +154,8 @@ object TableOutputResolver {
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       Alias(GetStructField(input, i, Some(f.name)), f.name)()
     }
-    val reordered = reorderColumnsByName(fields, expectedType.toAttributes, conf, addError, colPath)
+    val reordered = reorderColumnsByName(
+      tableName, fields, expectedType.toAttributes, conf, addError, colPath)
     if (reordered.length == expectedType.length) {
       val struct = CreateStruct(reordered)
       val res = if (input.nullable) {
@@ -162,6 +170,7 @@ object TableOutputResolver {
   }
 
   private def resolveArrayType(
+      tableName: String,
       input: NamedExpression,
       inputType: ArrayType,
       expectedType: ArrayType,
@@ -170,12 +179,13 @@ object TableOutputResolver {
       addError: String => Unit,
       colPath: Seq[String]): Option[NamedExpression] = {
     if (inputType.containsNull && !expectedType.containsNull) {
-      addError(s"Cannot write nullable elements to array of non-nulls: '${colPath.quoted}'")
-      None
+      throw QueryCompilationErrors.incompatibleDataToTableNullableArrayElementsError(
+        tableName, colPath.quoted
+      )
     } else {
       val param = NamedLambdaVariable("x", inputType.elementType, inputType.containsNull)
       val fakeAttr = AttributeReference("x", expectedType.elementType, expectedType.containsNull)()
-      val res = reorderColumnsByName(Seq(param), Seq(fakeAttr), conf, addError, colPath)
+      val res = reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
       if (res.length == 1) {
         val func = LambdaFunction(res.head, Seq(param))
         Some(Alias(ArrayTransform(input, func), expectedName)())
@@ -186,6 +196,7 @@ object TableOutputResolver {
   }
 
   private def resolveMapType(
+      tableName: String,
       input: NamedExpression,
       inputType: MapType,
       expectedType: MapType,
@@ -194,19 +205,20 @@ object TableOutputResolver {
       addError: String => Unit,
       colPath: Seq[String]): Option[NamedExpression] = {
     if (inputType.valueContainsNull && !expectedType.valueContainsNull) {
-      addError(s"Cannot write nullable values to map of non-nulls: '${colPath.quoted}'")
-      None
+      throw QueryCompilationErrors.incompatibleDataToTableNullableMapValuesError(
+        tableName, colPath.quoted
+      )
     } else {
       val keyParam = NamedLambdaVariable("k", inputType.keyType, nullable = false)
       val fakeKeyAttr = AttributeReference("k", expectedType.keyType, nullable = false)()
       val resKey = reorderColumnsByName(
-        Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath :+ "key")
+        tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath :+ "key")
 
       val valueParam = NamedLambdaVariable("v", inputType.valueType, inputType.valueContainsNull)
       val fakeValueAttr =
         AttributeReference("v", expectedType.valueType, expectedType.valueContainsNull)()
       val resValue = reorderColumnsByName(
-        Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath :+ "value")
+        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath :+ "value")
 
       if (resKey.length == 1 && resValue.length == 1) {
         val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
@@ -247,6 +259,7 @@ object TableOutputResolver {
   }
 
   private def checkField(
+      tableName: String,
       tableAttr: Attribute,
       queryExpr: NamedExpression,
       byName: Boolean,
@@ -292,9 +305,8 @@ object TableOutputResolver {
           queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name,
           storeAssignmentPolicy, addError)
         if (queryExpr.nullable && !tableAttr.nullable) {
-          addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
-          None
-
+          throw QueryCompilationErrors.incompatibleDataToTableNullableColumnError(
+            tableName, tableAttr.name)
         } else if (!canWrite) {
           None
 

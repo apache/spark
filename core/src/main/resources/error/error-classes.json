@@ -116,12 +116,6 @@
       "<details>"
     ]
   },
-  "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE" : {
-    "message" : [
-      "Cannot write incompatible data to table <tableName>:",
-      "- <errors>."
-    ]
-  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -621,6 +615,43 @@
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
+  },
+  "INCOMPATIBLE_DATA_TO_TABLE" : {
+    "message" : [
+      "Cannot write incompatible data to table <tableName>:"
+    ],
+    "subClass" : {
+      "CANNOT_FIND_DATA" : {
+        "message" : [
+          "Cannot find data for output column <colPath>."
+        ]
+      },
+      "AMBIGUOUS_COLUMN_NAME" : {
+        "message" : [
+          "Ambiguous column name in the input data: <colPath>."
+        ]
+      },
+      "EXTRA_STRUCT_FIELDS" : {
+        "message" : [
+          "Cannot write extra fields to struct <colPath>: <extraCols>."
+        ]
+      },
+      "NULLABLE_COLUMN" : {
+        "message" : [
+          "Cannot write nullable values to non-null column <colPath>."
+        ]
+      },
+      "NULLABLE_ARRAY_ELEMENTS" : {
+        "message" : [
+          "Cannot write nullable elements to array of non-nulls: <colPath>."
+        ]
+      },
+      "NULLABLE_MAP_VALUES" : {
+        "message" : [
+          "Cannot write nullable elements to array of non-nulls: <colPath>."
+        ]
+      }
+    }
   },
   "INCOMPATIBLE_JOIN_TYPES" : {
     "message" : [

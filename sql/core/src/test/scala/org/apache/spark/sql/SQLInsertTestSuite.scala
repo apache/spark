@@ -426,12 +426,8 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
       createTable("t1", cols, Seq.fill(4)("int"))
       checkError(
         exception = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)")),
-        errorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
-        parameters = Map(
-          "tableName" -> "`testcat`.`t1`",
-          "errors" -> ("Cannot find data for output column 'c2'" +
-            "\n- Cannot find data for output column 'c3'" +
-            "\n- Cannot find data for output column 'c4'"))
+        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
+        parameters = Map("tableName" -> "`testcat`.`t1`", "colPath" -> "`c2`")
       )
     }
 
@@ -441,11 +437,8 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
         },
-        errorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
-        parameters = Map(
-          "tableName" -> "`testcat`.`t1`",
-          "errors" -> "Cannot find data for output column 'c2'"
-        )
+        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
+        parameters = Map("tableName" -> "`testcat`.`t1`", "colPath" -> "`c2`")
       )
     }
   }

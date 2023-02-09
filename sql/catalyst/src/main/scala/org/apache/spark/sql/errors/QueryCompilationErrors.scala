@@ -2049,12 +2049,71 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
   }
 
-  def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {
+  def incompatibleDataToTableCannotFindDataError(
+      tableName: String, colPath: String): Throwable = {
     new AnalysisException(
-      errorClass = "CANNOT_WRITE_INCOMPATIBLE_DATA_TO_TABLE",
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("\n- ")))
+        "colPath" -> toSQLId(colPath)
+      )
+    )
+  }
+
+  def incompatibleDataToTableAmbiguousColumnNameError(
+      tableName: String, colPath: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.AMBIGUOUS_COLUMN_NAME",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath)
+      )
+    )
+  }
+
+  def incompatibleDataToTableExtraStructFieldsError(
+      tableName: String, colPath: String, extraCols: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.EXTRA_STRUCT_FIELDS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath),
+        "extraCols" -> extraCols
+      )
+    )
+  }
+
+  def incompatibleDataToTableNullableColumnError(
+      tableName: String, colPath: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath)
+      )
+    )
+  }
+
+  def incompatibleDataToTableNullableArrayElementsError(
+      tableName: String, colPath: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_ARRAY_ELEMENTS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath)
+      )
+    )
+  }
+
+  def incompatibleDataToTableNullableMapValuesError(
+      tableName: String, colPath: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_MAP_VALUES",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath)
+      )
+    )
   }
 
   def secondArgumentOfFunctionIsNotIntegerError(
