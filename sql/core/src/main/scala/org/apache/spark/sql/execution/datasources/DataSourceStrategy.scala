@@ -312,7 +312,7 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
   }
 
   private def resolveColumnNames(
-    columnNames: Seq[String], outputAttrs: Seq[Attribute]): Seq[NamedExpression] = {
+                                  columnNames: Seq[String], outputAttrs: Seq[Attribute]): Seq[NamedExpression] = {
     columnNames.map { c =>
       outputAttrs.resolve(c :: Nil, conf.resolver).
         getOrElse(throw new AnalysisException(s"Cannot resolve column name $c among (" +
