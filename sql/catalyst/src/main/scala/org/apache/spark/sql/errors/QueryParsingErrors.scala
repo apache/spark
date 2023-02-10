@@ -388,7 +388,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def operationNotAllowedError(message: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       messageParameters = Map("message" -> message),
       ctx)
   }
