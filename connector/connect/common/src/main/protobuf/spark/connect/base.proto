@@ -183,6 +183,85 @@ message ExecutePlanResponse {
   }
 }
 
+// Request to update or fetch the configurations.
+message ConfigRequest {
+  // (Required)
+  //
+  // The client_id is set by the client to be able to collate streaming responses from
+  // different queries.
+  string client_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  Operation operation = 3;
+
+  // (Optional)
+  //
+  // Identify which keys will be updated or fetched.
+  // Required when the 'operation' is 'SET', 'GET', 'GET_OPTION', 'UNSET',
+  // 'CONTAINS', 'IS_MODIFIABLE'.
+  repeated string keys = 4;
+
+  // (Optional)
+  //
+  // Corresponding values to the keys.
+  // Required when the 'operation' is 'SET'.
+  // Optional when the 'operation' is 'GET', the values here will be used
+  // as the default values.
+  repeated string values = 5;
+
+  // (Optional)
+  //
+  // Only used when the 'operation' is 'GET_ALL'.
+  // If prefix is given, only parameters that start with the prefix will be returned.
+  optional string prefix = 6;
+
+  enum Operation {
+    OPERATION_UNSPECIFIED = 0;
+    OPERATION_SET = 1;
+    OPERATION_GET = 2;
+    OPERATION_GET_OPTION = 3;
+    OPERATION_GET_ALL = 4;
+    OPERATION_UNSET = 5;
+    OPERATION_CONTAINS = 6;
+    OPERATION_IS_MODIFIABLE = 7;
+  }
+}
+
+message ConfigResponse {
+  string client_id = 1;
+
+  // (Optional)
+  //
+  // Available when the operation is 'GET_ALL'.
+  repeated string keys = 2;
+
+  // (Optional)
+  //
+  // Available when the operation is 'GET', 'GET_ALL'.
+  repeated string values = 3;
+
+  // (Optional)
+  //
+  // Available when the operation is 'GET_OPTION'.
+  repeated OptionalValue optional_values = 4;
+
+  // (Optional)
+  //
+  // Available when the operation is 'CONTAINS', 'IS_MODIFIABLE'.
+  repeated bool bools = 5;
+
+  // (Optional)
+  //
+  // Warning messages for deprecated or unsupported configurations.
+  repeated string warnings = 6;
+
+  message OptionalValue {
+    optional string value = 1;
+  }
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -193,5 +272,8 @@ service SparkConnectService {
 
   // Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
   rpc AnalyzePlan(AnalyzePlanRequest) returns (AnalyzePlanResponse) {}
+
+  // Update or fetch the configurations and returns a [[ConfigResponse]] containing the result.
+  rpc Config(ConfigRequest) returns (ConfigResponse) {}
 }
 
