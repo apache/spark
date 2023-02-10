@@ -92,17 +92,17 @@ object TableOutputResolver {
         }
         (matchedCol.dataType, expectedCol.dataType) match {
           case (matchedType: StructType, expectedType: StructType) =>
-            checkNullability(tableName, matchedCol, expectedCol, conf, addError, newColPath)
+            checkNullability(tableName, matchedCol, expectedCol, conf, newColPath)
             resolveStructType(
               tableName, matchedCol, matchedType, expectedType,
               expectedName, conf, addError, newColPath)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
-            checkNullability(tableName, matchedCol, expectedCol, conf, addError, newColPath)
+            checkNullability(tableName, matchedCol, expectedCol, conf, newColPath)
             resolveArrayType(
               tableName, matchedCol, matchedType, expectedType,
               expectedName, conf, addError, newColPath)
           case (matchedType: MapType, expectedType: MapType) =>
-            checkNullability(tableName, matchedCol, expectedCol, conf, addError, newColPath)
+            checkNullability(tableName, matchedCol, expectedCol, conf, newColPath)
             resolveMapType(
               tableName, matchedCol, matchedType, expectedType,
               expectedName, conf, addError, newColPath)
@@ -132,7 +132,6 @@ object TableOutputResolver {
       input: Expression,
       expected: Attribute,
       conf: SQLConf,
-      addError: String => Unit,
       colPath: Seq[String]): Unit = {
     if (input.nullable && !expected.nullable &&
       conf.storeAssignmentPolicy != StoreAssignmentPolicy.LEGACY) {
@@ -302,8 +301,8 @@ object TableOutputResolver {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         // run the type check first to ensure type errors are present
         val canWrite = DataType.canWrite(
-          queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name,
-          storeAssignmentPolicy, addError)
+          tableName, queryExpr.dataType, tableAttr.dataType, byName, conf.resolver,
+          tableAttr.name, storeAssignmentPolicy, addError)
         if (queryExpr.nullable && !tableAttr.nullable) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableColumnError(
             tableName, tableAttr.name)

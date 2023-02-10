@@ -631,6 +631,11 @@
           "Cannot find data for output column <colPath>."
         ]
       },
+      "CANNOT_SAFELY_CAST" : {
+        "message" : [
+          "Cannot safely cast <colPath>: <from> to <to>."
+        ]
+      },
       "EXTRA_STRUCT_FIELDS" : {
         "message" : [
           "Cannot write extra fields to struct <colPath>: <extraCols>."
@@ -649,6 +654,16 @@
       "NULLABLE_MAP_VALUES" : {
         "message" : [
           "Cannot write nullable elements to array of non-nulls: <colPath>."
+        ]
+      },
+      "STRUCT_MISSING_FIELDS" : {
+        "message" : [
+          "Struct <colPath> missing fields: <missingFields>."
+        ]
+      },
+      "UNEXPECTED_COLUMN_NAME" : {
+        "message" : [
+          "Struct <colPath> <order>-th field name does not match (may be out of order): expected <expected>, found <found>."
         ]
       }
     }

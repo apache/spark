@@ -2116,6 +2116,49 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
+  def incompatibleDataToTableCannotSafelyCastError(
+      tableName: String, colPath: String, from: String, to: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath),
+        "from" -> toSQLType(from),
+        "to" -> toSQLType(to),
+      )
+    )
+  }
+
+  def incompatibleDataToTableStructMissingFieldsError(
+      tableName: String, colPath: String, missingFields: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.STRUCT_MISSING_FIELDS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath),
+        "missingFIelds" -> missingFields
+      )
+    )
+  }
+
+  def incompatibleDataToTableUnexpectedColumnNameError(
+     tableName: String,
+     colPath: String,
+     order: Int,
+     expected: String,
+     found: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.UNEXPECTED_COLUMN_NAME",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colPath" -> toSQLId(colPath),
+        "order" -> order.toString,
+        "expected" -> toSQLId(expected),
+        "found" -> toSQLId(found)
+      )
+    )
+  }
+
   def secondArgumentOfFunctionIsNotIntegerError(
       function: String, e: NumberFormatException): Throwable = {
     // The second argument of {function} function needs to be an integer

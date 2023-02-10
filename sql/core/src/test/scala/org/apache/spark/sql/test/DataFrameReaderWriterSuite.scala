@@ -381,10 +381,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        val msg = intercept[AnalysisException] {
-          Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"BIGINT\"",
+            "to" -> "\"INT\"")
+        )
 
         // Insert into table successfully.
         Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
@@ -402,17 +409,29 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        var msg = intercept[AnalysisException] {
-          Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': string to int") &&
-          msg.contains("Cannot safely cast 'd': string to double"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"STRING\"",
+            "to" -> "\"INT\"")
+        )
 
-        msg = intercept[AnalysisException] {
-          Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
-          msg.contains("Cannot safely cast 'd': boolean to double"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"BOOLEAN\"",
+            "to" -> "\"INT\"")
+        )
       }
     }
   }

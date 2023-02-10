@@ -629,17 +629,31 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t select 1L, 2")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"BIGINT\"",
+            "to" -> "\"INT\"")
+        )
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t select 1, 2.0")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`d`",
+            "from" -> "\"DECIMAL(2,1)\"",
+            "to" -> "\"DOUBLE\"")
+        )
+
         var msg = intercept[AnalysisException] {
-          sql("insert into t select 1L, 2")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
-
-        msg = intercept[AnalysisException] {
-          sql("insert into t select 1, 2.0")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'd': decimal(2,1) to double"))
-
-        msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0D, 3")
         }.getMessage
         assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
@@ -666,21 +680,39 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
-        var msg = intercept[AnalysisException] {
-          sql("insert into t values('a', 'b')")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': string to int") &&
-          msg.contains("Cannot safely cast 'd': string to double"))
-        msg = intercept[AnalysisException] {
-          sql("insert into t values(now(), now())")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': timestamp to int") &&
-          msg.contains("Cannot safely cast 'd': timestamp to double"))
-        msg = intercept[AnalysisException] {
-          sql("insert into t values(true, false)")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
-          msg.contains("Cannot safely cast 'd': boolean to double"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t values('a', 'b')")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"STRING\"",
+            "to" -> "\"INT\"")
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t values(now(), now())")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"TIMESTAMP\"",
+            "to" -> "\"INT\"")
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t values(true, false)")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"BOOLEAN\"",
+            "to" -> "\"INT\"")
+        )
       }
     }
   }
@@ -776,38 +808,62 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("CREATE TABLE t(i int, t timestamp) USING parquet")
-        val msg = intercept[AnalysisException] {
-          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': timestamp to int"))
-        assert(msg.contains("Cannot safely cast 't': int to timestamp"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"TIMESTAMP\"",
+            "to" -> "\"INT\"")
+        )
       }
 
       withTable("t") {
         sql("CREATE TABLE t(i int, d date) USING parquet")
-        val msg = intercept[AnalysisException] {
-          sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': date to int"))
-        assert(msg.contains("Cannot safely cast 'd': int to date"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
+          },
+          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colPath" -> "`i`",
+            "from" -> "\"DATE\"",
+            "to" -> "\"INT\"")
+        )
       }
 
       withTable("t") {
         sql("CREATE TABLE t(b boolean, t timestamp) USING parquet")
-        val msg = intercept[AnalysisException] {
-          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'b': timestamp to boolean"))
-        assert(msg.contains("Cannot safely cast 't': boolean to timestamp"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
+          },
+            errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+            parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`t`",
+        "colPath" -> "`b`",
+        "from" -> "\"TIMESTAMP\"",
+        "to" -> "\"BOOLEAN\"")
+        )
       }
 
       withTable("t") {
         sql("CREATE TABLE t(b boolean, d date) USING parquet")
-        val msg = intercept[AnalysisException] {
-          sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'b': date to boolean"))
-        assert(msg.contains("Cannot safely cast 'd': boolean to date"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
+          },
+            errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+            parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`t`",
+        "colPath" -> "`b`",
+        "from" -> "\"DATE\"",
+        "to" -> "\"BOOLEAN\"")
+        )
       }
     }
   }

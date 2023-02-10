@@ -485,6 +485,7 @@ object DataType {
    * @return true if data written with the write type can be read using the read type
    */
   def canWrite(
+      tableName: String,
       write: DataType,
       read: DataType,
       byName: Boolean,
@@ -496,12 +497,13 @@ object DataType {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
         val typesCompatible = canWrite(
-          wArr.elementType, rArr.elementType, byName, resolver, context + ".element",
+          tableName, wArr.elementType, rArr.elementType, byName, resolver, context + ".element",
           storeAssignmentPolicy, addError)
 
         if (wArr.containsNull && !rArr.containsNull) {
-          addError(s"Cannot write nullable elements to array of non-nulls: '$context'")
-          false
+          throw QueryCompilationErrors.incompatibleDataToTableNullableArrayElementsError(
+            tableName, context
+          )
         } else {
           typesCompatible
         }
@@ -512,15 +514,16 @@ object DataType {
 
         // run compatibility check first to produce all error messages
         val keyCompatible = canWrite(
-          wMap.keyType, rMap.keyType, byName, resolver, context + ".key",
+          tableName, wMap.keyType, rMap.keyType, byName, resolver, context + ".key",
           storeAssignmentPolicy, addError)
         val valueCompatible = canWrite(
-          wMap.valueType, rMap.valueType, byName, resolver, context + ".value",
+          tableName, wMap.valueType, rMap.valueType, byName, resolver, context + ".value",
           storeAssignmentPolicy, addError)
 
         if (wMap.valueContainsNull && !rMap.valueContainsNull) {
-          addError(s"Cannot write nullable values to map of non-nulls: '$context'")
-          false
+          throw QueryCompilationErrors.incompatibleDataToTableNullableMapValuesError(
+            tableName, context
+          )
         } else {
           keyCompatible && valueCompatible
         }
@@ -532,16 +535,15 @@ object DataType {
             val nameMatch = resolver(wField.name, rField.name) || isSparkGeneratedName(wField.name)
             val fieldContext = s"$context.${rField.name}"
             val typesCompatible = canWrite(
-              wField.dataType, rField.dataType, byName, resolver, fieldContext,
+              tableName, wField.dataType, rField.dataType, byName, resolver, fieldContext,
               storeAssignmentPolicy, addError)
 
             if (byName && !nameMatch) {
-              addError(s"Struct '$context' $i-th field name does not match " +
-                s"(may be out of order): expected '${rField.name}', found '${wField.name}'")
-              fieldCompatible = false
+              throw QueryCompilationErrors.incompatibleDataToTableUnexpectedColumnNameError(
+                tableName, context, i, rField.name, wField.name)
             } else if (!rField.nullable && wField.nullable) {
-              addError(s"Cannot write nullable values to non-null field: '$fieldContext'")
-              fieldCompatible = false
+              throw QueryCompilationErrors.incompatibleDataToTableNullableColumnError(
+                tableName, fieldContext)
             } else if (!typesCompatible) {
               // errors are added in the recursive call to canWrite above
               fieldCompatible = false
@@ -552,23 +554,25 @@ object DataType {
           val missingFieldsStr = readFields.takeRight(readFields.size - writeFields.size)
             .map(f => s"'${f.name}'").mkString(", ")
           if (missingFieldsStr.nonEmpty) {
-            addError(s"Struct '$context' missing fields: $missingFieldsStr")
-            fieldCompatible = false
+            throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
+              tableName, context, missingFieldsStr)
           }
 
         } else if (writeFields.size > readFields.size) {
           val extraFieldsStr = writeFields.takeRight(writeFields.size - readFields.size)
             .map(f => s"'${f.name}'").mkString(", ")
-          addError(s"Cannot write extra fields to struct '$context': $extraFieldsStr")
-          fieldCompatible = false
+          throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+            tableName, context, extraFieldsStr
+          )
         }
 
         fieldCompatible
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == STRICT =>
         if (!Cast.canUpCast(w, r)) {
-          addError(s"Cannot safely cast '$context': ${w.catalogString} to ${r.catalogString}")
-          false
+          throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
+            tableName, context, w.catalogString, r.catalogString
+          )
         } else {
           true
         }
@@ -577,8 +581,9 @@ object DataType {
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
         if (!Cast.canANSIStoreAssign(w, r)) {
-          addError(s"Cannot safely cast '$context': ${w.catalogString} to ${r.catalogString}")
-          false
+          throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
+             tableName, context, w.catalogString, r.catalogString
+          )
         } else {
           true
         }
@@ -587,9 +592,9 @@ object DataType {
         true
 
       case (w, r) =>
-        addError(s"Cannot write '$context': " +
-          s"${w.catalogString} is incompatible with ${r.catalogString}")
-        false
+        throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
+          tableName, context, w.catalogString, r.catalogString
+        )
     }
   }
 }
