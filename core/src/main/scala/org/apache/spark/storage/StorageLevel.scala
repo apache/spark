@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.annotation.DeveloperApi
@@ -111,6 +111,9 @@ class StorageLevel private(
     _deserialized = (flags & 1) != 0
     _replication = in.readByte()
   }
+
+  @throws(classOf[IOException])
+  private def readResolve(): Object = StorageLevel.getCachedStorageLevel(this)
 
   override def toString: String = {
     val disk = if (useDisk) "disk" else ""

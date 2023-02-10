@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 
@@ -84,6 +84,9 @@ class BlockManagerId private (
     val isTopologyInfoAvailable = in.readBoolean()
     topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
   }
+
+  @throws(classOf[IOException])
+  private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
   override def toString: String = s"BlockManagerId($executorId, $host, $port, $topologyInfo)"
 
