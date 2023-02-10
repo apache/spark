@@ -1413,6 +1413,7 @@ case class ArrayContains(left: Expression, right: Expression)
 case class ArrayPrepend(left: Expression, right: Expression)
   extends BinaryExpression
     with ImplicitCastInputTypes
+    with ComplexTypeMergingExpression
     with QueryErrorsBase {
 
   override def nullable: Boolean = left.nullable
@@ -1533,7 +1534,7 @@ case class ArrayPrepend(left: Expression, right: Expression)
     (left.dataType, right.dataType) match {
       case (_, NullType) => Seq.empty
       case (ArrayType(e1, hasNull), e2) =>
-        TypeCoercion.findWiderTypeWithoutStringPromotionForTwo(e1, e2) match {
+        TypeCoercion.findTightestCommonType(e1, e2) match {
           case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
           case _ => Seq.empty
         }
