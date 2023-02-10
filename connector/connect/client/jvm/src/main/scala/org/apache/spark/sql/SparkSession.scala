@@ -121,8 +121,10 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     new Dataset[T](this, plan)
   }
 
-  private[sql] def analyze(plan: proto.Plan): proto.AnalyzePlanResponse =
-    client.analyze(plan)
+  private[sql] def analyze(
+      plan: proto.Plan,
+      mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
+    client.analyze(plan, mode)
 
   private[sql] def execute(plan: proto.Plan): SparkResult = {
     val value = client.execute(plan)
