@@ -95,7 +95,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     val logDirFailureChannel = new LogDirFailureChannel(1)
     val topicPartition = new TopicPartition(topic, partition)
     val producerStateManagerConfig = new ProducerStateManagerConfig()
-    val logConfig = LogConfig(logProps, producerStateManagerConfig)
+    val logConfig = LogConfig(logProps)
     val log = UnifiedLog(
       dir,
       LogConfig,
@@ -105,7 +105,7 @@ class KafkaRDDSuite extends SparkFunSuite {
       new BrokerTopicStats(),
       mockTime,
       maxTransactionTimeoutMs = 5 * 60 * 1000, // KAFKA-13221
-      Int.MaxValue,
+      producerStateManagerConfig,
       Int.MaxValue,
       logDirFailureChannel,
       lastShutdownClean = false,
