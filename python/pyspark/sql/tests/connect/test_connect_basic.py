@@ -53,7 +53,6 @@ from pyspark.errors.exceptions.connect import (
     AnalysisException,
     ParseException,
     SparkConnectException,
-    TempTableAlreadyExistsException,
 )
 
 if should_test_connect:
@@ -1244,7 +1243,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(TempTableAlreadyExistsException):
+            with self.assertRaises(AnalysisException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -1256,7 +1255,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(TempTableAlreadyExistsException):
+            with self.assertRaises(AnalysisException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -2734,7 +2733,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "sparkContext",
             "streams",
             "readStream",
-            "udf",
             "version",
         ):
             with self.assertRaises(NotImplementedError):

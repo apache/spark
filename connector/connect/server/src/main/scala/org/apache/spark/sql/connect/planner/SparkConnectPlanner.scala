@@ -44,6 +44,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.functions.{col, expr}
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
@@ -1399,6 +1400,8 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(command: proto.Command): Unit = {
     command.getCommandTypeCase match {
+      case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
+        handleRegisterUserDefinedFunction(command.getRegisterFunction)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
@@ -1409,6 +1412,36 @@ class SparkConnectPlanner(val session: SparkSession) {
         handleCommandPlugin(command.getExtension)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
+  }
+
+  private def handleRegisterUserDefinedFunction(
+      fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    fun.getFunctionCase match {
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+        handleRegisterPythonUDF(fun)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+    }
+  }
+
+  private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = fun.getPythonUdf
+    val function = transformPythonFunction(udf)
+    val udpf = UserDefinedPythonFunction(
+      name = fun.getFunctionName,
+      func = function,
+      dataType = DataType.parseTypeWithFallback(
+        schema = udf.getOutputType,
+        parser = DataType.fromDDL,
+        fallbackParser = DataType.fromJson) match {
+        case s: DataType => s
+        case other => throw InvalidPlanInput(s"Invalid return type $other")
+      },
+      pythonEvalType = udf.getEvalType,
+      udfDeterministic = fun.getDeterministic)
+
+    session.udf.registerPython(fun.getFunctionName, udpf)
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {
