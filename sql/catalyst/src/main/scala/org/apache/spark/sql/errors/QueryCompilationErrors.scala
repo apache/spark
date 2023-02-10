@@ -2124,7 +2124,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),
         "from" -> toSQLType(from),
-        "to" -> toSQLType(to),
+        "to" -> toSQLType(to)
       )
     )
   }
