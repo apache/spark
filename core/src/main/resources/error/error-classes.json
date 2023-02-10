@@ -1181,7 +1181,7 @@
   },
   "OPERATION_NOT_ALLOWED" : {
     "message" : [
-      "Operation not allowed: <operation>."
+      "Operation not allowed: <message>."
     ],
     "sqlState" : "42000"
   },
