@@ -1476,8 +1476,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       plan = transformRelation(createView.getInput),
       allowExisting = false,
       replace = createView.getReplace,
-      viewType = viewType,
-      isAnalyzed = true)
+      viewType = viewType)
 
     Dataset.ofRows(session, plan).queryExecution.commandExecuted
   }
