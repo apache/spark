@@ -212,6 +212,21 @@ class SparkConnectService(debug: Boolean)
     response.setIsStreaming(ds.isStreaming)
     response.addAllInputFiles(ds.inputFiles.toSeq.asJava)
   }
+
+  /**
+   * This is the main entry method for Spark Connect and all calls to update or fetch
+   * configuration..
+   *
+   * @param request
+   * @param responseObserver
+   */
+  override def config(
+      request: proto.ConfigRequest,
+      responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
+    try {
+      new SparkConnectConfigHandler(responseObserver).handle(request)
+    } catch handleError("config", observer = responseObserver)
+  }
 }
 
 /**

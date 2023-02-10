@@ -570,3 +570,225 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
+
+class ConfigRequest(google.protobuf.message.Message):
+    """Request to update or fetch the configurations."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _Operation:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _OperationEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            ConfigRequest._Operation.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        OPERATION_UNSPECIFIED: ConfigRequest._Operation.ValueType  # 0
+        OPERATION_SET: ConfigRequest._Operation.ValueType  # 1
+        OPERATION_GET: ConfigRequest._Operation.ValueType  # 2
+        OPERATION_GET_OPTION: ConfigRequest._Operation.ValueType  # 3
+        OPERATION_GET_ALL: ConfigRequest._Operation.ValueType  # 4
+        OPERATION_UNSET: ConfigRequest._Operation.ValueType  # 5
+        OPERATION_CONTAINS: ConfigRequest._Operation.ValueType  # 6
+        OPERATION_IS_MODIFIABLE: ConfigRequest._Operation.ValueType  # 7
+
+    class Operation(_Operation, metaclass=_OperationEnumTypeWrapper): ...
+    OPERATION_UNSPECIFIED: ConfigRequest.Operation.ValueType  # 0
+    OPERATION_SET: ConfigRequest.Operation.ValueType  # 1
+    OPERATION_GET: ConfigRequest.Operation.ValueType  # 2
+    OPERATION_GET_OPTION: ConfigRequest.Operation.ValueType  # 3
+    OPERATION_GET_ALL: ConfigRequest.Operation.ValueType  # 4
+    OPERATION_UNSET: ConfigRequest.Operation.ValueType  # 5
+    OPERATION_CONTAINS: ConfigRequest.Operation.ValueType  # 6
+    OPERATION_IS_MODIFIABLE: ConfigRequest.Operation.ValueType  # 7
+
+    CLIENT_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    OPERATION_FIELD_NUMBER: builtins.int
+    KEYS_FIELD_NUMBER: builtins.int
+    VALUES_FIELD_NUMBER: builtins.int
+    PREFIX_FIELD_NUMBER: builtins.int
+    client_id: builtins.str
+    """(Required)
+
+    The client_id is set by the client to be able to collate streaming responses from
+    different queries.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context"""
+    operation: global___ConfigRequest.Operation.ValueType
+    @property
+    def keys(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional)
+
+        Identify which keys will be updated or fetched.
+        Required when the 'operation' is 'SET', 'GET', 'GET_OPTION', 'UNSET',
+        'CONTAINS', 'IS_MODIFIABLE'.
+        """
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional)
+
+        Corresponding values to the keys.
+        Required when the 'operation' is 'SET'.
+        Optional when the 'operation' is 'GET', the values here will be used
+        as the default values.
+        """
+    prefix: builtins.str
+    """(Optional)
+
+    Only used when the 'operation' is 'GET_ALL'.
+    If prefix is given, only parameters that start with the prefix will be returned.
+    """
+    def __init__(
+        self,
+        *,
+        client_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        operation: global___ConfigRequest.Operation.ValueType = ...,
+        keys: collections.abc.Iterable[builtins.str] | None = ...,
+        values: collections.abc.Iterable[builtins.str] | None = ...,
+        prefix: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_prefix", b"_prefix", "prefix", b"prefix", "user_context", b"user_context"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_prefix",
+            b"_prefix",
+            "client_id",
+            b"client_id",
+            "keys",
+            b"keys",
+            "operation",
+            b"operation",
+            "prefix",
+            b"prefix",
+            "user_context",
+            b"user_context",
+            "values",
+            b"values",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_prefix", b"_prefix"]
+    ) -> typing_extensions.Literal["prefix"] | None: ...
+
+global___ConfigRequest = ConfigRequest
+
+class ConfigResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OptionalValue(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        VALUE_FIELD_NUMBER: builtins.int
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            value: builtins.str | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_value", b"_value"]
+        ) -> typing_extensions.Literal["value"] | None: ...
+
+    CLIENT_ID_FIELD_NUMBER: builtins.int
+    KEYS_FIELD_NUMBER: builtins.int
+    VALUES_FIELD_NUMBER: builtins.int
+    OPTIONAL_VALUES_FIELD_NUMBER: builtins.int
+    BOOLS_FIELD_NUMBER: builtins.int
+    WARNINGS_FIELD_NUMBER: builtins.int
+    client_id: builtins.str
+    @property
+    def keys(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional)
+
+        Available when the operation is 'GET_ALL'.
+        """
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional)
+
+        Available when the operation is 'GET', 'GET_ALL'.
+        """
+    @property
+    def optional_values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ConfigResponse.OptionalValue
+    ]:
+        """(Optional)
+
+        Available when the operation is 'GET_OPTION'.
+        """
+    @property
+    def bools(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bool]:
+        """(Optional)
+
+        Available when the operation is 'CONTAINS', 'IS_MODIFIABLE'.
+        """
+    @property
+    def warnings(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional)
+
+        Warning messages for deprecated or unsupported configurations.
+        """
+    def __init__(
+        self,
+        *,
+        client_id: builtins.str = ...,
+        keys: collections.abc.Iterable[builtins.str] | None = ...,
+        values: collections.abc.Iterable[builtins.str] | None = ...,
+        optional_values: collections.abc.Iterable[global___ConfigResponse.OptionalValue]
+        | None = ...,
+        bools: collections.abc.Iterable[builtins.bool] | None = ...,
+        warnings: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "bools",
+            b"bools",
+            "client_id",
+            b"client_id",
+            "keys",
+            b"keys",
+            "optional_values",
+            b"optional_values",
+            "values",
+            b"values",
+            "warnings",
+            b"warnings",
+        ],
+    ) -> None: ...
+
+global___ConfigResponse = ConfigResponse
