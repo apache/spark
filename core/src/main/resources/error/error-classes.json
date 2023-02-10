@@ -1537,6 +1537,11 @@
     ],
     "sqlState" : "42883"
   },
+  "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
+    "message" : [
+      "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
+    ]
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."
@@ -2154,11 +2159,6 @@
   "_LEGACY_ERROR_TEMP_1000" : {
     "message" : [
       "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1001" : {
-    "message" : [
-      "USING column `<colName>` cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_1002" : {
