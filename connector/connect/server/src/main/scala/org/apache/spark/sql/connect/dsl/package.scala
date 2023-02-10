@@ -990,7 +990,11 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .addAllIds(ids.asJava)
-              .addAllValues(values.asJava)
+              .setValues(
+                Unpivot.Values
+                  .newBuilder()
+                  .addAllValues(values.asJava)
+                  .build())
               .setVariableColumnName(variableColumnName)
               .setValueColumnName(valueColumnName))
           .build()

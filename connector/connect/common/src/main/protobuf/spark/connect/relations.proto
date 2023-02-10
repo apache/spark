@@ -729,13 +729,17 @@ message Unpivot {
   repeated Expression ids = 2;
 
   // (Optional) Value columns to unpivot.
-  repeated Expression values = 3;
+  optional Values values = 3;
 
   // (Required) Name of the variable column.
   string variable_column_name = 4;
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+
+  message Values {
+    repeated Expression values = 1;
+  }
 }
 
 message ToSchema {
