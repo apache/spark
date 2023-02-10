@@ -17,15 +17,14 @@
 
 package org.apache.spark.internal.io.cloud
 
-import org.apache.spark.sql.sources.PartitionedWriteSuite
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.io.cloud.CommitterBindingSuite.enablePathCommitter
+import org.apache.spark.sql.execution.datasources.parquet.ParquetV2QuerySuite
 
 /**
- * Run the spark-sql core PartitionedWriteSuite through the
- * PathOutputCommitter.
+ * Run the Parquet SQL tests through the PathOutputCommitter.
  */
-class PathOutputPartitionedWriteSuite extends PartitionedWriteSuite {
+class PathOutputParquetQuerySuite extends ParquetV2QuerySuite {
 
   /**
    * Create a job configuration using the PathOutputCommitterProtocol

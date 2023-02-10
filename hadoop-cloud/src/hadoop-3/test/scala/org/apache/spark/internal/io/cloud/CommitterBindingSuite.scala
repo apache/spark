@@ -23,12 +23,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, StreamCapabilities}
 import org.apache.hadoop.io.IOUtils
 import org.apache.hadoop.mapreduce.{Job, JobStatus, MRJobConfig, TaskAttemptContext, TaskAttemptID}
-import org.apache.hadoop.mapreduce.lib.output.{BindingPathOutputCommitter, FileOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.{BindingPathOutputCommitter, FileOutputFormat, PathOutputCommitterFactory}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
-import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.{CAPABILITY_DYNAMIC_PARTITIONING, OUTPUTCOMMITTER_FACTORY_SCHEME, REJECT_FILE_OUTPUT}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol._
 import org.apache.spark.sql.internal.SQLConf
 
 class CommitterBindingSuite extends SparkFunSuite {
@@ -40,7 +41,8 @@ class CommitterBindingSuite extends SparkFunSuite {
   /**
    * The classname to use when referring to the path output committer.
    */
-  private val pathCommitProtocolClassname: String = classOf[PathOutputCommitProtocol].getName
+  private val pathCommitProtocolClassname: String = classOf[PathOutputCommitProtocol]
+    .getName
 
   /** hadoop-mapreduce option to enable the _SUCCESS marker. */
   private val successMarker = "mapreduce.fileoutputcommitter.marksuccessfuljobs"
@@ -58,9 +60,11 @@ class CommitterBindingSuite extends SparkFunSuite {
     val path = new Path("http://example/data")
     val conf = newJob(path).getConfiguration
     StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
-    val tContext: TaskAttemptContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
+    val tContext: TaskAttemptContext = new TaskAttemptContextImpl(conf,
+      taskAttemptId0)
     val parquet = new BindingParquetOutputCommitter(path, tContext)
-    val inner = parquet.boundCommitter.asInstanceOf[StubPathOutputCommitterWithDynamicPartioning]
+    val inner = parquet.boundCommitter
+      .asInstanceOf[StubPathOutputCommitterWithDynamicPartioning]
     parquet.setupJob(tContext)
     assert(inner.jobSetup, s"$inner job not setup")
     parquet.setupTask(tContext)
@@ -109,7 +113,8 @@ class CommitterBindingSuite extends SparkFunSuite {
     val tempDir = File.createTempFile("ser", ".bin")
 
     tempDir.delete()
-    val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString, false)
+    val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString,
+      false)
 
     val serData = File.createTempFile("ser", ".bin")
     var out: ObjectOutputStream = null
@@ -151,21 +156,24 @@ class CommitterBindingSuite extends SparkFunSuite {
    */
   test("permit dynamic partitioning even not declared as supported") {
     val path = new Path("http://example/dir1/dir2/dir3")
-    val conf= newJob(path).getConfiguration
+    val conf = newJob(path).getConfiguration
     StubPathOutputCommitterBinding.bind(conf, "http")
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val committer = instantiateCommitter(path, true)
     committer.setupTask(tContext)
-    assert(committer.getPartitions.isDefined, "committer partition list should be defined")
+    assert(committer.getPartitions.isDefined,
+      "committer partition list should be defined")
 
-    val file1 = new Path(committer.newTaskTempFile(tContext, Option("part=1"), ".csv"))
+    val file1 = new Path(
+      committer.newTaskTempFile(tContext, Option("part=1"), ".csv"))
     assert(file1.getName.endsWith(".csv"), s"wrong suffix in $file1")
     assert(file1.getParent.getName === "part=1", s"wrong parent dir in $file1")
     val partionSet1 = committer.getPartitions.get
     assert(partionSet1 === Set("part=1"))
 
     val file2 = new Path(
-      committer.newTaskTempFile(tContext, Option("part=2"), FileNameSpec("prefix", ".csv")))
+      committer.newTaskTempFile(tContext, Option("part=2"),
+        FileNameSpec("prefix", ".csv")))
     assert(file2.getName.endsWith(".csv"), s"wrong suffix in $file1")
     assert(file2.getName.startsWith("prefix"), s"wrong prefix in $file1")
 
@@ -189,9 +197,11 @@ class CommitterBindingSuite extends SparkFunSuite {
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val committer = instantiateCommitter(path, false)
     committer.setupTask(tContext)
-    assert(committer.getPartitions.isDefined, "committer partition list should be defined")
+    assert(committer.getPartitions.isDefined,
+      "committer partition list should be defined")
 
-    val file1 = new Path(committer.newTaskTempFile(tContext, Option("part=1"), ".csv"))
+    val file1 = new Path(
+      committer.newTaskTempFile(tContext, Option("part=1"), ".csv"))
     assert(file1.getName.endsWith(".csv"), s"wrong suffix in $file1")
     assert(file1.getParent.getName === "part=1", s"wrong parent dir in $file1")
 
@@ -204,6 +214,7 @@ class CommitterBindingSuite extends SparkFunSuite {
 
   /**
    * Instantiate a committer.
+   *
    * @param path path to bind to
    * @param dynamic use dynamicPartitionOverwrite
    * @return the committer
@@ -274,11 +285,12 @@ class CommitterBindingSuite extends SparkFunSuite {
       // unless/until setupTask() is invoked. the partition list is not created,
       // this means that the job manager instance will return None
       // on a call to getPartitions.
-      assert(committer.getPartitions.isEmpty, "committer partition list should be empty")
+      assert(committer.getPartitions.isEmpty,
+        "committer partition list should be empty")
       committer.setupTask(tContext)
       verifyAbsTempFileWorks(tContext, committer)
     } finally {
-      jobCommitDir.delete();
+      jobCommitDir.delete()
     }
   }
 
@@ -307,7 +319,7 @@ class CommitterBindingSuite extends SparkFunSuite {
       assert(!jobCommitDir.exists(),
         s"job commit dir $jobCommitDir should not have been created")
     } finally {
-      jobCommitDir.delete();
+      jobCommitDir.delete()
     }
   }
 
@@ -319,8 +331,8 @@ class CommitterBindingSuite extends SparkFunSuite {
    * @param committer committer
    */
   private def verifyAbsTempFileWorks(
-    tContext: TaskAttemptContextImpl,
-    committer: FileCommitProtocol): Unit = {
+      tContext: TaskAttemptContextImpl,
+      committer: FileCommitProtocol): Unit = {
     val spec = FileNameSpec(".lotus.", ".123")
     val absPath = committer.newTaskTempFileAbsPath(
       tContext,
@@ -334,10 +346,11 @@ class CommitterBindingSuite extends SparkFunSuite {
    * Given a hadoop configuration, explicitly set up the factory binding for the scheme
    * to a committer factory which always creates FileOutputCommitters.
    *
-   * @param conf   config to patch
+   * @param conf config to patch
    * @param scheme filesystem scheme.
    */
-  def bindToFileOutputCommitterFactory(conf: Configuration, scheme: String): Unit = {
+  def bindToFileOutputCommitterFactory(conf: Configuration,
+      scheme: String): Unit = {
 
     conf.set(OUTPUTCOMMITTER_FACTORY_SCHEME + "." + scheme,
       CommitterBindingSuite.FILE_OUTPUT_COMMITTER_FACTORY)
@@ -346,23 +359,100 @@ class CommitterBindingSuite extends SparkFunSuite {
 }
 
 /**
- * Constants for the suite and related test suites
+ * Constants for this and related test suites
  */
-private[cloud] object CommitterBindingSuite {
+private[cloud] object CommitterBindingSuite extends Logging {
   val FILE_OUTPUT_COMMITTER_FACTORY: String = "org.apache.hadoop.mapreduce.lib.output.FileOutputCommitterFactory"
 
-
   val PATH_OUTPUT_COMMITTER_NAME: String = "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
-
 
   val BINDING_PARQUET_OUTPUT_COMMITTER_CLASS: String =
     "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter"
 
-  val COMMITTER_OPTIONS: Map[String, String] = Map(
-    SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> BINDING_PARQUET_OUTPUT_COMMITTER_CLASS,
+  /**
+   * Options to bind to the path committer through SQL and parquet.
+   */
+  val BIND_TO_PATH_COMMITTER: Map[String, String] = Map(
+    SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
+      BINDING_PARQUET_OUTPUT_COMMITTER_CLASS,
     SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key -> PATH_OUTPUT_COMMITTER_NAME,
   )
 
+  /**
+   * Prefix to use for manifest committer options.
+   */
+  val MANIFEST_OPT_PREFIX = "spark.hadoop.mapreduce.manifest.committer."
+
+  /**
+   * Directory for saving job summary reports.
+   * These are the `_SUCCESS` files, but are saved even on
+   * job failures.
+   */
+  val OPT_SUMMARY_REPORT_DIR: String = MANIFEST_OPT_PREFIX +
+    "summary.report.directory"
+
+  /**
+   * Directory under target/ for reports.
+   */
+  val JOB_REPORTS_DIR = "./target/reports/"
+
+  /**
+   * Subdir for collected IOStatistics.
+   */
+  val IOSTATS_SUBDIR = "iostats"
+
+  /**
+   * Subdir for manifest committer _SUMMARY files.
+   */
+  val SUMMARY_SUBDIR = "summary"
+
+  /**
+   * Enable the path committer in a spark configuration, including optionally
+   * the manifest committer if the test is run on a hadoop build with it.
+   * This committer, which works on file:// repositories
+   * scales better on azure and google cloud stores, and
+   * collects and reports IOStatistics from task commit IO as well
+   * as Job commit operations.
+   * @param conf the configuration to modify
+   * @param tryToUseManifest should the manifest be probed for and enabled if found?
+   * @return (is the manifest in use, report directory)
+   */
+  def enablePathCommitter(conf: SparkConf,
+      tryToUseManifest: Boolean): (Boolean, File) = {
+    val reportsDir = new File(JOB_REPORTS_DIR).getCanonicalFile
+    val statisticsDir = new File(reportsDir, IOSTATS_SUBDIR).getCanonicalFile
+    conf.setAll(BIND_TO_PATH_COMMITTER)
+      .set(REPORT_DIR,
+        statisticsDir.toURI.toString)
+
+    if (!tryToUseManifest) {
+      // no need to look for the manifest.
+      return (false, reportsDir)
+    }
+    // look for the manifest committer exactly once.
+    val loader = getClass.getClassLoader
+
+    var usingManifest = try {
+      loader.loadClass(PathOutputCommitProtocol.MANIFEST_COMMITTER_FACTORY)
+      // manifest committer class was found so bind to and configure it.
+      logInfo("Using Manifest Committer")
+      conf.set(PathOutputCommitterFactory.COMMITTER_FACTORY_CLASS,
+        MANIFEST_COMMITTER_FACTORY)
+      // save full _SUCCESS files for the curious; this includes timings
+      // of operations in task as well as job commit.
+      conf.set(OPT_SUMMARY_REPORT_DIR,
+        new File(reportsDir, SUMMARY_SUBDIR).getCanonicalFile.toURI.toString)
+      true
+    } catch {
+      case _: ClassNotFoundException =>
+        val mapredJarUrl = loader.getResource(
+          "org/apache/hadoop/mapreduce/lib/output/PathOutputCommitterFactory.class")
+        logInfo(
+          s"Manifest Committer not found in JAR $mapredJarUrl; using FileOutputCommitter")
+        false
+    }
+    (usingManifest, reportsDir)
+  }
 }
 
 
