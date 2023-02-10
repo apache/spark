@@ -319,9 +319,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(
           decommissionExecutor(
             executorId,
-            ExecutorDecommissionInfo(s"Executor $executorId is decommissioned."),
-            adjustTargetNumExecutors = false,
-            triggeredByExecutor = true))
+            TriggeredByExecutorDecommissionInfo(s"Executor $executorId is decommissioned."),
+            adjustTargetNumExecutors = false))
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)

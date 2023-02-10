@@ -593,7 +593,7 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
       "Killing excluded executor id 2 since spark.excludeOnFailure.killExcludedExecutors is set." +
       " (actually decommissioning)"
     verify(allocationClientMock).decommissionExecutor(
-      "2", ExecutorDecommissionInfo(msg2), false, false)
+      "2", ExecutorDecommissionInfo(msg2), false)
     verify(allocationClientMock).decommissionExecutorsOnHost("hostA")
   }
 

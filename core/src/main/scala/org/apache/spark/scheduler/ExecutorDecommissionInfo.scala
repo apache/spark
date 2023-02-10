@@ -25,7 +25,19 @@ package org.apache.spark.scheduler
  *                shuffle data might be lost even if the external shuffle service is enabled.
  */
 private[spark]
-case class ExecutorDecommissionInfo(message: String, workerHost: Option[String] = None)
+abstract class DecommissionInfo
+
+private[spark]
+case class ExecutorDecommissionInfo(
+    message: String,
+    workerHost: Option[String] = None)
+    extends DecommissionInfo
+
+private[spark]
+case class TriggeredByExecutorDecommissionInfo(
+    message: String,
+    workerHost: Option[String] = None)
+    extends DecommissionInfo
 
 /**
  * State related to decommissioning that is kept by the TaskSchedulerImpl. This state is derived
