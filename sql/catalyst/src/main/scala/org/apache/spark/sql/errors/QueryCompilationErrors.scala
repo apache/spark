@@ -1564,6 +1564,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "config" -> SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key))
   }
 
+  def outputPathAlreadyExistsError(outputPath: Path): Throwable = {
+    new AnalysisException(
+      errorClass = "OUTPUT_PATH_ALREADY_EXISTS",
+      messageParameters = Map("outputPath" -> outputPath.toString))
+  }
+
   def cannotUseDataTypeForPartitionColumnError(field: StructField): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1153",
