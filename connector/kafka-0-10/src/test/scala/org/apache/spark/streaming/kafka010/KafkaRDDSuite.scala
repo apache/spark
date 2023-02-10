@@ -94,11 +94,6 @@ class KafkaRDDSuite extends SparkFunSuite {
     logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
     val logDirFailureChannel = new LogDirFailureChannel(1)
     val topicPartition = new TopicPartition(topic, partition)
-    val producerStateManagerConfig = ProducerStateManagerConfig(
-      flushInterval = 1000,
-      flushMs = 500,
-      maxPidExpirationMs = 30000
-    )
     val log = UnifiedLog(
       dir,
       LogConfig(logProps),
@@ -108,7 +103,7 @@ class KafkaRDDSuite extends SparkFunSuite {
       new BrokerTopicStats(),
       mockTime,
       maxTransactionTimeoutMs = 5 * 60 * 1000, // KAFKA-13221
-      producerStateManagerConfig,
+      ProducerStateManagerConfig.DefaultMaxPidExpirationMs,
       Int.MaxValue,
       logDirFailureChannel,
       lastShutdownClean = false,
