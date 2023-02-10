@@ -7621,10 +7621,10 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 @try_remote_functions
 def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     """
-    Collection function: Returns an array containing element as 
-    well as all elements from array. The new element is positioned 
+    Collection function: Returns an array containing element as
+    well as all elements from array. The new element is positioned
     at the beginning of the array.
-
+    
     .. versionadded:: 3.4.0
 
     Parameters
@@ -7636,6 +7636,7 @@ def array_prepend(col: "ColumnOrName", element: Any) -> Column:
 
     Returns
     -------
+
     :class:`~pyspark.sql.Column`
         an array excluding given value.
 
@@ -7644,7 +7645,7 @@ def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     >>> df = spark.createDataFrame([([2, 3, 4],), ([],)], ['data'])
     >>> df.select(array_prepend(df.data, 1)).collect()
     [Row(array_prepend(data, 1)=[1, 2, 3, 4]), Row(array_prepend(data, 1)=[1])]
-    """
+    """ 
     return _invoke_function("array_prepend", _to_java_column(col), element)
 
 @try_remote_functions
