@@ -113,8 +113,10 @@ class UserDefinedFunction:
                 .createDataFrame(data=[], schema=returnType)
                 .schema
             )
-            assert len(return_type_schema.fields) == 1, "returnType should be singular"
-            self._returnType = return_type_schema.fields[0].dataType
+            if len(return_type_schema.fields) == 1:
+                self._returnType = return_type_schema.fields[0].dataType
+            else:
+                self._returnType = return_type_schema
         else:
             self._returnType = returnType
         self._name = name or (
