@@ -2652,7 +2652,10 @@ abstract class CSVSuite
             assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
             checkAnswer(csv, Row("a", "b", skipLines + 1))
           } else {
-            checkAnswer(csv, Seq(Row("a", "b", skipLines), Row("a", "b", skipLines + 1)))
+            checkAnswer(csv,
+              Seq(
+                Row("a", "b", String.valueOf(skipLines)),
+                Row("a", "b", String.valueOf(skipLines + 1))))
           }
         }
       }
@@ -2675,7 +2678,10 @@ abstract class CSVSuite
           assert(csv.schema.fieldNames === Seq("a", "b\nb", String.valueOf(skipLines)))
           checkAnswer(csv, Row("a", "b\nb", skipLines + 1))
         } else {
-          checkAnswer(csv, Seq(Row("a", "b\nb", skipLines), Row("a", "b\nb", skipLines + 1)))
+          checkAnswer(csv,
+            Seq(
+              Row("a", "b\nb", String.valueOf(skipLines)),
+              Row("a", "b\nb", String.valueOf(skipLines + 1))))
         }
       }
     }
