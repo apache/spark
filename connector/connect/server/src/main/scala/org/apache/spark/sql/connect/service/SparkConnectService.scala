@@ -19,7 +19,9 @@ package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.TimeUnit
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
@@ -31,12 +33,16 @@ import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
+import org.apache.commons.lang3.StringUtils
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{SparkEnv, SparkThrowable}
+import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
+import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession}
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
 import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -53,8 +59,24 @@ class SparkConnectService(debug: Boolean)
     extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
 
-  private def buildStatusFromThrowable[A <: Throwable with SparkThrowable](st: A): RPCStatus = {
-    val t = Option(st.getCause).getOrElse(st)
+  private def allClasses(cl: Class[_]): Seq[Class[_]] = {
+    val classes = ArrayBuffer.empty[Class[_]]
+    if (cl != null && !cl.equals(classOf[java.lang.Object])) {
+      classes.append(cl) // Includes itself.
+    }
+
+    @tailrec
+    def appendSuperClasses(clazz: Class[_]): Unit = {
+      if (clazz == null || clazz.equals(classOf[java.lang.Object])) return
+      classes.append(clazz.getSuperclass)
+      appendSuperClasses(clazz.getSuperclass)
+    }
+
+    appendSuperClasses(cl)
+    classes.toSeq
+  }
+
+  private def buildStatusFromThrowable(st: Throwable): RPCStatus = {
     RPCStatus
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
@@ -62,11 +84,19 @@ class SparkConnectService(debug: Boolean)
         ProtoAny.pack(
           ErrorInfo
             .newBuilder()
-            .setReason(t.getClass.getName)
+            .setReason(st.getClass.getName)
             .setDomain("org.apache.spark")
+            .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
             .build()))
-      .setMessage(t.getLocalizedMessage)
+      .setMessage(StringUtils.abbreviate(st.getMessage, 2048))
       .build()
+  }
+
+  private def isPythonExecutionException(se: SparkException): Boolean = {
+    // See also pyspark.errors.exceptions.captured.convert_exception in PySpark.
+    se.getCause != null && se.getCause
+      .isInstanceOf[PythonException] && se.getCause.getStackTrace
+      .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
   }
 
   /**
@@ -83,39 +113,22 @@ class SparkConnectService(debug: Boolean)
   private def handleError[V](
       opType: String,
       observer: StreamObserver[V]): PartialFunction[Throwable, Unit] = {
-    case ae: AnalysisException =>
-      logError(s"Error during: $opType", ae)
-      val status = RPCStatus
-        .newBuilder()
-        .setCode(RPCCode.INTERNAL_VALUE)
-        .addDetails(
-          ProtoAny.pack(
-            ErrorInfo
-              .newBuilder()
-              .setReason(ae.getClass.getName)
-              .setDomain("org.apache.spark")
-              .putMetadata("message", ae.getSimpleMessage)
-              .putMetadata("plan", Option(ae.plan).flatten.map(p => s"$p").getOrElse(""))
-              .build()))
-        .setMessage(ae.getLocalizedMessage)
-        .build()
-      observer.onError(StatusProto.toStatusRuntimeException(status))
-    case st: SparkThrowable =>
-      logError(s"Error during: $opType", st)
-      val status = buildStatusFromThrowable(st)
-      observer.onError(StatusProto.toStatusRuntimeException(status))
-    case NonFatal(nf) =>
-      logError(s"Error during: $opType", nf)
-      val status = RPCStatus
-        .newBuilder()
-        .setCode(RPCCode.INTERNAL_VALUE)
-        .setMessage(nf.getLocalizedMessage)
-        .build()
-      observer.onError(StatusProto.toStatusRuntimeException(status))
+    case se: SparkException if isPythonExecutionException(se) =>
+      logError(s"Error during: $opType", se)
+      observer.onError(
+        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(se.getCause)))
+
+    case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
+      logError(s"Error during: $opType", e)
+      observer.onError(StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e)))
+
     case e: Throwable =>
       logError(s"Error during: $opType", e)
       observer.onError(
-        Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
+        Status.UNKNOWN
+          .withCause(e)
+          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+          .asRuntimeException())
   }
 
   /**
@@ -224,7 +237,7 @@ object SparkConnectService {
   // different or complex type easily.
   private type SessionCacheKey = (String, String)
 
-  private var server: Server = _
+  private[connect] var server: Server = _
 
   // For testing purpose, it's package level private.
   private[connect] lazy val localPort = {

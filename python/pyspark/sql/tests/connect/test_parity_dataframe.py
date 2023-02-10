@@ -22,11 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41612): support Catalog.isCached
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cache(self):
-        super().test_cache()
-
     # TODO(SPARK-41868): Support data type Duration(NANOSECOND)
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
@@ -89,6 +84,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()
+
+    # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
+    def test_sample(self):
+        super().test_sample()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):

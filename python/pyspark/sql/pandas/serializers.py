@@ -231,18 +231,25 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 s = s.astype(s.dtypes.categories.dtype)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
+            except TypeError as e:
+                error_msg = (
+                    "Exception thrown when converting pandas.Series (%s) "
+                    "with name '%s' to Arrow Array (%s)."
+                )
+                raise TypeError(error_msg % (s.dtype, s.name, t)) from e
             except ValueError as e:
+                error_msg = (
+                    "Exception thrown when converting pandas.Series (%s) "
+                    "with name '%s' to Arrow Array (%s)."
+                )
                 if self._safecheck:
-                    error_msg = (
-                        "Exception thrown when converting pandas.Series (%s) to "
-                        + "Arrow Array (%s). It can be caused by overflows or other "
-                        + "unsafe conversions warned by Arrow. Arrow safe type check "
-                        + "can be disabled by using SQL config "
-                        + "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                    error_msg = error_msg + (
+                        " It can be caused by overflows or other "
+                        "unsafe conversions warned by Arrow. Arrow safe type check "
+                        "can be disabled by using SQL config "
+                        "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                     )
-                    raise ValueError(error_msg % (s.dtype, t)) from e
-                else:
-                    raise e
+                raise ValueError(error_msg % (s.dtype, s.name, t)) from e
             return array
 
         arrs = []
@@ -265,7 +272,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 # Assign result columns by  position
                 else:
                     arrs_names = [
-                        (create_array(s[s.columns[i]], field.type), field.name)
+                        # the selected series has name '1', so we rename it to field.name
+                        # as the name is used by create_array to provide a meaningful error message
+                        (create_array(s[s.columns[i]].rename(field.name), field.type), field.name)
                         for i, field in enumerate(t)
                     ]
 

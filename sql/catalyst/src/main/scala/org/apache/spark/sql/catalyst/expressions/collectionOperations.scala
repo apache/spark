@@ -4601,6 +4601,257 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1, or start from the end if start is negative).\",",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
+       [1,2,3,4,5]
+      > SELECT _FUNC_(array(5, 3, 2, 1), -3, 4);
+       [5,4,3,2,1]
+  """,
+  group = "array_funcs",
+  since = "3.4.0")
+case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
+    with QueryErrorsBase {
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
+      case (ArrayType(e1, hasNull), e2: IntegralType, e3) if (e2 != LongType) =>
+        TypeCoercion.findTightestCommonType(e1, e3) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), IntegerType, dt)
+          case _ => Seq.empty
+        }
+      case (e1, e2, e3) => Seq.empty
+    }
+    Seq.empty
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (first.dataType, second.dataType, third.dataType) match {
+      case (_: ArrayType, e2, e3) if e2 != IntegerType =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2",
+            "requiredType" -> toSQLType(IntegerType),
+            "inputSql" -> toSQLExpr(second),
+            "inputType" -> toSQLType(second.dataType))
+        )
+      case (ArrayType(e1, _), e2, e3) if e1.sameType(e3) =>
+        TypeCheckResult.TypeCheckSuccess
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(first.dataType),
+            "rightType" -> toSQLType(third.dataType)
+          )
+        )
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value1 = first.eval(input)
+    if (value1 != null) {
+      val value2 = second.eval(input)
+      if (value2 != null) {
+        val value3 = third.eval(input)
+        return nullSafeEval(value1, value2, value3)
+      }
+    }
+    null
+  }
+
+  override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
+    val baseArr = arr.asInstanceOf[ArrayData]
+    var posInt = pos.asInstanceOf[Int]
+    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
+
+    val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
+
+    if (newPosExtendsArrayLeft) {
+      // special case- if the new position is negative but larger than the current array size
+      // place the new item at start of array, place the current array contents at the end
+      // and fill the newly created array elements inbetween with a null
+
+      val newArrayLength = -posInt + 1
+
+      if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+      }
+
+      val newArray = new Array[Any](newArrayLength)
+
+      baseArr.foreach(arrayElementType, (i, v) => {
+        // current position, offset by new item + new null array elements
+        val elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
+        newArray(elementPosition) = v
+      })
+
+      newArray(0) = item
+
+      return new GenericArrayData(newArray)
+    } else {
+      if (posInt < 0) {
+        posInt = posInt + baseArr.numElements()
+      } else if (posInt > 0) {
+        posInt = posInt - 1
+      }
+
+      val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
+
+      if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+      }
+
+      val newArray = new Array[Any](newArrayLength)
+
+      baseArr.foreach(arrayElementType, (i, v) => {
+        if (i >= posInt) {
+          newArray(i + 1) = v
+        } else {
+          newArray(i) = v
+        }
+      })
+
+      newArray(posInt) = item
+
+      return new GenericArrayData(newArray)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val f = (arrExpr: ExprCode, posExpr: ExprCode, itemExpr: ExprCode) => {
+      val arr = arrExpr.value
+      val pos = posExpr.value
+      val item = itemExpr.value
+
+      val itemInsertionIndex = ctx.freshName("itemInsertionIndex")
+      val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
+      val resLength = ctx.freshName("resLength")
+      val insertedItemIsNull = ctx.freshName("insertedItemIsNull")
+      val i = ctx.freshName("i")
+      val j = ctx.freshName("j")
+      val values = ctx.freshName("values")
+
+      val allocation = CodeGenerator.createArrayData(
+        values, elementType, resLength, s"$prettyName failed.")
+      val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
+        adjustedAllocIdx, i, first.dataType.asInstanceOf[ArrayType].containsNull)
+
+      s"""
+         |int $itemInsertionIndex = 0;
+         |int $resLength = 0;
+         |int $adjustedAllocIdx = 0;
+         |boolean $insertedItemIsNull = ${itemExpr.isNull};
+         |
+         |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
+         |
+         |  $resLength = java.lang.Math.abs($pos) + 1;
+         |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+         |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+         |  }
+         |
+         |  $allocation
+         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |    $adjustedAllocIdx = $i + 1 + java.lang.Math.abs($pos + $arr.numElements());
+         |    $assignment
+         |  }
+         |  ${CodeGenerator.setArrayElement(
+              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
+         |
+         |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
+         |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
+         |  }
+         |
+         |  ${ev.value} = $values;
+         |} else {
+         |
+         |  $itemInsertionIndex = 0;
+         |  if ($pos < 0) {
+         |    $itemInsertionIndex = $pos + $arr.numElements();
+         |  } else if ($pos > 0) {
+         |    $itemInsertionIndex = $pos - 1;
+         |  }
+         |
+         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
+         |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+         |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+         |  }
+         |
+         |  $allocation
+         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |    $adjustedAllocIdx = $i;
+         |    if ($i >= $itemInsertionIndex) {
+         |      $adjustedAllocIdx = $adjustedAllocIdx + 1;
+         |    }
+         |    $assignment
+         |  }
+         |  ${CodeGenerator.setArrayElement(
+              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
+         |
+         |  for (int $j = $arr.numElements(); $j < $resLength - 1; $j ++) {
+         |    $values.setNullAt($j);
+         |  }
+         |
+         |  ${ev.value} = $values;
+         |}
+      """.stripMargin
+    }
+
+    val leftGen = first.genCode(ctx)
+    val midGen = second.genCode(ctx)
+    val rightGen = third.genCode(ctx)
+    val resultCode = f(leftGen, midGen, rightGen)
+
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + ctx.nullSafeExec(first.nullable, leftGen.isNull) {
+          midGen.code + ctx.nullSafeExec(second.nullable, midGen.isNull) {
+            s"""
+              ${rightGen.code}
+              ${ev.isNull} = false;
+              $resultCode
+            """
+          }
+        }
+
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      ev.copy(code = code"""
+        ${leftGen.code}
+        ${midGen.code}
+        ${rightGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
+
+  override def first: Expression = srcArrayExpr
+  override def second: Expression = posExpr
+  override def third: Expression = itemExpr
+
+  override def prettyName: String = "array_insert"
+  override def dataType: DataType = first.dataType
+  override def nullable: Boolean = first.nullable | second.nullable
+
+  @transient private lazy val elementType: DataType =
+    srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
+
+
+  override protected def withNewChildrenInternal(
+      newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
+    copy(srcArrayExpr = newSrcArrayExpr, posExpr = newPosExpr, itemExpr = newItemExpr)
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(array) - Removes null values from the array.",
   examples = """

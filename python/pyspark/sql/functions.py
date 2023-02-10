@@ -38,10 +38,7 @@ from typing import (
 )
 
 from pyspark import SparkContext
-from pyspark.errors.exceptions import (
-    PySparkTypeError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
@@ -3832,7 +3829,7 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
     v = value._jc if isinstance(value, Column) else value
@@ -5470,7 +5467,7 @@ def window(
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
@@ -5589,7 +5586,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
@@ -5853,7 +5850,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
 
@@ -5893,7 +5890,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
 
@@ -6435,12 +6432,12 @@ def overlay(
     """
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
@@ -7680,6 +7677,43 @@ def array_distinct(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName") -> Column:
+    """
+    Collection function: adds an item into a given array at a specified array index.
+    Array indices start at 1 (or from the end if the index is negative).
+    Index specified beyond the size of the current array (plus additional element)
+    is extended with 'null' elements.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    arr : :class:`~pyspark.sql.Column` or str
+        name of column containing an array
+    pos : :class:`~pyspark.sql.Column` or str
+        name of Numeric type column indicating position of insertion
+        (starting at index 1, negative position is a start from the back of the array)
+    value : :class:`~pyspark.sql.Column` or str
+        name of column containing values for insertion into array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values, including the new specified value
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(
+    ...     [(['a', 'b', 'c'], 2, 'd'), (['c', 'b', 'a'], -2, 'd')],
+    ...     ['data', 'pos', 'val']
+    ... )
+    >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val).alias('data')).collect()
+    [Row(data=['a', 'd', 'b', 'c']), Row(data=['c', 'd', 'b', 'a'])]
+    """
+    return _invoke_function_over_columns("array_insert", arr, pos, value)
+
+
+@try_remote_functions
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the intersection of col1 and col2,
@@ -8344,7 +8378,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
         col = _to_java_column(json)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
@@ -8391,7 +8425,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
         col = _to_java_column(csv)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
@@ -9126,7 +9160,7 @@ def from_csv(
         schema = _to_java_column(schema)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
@@ -9937,7 +9971,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     """
     if not isinstance(numBuckets, (int, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER",
+            error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": type(numBuckets).__name__},
         )
 

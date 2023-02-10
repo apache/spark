@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
@@ -282,8 +282,13 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
       "NULL_MAP_KEY")
 
-    checkExceptionInExpression[RuntimeException](
-      CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
@@ -326,7 +331,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
-        "actualNum" -> "3")
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     // The given keys of function map should all be the same type
@@ -387,11 +393,15 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       MapFromArrays(intWithNullArray, strArray),
       "NULL_MAP_KEY")
 
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       MapFromArrays(
         Literal.create(Seq(1, 1), ArrayType(IntegerType)),
         Literal.create(Seq(2, 3), ArrayType(IntegerType))),
-      "Duplicate map key")
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
@@ -444,7 +454,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",
-        "actualNum" -> "3")
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 
@@ -460,27 +471,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       "b", create_row(Seq("a", "b")))
     checkEvaluation(quickResolve($"c".struct($"a".int).at(0).getField("a")),
       1, create_row(create_row(1)))
-  }
-
-  test("error message of ExtractValue") {
-    val structType = StructType(StructField("a", StringType, true) :: Nil)
-    val otherType = StringType
-
-    def checkErrorMessage(
-      childDataType: DataType,
-      fieldDataType: DataType,
-      errorMessage: String): Unit = {
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        ExtractValue(
-          Literal.create(null, childDataType),
-          Literal.create(null, fieldDataType),
-          _ == _)
-      }
-      assert(e.getMessage().contains(errorMessage))
-    }
-
-    checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
-    checkErrorMessage(otherType, StringType, "Can't extract value from")
   }
 
   test("ensure to preserve metadata") {
@@ -531,8 +521,13 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m6 = Map("a" -> "1", "b" -> "2", "c" -> "3")
     checkEvaluation(StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
 
-    checkExceptionInExpression[RuntimeException](
-      new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      new StringToMap(Literal("a:1,b:2,a:3")),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(

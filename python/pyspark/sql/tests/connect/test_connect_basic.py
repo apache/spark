@@ -37,6 +37,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark.testing.sqlutils import (
+    MyObject,
     SQLTestUtils,
     PythonOnlyUDT,
     ExamplePoint,
@@ -48,11 +49,10 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.errors import (
+from pyspark.errors.exceptions.connect import (
+    AnalysisException,
+    ParseException,
     SparkConnectException,
-    SparkConnectAnalysisException,
-    SparkConnectParseException,
-    SparkConnectTempTableAlreadyExistsException,
 )
 
 if should_test_connect:
@@ -62,9 +62,9 @@ if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
-    from pyspark.sql.connect.function_builder import udf
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.client import Retrying
@@ -222,7 +222,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_error_handling(self):
         # SPARK-41533 Proper error handling for Spark Connect
         df = self.connect.range(10).select("id2")
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             df.collect()
 
     def test_simple_read(self):
@@ -420,15 +420,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .schema,
         )
 
-    def test_simple_udf(self):
-        def conv_udf(x) -> str:
-            return "Martin"
-
-        u = udf(conv_udf)
-        df = self.connect.read.table(self.tbl_name)
-        result = df.select(u(df.id)).toPandas()
-        self.assertIsNotNone(result)
-
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
@@ -480,7 +471,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectParseException):
+        with self.assertRaises(ParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -526,7 +517,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(SparkConnectParseException):
+        with self.assertRaises(ParseException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
@@ -849,6 +840,22 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(cdf.schema, sdf.schema)
             self.assertEqual(cdf.collect(), sdf.collect())
 
+    def test_create_df_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+
+        # +---+-----+
+        # |key|value|
+        # +---+-----+
+        # |  1|    1|
+        # |  2|    2|
+        # +---+-----+
+
+        cdf = self.connect.createDataFrame(data)
+        sdf = self.spark.createDataFrame(data)
+
+        self.assertEqual(cdf.schema, sdf.schema)
+        self.assertEqual(cdf.collect(), sdf.collect())
+
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df._explain_string()
@@ -997,7 +1004,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # incompatible field nullability
         schema = StructType([StructField("id", LongType(), False)])
         self.assertRaisesRegex(
-            SparkConnectAnalysisException,
+            AnalysisException,
             "NULLABLE_COLUMN_OR_FIELD",
             lambda: cdf.to(schema).toPandas(),
         )
@@ -1005,7 +1012,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # field cannot upcast
         schema = StructType([StructField("name", LongType())])
         self.assertRaisesRegex(
-            SparkConnectAnalysisException,
+            AnalysisException,
             "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
             lambda: cdf.to(schema).toPandas(),
         )
@@ -1017,7 +1024,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ]
         )
         self.assertRaisesRegex(
-            SparkConnectAnalysisException,
+            AnalysisException,
             "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
             lambda: cdf.to(schema).toPandas(),
         )
@@ -1236,7 +1243,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
+            with self.assertRaises(AnalysisException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -1248,7 +1255,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(SparkConnectTempTableAlreadyExistsException):
+            with self.assertRaises(AnalysisException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -1358,6 +1365,35 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_select_star(self):
+        data = [Row(a=1, b=Row(c=2, d=Row(e=3)))]
+
+        # +---+--------+
+        # |  a|       b|
+        # +---+--------+
+        # |  1|{2, {3}}|
+        # +---+--------+
+
+        cdf = self.connect.createDataFrame(data=data)
+        sdf = self.spark.createDataFrame(data=data)
+
+        self.assertEqual(
+            cdf.select("*").collect(),
+            sdf.select("*").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "*").collect(),
+            sdf.select("a", "*").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "b").collect(),
+            sdf.select("a", "b").collect(),
+        )
+        self.assertEqual(
+            cdf.select("a", "b.*").collect(),
+            sdf.select("a", "b.*").collect(),
+        )
+
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
@@ -1462,7 +1498,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
             self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
 
-        with self.assertRaises(SparkConnectAnalysisException) as context:
+        with self.assertRaises(AnalysisException) as context:
             self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
             self.assertIn(
                 """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
@@ -1570,7 +1606,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # Hint with unsupported parameter values
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
@@ -1584,7 +1620,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).toPandas()
 
         # Hint with wrong combination
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_join_hint(self):
@@ -1913,7 +1949,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartition with unsupported parameter values
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).repartition("id+1").toPandas()
 
     def test_repartition_by_range(self) -> None:
@@ -1937,7 +1973,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # repartitionByRange with unsupported parameter values
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             self.connect.read.table(self.tbl_name).repartitionByRange("id+1").toPandas()
 
     def test_agg_with_two_agg_exprs(self) -> None:
@@ -1981,6 +2017,27 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         ndf = self.connect.read.table("parquet_test")
         self.assertEqual(set(df.collect()), set(ndf.collect()))
+
+    def test_writeTo_operations(self):
+        # SPARK-42002: Implement DataFrameWriterV2
+        import datetime
+        from pyspark.sql.connect.functions import col, years, months, days, hours, bucket
+
+        df = self.connect.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
+        )
+        writer = df.writeTo("table1")
+        self.assertIsInstance(writer.option("property", "value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.options(property="value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.tableProperty("foo", "bar"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(years("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(months("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(days("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours("ts")), DataFrameWriterV2)
 
     def test_agg_with_avg(self):
         # SPARK-41325: groupby.avg()
@@ -2555,6 +2612,22 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ).collect(),
         )
 
+    def test_simple_udt(self):
+        from pyspark.ml.linalg import MatrixUDT, VectorUDT
+
+        for schema in [
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", MapType(LongType(), PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("vec", VectorUDT()),
+            StructType().add("key", LongType()).add("mat", MatrixUDT()),
+        ]:
+            cdf = self.connect.createDataFrame(data=[], schema=schema)
+            sdf = self.spark.createDataFrame(data=[], schema=schema)
+
+            self.assertEqual(cdf.schema, sdf.schema)
+
     def test_simple_udt_from_read(self):
         from pyspark.ml.linalg import Matrices, Vectors
 
@@ -2629,7 +2702,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "_repr_html_",
             "semanticHash",
             "sameSemantics",
-            "writeTo",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
@@ -2661,7 +2733,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "sparkContext",
             "streams",
             "readStream",
-            "udf",
             "version",
         ):
             with self.assertRaises(NotImplementedError):
@@ -2670,18 +2741,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_unsupported_catalog_functions(self):
         # SPARK-41939: Disable unsupported functions.
 
-        for f in (
-            "isCached",
-            "cacheTable",
-            "uncacheTable",
-            "registerFunction",
-        ):
+        for f in ("registerFunction",):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect.catalog, f)()
 
     def test_unsupported_io_functions(self):
         # SPARK-41964: Disable unsupported functions.
-        # DataFrameWriterV2 is also not implemented yet
         df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
 
         for f in ("jdbc",):

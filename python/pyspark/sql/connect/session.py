@@ -68,6 +68,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
+    from pyspark.sql.connect.udf import UDFRegistration
 
 
 class SparkSession:
@@ -294,7 +295,9 @@ class SparkSession:
                 # For dictionaries, we sort the schema in alphabetical order.
                 _data = [dict(sorted(d.items())) for d in _data]
 
-            elif not isinstance(_data[0], (Row, tuple, list, dict)):
+            elif not isinstance(_data[0], (Row, tuple, list, dict)) and not hasattr(
+                _data[0], "__dict__"
+            ):
                 # input data can be [1, 2, 3]
                 # we need to convert it to [[1], [2], [3]] to be able to infer schema.
                 _data = [[d] for d in _data]
@@ -434,8 +437,12 @@ class SparkSession:
         raise NotImplementedError("readStream() is not implemented.")
 
     @property
-    def udf(self) -> Any:
-        raise NotImplementedError("udf() is not implemented.")
+    def udf(self) -> "UDFRegistration":
+        from pyspark.sql.connect.udf import UDFRegistration
+
+        return UDFRegistration(self)
+
+    udf.__doc__ = PySparkSession.udf.__doc__
 
     @property
     def version(self) -> str:
@@ -452,9 +459,6 @@ class SparkSession:
         :class:`SparkConnectClient`
         """
         return self._client
-
-    def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
-        return self._client.register_udf(function, return_type)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

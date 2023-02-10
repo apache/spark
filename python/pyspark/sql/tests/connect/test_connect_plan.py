@@ -32,7 +32,6 @@ if should_test_connect:
     from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.functions import col, lit
-    from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
         StringType,
@@ -495,15 +494,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
 
-    def test_simple_udf(self):
-        u = udf(lambda x: "Martin", StringType())
-        self.assertIsNotNone(u)
-        expr = u("ThisCol", "ThatCol", "OtherCol")
-        self.assertTrue(isinstance(expr, Column))
-        self.assertTrue(isinstance(expr._expr, UserDefinedFunction))
-        u_plan = expr.to_plan(self.connect)
-        self.assertIsNotNone(u_plan)
-
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
@@ -695,10 +685,21 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             (None, proto.Join.JoinType.JOIN_TYPE_INNER),
             ("inner", proto.Join.JoinType.JOIN_TYPE_INNER),
             ("outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("full", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("fullouter", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("full_outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("left", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
             ("leftouter", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("left_outer", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("right", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
             ("rightouter", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
-            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("right_outer", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
+            ("semi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
             ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("left_semi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("anti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("left_anti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
             ("cross", proto.Join.JoinType.JOIN_TYPE_CROSS),
         ]:
             joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto(

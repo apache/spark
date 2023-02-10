@@ -491,22 +491,25 @@ class PythonUDF:
         output_type: str,
         eval_type: int,
         command: bytes,
+        python_ver: str,
     ) -> None:
         self._output_type = output_type
         self._eval_type = eval_type
         self._command = command
+        self._python_ver = python_ver
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
         expr = proto.PythonUDF()
         expr.output_type = self._output_type
         expr.eval_type = self._eval_type
         expr.command = self._command
+        expr.python_ver = self._python_ver
         return expr
 
     def __repr__(self) -> str:
         return (
             f"{self._output_type}, {self._eval_type}, "
-            f"{self._command}"  # type: ignore[str-bytes-safe]
+            f"{self._command}, f{self._python_ver}"  # type: ignore[str-bytes-safe]
         )
 
 
@@ -537,6 +540,13 @@ class CommonInlineUserDefinedFunction(Expression):
         expr.common_inline_user_defined_function.python_udf.CopyFrom(
             self._function.to_plan(session)
         )
+        return expr
+
+    def to_command(self, session: "SparkConnectClient") -> "proto.CommonInlineUserDefinedFunction":
+        expr = proto.CommonInlineUserDefinedFunction()
+        expr.function_name = self._function_name
+        expr.deterministic = self._deterministic
+        expr.python_udf.CopyFrom(self._function.to_plan(session))
         return expr
 
     def __repr__(self) -> str:

@@ -19,7 +19,7 @@ import unittest
 
 from pyspark.testing.connectutils import should_test_connect
 
-if should_test_connect:  # test_udf_with_partial_function
+if should_test_connect:
     from pyspark import sql
     from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -27,9 +27,7 @@ if should_test_connect:  # test_udf_with_partial_function
 
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors.exceptions import SparkConnectAnalysisException
-from pyspark.sql.connect.functions import udf
-from pyspark.sql.types import BooleanType
+from pyspark.sql.types import IntegerType
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
@@ -154,11 +152,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
 
     # TODO(SPARK-42210): implement `spark.udf`
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_registration_returns_udf(self):
-        super().test_udf_registration_returns_udf()
-
-    # TODO(SPARK-42210): implement `spark.udf`
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_register_java_function(self):
         super().test_register_java_function()
 
@@ -167,15 +160,10 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_register_java_udaf(self):
         super().test_register_java_udaf()
 
-    # TODO(SPARK-42267): support left_outer join type
+    # TODO(SPARK-42210): implement `spark.udf`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_in_left_outer_join_condition(self):
         super().test_udf_in_left_outer_join_condition()
-
-    # TODO(SPARK-42267): support left_outer join type
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_in_filter_on_top_of_outer_join(self):
-        super().test_udf_in_filter_on_top_of_outer_join()
 
     # TODO(SPARK-42269): support return type as a collection DataType in DDL strings
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -187,25 +175,14 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_in_subquery(self):
         super().test_udf_in_subquery()
 
-    def test_udf_not_supported_in_join_condition(self):
-        # The vanilla PySpark throws AnalysisException instead.
-        # test python udf is not supported in join type except inner join.
-        left = self.spark.createDataFrame([(1, 1, 1), (2, 2, 2)], ["a", "a1", "a2"])
-        right = self.spark.createDataFrame([(1, 1, 1), (1, 3, 1)], ["b", "b1", "b2"])
-        f = udf(lambda a, b: a == b, BooleanType())
+    def test_udf_registration_returns_udf(self):
+        df = self.spark.range(10)
+        add_three = self.spark.udf.register("add_three", lambda x: x + 3, IntegerType())
 
-        def runWithJoinType(join_type, type_string):
-            with self.assertRaisesRegex(
-                SparkConnectAnalysisException,
-                """Python UDF in the ON clause of a %s JOIN.""" % type_string,
-            ):
-                left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
-
-        runWithJoinType("full", "FULL OUTER")
-        runWithJoinType("left", "LEFT OUTER")
-        runWithJoinType("right", "RIGHT OUTER")
-        runWithJoinType("leftanti", "LEFT ANTI")
-        runWithJoinType("leftsemi", "LEFT SEMI")
+        self.assertListEqual(
+            df.selectExpr("add_three(id) AS plus_three").collect(),
+            df.select(add_three("id").alias("plus_three")).collect(),
+        )
 
 
 if __name__ == "__main__":

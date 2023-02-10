@@ -24,6 +24,7 @@ import javax.annotation.Nonnull
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -138,7 +139,7 @@ object JavaTypeInference {
       JavaBeanEncoder(ClassTag(c), fields)
 
     case _ =>
-      throw QueryExecutionErrors.cannotFindEncoderForTypeError(t.toString)
+      throw QueryExecutionErrors.cannotFindEncoderForTypeError(t.toString, SPARK_DOC_ROOT)
   }
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {

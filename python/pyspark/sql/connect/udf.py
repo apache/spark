@@ -21,9 +21,11 @@ from pyspark.sql.connect import check_dependencies
 
 check_dependencies(__name__, __file__)
 
+import sys
 import functools
-from typing import Callable, Any, TYPE_CHECKING, Optional
+from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
 
+from pyspark.rdd import PythonEvalType
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.expressions import (
     ColumnReference,
@@ -32,6 +34,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.types import DataType, StringType
+from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
 from pyspark.sql.utils import is_remote
 
 
@@ -41,6 +44,7 @@ if TYPE_CHECKING:
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
+    from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.types import StringType
 
 
@@ -74,7 +78,7 @@ class UserDefinedFunction:
         func: Callable[..., Any],
         returnType: "DataTypeOrString" = StringType(),
         name: Optional[str] = None,
-        evalType: int = 100,
+        evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
     ):
         if not callable(func):
@@ -131,6 +135,7 @@ class UserDefinedFunction:
             output_type=data_type_str,
             eval_type=self.evalType,
             command=CloudPickleSerializer().dumps((self.func, self._returnType)),
+            python_ver="%d.%d" % sys.version_info[:2],
         )
         return Column(
             CommonInlineUserDefinedFunction(
@@ -185,3 +190,54 @@ class UserDefinedFunction:
         """
         self.deterministic = False
         return self
+
+
+class UDFRegistration:
+    """
+    Wrapper for user-defined function registration.
+    """
+
+    def __init__(self, sparkSession: "SparkSession"):
+        self.sparkSession = sparkSession
+
+    def register(
+        self,
+        name: str,
+        f: Union[Callable[..., Any], "UserDefinedFunctionLike"],
+        returnType: Optional["DataTypeOrString"] = None,
+    ) -> "UserDefinedFunctionLike":
+        # This is to check whether the input function is from a user-defined function or
+        # Python function.
+        if hasattr(f, "asNondeterministic"):
+            if returnType is not None:
+                raise TypeError(
+                    "Invalid return type: data type can not be specified when f is"
+                    "a user-defined function, but got %s." % returnType
+                )
+            f = cast("UserDefinedFunctionLike", f)
+            if f.evalType not in [
+                PythonEvalType.SQL_BATCHED_UDF,
+                PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            ]:
+                raise ValueError(
+                    "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
+                    "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF."
+                )
+            return_udf = f
+            self.sparkSession._client.register_udf(
+                f, f.returnType, name, f.evalType, f.deterministic
+            )
+        else:
+            if returnType is None:
+                returnType = StringType()
+            return_udf = _create_udf(
+                f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
+            )
+
+            self.sparkSession._client.register_udf(f, returnType, name)
+
+        return return_udf
+
+    register.__doc__ = PySparkUDFRegistration.register.__doc__

@@ -420,12 +420,12 @@ class JacksonParser(
     case VALUE_STRING if parser.getTextLength < 1 && allowEmptyString =>
       dataType match {
         case FloatType | DoubleType | TimestampType | DateType =>
-          throw QueryExecutionErrors.failToParseEmptyStringForDataTypeError(dataType)
+          throw QueryExecutionErrors.emptyJsonFieldValueError(dataType)
         case _ => null
       }
 
     case VALUE_STRING if parser.getTextLength < 1 =>
-      throw QueryExecutionErrors.failToParseEmptyStringForDataTypeError(dataType)
+      throw QueryExecutionErrors.emptyJsonFieldValueError(dataType)
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a

@@ -1416,6 +1416,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
+    buildConf("spark.sql.sources.timestampNTZTypeInference.enabled")
+      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
+        "this config determines whether to choose the TimestampNTZ type if a column can be " +
+        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
+        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_ENABLED = buildConf("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
     .version("2.0.0")
@@ -1439,6 +1449,19 @@ object SQLConf {
         "values, Spark will calculate a superset of partition values and pushdown that info to " +
         "scan nodes, which will use empty partitions for the missing partition values on either " +
         "side. This could help to eliminate unnecessary shuffles")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
+      .doc("During a storage-partitioned join, whether to allow input partitions to be " +
+        "partially clustered, when both sides of the join are of KeyGroupedPartitioning. At " +
+        "planning time, Spark will pick the side with less data size based on table " +
+        "statistics, group and replicate them to match the other side. This is an optimization " +
+        "on skew join and can help to reduce data skewness when certain partitions are assigned " +
+        s"large amount of data. This config requires both ${V2_BUCKETING_ENABLED.key} and " +
+        s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be enabled")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -3518,16 +3541,6 @@ object SQLConf {
       .checkValues(TimestampTypes.values.map(_.toString))
       .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
 
-  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
-    buildConf("spark.sql.inferTimestampNTZInDataSources.enabled")
-      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
-        "this config determines whether to choose the TimestampNTZ type if a column can be " +
-        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
-        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
       "java.time.LocalDate classes of Java 8 API are used as external types for " +
@@ -3773,6 +3786,13 @@ object SQLConf {
       .version("3.2.3")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_PARQUET_NANOS_AS_LONG = buildConf("spark.sql.legacy.parquet.nanosAsLong")
+    .internal()
+    .doc("When true, the Parquet's nanos precision timestamps are converted to SQL long values.")
+    .version("3.2.4")
+    .booleanConf
+    .createWithDefault(false)
 
   val PARQUET_INT96_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.parquet.int96RebaseModeInWrite")
@@ -4620,6 +4640,9 @@ class SQLConf extends Serializable with Logging {
   def v2BucketingPushPartValuesEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
 
+  def v2BucketingPartiallyClusteredDistributionEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -4942,6 +4965,8 @@ class SQLConf extends Serializable with Logging {
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
+
+  def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
 
   def parquetInferTimestampNTZEnabled: Boolean = getConf(PARQUET_INFER_TIMESTAMP_NTZ_ENABLED)
 

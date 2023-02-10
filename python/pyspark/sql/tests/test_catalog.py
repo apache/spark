@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+from pyspark.errors import AnalysisException
 from pyspark.sql.types import StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -28,9 +28,7 @@ class CatalogTestsMixin:
             spark.catalog.setCurrentDatabase("some_db")
             self.assertEqual(spark.catalog.currentDatabase(), "some_db")
             self.assertRaisesRegex(
-                # TODO(SPARK-41715): Should catch specific exceptions for both
-                #  Spark Connect and PySpark
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.setCurrentDatabase("does_not_exist"),
             )
@@ -181,7 +179,7 @@ class CatalogTestsMixin:
                         )
                     )
                     self.assertRaisesRegex(
-                        Exception,
+                        AnalysisException,
                         "does_not_exist",
                         lambda: spark.catalog.listTables("does_not_exist"),
                     )
@@ -236,7 +234,7 @@ class CatalogTestsMixin:
                 self.assertTrue("func1" not in newFunctionsSomeDb)
                 self.assertTrue("func2" in newFunctionsSomeDb)
                 self.assertRaisesRegex(
-                    Exception,
+                    AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listFunctions("does_not_exist"),
                 )
@@ -333,9 +331,11 @@ class CatalogTestsMixin:
                         isBucket=False,
                     ),
                 )
-                self.assertRaisesRegex(Exception, "tab2", lambda: spark.catalog.listColumns("tab2"))
                 self.assertRaisesRegex(
-                    Exception,
+                    AnalysisException, "tab2", lambda: spark.catalog.listColumns("tab2")
+                )
+                self.assertRaisesRegex(
+                    AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listColumns("does_not_exist"),
                 )
