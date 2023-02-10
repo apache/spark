@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
-import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -543,6 +543,8 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     private[this] var updatedStateRowsCount = 0
+    private[this] val allowMultipleStatefulOperators: Boolean =
+      conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered
@@ -556,7 +558,8 @@ case class StreamingSymmetricHashJoinExec(
         generateJoinedRow: (InternalRow, InternalRow) => JoinedRow)
       : Iterator[InternalRow] = {
 
-      val watermarkAttribute = WatermarkSupport.findEventTimeColumn(inputAttributes)
+      val watermarkAttribute = WatermarkSupport.findEventTimeColumn(inputAttributes,
+        useFirstOccurrence = !allowMultipleStatefulOperators)
       val nonLateRows =
         WatermarkSupport.watermarkExpression(
           watermarkAttribute, eventTimeWatermarkForLateEvents) match {

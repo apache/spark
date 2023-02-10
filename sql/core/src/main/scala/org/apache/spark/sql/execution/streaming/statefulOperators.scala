@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.python.PythonSQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
@@ -249,10 +250,14 @@ trait WatermarkSupport extends SparkPlan {
   lazy val watermarkExpressionForEviction: Option[Expression] =
     watermarkExpression(eventTimeWatermarkForEviction)
 
+  lazy val allowMultipleStatefulOperators: Boolean =
+    conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+
   /** Generate an expression that matches data older than the watermark */
   private def watermarkExpression(watermark: Option[Long]): Option[Expression] = {
     WatermarkSupport.watermarkExpression(
-      WatermarkSupport.findEventTimeColumn(child.output), watermark)
+      WatermarkSupport.findEventTimeColumn(child.output,
+        useFirstOccurrence = !allowMultipleStatefulOperators), watermark)
   }
 
   /** Predicate based on keys that matches data older than the late event filtering watermark */
@@ -340,18 +345,30 @@ object WatermarkSupport {
     Some(evictionExpression)
   }
 
-  def findEventTimeColumn(attrs: Seq[Attribute]): Option[Attribute] = {
+  def findEventTimeColumn(
+      attrs: Seq[Attribute],
+      useFirstOccurrence: Boolean): Option[Attribute] = {
     val eventTimeCols = attrs.filter(_.metadata.contains(EventTimeWatermark.delayKey))
-    // There is a case projection leads the same column (same exprId) to appear more than one time.
-    // Allowing them does not hurt the correctness of state row eviction, hence let's start with
-    // allowing them.
-    val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
-    if (eventTimeColsSet.size > 1) {
-      throw new AnalysisException("More than one event time columns are available. Please " +
-        "ensure there is at most one event time column per stream. event time columns: " +
-        eventTimeCols.mkString("(", ",", ")"))
+    if (!useFirstOccurrence) {
+      // There is a case projection leads the same column (same exprId) to appear more than one
+      // time. Allowing them does not hurt the correctness of state row eviction, hence let's start
+      // with allowing them.
+      val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
+      if (eventTimeColsSet.size > 1) {
+        throw new AnalysisException("More than one event time columns are available. Please " +
+          "ensure there is at most one event time column per stream. event time columns: " +
+          eventTimeCols.mkString("(", ",", ")"))
+      }
+
+      // With above check, even there are multiple columns in eventTimeCols, all columns must be
+      // same.
+    } else {
+      // This is for compatibility with previous behavior - we allow multiple distinct event time
+      // columns and pick up the first occurrence. This is incorrect if non-first occurrence is
+      // not smaller than the first one, but allow this as "escape hatch" in case we break the
+      // existing query.
     }
-    // With above check, even there are multiple columns here, all columns must be same.
+    // pick the first element if exists
     eventTimeCols.headOption
   }
 }
