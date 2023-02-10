@@ -2629,7 +2629,7 @@ abstract class CSVSuite
         val csv = spark.read
           .option("multiLine", multiline)
           .option("skipLines", 2)
-          .option("inferSchema", true)
+          .option("inferSchema", false)
           .option("comment", "#")
           .csv(ds)
         checkAnswer(csv, Seq(Row("a", "b", "c"), Row("d", "e", "f")))
@@ -2646,7 +2646,7 @@ abstract class CSVSuite
             .option("header", header)
             .option("multiLine", multiline)
             .option("skipLines", skipLines)
-            .option("inferSchema", true)
+            .option("inferSchema", header)
             .csv(ds)
           if (header) {
             assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
@@ -2668,7 +2668,7 @@ abstract class CSVSuite
         val csv = spark.read
           .option("skipLines", skipLines)
           .option("multiLine", true)
-          .option("inferSchema", true)
+          .option("inferSchema", header)
           .option("header", header)
           .csv(ds)
         if (header) {
