@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Random
 
-import kafka.log.{CleanerConfig, LogCleaner, LogConfig, UnifiedLog}
+import kafka.log.{CleanerConfig, LogCleaner, LogConfig, UnifiedLog, ProducerStateManagerConfig}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
