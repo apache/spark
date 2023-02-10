@@ -443,8 +443,6 @@ class SparkConnectClient(object):
         """Create a temporary UDF in the session catalog on the other side. We generate a
         temporary name for it."""
 
-        from pyspark.sql import SparkSession as PySparkSession
-
         if name is None:
             name = f"fun_{uuid.uuid4().hex}"
 
