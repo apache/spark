@@ -622,7 +622,7 @@ test_that("read/write json files", {
 
     # Test errorifexists
     expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
-                 "analysis error - Path file:.*already exists")
+                 "Error in save : analysis error - \\[OUTPUT_PATH_ALREADY_EXISTS\\].*")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
