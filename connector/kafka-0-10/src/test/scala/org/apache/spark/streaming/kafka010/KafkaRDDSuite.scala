@@ -108,7 +108,7 @@ class KafkaRDDSuite extends SparkFunSuite {
       new BrokerTopicStats(),
       mockTime,
       maxTransactionTimeoutMs = 5 * 60 * 1000, // KAFKA-13221
-      ProducerStateManagerConfig(),
+      producerStateManagerConfig,
       Int.MaxValue,
       logDirFailureChannel,
       lastShutdownClean = false,
