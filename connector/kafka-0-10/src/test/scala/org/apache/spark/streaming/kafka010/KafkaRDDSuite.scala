@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Random
 
-import kafka.log.{CleanerConfig, LogCleaner, LogConfig, UnifiedLog, ProducerStateManagerConfig}
+import kafka.log.{CleanerConfig, LogCleaner, LogConfig, ProducerStateManagerConfig, UnifiedLog}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
@@ -96,14 +96,14 @@ class KafkaRDDSuite extends SparkFunSuite {
     val topicPartition = new TopicPartition(topic, partition)
     val log = UnifiedLog(
       dir,
-      LogConfig(logProps),
+      LogConfig(logProps, ProducerStateManagerConfig()),
       0L,
       0L,
       mockTime.scheduler,
       new BrokerTopicStats(),
       mockTime,
       maxTransactionTimeoutMs = 5 * 60 * 1000, // KAFKA-13221
-      ProducerStateManagerConfig.DefaultMaxPidExpirationMs,
+      Int.MaxValue,
       Int.MaxValue,
       logDirFailureChannel,
       lastShutdownClean = false,
