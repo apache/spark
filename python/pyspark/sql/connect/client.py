@@ -60,13 +60,9 @@ import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
 from pyspark.errors.exceptions.connect import (
-    AnalysisException,
-    ParseException,
-    PythonException,
+    convert_exception,
     SparkConnectException,
     SparkConnectGrpcException,
-    TempTableAlreadyExistsException,
-    IllegalArgumentException,
 )
 from pyspark.sql.connect.expressions import (
     PythonUDF,
@@ -730,32 +726,7 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
-                    reason = info.reason
-                    if reason == "org.apache.spark.sql.AnalysisException":
-                        raise AnalysisException(
-                            info.metadata["message"], plan=info.metadata["plan"]
-                        ) from None
-                    elif reason == "org.apache.spark.sql.catalyst.parser.ParseException":
-                        raise ParseException(info.metadata["message"]) from None
-                    elif (
-                        reason
-                        == "org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException"
-                    ):
-                        raise TempTableAlreadyExistsException(
-                            info.metadata["message"], plan=info.metadata["plan"]
-                        ) from None
-                    elif reason == "java.lang.IllegalArgumentException":
-                        message = info.metadata["message"]
-                        message = message if message != "" else status.message
-                        raise IllegalArgumentException(message) from None
-                    elif reason == "org.apache.spark.api.python.PythonException":
-                        message = info.metadata["message"]
-                        message = message if message != "" else status.message
-                        raise PythonException(message) from None
-                    else:
-                        raise SparkConnectGrpcException(
-                            status.message, reason=info.reason
-                        ) from None
+                    raise convert_exception(info, status.message) from None
 
             raise SparkConnectGrpcException(status.message) from None
         else:
