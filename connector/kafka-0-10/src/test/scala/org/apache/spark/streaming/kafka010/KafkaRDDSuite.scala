@@ -98,7 +98,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     val logConfig = LogConfig(logProps, producerStateManagerConfig)
     val log = UnifiedLog(
       dir,
-      LogConfig(logProps, ProducerStateManagerConfig()),
+      LogConfig,
       0L,
       0L,
       mockTime.scheduler,
