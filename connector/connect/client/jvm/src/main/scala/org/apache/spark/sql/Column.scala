@@ -76,7 +76,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 3.4.0
    */
-  def === (other: Any): Column = fn("=", this, lit(other))
+  def ===(other: Any): Column = fn("=", this, lit(other))
 
   /**
    * Gives the column a name (alias).
