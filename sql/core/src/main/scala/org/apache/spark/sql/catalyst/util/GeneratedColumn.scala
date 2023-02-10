@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 
 /**
- * This object contains utility methods and values for Generated Columns
+ * This object contains utility methods for Generated Columns
  */
 object GeneratedColumn {
 

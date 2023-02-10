@@ -1525,6 +1525,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
+    "message" : [
+      "Cannot create generated column <fieldName> with generation expression <expressionStr> because it cannot be converted to a V2 expression."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
       "A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
@@ -1536,12 +1542,6 @@
       "Expression <sqlExpr> not supported within a window function."
     ],
     "sqlState" : "42P20"
-  },
-  "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
-    "message" : [
-      "Cannot create generated column <fieldName> with generation expression <expressionStr> because it cannot be converted to a V2 expression."
-    ],
-    "sqlState" : "0A000"
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
