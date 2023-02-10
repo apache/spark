@@ -94,7 +94,8 @@ class KafkaRDDSuite extends SparkFunSuite {
     logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
     val logDirFailureChannel = new LogDirFailureChannel(1)
     val topicPartition = new TopicPartition(topic, partition)
-    val producerStateManagerConfig = new ProducerStateManagerConfig()
+    val producerIdExpirationMs = Int.MaxValue
+    val producerStateManagerConfig = new ProducerStateManagerConfig(producerIdExpirationMs)
     val logConfig = LogConfig(logProps)
     val log = UnifiedLog(
       dir,
