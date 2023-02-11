@@ -1361,7 +1361,15 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T],
       isCacheVisible: Boolean = true): Either[BlockResult, Iterator[T]] = {
-    var iterator = makeIterator
+    // Track whether the data is computed or not, force to do the computation later if need to.
+    // The reason we push the force computing later is that once the executor is decommissioned we
+    // will have a better chance to replicate the cache block because of the `checkShouldStore`
+    // validation when putting a new block.
+    var computed: Boolean = false
+    val iterator = () => {
+      computed = true
+      makeIterator()
+    }
     if (isCacheVisible) {
       // Attempt to read the block from local or remote storage. If it's present, then we don't need
       // to go through the local-get-or-put path.
@@ -1369,12 +1377,8 @@ private[spark] class BlockManager(
         case Some(block) =>
           return Left(block)
         case _ =>
-        // Need to compute the block.
+          // Need to compute the block.
       }
-    } else {
-      // Since cache is not visible, force to compute to report accumulator updates.
-      val data = makeIterator()
-      iterator = () => data
     }
 
     // Initially we hold no locks on this block.
@@ -1382,6 +1386,10 @@ private[spark] class BlockManager(
       case None =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
+        if (!isCacheVisible && !computed) {
+          // Force compute to report accumulator updates.
+          makeIterator()
+        }
         val blockResult = getLocalValues(blockId).getOrElse {
           // Since we held a read lock between the doPut() and get() calls, the block should not
           // have been evicted, so get() not returning the block indicates some internal error.
