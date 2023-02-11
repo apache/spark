@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_API_WATCHER
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_WATCHER_AUTO_RESET
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -47,6 +48,7 @@ class ExecutorPodsWatchSnapshotSource(
   private var watchConnection: Closeable = _
   private var watchApplicationId: String = null
   private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
+  private val enableWatchingAutoReset = conf.get(KUBERNETES_EXECUTOR_ENABLE_WATCHER_AUTO_RESET)
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
@@ -97,7 +99,7 @@ class ExecutorPodsWatchSnapshotSource(
     }
 
     override def onClose(e: WatcherException): Unit = {
-      if (e != null && e.isHttpGone) {
+      if (enableWatchingAutoReset && e != null && e.isHttpGone) {
         logDebug(s"Got HTTP Gone code, should be reset watcher connection, " +
           s"resource version changed in k8s api: $e")
         reset(this)

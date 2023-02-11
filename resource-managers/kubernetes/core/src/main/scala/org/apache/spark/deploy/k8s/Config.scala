@@ -501,6 +501,14 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_EXECUTOR_ENABLE_WATCHER_AUTO_RESET =
+    ConfigBuilder("spark.kubernetes.executor.enableApiWatcherAutoReset")
+      .doc("If Spark ExecutorPodsWatcher closed caused by client too old resource version. " +
+        "We should reset executor watcher connection.")
+      .version("3.4.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
