@@ -1532,7 +1532,6 @@ case class ArrayPrepend(left: Expression, right: Expression)
   }
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
-      case (_, NullType) => Seq.empty
       case (ArrayType(e1, hasNull), e2) =>
         TypeCoercion.findTightestCommonType(e1, e2) match {
           case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
