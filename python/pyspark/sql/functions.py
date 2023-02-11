@@ -7636,7 +7636,7 @@ def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     Collection function: Returns an array containing element as
     well as all elements from array. The new element is positioned
     at the beginning of the array.
-    
+
     .. versionadded:: 3.4.0
 
     Parameters
