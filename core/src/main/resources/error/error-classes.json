@@ -1188,7 +1188,8 @@
   "OUTPUT_PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists."
-    ]
+    ],
+    "sqlState" : "42K04"
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
