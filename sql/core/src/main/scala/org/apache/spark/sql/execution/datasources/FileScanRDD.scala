@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
@@ -50,6 +50,7 @@ import org.apache.spark.util.NextIterator
  * @param length number of bytes to read.
  * @param modificationTime The modification time of the input file, in milliseconds.
  * @param fileSize The length of the input file (not the block), in bytes.
+ * @param otherConstantMetadataColumnValues The values of any additional constant metadata columns.
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
@@ -58,7 +59,8 @@ case class PartitionedFile(
     length: Long,
     @transient locations: Array[String] = Array.empty,
     modificationTime: Long = 0L,
-    fileSize: Long = 0L) {
+    fileSize: Long = 0L,
+    otherConstantMetadataColumnValues: Map[String, Any] = Map.empty) {
 
   def pathUri: URI = filePath.toUri
   def toPath: Path = filePath.toPath
@@ -71,6 +73,7 @@ case class PartitionedFile(
 
 /**
  * An RDD that scans a list of file partitions.
+ * @param metadataColumns File-constant metadata columns to append to end of schema.
  */
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
@@ -148,7 +151,7 @@ class FileScanRDD(
         if (metadataColumns.nonEmpty && currentFile != null) {
           updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
             currentFile.toPath, currentFile.fileSize, currentFile.start, currentFile.length,
-            currentFile.modificationTime)
+            currentFile.modificationTime, currentFile.otherConstantMetadataColumnValues)
         }
 
       /**
@@ -156,32 +159,59 @@ class FileScanRDD(
        */
       private def createMetadataColumnVector(c: ColumnarBatch): Array[ColumnVector] = {
         val path = currentFile.toPath
-        metadataColumns.map(_.name).map {
-          case FILE_PATH =>
+        metadataColumns.map(a => (a.name, a.dataType)).map {
+          case (FILE_PATH, dataType) =>
+            require(dataType == StringType)
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)
             columnVector.setUtf8String(UTF8String.fromString(path.toString))
             columnVector
-          case FILE_NAME =>
+          case (FILE_NAME, dataType) =>
+            require(dataType == StringType)
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)
             columnVector.setUtf8String(UTF8String.fromString(path.getName))
             columnVector
-          case FILE_SIZE =>
+          case (FILE_SIZE, dataType) =>
+            require(dataType == LongType)
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
             columnVector.setLong(currentFile.fileSize)
             columnVector
-          case FILE_BLOCK_START =>
+          case (FILE_BLOCK_START, dataType) =>
+            require(dataType == LongType)
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
             columnVector.setLong(currentFile.start)
             columnVector
-          case FILE_BLOCK_LENGTH =>
+          case (FILE_BLOCK_LENGTH, dataType) =>
+            require(dataType == LongType)
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
             columnVector.setLong(currentFile.length)
             columnVector
-          case FILE_MODIFICATION_TIME =>
+          case (FILE_MODIFICATION_TIME, dataType) =>
+            require(dataType == TimestampType)
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
             // the modificationTime from the file is in millisecond,
             // while internally, the TimestampType is stored in microsecond
             columnVector.setLong(currentFile.modificationTime * 1000L)
+            columnVector
+          case (other, otherType: AtomicType) =>
+            // Other metadata columns use the file-provided value, if one exists
+            //
+            // WARNING: If caller provided a normal string, convert it to UTF8String as a courtesy.
+            val value = currentFile.otherConstantMetadataColumnValues.get(other).orNull
+            val columnVector = new ConstantColumnVector(c.numRows(), otherType)
+            (value, otherType) match {
+              case (v: java.lang.Long, TimestampType) => columnVector.setLong(v)
+              case (v: java.lang.Long, LongType) => columnVector.setLong(v)
+              case (v: java.lang.Integer, IntegerType) => columnVector.setInt(v)
+              case (v: java.lang.Short, ShortType) => columnVector.setShort(v)
+              case (v: java.lang.Byte, ByteType) => columnVector.setByte(v)
+              case (v: java.lang.Float, FloatType) => columnVector.setFloat(v)
+              case (v: java.lang.Double, DoubleType) => columnVector.setDouble(v)
+              case (v: String, StringType) => columnVector.setUtf8String(UTF8String.fromString(v))
+              case (v: UTF8String, StringType) => columnVector.setUtf8String(v)
+              case (null, _) => columnVector.setNull() // missing or null
+              case (v: Any, dataType) => throw new IllegalArgumentException(
+                s"${v.getClass.getSimpleName} is not compatible with $dataType")
+            }
             columnVector
         }.toArray
       }
