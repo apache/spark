@@ -63,15 +63,16 @@ private[spark] object KubernetesClientUtils extends Logging {
   def buildSparkConfDirFilesMap(
       configMapName: String,
       sparkConf: SparkConf,
-      resolvedPropertiesMap: Map[String, String]): Map[String, String] = synchronized {
+      resolvedPropertiesMap: Map[String, String],
+      extraSize: Long = 0): Map[String, String] = synchronized {
     if (resolvedPropertiesMap.nonEmpty) {
       val resolvedProperties: String = KubernetesClientUtils
         .buildStringFromPropertiesMap(configMapName, resolvedPropertiesMap)
-      val extraSize = resolvedProperties.length
-      val loadedConfFilesMap = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf, extraSize)
+      val loadedConfFilesMap = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf,
+        extraSize + resolvedProperties.length)
       loadedConfFilesMap ++ Map(Constants.SPARK_CONF_FILE_NAME -> resolvedProperties)
     } else {
-      KubernetesClientUtils.loadSparkConfDirFiles(sparkConf, 0)
+      KubernetesClientUtils.loadSparkConfDirFiles(sparkConf, extraSize)
     }
   }
 
@@ -110,7 +111,7 @@ private[spark] object KubernetesClientUtils extends Logging {
 
   // exposed for testing
   private[submit] def loadSparkConfDirFiles(conf: SparkConf,
-                                            extraSize: Long): Map[String, String] = {
+                                            extraSize: Long = 0): Map[String, String] = {
     val confDir = Option(conf.getenv(ENV_SPARK_CONF_DIR)).orElse(
       conf.getOption("spark.home").map(dir => s"$dir/conf"))
     val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE) - extraSize
