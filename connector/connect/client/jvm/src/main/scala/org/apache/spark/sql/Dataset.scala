@@ -17,9 +17,11 @@
 package org.apache.spark.sql
 
 import java.util.{Collections, Locale}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
@@ -203,8 +205,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 1.6.0
    */
   def schema: StructType = {
-    val schema = session.analyze(plan, proto.Explain.ExplainMode.SIMPLE).getSchema
-    DataTypeProtoConverter.toCatalystType(schema).asInstanceOf[StructType]
+    DataTypeProtoConverter.toCatalystType(analyze.getSchema).asInstanceOf[StructType]
   }
 
   /**
@@ -309,9 +310,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group basic
    * @since 3.4.0
    */
-  def isLocal: Boolean = {
-    session.analyze(plan, proto.Explain.ExplainMode.SIMPLE).getIsLocal
-  }
+  def isLocal: Boolean = analyze.getIsLocal
 
   /**
    * Returns true if the `Dataset` is empty.
@@ -319,11 +318,8 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group basic
    * @since 3.4.0
    */
-  def isEmpty: Boolean = {
-    val result = select().limit(1).collectResult()
-    try result.length == 0 finally {
-      result.close()
-    }
+  def isEmpty: Boolean = select().limit(1).withResult { result =>
+    result.length == 0
   }
 
   /**
@@ -335,9 +331,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group streaming
    * @since 3.4.0
    */
-  def isStreaming: Boolean = {
-    session.analyze(plan, proto.Explain.ExplainMode.SIMPLE).getIsStreaming
-  }
+  def isStreaming: Boolean = analyze.getIsStreaming
 
   /**
    * Displays the Dataset in a tabular form. Strings more than 20 characters will be truncated,
@@ -476,15 +470,12 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
         .setTruncate(truncate)
         .setVertical(vertical)
     }
-    val result = df.collectResult()
-    try {
+    df.withResult { result =>
       assert(result.length == 1)
       assert(result.schema.size == 1)
       // scalastyle:off println
       println(result.toArray.head.getString(0))
       // scalastyle:on println
-    } finally {
-      result.close()
     }
   }
 
@@ -1251,7 +1242,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def unionByName(other: Dataset[T]): Dataset[T] = unionByName(other, false)
+  def unionByName(other: Dataset[T]): Dataset[T] = unionByName(other, allowMissingColumns = false)
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
@@ -1687,11 +1678,9 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   def drop(col: Column, cols: Column*): DataFrame = drop(col +: cols)
 
   private def drop(cols: Seq[Column]): DataFrame = session.newDataset { builder =>
-    session.newDataset { builder =>
-      builder.getDropBuilder
-        .setInput(plan.getRoot)
-        .addAllCols(cols.map(_.expr).asJava)
-    }
+    builder.getDropBuilder
+      .setInput(plan.getRoot)
+      .addAllCols(cols.map(_.expr).asJava)
   }
 
   /**
@@ -1738,9 +1727,433 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     dropDuplicates(colNames)
   }
 
+  /**
+   * Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
+   * and max. If no columns are given, this function computes statistics for all numerical or
+   * string columns.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting Dataset. If you want to
+   * programmatically compute summary statistics, use the `agg` function instead.
+   *
+   * {{{
+   *   ds.describe("age", "height").show()
+   *
+   *   // output:
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // mean    53.3  178.05
+   *   // stddev  11.6  15.7
+   *   // min     18.0  163.0
+   *   // max     92.0  192.0
+   * }}}
+   *
+   * Use [[summary]] for expanded statistics and control over which statistics to compute.
+   *
+   * @param cols Columns to compute statistics on.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def describe(cols: String*): DataFrame = session.newDataset { builder =>
+    builder.getDescribeBuilder
+      .setInput(plan.getRoot)
+      .addAllCols(cols.asJava)
+  }
+
+  /**
+   * Computes specified statistics for numeric and string columns. Available statistics are:
+   * <ul>
+   *   <li>count</li>
+   *   <li>mean</li>
+   *   <li>stddev</li>
+   *   <li>min</li>
+   *   <li>max</li>
+   *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
+   *   <li>count_distinct</li>
+   *   <li>approx_count_distinct</li>
+   * </ul>
+   *
+   * If no statistics are given, this function computes count, mean, stddev, min,
+   * approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting Dataset. If you want to
+   * programmatically compute summary statistics, use the `agg` function instead.
+   *
+   * {{{
+   *   ds.summary().show()
+   *
+   *   // output:
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // mean    53.3  178.05
+   *   // stddev  11.6  15.7
+   *   // min     18.0  163.0
+   *   // 25%     24.0  176.0
+   *   // 50%     24.0  176.0
+   *   // 75%     32.0  180.0
+   *   // max     92.0  192.0
+   * }}}
+   *
+   * {{{
+   *   ds.summary("count", "min", "25%", "75%", "max").show()
+   *
+   *   // output:
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // min     18.0  163.0
+   *   // 25%     24.0  176.0
+   *   // 75%     32.0  180.0
+   *   // max     92.0  192.0
+   * }}}
+   *
+   * To do a summary for specific columns first select them:
+   *
+   * {{{
+   *   ds.select("age", "height").summary().show()
+   * }}}
+   *
+   * Specify statistics to output custom summaries:
+   *
+   * {{{
+   *   ds.summary("count", "count_distinct").show()
+   * }}}
+   *
+   * The distinct count isn't included by default.
+   *
+   * You can also run approximate distinct counts which are faster:
+   *
+   * {{{
+   *   ds.summary("count", "approx_count_distinct").show()
+   * }}}
+   *
+   * See also [[describe]] for basic statistics.
+   *
+   * @param statistics Statistics from above list to be computed.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def summary(statistics: String*): DataFrame = session.newDataset { builder =>
+    builder.getSummaryBuilder
+      .setInput(plan.getRoot)
+      .addAllStatistics(statistics.asJava)
+  }
+
+  /**
+   * Returns the first `n` rows.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  def head(n: Int): Array[T] = limit(n).collect()
+
+  /**
+   * Returns the first row.
+   * @group action
+   * @since 3.4.0
+   */
+  def head(): T = head(1).head
+
+  /**
+   * Returns the first row. Alias for head().
+   * @group action
+   * @since 3.4.0
+   */
+  def first(): T = head()
+
+  /**
+   * Concise syntax for chaining custom transformations.
+   * {{{
+   *   def featurize(ds: Dataset[T]): Dataset[U] = ...
+   *
+   *   ds
+   *     .transform(featurize)
+   *     .transform(...)
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
+
+  /**
+   * Returns the first `n` rows in the Dataset.
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  def take(n: Int): Array[T] = head(n)
+
+  /**
+   * Returns the last `n` rows in the Dataset.
+   *
+   * Running tail requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  def tail(n: Int): Array[T] = {
+    val lastN = session.newDataset[T] { builder =>
+      builder.getTailBuilder
+        .setInput(plan.getRoot)
+        .setLimit(n)
+    }
+    lastN.collect()
+  }
+
+  /**
+   * Returns the first `n` rows in the Dataset as a list.
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  def takeAsList(n: Int): java.util.List[T] = java.util.Arrays.asList(take(n) : _*)
+
+  /**
+   * Returns an array that contains all rows in this Dataset.
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * For Java API, use [[collectAsList]].
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  def collect(): Array[T] = withResult { result =>
+    result.toArray.asInstanceOf[Array[T]]
+  }
+
+  /**
+   * Returns a Java list that contains all rows in this Dataset.
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  def collectAsList(): java.util.List[T] = {
+    java.util.Arrays.asList(collect() : _*)
+  }
+
+  /**
+   * Returns an iterator that contains all rows in this Dataset.
+   *
+   * The iterator will consume as much memory as the largest partition in this Dataset.
+   *
+   * @note this results in multiple Spark jobs, and if the input Dataset is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input Dataset should be cached first.
+   *
+   * @group action
+   * @since 3.4.0
+   */
+  def toLocalIterator(): java.util.Iterator[T] = {
+    // TODO make this a destructive iterator.
+    // TODO document that we need to close this.
+    collectResult().iterator.asInstanceOf[java.util.Iterator[T]]
+  }
+
+  /**
+   * Returns a new Dataset that has exactly `numPartitions` partitions.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def repartition(numPartitions: Int): Dataset[T] = session.newDataset { builder =>
+    builder.getRepartitionBuilder
+      .setInput(plan.getRoot)
+      .setNumPartitions(numPartitions)
+      .setShuffle(true)
+  }
+
+  private def repartitionByExpression(
+      numPartitions: Option[Int],
+      partitionExprs: Seq[Column]): Dataset[T] = {
+    // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
+    // However, we don't want to complicate the semantics of this API method.
+    // Instead, let's give users a friendly error message, pointing them to the new method.
+    val sortOrders = partitionExprs.filter(_.expr.hasSortOrder)
+    if (sortOrders.nonEmpty) throw new IllegalArgumentException(
+      s"""Invalid partitionExprs specified: $sortOrders
+         |For range partitioning use repartitionByRange(...) instead.
+       """.stripMargin)
+    session.newDataset { builder =>
+      val repartitionBuilder = builder.getRepartitionByExpressionBuilder
+        .setInput(plan.getRoot)
+        .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
+      numPartitions.foreach(repartitionBuilder.setNumPartitions)
+    }
+  }
+
+  /**
+   * Returns a new Dataset partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting Dataset is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+    repartitionByExpression(Some(numPartitions), partitionExprs)
+  }
+
+  /**
+   * Returns a new Dataset partitioned by the given partitioning expressions, using
+   * `spark.sql.shuffle.partitions` as number of partitions.
+   * The resulting Dataset is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def repartition(partitionExprs: Column*): Dataset[T] = {
+    repartitionByExpression(None, partitionExprs)
+  }
+
+  private def repartitionByRange(
+      numPartitions: Option[Int],
+      partitionExprs: Seq[Column]): Dataset[T] = {
+    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
+    val sortExprs = partitionExprs.map {
+      case e if e.expr.hasSortOrder => e.expr
+      case e => e.asc.expr
+    }
+    session.newDataset { builder =>
+      val repartitionBuilder = builder.getRepartitionByExpressionBuilder
+        .setInput(plan.getRoot)
+        .addAllPartitionExprs(sortExprs.asJava)
+      numPartitions.foreach(repartitionBuilder.setNumPartitions)
+    }
+  }
+
+  /**
+   * Returns a new Dataset partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting Dataset is range partitioned.
+   *
+   * At least one partition-by expression must be specified.
+   * When no explicit sort order is specified, "ascending nulls first" is assumed.
+   * Note, the rows are not sorted in each partition of the resulting Dataset.
+   *
+   *
+   * Note that due to performance reasons this method uses sampling to estimate the ranges.
+   * Hence, the output may not be consistent, since sampling can return different values.
+   * The sample size can be controlled by the config
+   * `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+    repartitionByRange(Some(numPartitions), partitionExprs)
+  }
+
+  /**
+   * Returns a new Dataset partitioned by the given partitioning expressions, using
+   * `spark.sql.shuffle.partitions` as number of partitions.
+   * The resulting Dataset is range partitioned.
+   *
+   * At least one partition-by expression must be specified.
+   * When no explicit sort order is specified, "ascending nulls first" is assumed.
+   * Note, the rows are not sorted in each partition of the resulting Dataset.
+   *
+   * Note that due to performance reasons this method uses sampling to estimate the ranges.
+   * Hence, the output may not be consistent, since sampling can return different values.
+   * The sample size can be controlled by the config
+   * `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
+    repartitionByRange(None, partitionExprs)
+  }
+
+  /**
+   * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
+   * are requested. If a larger number of partitions is requested, it will stay at the current
+   * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in
+   * a narrow dependency, e.g. if you go from 1000 partitions to 100 partitions, there will not
+   * be a shuffle, instead each of the 100 new partitions will claim 10 of the current partitions.
+   *
+   * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+   * this may result in your computation taking place on fewer nodes than
+   * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+   * you can call repartition. This will add a shuffle step, but means the
+   * current upstream partitions will be executed in parallel (per whatever
+   * the current partitioning is).
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def coalesce(numPartitions: Int): Dataset[T] = session.newDataset { builder =>
+    builder.getRepartitionBuilder
+      .setInput(plan.getRoot)
+      .setNumPartitions(numPartitions)
+      .setShuffle(false)
+  }
+
+  /**
+   * Returns a new Dataset that contains only the unique rows from this Dataset.
+   * This is an alias for `dropDuplicates`.
+   *
+   * Note that for a streaming [[Dataset]], this method returns distinct rows only once
+   * regardless of the output mode, which the behavior may not be same with `DISTINCT` in SQL
+   * against streaming [[Dataset]].
+   *
+   * @note Equality checking is performed directly on the encoded representation of the data
+   * and thus is not affected by a custom `equals` function defined on `T`.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def distinct(): Dataset[T] = dropDuplicates()
+
+  /**
+   * Returns a best-effort snapshot of the files that compose this Dataset. This method simply
+   * asks each constituent BaseRelation for its respective files and takes the union of all results.
+   * Depending on the source relations, this may not find all input files. Duplicates are removed.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def inputFiles: Array[String] = {
+    analyze.getInputFilesList.toArray {
+      n: Int => new Array[String](n)
+    }
+  }
+
   private[sql] def analyze: proto.AnalyzePlanResponse = {
     session.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
   }
 
   def collectResult(): SparkResult = session.execute(plan)
+
+  private def withResult[E](f: SparkResult => E): E = {
+    val result = collectResult()
+    try f(result) finally {
+      result.close()
+    }
+  }
 }
