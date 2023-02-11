@@ -1611,7 +1611,7 @@ private[spark] object JsonProtocol {
     }
 
     def extractString: String = {
-      require(json.isTextual, s"Expected string, got ${json.getNodeType}")
+      require(json.isTextual || json.isNull, s"Expected string or NULL, got ${json.getNodeType}")
       json.textValue
     }
   }
