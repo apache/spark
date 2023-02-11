@@ -647,7 +647,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_print(self):
         # SPARK-41717: test print
         self.assertEqual(
-            self.connect.sql("SELECT 1")._plan.print().strip(), "<SQL query='SELECT 1'>"
+            self.connect.sql("SELECT 1")._plan.print().strip(),
+            "<SQL query='SELECT 1', args='None'>",
         )
         self.assertEqual(
             self.connect.range(1, 10)._plan.print().strip(),
