@@ -1558,7 +1558,8 @@ private[spark] object JsonProtocol {
     json.extractElements.map { line =>
       val declaringClass = line.get("Declaring Class").extractString
       val methodName = line.get("Method Name").extractString
-      val fileName = line.get("File Name").extractString
+      val fileNameField = line.get("File Name")
+      val fileName = if (fileNameField == null) null else fileNameField.extractString
       val lineNumber = line.get("Line Number").extractInt
       new StackTraceElement(declaringClass, methodName, fileName, lineNumber)
     }.toArray
