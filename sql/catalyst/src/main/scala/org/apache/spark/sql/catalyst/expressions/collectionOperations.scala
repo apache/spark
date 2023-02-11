@@ -4601,9 +4601,13 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1, or start from the end if start is negative).\",",
+  usage = """
+    _FUNC_(x, pos, val) - Places val into index pos of array x.
+      Array indices start at 1, or start from the end if start is negative.
+      Index specified beyond the size of the current array (plus additional element)
+      is extended with 'null' elements.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
