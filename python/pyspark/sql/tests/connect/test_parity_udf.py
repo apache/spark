@@ -170,11 +170,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_with_string_return_type(self):
         super().test_udf_with_string_return_type()
 
-    # TODO(SPARK-41279): fix DataFrame.createTempView
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_in_subquery(self):
-        super().test_udf_in_subquery()
-
     def test_udf_registration_returns_udf(self):
         df = self.spark.range(10)
         add_three = self.spark.udf.register("add_three", lambda x: x + 3, IntegerType())
