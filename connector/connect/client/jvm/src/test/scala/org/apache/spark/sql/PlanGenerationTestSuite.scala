@@ -187,6 +187,286 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     simple.filter(fn.col("id") === fn.lit(10L))
   }
 
+  test("toDF") {
+    simple.toDF("x1", "x2", "x3")
+  }
+
+  test("to") {
+    simple
+  }
+
+  test("join inner_no_condition") {
+    simple
+  }
+
+  test("join inner_using_single_col") {
+    simple
+  }
+
+  test("join inner_using_multiple_col_array") {
+    simple
+  }
+
+  test("join inner_using_multiple_col_seq") {
+    simple
+  }
+
+  test("join using_single_col") {
+    simple
+  }
+
+  test("join using_multiple_col_array") {
+    simple
+  }
+
+  test("join using_multiple_col_seq") {
+    simple
+  }
+
+  test("join inner_condition") {
+    simple
+  }
+
+  test("join condition") {
+    simple
+  }
+
+  test("crossJoin") {
+    simple
+  }
+
+  test("sortWithinPartitions strings") {
+    simple
+  }
+
+  test("sortWithinPartitions columns") {
+    simple
+  }
+
+  test("sort strings") {
+    simple
+  }
+
+  test("sort columns") {
+    simple
+  }
+
+  test("orderBy strings") {
+    simple
+  }
+
+  test("orderBy columns") {
+    simple
+  }
+
+  test("apply") {
+    simple
+  }
+
+  test("hint") {
+    simple
+  }
+
+  test("col") {
+    simple
+  }
+
+  test("colRegex") {
+    simple
+  }
+
+  test("as string") {
+    simple
+  }
+
+  test("as symbol") {
+    simple
+  }
+  test("alias string") {
+    simple
+  }
+
+  test("alias symbol") {
+    simple
+  }
+  test("select strings") {
+    simple
+  }
+
+  test("selectExpr") {
+    simple
+  }
+  test("filter expr") {
+    simple
+  }
+
+  test("where column") {
+    simple
+  }
+
+  test("where expr") {
+    simple
+  }
+
+  test("unpivot values") {
+    simple
+  }
+
+  test("unpivot no_values") {
+    simple
+  }
+
+  test("melt values") {
+    simple
+  }
+
+  test("melt no_values") {
+    simple
+  }
+
+  test("offset") {
+    simple
+  }
+
+  test("union") {
+    simple
+  }
+
+  test("unionAll") {
+    simple
+  }
+
+  test("unionByName") {
+    simple
+  }
+
+  test("unionByName allowMissingColumns") {
+    simple
+  }
+
+  test("intersect") {
+    simple
+  }
+
+  test("intersectAll") {
+    simple
+  }
+
+  test("except") {
+    simple
+  }
+
+  test("exceptAll") {
+    simple
+  }
+
+  test("sample seed") {
+    simple
+  }
+
+  test("sample withReplacement_seed") {
+    simple
+  }
+
+  test("sample withReplacement") {
+    simple
+  }
+
+  test("withColumn single") {
+    simple
+  }
+
+  test("withColumns scala_map") {
+    simple
+  }
+
+  test("withColumns java_map") {
+    simple
+  }
+
+  test("withColumnRenamed single") {
+    simple
+  }
+
+  test("withColumnRenamed scala_map") {
+    simple
+  }
+
+  test("withColumnRenamed java_map") {
+    simple
+  }
+
+  test("withMetadata") {
+    simple
+  }
+
+  test("drop single string") {
+    simple
+  }
+
+  test("drop multiple strings") {
+    simple
+  }
+
+  test("drop single column") {
+    simple
+  }
+
+  test("drop multiple column") {
+    simple
+  }
+
+  test("dropDuplicates") {
+    simple
+  }
+
+  test("dropDuplicates names seq") {
+    simple
+  }
+
+  test("dropDuplicates names array") {
+    simple
+  }
+
+  test("dropDuplicates varargs") {
+    simple
+  }
+
+  test("describe") {
+    simple
+  }
+
+  test("summary") {
+    simple
+  }
+
+  test("repartition") {
+    simple
+  }
+
+  test("repartition num_partitions_expressions") {
+    simple
+  }
+
+  test("repartition expressions") {
+    simple
+  }
+
+  test("repartitionByRange num_partitions_expressions") {
+    simple
+  }
+
+  test("repartitionByRange expressions") {
+    simple
+  }
+
+  test("coalesce") {
+    simple
+  }
+
+  test("distinct") {
+    simple
+  }
   /* Column API */
   test("column by name") {
     select(fn.col("b"))
