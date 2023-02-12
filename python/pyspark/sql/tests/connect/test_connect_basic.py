@@ -53,7 +53,6 @@ from pyspark.errors.exceptions.connect import (
     AnalysisException,
     ParseException,
     SparkConnectException,
-    TempTableAlreadyExistsException,
 )
 
 if should_test_connect:
@@ -1106,6 +1105,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         pdf = self.connect.sql("SELECT 1").toPandas()
         self.assertEqual(1, len(pdf.index))
 
+    def test_sql_with_args(self):
+        df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": "7"})
+        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": "7"})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
     def test_head(self):
         # SPARK-41002: test `head` API in Python Client
         df = self.connect.read.table(self.tbl_name)
@@ -1244,7 +1248,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(TempTableAlreadyExistsException):
+            with self.assertRaises(AnalysisException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -1256,7 +1260,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(TempTableAlreadyExistsException):
+            with self.assertRaises(AnalysisException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -2734,7 +2738,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "sparkContext",
             "streams",
             "readStream",
-            "udf",
             "version",
         ):
             with self.assertRaises(NotImplementedError):

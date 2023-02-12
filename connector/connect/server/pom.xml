@@ -349,6 +349,9 @@
               <shadedPattern>${spark.shade.packageName}.connect.google_protos.type</shadedPattern>
             </relocation>
           </relocations>
+          <transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+          </transformers>
         </configuration>
       </plugin>
     </plugins>

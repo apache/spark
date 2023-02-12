@@ -68,6 +68,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
+    from pyspark.sql.connect.udf import UDFRegistration
 
 
 class SparkSession:
@@ -340,8 +341,8 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sqlQuery), self)
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
+        return DataFrame.withPlan(SQL(sqlQuery, args), self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -436,8 +437,12 @@ class SparkSession:
         raise NotImplementedError("readStream() is not implemented.")
 
     @property
-    def udf(self) -> Any:
-        raise NotImplementedError("udf() is not implemented.")
+    def udf(self) -> "UDFRegistration":
+        from pyspark.sql.connect.udf import UDFRegistration
+
+        return UDFRegistration(self)
+
+    udf.__doc__ = PySparkSession.udf.__doc__
 
     @property
     def version(self) -> str:

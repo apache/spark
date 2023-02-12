@@ -387,7 +387,7 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.getTable("tbl1")  # doctest: +SKIP
+        >>> spark.catalog.getTable("tbl1")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -548,7 +548,7 @@ class Catalog:
 
         Throw an analysis exception when the function does not exists.
 
-        >>> spark.catalog.getFunction("my_func2")  # doctest: +SKIP
+        >>> spark.catalog.getFunction("my_func2")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -867,7 +867,7 @@ class Catalog:
 
         Throw an exception if the temporary view does not exists.
 
-        >>> spark.table("my_table")  # doctest: +SKIP
+        >>> spark.table("my_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -907,7 +907,7 @@ class Catalog:
 
         Throw an exception if the global view does not exists.
 
-        >>> spark.table("global_temp.my_table")  # doctest: +SKIP
+        >>> spark.table("global_temp.my_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
