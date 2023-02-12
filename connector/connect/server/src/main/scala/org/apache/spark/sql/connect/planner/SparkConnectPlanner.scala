@@ -196,7 +196,10 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
-    session.sessionState.sqlParser.parsePlan(sql.getQuery)
+    val args = sql.getArgsMap.asScala.toMap
+    val parser = session.sessionState.sqlParser
+    val parsedArgs = args.mapValues(parser.parseExpression).toMap
+    Parameter.bind(parser.parsePlan(sql.getQuery), parsedArgs)
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
@@ -1476,8 +1479,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       plan = transformRelation(createView.getInput),
       allowExisting = false,
       replace = createView.getReplace,
-      viewType = viewType,
-      isAnalyzed = true)
+      viewType = viewType)
 
     Dataset.ofRows(session, plan).queryExecution.commandExecuted
   }

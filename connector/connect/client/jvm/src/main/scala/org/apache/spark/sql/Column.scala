@@ -63,6 +63,22 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def +(other: Any): Column = fn("+", this, lit(other))
 
   /**
+   * Equality test.
+   * {{{
+   *   // Scala:
+   *   df.filter( df("colA") === df("colB") )
+   *
+   *   // Java
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.filter( col("colA").equalTo(col("colB")) );
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  def ===(other: Any): Column = fn("=", this, lit(other))
+
+  /**
    * Gives the column a name (alias).
    * {{{
    *   // Renames colA to colB in select output.

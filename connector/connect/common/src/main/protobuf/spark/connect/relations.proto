@@ -99,6 +99,9 @@ message RelationCommon {
 message SQL {
   // (Required) The SQL query.
   string query = 1;
+
+  // (Optional) A map of parameter names to literal values.
+  map<string, string> args = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional

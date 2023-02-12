@@ -85,8 +85,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_same_semantics_error(self):
         super().test_same_semantics_error()
 
-    # TODO(SPARK-42338): Different exception in DataFrame.sample
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
     def test_sample(self):
         super().test_sample()
 
