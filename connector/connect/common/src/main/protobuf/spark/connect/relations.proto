@@ -76,6 +76,8 @@ message Relation {
     StatFreqItems freq_items = 106;
     StatSampleBy sample_by = 107;
 
+    int64 server_side_dataframe_id = 108;
+
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
 

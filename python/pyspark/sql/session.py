@@ -185,6 +185,10 @@ class SparkSession(SparkConversionMixin):
     >>> spark = SparkSession(sc)
     """
 
+    @staticmethod
+    def isSparkConnectClient():
+        return True
+
     class Builder:
         """Builder for :class:`SparkSession`."""
 

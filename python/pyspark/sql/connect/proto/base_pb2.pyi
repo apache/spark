@@ -41,6 +41,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
+import pyspark.sql.connect.proto.ml_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -53,6 +54,7 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the
     client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
@@ -64,34 +66,53 @@ class Plan(google.protobuf.message.Message):
 
     ROOT_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
+    ML_COMMAND_FIELD_NUMBER: builtins.int
     @property
     def root(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
     @property
     def command(self) -> pyspark.sql.connect.proto.commands_pb2.Command: ...
+    @property
+    def ml_command(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand: ...
     def __init__(
         self,
         *,
         root: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         command: pyspark.sql.connect.proto.commands_pb2.Command | None = ...,
+        ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "ml_command",
+            b"ml_command",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "ml_command",
+            b"ml_command",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
-    ) -> typing_extensions.Literal["root", "command"] | None: ...
+    ) -> typing_extensions.Literal["root", "command", "ml_command"] | None: ...
 
 global___Plan = Plan
 
+@typing_extensions.final
 class Explain(google.protobuf.message.Message):
     """Explains the input plan based on a configurable mode."""
 
@@ -157,6 +178,7 @@ class Explain(google.protobuf.message.Message):
 
 global___Explain = Explain
 
+@typing_extensions.final
 class UserContext(google.protobuf.message.Message):
     """User Context is used to refer to one particular user session that is executing
     queries in the backend.
@@ -196,6 +218,7 @@ class UserContext(google.protobuf.message.Message):
 
 global___UserContext = UserContext
 
+@typing_extensions.final
 class AnalyzePlanRequest(google.protobuf.message.Message):
     """Request to perform plan analyze, optionally to explain the plan."""
 
@@ -273,6 +296,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
 
+@typing_extensions.final
 class AnalyzePlanResponse(google.protobuf.message.Message):
     """Response to performing analysis of the query. Contains relevant metadata to be able to
     reason about the performance.
@@ -341,6 +365,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
 
+@typing_extensions.final
 class ExecutePlanRequest(google.protobuf.message.Message):
     """A request to be executed by the service."""
 
@@ -409,6 +434,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
 global___ExecutePlanRequest = ExecutePlanRequest
 
+@typing_extensions.final
 class ExecutePlanResponse(google.protobuf.message.Message):
     """The response of a query, can be one or more for each request. Responses belonging to the
     same input query, carry the same `client_id`.
@@ -416,6 +442,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class ArrowBatch(google.protobuf.message.Message):
         """Batch results of metrics."""
 
@@ -435,12 +462,15 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
 
+    @typing_extensions.final
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        @typing_extensions.final
         class MetricObject(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+            @typing_extensions.final
             class ExecutionMetricsEntry(google.protobuf.message.Message):
                 DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -500,6 +530,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        @typing_extensions.final
         class MetricValue(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -540,9 +571,51 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["metrics", b"metrics"]
         ) -> None: ...
 
+    @typing_extensions.final
+    class MlCommandResponse(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SERVER_SIDE_OBJECT_ID_FIELD_NUMBER: builtins.int
+        PARAMS_FIELD_NUMBER: builtins.int
+        server_side_object_id: builtins.int
+        @property
+        def params(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand.Params: ...
+        def __init__(
+            self,
+            *,
+            server_side_object_id: builtins.int = ...,
+            params: pyspark.sql.connect.proto.ml_pb2.MlCommand.Params | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "params",
+                b"params",
+                "server_side_object_id",
+                b"server_side_object_id",
+                "value",
+                b"value",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "params",
+                b"params",
+                "server_side_object_id",
+                b"server_side_object_id",
+                "value",
+                b"value",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["value", b"value"]
+        ) -> typing_extensions.Literal["server_side_object_id", "params"] | None: ...
+
     CLIENT_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
+    ML_COMMAND_RESPONSE_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
@@ -551,21 +624,41 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         """Metrics for the query execution. Typically, this field is only present in the last
         batch of results and then represent the overall state of the query execution.
         """
+    @property
+    def ml_command_response(self) -> global___ExecutePlanResponse.MlCommandResponse:
+        """Used for optional ML command results.
+        TODO: Move this field to a better place
+        """
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
+        ml_command_response: global___ExecutePlanResponse.MlCommandResponse | None = ...,
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal["arrow_batch", b"arrow_batch", "metrics", b"metrics"],
+        field_name: typing_extensions.Literal[
+            "arrow_batch",
+            b"arrow_batch",
+            "metrics",
+            b"metrics",
+            "ml_command_response",
+            b"ml_command_response",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "arrow_batch", b"arrow_batch", "client_id", b"client_id", "metrics", b"metrics"
+            "arrow_batch",
+            b"arrow_batch",
+            "client_id",
+            b"client_id",
+            "metrics",
+            b"metrics",
+            "ml_command_response",
+            b"ml_command_response",
         ],
     ) -> None: ...
 

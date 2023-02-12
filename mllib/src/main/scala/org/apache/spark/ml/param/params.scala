@@ -24,6 +24,7 @@ import java.util.NoSuchElementException
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -32,6 +33,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
 import org.apache.spark.ml.util.Identifiable
+
 
 /**
  * A param with self-contained documentation and optionally default value. Primitive-typed param
@@ -44,8 +46,17 @@ import org.apache.spark.ml.util.Identifiable
  *                See [[ParamValidators]] for factory methods for common validation functions.
  * @tparam T param value type
  */
-class Param[T](val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
-  extends Serializable {
+class Param[T: ClassTag](
+    val parent: String,
+    val name: String,
+    val doc: String,
+    val isValid: T => Boolean
+) extends Serializable {
+
+  // Generic type T is erased when compiling,
+  // but spark connect ML needs T type information,
+  // so use classTag to preserve the T type.
+  val paramValueClassTag = implicitly[ClassTag[T]]
 
   def this(parent: Identifiable, name: String, doc: String, isValid: T => Boolean) =
     this(parent.uid, name, doc, isValid)
@@ -788,6 +799,13 @@ trait Params extends Identifiable with Serializable {
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
     }
     this
+  }
+
+  /**
+   * This method is used in Spark Connect ML.
+   */
+  private[spark] def _setDefault[T](param: Param[T], value: T): this.type = {
+    this.setDefault(param, value)
   }
 
   /**

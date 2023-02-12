@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -213,13 +214,39 @@ class SparkConnectService(debug: Boolean)
   }
 }
 
+
+/**
+ * This class is for managing server side object that is used by spark connect
+ * client side code.
+ */
+class ServerSideObjectManager(
+    val objectMap: ConcurrentHashMap[Long, Object] = new ConcurrentHashMap[Long, Object](),
+    val idGen: AtomicLong = new AtomicLong(0)
+) {
+  def registerObject(obj: Object): Long = {
+    val objectId = idGen.getAndIncrement()
+    objectMap.put(objectId, obj)
+    objectId
+  }
+
+  def getObject(id: Long): Object = objectMap.get(id)
+
+  def removeObject(id: Long): Object = objectMap.remove(id)
+}
+
+
 /**
  * Object used for referring to SparkSessions in the SessionCache.
  *
  * @param userId
  * @param session
  */
-case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
+case class SessionHolder(
+    userId: String,
+    sessionId: String,
+    session: SparkSession,
+    serverSideObjectManager: ServerSideObjectManager = new ServerSideObjectManager()
+)
 
 /**
  * Static instance of the SparkConnectService.

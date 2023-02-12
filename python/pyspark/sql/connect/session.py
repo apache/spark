@@ -72,6 +72,11 @@ if TYPE_CHECKING:
 
 
 class SparkSession:
+
+    @staticmethod
+    def isSparkConnectClient():
+        return True
+
     class Builder:
         """Builder for :class:`SparkSession`."""
 
