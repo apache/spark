@@ -555,6 +555,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         None
       }
     }
+
+    if (executorsToDecommission.isEmpty) {
+      return executorsToDecommission
+    }
+
     logInfo(s"Decommission executors: ${executorsToDecommission.mkString(", ")}")
 
     // If we don't want to replace the executors we are decommissioning
