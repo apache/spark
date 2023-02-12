@@ -478,7 +478,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def unexpectedFormatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0042", ctx)
+    new ParseException(errorClass = "INVALID_SET_SYNTAX", ctx)
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
