@@ -4085,11 +4085,6 @@
       "Could not compare cost with <cost>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2099" : {
-    "message" : [
-      "Unsupported data type: <dt>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2100" : {
     "message" : [
       "not support type: <dataType>."
