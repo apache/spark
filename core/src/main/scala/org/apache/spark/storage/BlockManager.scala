@@ -43,7 +43,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Network
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -202,6 +202,9 @@ private[spark] class BlockManager(
 
   // Visible for testing
   private[storage] val blockInfoManager = new BlockInfoManager
+
+  /** Whether rdd cache visibility tracking is enabled. */
+  private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
@@ -1466,6 +1469,11 @@ private[spark] class BlockManager(
 
   // Check whether a rdd block is visible or not.
   private[spark] def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    // Cached blocks are always visible if the feature flag is disabled.
+    if (!trackingCacheVisibility) {
+      return true
+    }
+
     // If the rdd block visibility information not available in the block manager,
     // asking master for the information.
     if (blockInfoManager.isRDDBlockVisible(blockId)) {

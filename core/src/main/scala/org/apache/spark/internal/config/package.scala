@@ -2461,4 +2461,15 @@ package object config {
       .version("3.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("5s")
+
+  private[spark] val RDD_CACHE_VISIBILITY_TRACKING_ENABLED =
+    ConfigBuilder("spark.rdd.cache.visibilityTracking.enabled")
+      .internal()
+      .doc("Set to be true to enabled RDD cache block's visibility status. Once it's enabled," +
+        " a RDD cache block can be used only when it's marked as visible. And a RDD block will be" +
+        " marked as visible only when one of the tasks generating the cache block finished" +
+        " successfully.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 }

@@ -38,6 +38,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
@@ -302,6 +303,10 @@ private[spark] class DAGScheduler(
   // Send finalize RPC tasks to merger ESS
   private val shuffleSendFinalizeRpcExecutor: ExecutorService =
     ThreadUtils.newDaemonFixedThreadPool(shuffleFinalizeRpcThreads, "shuffle-merge-finalize-rpc")
+
+  /** Whether rdd cache visibility tracking is enabled. */
+  private val trackingCacheVisibility: Boolean =
+    sc.getConf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -1786,16 +1791,15 @@ private[spark] class DAGScheduler(
           case _ =>
             updateAccumulators(event)
         }
-        // Update rdd blocks' visibility status.
-        blockManagerMaster.updateRDDBlockVisibility(event.taskInfo.taskId, visible = true)
-      case _: ExceptionFailure | _: TaskKilled =>
-        updateAccumulators(event)
-        // Update rdd blocks' visibility status.
-        blockManagerMaster.updateRDDBlockVisibility(event.taskInfo.taskId, visible = false)
+      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
-        // Update rdd blocks' visibility status.
-        blockManagerMaster.updateRDDBlockVisibility(event.taskInfo.taskId, visible = false)
     }
+    if (trackingCacheVisibility) {
+      // Update rdd blocks' visibility status.
+      blockManagerMaster.updateRDDBlockVisibility(
+        event.taskInfo.taskId, visible = event.reason == Success)
+    }
+
     postTaskEnd(event)
 
     event.reason match {

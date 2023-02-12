@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.StorageLevel
@@ -93,6 +94,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("SPARK-41497: accumulators should be reported in the case of task retry with rdd cache") {
     // Set up a cluster with 2 executors
     val conf = new SparkConf()
+      .set(RDD_CACHE_VISIBILITY_TRACKING_ENABLED, true)
       .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)

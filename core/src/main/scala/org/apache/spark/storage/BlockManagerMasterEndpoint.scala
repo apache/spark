@@ -32,6 +32,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
@@ -120,6 +121,9 @@ class BlockManagerMasterEndpoint(
 
   private lazy val driverEndpoint =
     RpcUtils.makeDriverRef(CoarseGrainedSchedulerBackend.ENDPOINT_NAME, conf, rpcEnv)
+
+  /** Whether rdd cache visibility tracking is enabled. */
+  private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(
@@ -220,13 +224,23 @@ class BlockManagerMasterEndpoint(
       context.reply(updateRDDBlockTaskInfo(blockId, taskId))
 
     case GetRDDBlockVisibility(blockId) =>
-      context.reply(visibleRDDBlocks.contains(blockId))
+      if (!trackingCacheVisibility) {
+        // Always visible if the feature flag is disabled.
+        context.reply(true)
+      } else {
+        context.reply(visibleRDDBlocks.contains(blockId))
+      }
 
     case UpdateRDDBlockVisibility(taskId, visible) =>
       context.reply(updateRDDBlockVisibility(taskId, visible))
   }
 
   private def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
+    if (!trackingCacheVisibility) {
+      // Do nothing if the feature flag is disabled.
+      return
+    }
+
     if (visible) {
       tidToRddBlockIds.get(taskId).foreach { blockIds =>
         blockIds.foreach { blockId =>
@@ -244,6 +258,10 @@ class BlockManagerMasterEndpoint(
   }
 
   private def updateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long): Unit = {
+    if (!trackingCacheVisibility) {
+      // Do nothing if the feature flag is disabled.
+      return
+    }
     tidToRddBlockIds.getOrElseUpdate(taskId, new mutable.HashSet[RDDBlockId])
       .add(blockId)
   }
@@ -308,7 +326,9 @@ class BlockManagerMasterEndpoint(
 
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
-      visibleRDDBlocks.remove(blockId)
+      if (trackingCacheVisibility) {
+        visibleRDDBlocks.remove(blockId)
+      }
 
       val (bmIdsExtShuffle, bmIdsExecutor) = bms.partition(_.port == externalShuffleServicePort)
       val liveExecutorsForBlock = bmIdsExecutor.map(_.executorId).toSet
@@ -750,7 +770,7 @@ class BlockManagerMasterEndpoint(
       locations.add(blockManagerId)
       // If the rdd block is already visible, ask storage manager to update the visibility status.
       blockId.asRDDId.foreach(rddBlockId =>
-        if (visibleRDDBlocks.contains(rddBlockId)) {
+        if (trackingCacheVisibility && visibleRDDBlocks.contains(rddBlockId)) {
           blockManagerInfo(blockManagerId).storageEndpoint
             .ask[Unit](MarkRDDBlockAsVisible(rddBlockId))
         }
