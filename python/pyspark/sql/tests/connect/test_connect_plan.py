@@ -32,7 +32,6 @@ if should_test_connect:
     from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.functions import col, lit
-    from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
         StringType,
@@ -331,24 +330,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
         self.assertEqual(plan.root.freq_items.support, 0.01)
 
-    def test_freqItems(self):
-        df = self.connect.readTable(table_name=self.tbl_name)
-        plan = (
-            df.filter(df.col_name > 3).freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
-        )
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 1)
-        plan = df.filter(df.col_name > 3).freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 0.01)
-
-        plan = df.stat.freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 1)
-        plan = df.stat.freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
-        self.assertEqual(plan.root.freq_items.support, 0.01)
-
     def test_limit(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         limit_plan = df.limit(10)._plan.to_proto(self.connect)
@@ -507,19 +488,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         data_source = plan.root.read.data_source
         self.assertEqual(data_source.format, "text")
         self.assertEqual(data_source.schema, "id INT")
-        self.assertEqual(len(data_source.options), 3)
-        self.assertEqual(data_source.options.get("path"), "test_path")
+        self.assertEqual(len(data_source.options), 2)
         self.assertEqual(data_source.options.get("op1"), "opv")
         self.assertEqual(data_source.options.get("op2"), "opv2")
-
-    def test_simple_udf(self):
-        u = udf(lambda x: "Martin", StringType())
-        self.assertIsNotNone(u)
-        expr = u("ThisCol", "ThatCol", "OtherCol")
-        self.assertTrue(isinstance(expr, Column))
-        self.assertTrue(isinstance(expr._expr, UserDefinedFunction))
-        u_plan = expr.to_plan(self.connect)
-        self.assertIsNotNone(u_plan)
+        self.assertEqual(len(data_source.paths), 1)
+        self.assertEqual(data_source.paths[0], "test_path")
 
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -585,6 +558,32 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             df.repartition(-1)._plan.to_proto(self.connect)
         self.assertTrue("numPartitions must be positive" in str(context.exception))
 
+    def test_repartition_by_expression(self):
+        # SPARK-41354: test dataframe.repartition(expressions)
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.repartition(10, "col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(10, plan.root.repartition_by_expression.num_partitions)
+        self.assertEqual(
+            [
+                f.unresolved_attribute.unparsed_identifier
+                for f in plan.root.repartition_by_expression.partition_exprs
+            ],
+            ["col_a", "col_b"],
+        )
+
+    def test_repartition_by_range(self):
+        # SPARK-41354: test dataframe.repartitionByRange(expressions)
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.repartitionByRange(10, "col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(10, plan.root.repartition_by_expression.num_partitions)
+        self.assertEqual(
+            [
+                f.sort_order.child.unresolved_attribute.unparsed_identifier
+                for f in plan.root.repartition_by_expression.partition_exprs
+            ],
+            ["col_a", "col_b"],
+        )
+
     def test_to(self):
         # SPARK-41464: test `to` API in Python client.
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -648,7 +647,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_print(self):
         # SPARK-41717: test print
         self.assertEqual(
-            self.connect.sql("SELECT 1")._plan.print().strip(), "<SQL query='SELECT 1'>"
+            self.connect.sql("SELECT 1")._plan.print().strip(),
+            "<SQL query='SELECT 1', args='None'>",
         )
         self.assertEqual(
             self.connect.range(1, 10)._plan.print().strip(),
@@ -686,10 +686,21 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             (None, proto.Join.JoinType.JOIN_TYPE_INNER),
             ("inner", proto.Join.JoinType.JOIN_TYPE_INNER),
             ("outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("full", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("fullouter", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("full_outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("left", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
             ("leftouter", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("left_outer", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("right", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
             ("rightouter", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
-            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("right_outer", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
+            ("semi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
             ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("left_semi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("anti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("left_anti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
             ("cross", proto.Join.JoinType.JOIN_TYPE_CROSS),
         ]:
             joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto(
@@ -730,7 +741,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_uuid_literal(self):
 
         val = uuid.uuid4()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             lit(val)
 
     def test_column_literals(self):
@@ -805,7 +816,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases
         col0 = col("a").alias("martin")
-        self.assertEqual("Column<'Alias(ColumnReference(a), (martin))'>", str(col0))
+        self.assertEqual("Column<'a AS martin'>", str(col0))
 
         col0 = col("a").alias("martin", metadata={"pii": True})
         plan = col0.to_plan(self.session.client)

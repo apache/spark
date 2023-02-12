@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import (
     Any,
@@ -33,18 +36,23 @@ from typing import (
 import sys
 import random
 import pandas
-import datetime
 import json
 import warnings
 from collections.abc import Iterable
 
-from pyspark import _NoValue, SparkContext, SparkConf
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import StructType, Row
+from pyspark.sql.types import Row, StructType
+from pyspark.sql.dataframe import (
+    DataFrame as PySparkDataFrame,
+    DataFrameNaFunctions as PySparkDataFrameNaFunctions,
+    DataFrameStatFunctions as PySparkDataFrameStatFunctions,
+)
 
+from pyspark.errors import PySparkTypeError
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
-from pyspark.sql.connect.readwriter import DataFrameWriter
+from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
@@ -54,14 +62,16 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
-from pyspark.sql.dataframe import (
-    DataFrame as PySparkDataFrame,
-    DataFrameNaFunctions as PySparkDataFrameNaFunctions,
-    DataFrameStatFunctions as PySparkDataFrameStatFunctions,
-)
+from pyspark.sql.connect.types import from_arrow_schema
+
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        LiteralType,
+        PrimitiveType,
+        OptionalPrimitiveType,
+    )
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -134,6 +144,11 @@ class DataFrame:
     alias.__doc__ = PySparkDataFrame.alias.__doc__
 
     def colRegex(self, colName: str) -> Column:
+        if not isinstance(colName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
+            )
         return Column(UnresolvedRegex(colName))
 
     colRegex.__doc__ = PySparkDataFrame.colRegex.__doc__
@@ -188,19 +203,100 @@ class DataFrame:
 
     coalesce.__doc__ = PySparkDataFrame.coalesce.__doc__
 
-    def repartition(self, numPartitions: int) -> "DataFrame":
-        if not numPartitions > 0:
-            raise ValueError("numPartitions must be positive.")
-        return DataFrame.withPlan(
-            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
-            self._session,
-        )
+    @overload
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartition(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                return DataFrame.withPlan(
+                    plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
+                    self._session,
+                )
+            else:
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, list(cols)),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, list(cols)),
+                self.sparkSession,
+            )
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_STR",
+                message_parameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
 
     repartition.__doc__ = PySparkDataFrame.repartition.__doc__
 
+    @overload
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartitionByRange(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
+        def _convert_col(col: "ColumnOrName") -> "ColumnOrName":
+            from pyspark.sql.connect.expressions import SortOrder, ColumnReference
+
+            if isinstance(col, Column):
+                if isinstance(col._expr, SortOrder):
+                    return col
+                else:
+                    return Column(SortOrder(col._expr))
+            else:
+                return Column(SortOrder(ColumnReference(col)))
+
+        if isinstance(numPartitions, int):
+            if not numPartitions > 0:
+                raise ValueError("numPartitions must be positive.")
+            if len(cols) == 0:
+                raise ValueError("At least one partition-by expression must be specified.")
+            else:
+                sort = []
+                sort.extend([_convert_col(c) for c in cols])
+                return DataFrame.withPlan(
+                    plan.RepartitionByExpression(self._plan, numPartitions, sort),
+                    self.sparkSession,
+                )
+        elif isinstance(numPartitions, (str, Column)):
+            cols = (numPartitions,) + cols
+            sort = []
+            sort.extend([_convert_col(c) for c in cols])
+            return DataFrame.withPlan(
+                plan.RepartitionByExpression(self._plan, None, sort),
+                self.sparkSession,
+            )
+        else:
+            raise TypeError("numPartitions should be an int, string or Column")
+
+    repartitionByRange.__doc__ = PySparkDataFrame.repartitionByRange.__doc__
+
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
-        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
-            raise TypeError("Parameter 'subset' must be a list of columns")
+        if subset is not None and not isinstance(subset, (list, tuple)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
 
         if subset is None:
             return DataFrame.withPlan(
@@ -340,6 +436,8 @@ class DataFrame:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot join when other._plan is empty.")
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
 
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
@@ -473,21 +571,6 @@ class DataFrame:
 
     sample.__doc__ = PySparkDataFrame.sample.__doc__
 
-    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
-        if not isinstance(metadata, dict):
-            raise TypeError("metadata should be a dict")
-
-        return DataFrame.withPlan(
-            plan.WithMetadata(
-                child=self._plan,
-                column=columnName,
-                metadata=json.dumps(metadata),
-            ),
-            session=self._session,
-        )
-
-    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
-
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
         return self.withColumnsRenamed({existing: new})
 
@@ -495,9 +578,12 @@ class DataFrame:
 
     def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
         if not isinstance(colsMap, dict):
-            raise TypeError("colsMap must be dict of existing column name and new column name.")
+            raise PySparkTypeError(
+                error_class="NOT_DICT",
+                message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
+            )
 
-        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
+        return DataFrame.withPlan(plan.WithColumnsRenamed(self._plan, colsMap), self._session)
 
     withColumnsRenamed.__doc__ = PySparkDataFrame.withColumnsRenamed.__doc__
 
@@ -505,9 +591,15 @@ class DataFrame:
         self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
     ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
-            raise TypeError("Parameter 'n' (number of rows) must be an int")
+            raise PySparkTypeError(
+                error_class="NOT_INT",
+                message_parameters={"arg_name": "n", "arg_type": type(n).__name__},
+            )
         if not isinstance(vertical, bool):
-            raise TypeError("Parameter 'vertical' must be a bool")
+            raise PySparkTypeError(
+                error_class="NOT_BOOL",
+                message_parameters={"arg_name": "vertical", "arg_type": type(vertical).__name__},
+            )
 
         _truncate: int = -1
         if isinstance(truncate, bool) and truncate:
@@ -516,8 +608,12 @@ class DataFrame:
             try:
                 _truncate = int(truncate)
             except ValueError:
-                raise TypeError(
-                    "Parameter 'truncate={}' should be either bool or int.".format(truncate)
+                raise PySparkTypeError(
+                    error_class="NOT_BOOL",
+                    message_parameters={
+                        "arg_name": "truncate",
+                        "arg_type": type(truncate).__name__,
+                    },
                 )
 
         pdf = DataFrame.withPlan(
@@ -531,8 +627,18 @@ class DataFrame:
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of column name and column.")
 
+        names: List[str] = []
+        columns: List[Column] = []
+        for columnName, column in colsMap.items():
+            names.append(columnName)
+            columns.append(column)
+
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, colsMap),
+            plan.WithColumns(
+                self._plan,
+                columnNames=names,
+                columns=columns,
+            ),
             session=self._session,
         )
 
@@ -542,11 +648,31 @@ class DataFrame:
         if not isinstance(col, Column):
             raise TypeError("col should be Column")
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, {colName: col}),
+            plan.WithColumns(
+                self._plan,
+                columnNames=[colName],
+                columns=[col],
+            ),
             session=self._session,
         )
 
     withColumn.__doc__ = PySparkDataFrame.withColumn.__doc__
+
+    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(
+                self._plan,
+                columnNames=[columnName],
+                columns=[self[columnName]],
+                metadata=[json.dumps(metadata)],
+            ),
+            session=self._session,
+        )
+
+    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
 
     def unpivot(
         self,
@@ -555,6 +681,8 @@ class DataFrame:
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
+        assert ids is not None, "ids must not be None"
+
         def to_jcols(
             cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
         ) -> List["ColumnOrName"]:
@@ -579,17 +707,26 @@ class DataFrame:
 
     melt = unpivot
 
-    def hint(self, name: str, *params: Any) -> "DataFrame":
-        for param in params:
-            # TODO(SPARK-41887): support list type as hint parameter
-            if param is not None and not isinstance(param, (int, str, float)):
+    def hint(
+        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+    ) -> "DataFrame":
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]  # type: ignore[assignment]
+
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+
+        allowed_types = (str, list, float, int)
+        for p in parameters:
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    f"param should be a str, float or int, but got {type(param).__name__}"
-                    f" {param}"
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)
+                    )
                 )
 
         return DataFrame.withPlan(
-            plan.Hint(self._plan, name, list(params)),
+            plan.Hint(self._plan, name, list(parameters)),
             session=self._session,
         )
 
@@ -659,7 +796,11 @@ class DataFrame:
             raise ValueError("Argument to UnionByName does not contain a valid plan.")
         return DataFrame.withPlan(
             plan.SetOperation(
-                self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
+                self._plan,
+                other._plan,
+                "union",
+                by_name=True,
+                allow_missing_columns=allowMissingColumns,
             ),
             session=self._session,
         )
@@ -698,6 +839,11 @@ class DataFrame:
     intersectAll.__doc__ = PySparkDataFrame.intersectAll.__doc__
 
     def where(self, condition: Union[Column, str]) -> "DataFrame":
+        if not isinstance(condition, (str, Column)):
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_STR",
+                message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            )
         return self.filter(condition)
 
     where.__doc__ = PySparkDataFrame.where.__doc__
@@ -714,9 +860,9 @@ class DataFrame:
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
         if not isinstance(value, (float, int, str, bool, dict)):
-            raise TypeError(
-                f"value should be a float, int, string, bool or dict, "
-                f"but got {type(value).__name__}"
+            raise PySparkTypeError(
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
+                message_parameters={"arg_name": "value", "arg_type": type(value).__name__},
             )
         if isinstance(value, dict):
             if len(value) == 0:
@@ -745,9 +891,9 @@ class DataFrame:
                         )
                 _cols = list(subset)
             else:
-                raise TypeError(
-                    f"cols should be a str, tuple[str] or list[str], "
-                    f"but got {type(subset).__name__}"
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OR_TUPLE",
+                    message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
                 )
 
         if isinstance(value, dict):
@@ -801,9 +947,9 @@ class DataFrame:
                         )
                 _cols = list(subset)
             else:
-                raise TypeError(
-                    f"cols should be a str, tuple[str] or list[str], "
-                    f"but got {type(subset).__name__}"
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OR_STR_OR_TUPLE",
+                    message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
                 )
 
         return DataFrame.withPlan(
@@ -827,7 +973,10 @@ class DataFrame:
             if isinstance(to_replace, dict):
                 value = None
             else:
-                raise TypeError("value argument is required when to_replace is not a dictionary.")
+                raise PySparkTypeError(
+                    error_class="ARGUMENT_REQUIRED",
+                    message_parameters={"arg_name": "value", "condition": "`to_replace` is dict"},
+                )
 
         # Helper functions
         def all_of(types: Union[Type, Tuple[Type, ...]]) -> Callable[[Iterable], bool]:
@@ -852,9 +1001,12 @@ class DataFrame:
         # Validate input types
         valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict,)):
-            raise TypeError(
-                "to_replace should be a bool, float, int, string, list, tuple, or dict. "
-                "Got {0}".format(type(to_replace))
+            raise PySparkTypeError(
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+                message_parameters={
+                    "arg_name": "to_replace",
+                    "arg_type": type(to_replace).__name__,
+                },
             )
 
         if (
@@ -949,9 +1101,15 @@ class DataFrame:
 
     def cov(self, col1: str, col2: str) -> float:
         if not isinstance(col1, str):
-            raise TypeError("col1 should be a string.")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "col1", "arg_type": type(col1).__name__},
+            )
         if not isinstance(col2, str):
-            raise TypeError("col2 should be a string.")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
+            )
         pdf = DataFrame.withPlan(
             plan.StatCov(child=self._plan, col1=col1, col2=col2),
             session=self._session,
@@ -1065,16 +1223,33 @@ class DataFrame:
     def sampleBy(
         self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
     ) -> "DataFrame":
-        if not isinstance(col, (Column, str)):
-            raise TypeError("col must be a string or a column, but got %r" % type(col))
+        from pyspark.sql.connect.expressions import ColumnReference
+
+        if isinstance(col, str):
+            col = Column(ColumnReference(col))
+        elif not isinstance(col, Column):
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_STR",
+                message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+            )
         if not isinstance(fractions, dict):
-            raise TypeError("fractions must be a dict but got %r" % type(fractions))
+            raise PySparkTypeError(
+                error_class="NOT_DICT",
+                message_parameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
+            )
         for k, v in fractions.items():
             if not isinstance(k, (float, int, str)):
-                raise TypeError("key must be float, int, or string, but got %r" % type(k))
+                raise PySparkTypeError(
+                    error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+                    message_parameters={
+                        "arg_name": "fractions",
+                        "arg_type": type(fractions).__name__,
+                        "allowed_types": "float, int, str",
+                        "return_type": type(k).__name__,
+                    },
+                )
             fractions[k] = float(v)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-
         return DataFrame.withPlan(
             plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
             session=self._session,
@@ -1131,20 +1306,13 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table = self._session.client.to_table(query)
 
-        rows: List[Row] = []
-        for row in table.to_pylist():
-            _dict: Dict[Any, Any] = {}
-            for k, v in row.items():
-                if isinstance(v, bytes):
-                    _dict[k] = bytearray(v)
-                elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
-                    # TODO: Should be controlled by "spark.sql.timestampType"
-                    # always remove the time zone for now
-                    _dict[k] = v.replace(tzinfo=None)
-                else:
-                    _dict[k] = v
-            rows.append(Row(**_dict))
-        return rows
+        schema = from_arrow_schema(table.schema)
+
+        assert schema is not None and isinstance(schema, StructType)
+
+        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+
+        return ArrowTableToRowsConversion.convert(table, schema)
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
@@ -1220,7 +1388,7 @@ class DataFrame:
     to.__doc__ = PySparkDataFrame.to.__doc__
 
     def toDF(self, *cols: str) -> "DataFrame":
-        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
+        return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
 
     toDF.__doc__ = PySparkDataFrame.toDF.__doc__
 
@@ -1385,8 +1553,11 @@ class DataFrame:
     def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("sameSemantics() is not implemented.")
 
-    def writeTo(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("writeTo() is not implemented.")
+    def writeTo(self, table: str) -> "DataFrameWriterV2":
+        assert self._plan is not None
+        return DataFrameWriterV2(self._plan, self._session, table)
+
+    writeTo.__doc__ = PySparkDataFrame.writeTo.__doc__
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
@@ -1509,67 +1680,44 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.dataframe
 
     os.chdir(os.environ["SPARK_HOME"])
 
-    if should_test_connect:
-        import pyspark.sql.connect.dataframe
+    globs = pyspark.sql.connect.dataframe.__dict__.copy()
+    # Spark Connect does not support RDD but the tests depend on them.
+    del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
+    del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+    del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
-        globs = pyspark.sql.connect.dataframe.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.dataframe tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.dataframe tests"}
-        )
+    # TODO(SPARK-41823): ambiguous column names
+    del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
+    del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
-        # Spark Connect does not support RDD but the tests depend on them.
-        del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+    # TODO(SPARK-41625): Support Structured Streaming
+    del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
 
-        # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
-        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
+    # TODO(SPARK-41818): Support saveAsTable
+    del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
 
-        # TODO(SPARK-41823): ambiguous column names
-        del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.dataframe tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
 
-        del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.dataframe,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        # TODO(SPARK-41886): The doctest output has different order
-        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
+    globs["spark"].stop()
 
-        # TODO(SPARK-41625): Support Structured Streaming
-        del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
-        # TODO(SPARK-41832): fix unionByName
-        del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
-
-        # TODO(SPARK-41818): Support saveAsTable
-        del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
-
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
-
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.dataframe,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-        globs["_spark"].stop()
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.dataframe doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

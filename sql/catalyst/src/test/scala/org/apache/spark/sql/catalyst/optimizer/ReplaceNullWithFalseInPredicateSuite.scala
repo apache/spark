@@ -55,10 +55,13 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("Not expected type - replaceNullWithFalse") {
-    val e = intercept[AnalysisException] {
-      testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
-    }.getMessage
-    assert(e.contains("'CAST(NULL AS INT)' of type int is not a boolean"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
+      },
+      errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      parameters = Map("sqlExpr" -> "\"NULL\"", "filter" -> "\"NULL\"", "type" -> "\"INT\"")
+    )
   }
 
   test("replace null in branches of If") {

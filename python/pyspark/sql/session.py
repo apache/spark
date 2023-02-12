@@ -60,7 +60,8 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred, to_str
+from pyspark.errors.exceptions.captured import install_exception_handler
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -270,10 +271,13 @@ class SparkSession(SparkConversionMixin):
                             % self._options.get("spark.master", os.environ.get("MASTER"))
                         )
 
-                    if "SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != v:
+                    if ("SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != v) and (
+                        "SPARK_LOCAL_REMOTE" in os.environ and not v.startswith("local")
+                    ):
                         raise RuntimeError(
-                            "Only one Spark Connect client URL can be set; however, got a different"
-                            "URL [%s] from the existing [%s]" % (os.environ["SPARK_REMOTE"], v)
+                            "Only one Spark Connect client URL can be set; however, got a "
+                            "different URL [%s] from the existing [%s]"
+                            % (os.environ["SPARK_REMOTE"], v)
                         )
 
             with self._lock:
@@ -415,31 +419,39 @@ class SparkSession(SparkConversionMixin):
             True
             """
             from pyspark.context import SparkContext
+            from pyspark.conf import SparkConf
 
             opts = dict(self._options)
-            if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
-                with SparkContext._lock:
-                    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-
-                    if (
-                        SparkContext._active_spark_context is None
-                        and SparkSession._instantiatedSession is None
-                    ):
-                        url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
-                        os.environ["SPARK_REMOTE"] = url
-                        opts["spark.remote"] = url
-                        return RemoteSparkSession.builder.config(map=opts).getOrCreate()
-                    elif "SPARK_TESTING" not in os.environ:
-                        raise RuntimeError(
-                            "Cannot start a remote Spark session because there "
-                            "is a regular Spark Connect already running."
-                        )
-
-                # Cannot reach here in production. Test-only.
-                return RemoteSparkSession.builder.config(map=opts).getOrCreate()
 
             with self._lock:
-                from pyspark.conf import SparkConf
+                if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                    with SparkContext._lock:
+                        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                        if (
+                            SparkContext._active_spark_context is None
+                            and SparkSession._instantiatedSession is None
+                        ):
+                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                            if url.startswith("local"):
+                                os.environ["SPARK_LOCAL_REMOTE"] = "1"
+                                RemoteSparkSession._start_connect_server(url, opts)
+                                url = "sc://localhost"
+
+                            os.environ["SPARK_REMOTE"] = url
+                            opts["spark.remote"] = url
+                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                        elif "SPARK_LOCAL_REMOTE" in os.environ:
+                            url = "sc://localhost"
+                            os.environ["SPARK_REMOTE"] = url
+                            opts["spark.remote"] = url
+                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                        else:
+                            raise RuntimeError(
+                                "Cannot start a remote Spark session because there "
+                                "is a regular Spark Connect already running."
+                            )
 
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
@@ -697,15 +709,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Returns
         -------
         :class:`UDFRegistration`
 
         Examples
         --------
-        >>> spark.udf
-        <pyspark.sql.udf.UDFRegistration object ...>
-
         Register a Python UDF, and use it in SQL.
 
         >>> strlen = spark.udf.register("strlen", lambda x: len(x))
@@ -1296,7 +1308,7 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str, args: Dict[str, str] = {}, **kwargs: Any) -> DataFrame:
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None, **kwargs: Any) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
         standard formatter. The method binds named parameters to SQL literals from `args`.
@@ -1404,7 +1416,7 @@ class SparkSession(SparkConversionMixin):
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            return DataFrame(self._jsparkSession.sql(sqlQuery, args), self)
+            return DataFrame(self._jsparkSession.sql(sqlQuery, args or {}), self)
         finally:
             if len(kwargs) > 0:
                 formatter.clear()

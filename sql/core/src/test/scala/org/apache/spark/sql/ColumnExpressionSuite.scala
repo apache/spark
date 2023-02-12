@@ -1087,17 +1087,22 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should throw an exception if intermediate field reference is ambiguous") {
-    intercept[AnalysisException] {
-      val structLevel2: DataFrame = spark.createDataFrame(
-        sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
-        StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a", structType, nullable = false),
-            StructField("a", structType, nullable = false))),
-            nullable = false))))
+    checkError(
+      exception = intercept[AnalysisException] {
+        val structLevel2: DataFrame = spark.createDataFrame(
+          sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+          StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", structType, nullable = false),
+              StructField("a", structType, nullable = false))),
+              nullable = false))))
 
-      structLevel2.withColumn("a", $"a".withField("a.b", lit(2)))
-    }.getMessage should include("Ambiguous reference to fields")
+        structLevel2.withColumn("a", $"a".withField("a.b", lit(2)))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
   }
 
   test("withField should add field with no name") {
@@ -1647,10 +1652,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".withField("a.c", lit(3))),
       Row(Row(Row(1, 2, 3))))
 
-    intercept[AnalysisException] {
-      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
-        .select($"struct_col".withField("a.c", lit(3)))
-    }.getMessage should include("Ambiguous reference to fields")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+          .select($"struct_col".withField("a.c", lit(3)))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
 
     checkAnswer(
       sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
@@ -1862,17 +1872,22 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if intermediate field reference is ambiguous") {
-    intercept[AnalysisException] {
-      val structLevel2: DataFrame = spark.createDataFrame(
-        sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
-        StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a", structType, nullable = false),
-            StructField("a", structType, nullable = false))),
-            nullable = false))))
+    checkError(
+      exception = intercept[AnalysisException] {
+        val structLevel2: DataFrame = spark.createDataFrame(
+          sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+          StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", structType, nullable = false),
+              StructField("a", structType, nullable = false))),
+              nullable = false))))
 
-      structLevel2.withColumn("a", $"a".dropFields("a.b"))
-    }.getMessage should include("Ambiguous reference to fields")
+        structLevel2.withColumn("a", $"a".dropFields("a.b"))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
   }
 
   test("dropFields should drop field in struct") {
@@ -2208,10 +2223,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".dropFields("a.b")),
       Row(Row(Row(1))))
 
-    intercept[AnalysisException] {
-      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
-        .select($"struct_col".dropFields("a.c"))
-    }.getMessage should include("Ambiguous reference to fields")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+          .select($"struct_col".dropFields("a.c"))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
 
     checkAnswer(
       sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2, 'c', 3)) struct_col")

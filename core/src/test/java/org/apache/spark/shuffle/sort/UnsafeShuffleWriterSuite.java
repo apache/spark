@@ -70,7 +70,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   long[] partitionSizesInMergedFile;
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
   SparkConf conf;
-  final Serializer serializer = new KryoSerializer(new SparkConf());
+  final Serializer serializer =
+    new KryoSerializer(new SparkConf().set("spark.kryo.unsafe", "false"));
   TaskMetrics taskMetrics;
 
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
@@ -97,7 +98,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     spillFilesCreated.clear();
     conf = new SparkConf()
       .set(package$.MODULE$.BUFFER_PAGESIZE().key(), "1m")
-      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
+      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)
+      .set("spark.kryo.unsafe", "false");
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);

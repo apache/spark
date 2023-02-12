@@ -224,6 +224,12 @@ public class ExternalBlockHandler extends RpcHandler
       } finally {
         responseDelayContext.stop();
       }
+    } else if (msgObj instanceof RemoveShuffleMerge) {
+      RemoveShuffleMerge msg = (RemoveShuffleMerge) msgObj;
+      checkAuth(client, msg.appId);
+      logger.info("Removing shuffle merge data for application {} shuffle {} shuffleMerge {}",
+          msg.appId, msg.shuffleId, msg.shuffleMergeId);
+      mergeManager.removeShuffleMerge(msg);
     } else if (msgObj instanceof DiagnoseCorruption) {
       DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
       checkAuth(client, msg.appId);

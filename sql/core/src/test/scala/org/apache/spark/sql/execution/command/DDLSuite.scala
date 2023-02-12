@@ -984,8 +984,16 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(e.getMessage.contains(
-      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
+    checkError(
+      exception = e,
+      errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+      parameters = Map(
+        "alternative" -> "DROP TABLE",
+        "operation" -> "DROP VIEW",
+        "foundType" -> "EXTERNAL",
+        "requiredType" -> "VIEW",
+        "objectName" -> "spark_catalog.dbx.tab1")
+    )
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1166,8 +1174,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withTable("tab1", "tab2") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
-        assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
+        checkError(
+          exception = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") },
+          errorClass = "UNABLE_TO_INFER_SCHEMA",
+          parameters = Map("format" -> "JSON")
+        )
 
         sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
         checkAnswer(spark.table("tab2"), Row("a", "b"))

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -140,8 +140,8 @@ object FunctionRegistryBase {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params.length)
+          throw QueryCompilationErrors.wrongNumArgsError(
+            name, validParametersCount, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -534,6 +534,7 @@ object FunctionRegistry {
     expression[Length]("length"),
     expression[Length]("len", setAlias = true, Some("3.4.0")),
     expression[Levenshtein]("levenshtein"),
+    expression[Luhncheck]("luhn_check"),
     expression[Like]("like"),
     expression[ILike]("ilike"),
     expression[Lower]("lower"),
@@ -661,6 +662,7 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
     expression[ArraysOverlap]("arrays_overlap"),
+    expression[ArrayInsert]("array_insert"),
     expression[ArrayIntersect]("array_intersect"),
     expression[ArrayJoin]("array_join"),
     expression[ArrayPosition]("array_position"),
@@ -687,6 +689,7 @@ object FunctionRegistry {
     expression[Shuffle]("shuffle"),
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
+    expression[ArrayAppend]("array_append"),
     expression[Reverse]("reverse"),
     expression[Concat]("concat"),
     expression[Flatten]("flatten"),
@@ -903,7 +906,7 @@ object FunctionRegistry {
     val builder = (args: Seq[Expression]) => {
       val argSize = args.size
       if (argSize != 1) {
-        throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", argSize)
+        throw QueryCompilationErrors.wrongNumArgsError(name, Seq(1), argSize)
       }
       Cast(args.head, dataType)
     }
@@ -962,8 +965,29 @@ object TableFunctionRegistry {
     (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
+  def generator[T <: Generator : ClassTag](name: String, outer: Boolean = false)
+      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
+    val newBuilder = (expressions: Seq[Expression]) => {
+      val generator = builder(expressions)
+      assert(generator.isInstanceOf[Generator])
+      Generate(
+        generator,
+        unrequiredChildIndex = Nil,
+        outer = outer,
+        qualifier = None,
+        generatorOutput = Nil,
+        child = OneRowRelation())
+    }
+    (name, (info, newBuilder))
+  }
+
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
-    logicalPlan[Range]("range")
+    logicalPlan[Range]("range"),
+    generator[Explode]("explode"),
+    generator[Explode]("explode_outer", outer = true),
+    generator[Inline]("inline"),
+    generator[Inline]("inline_outer", outer = true)
   )
 
   val builtin: SimpleTableFunctionRegistry = {

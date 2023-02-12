@@ -637,6 +637,85 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class UDT(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TYPE_FIELD_NUMBER: builtins.int
+        JVM_CLASS_FIELD_NUMBER: builtins.int
+        PYTHON_CLASS_FIELD_NUMBER: builtins.int
+        SERIALIZED_PYTHON_CLASS_FIELD_NUMBER: builtins.int
+        SQL_TYPE_FIELD_NUMBER: builtins.int
+        type: builtins.str
+        jvm_class: builtins.str
+        python_class: builtins.str
+        serialized_python_class: builtins.str
+        @property
+        def sql_type(self) -> global___DataType: ...
+        def __init__(
+            self,
+            *,
+            type: builtins.str = ...,
+            jvm_class: builtins.str | None = ...,
+            python_class: builtins.str | None = ...,
+            serialized_python_class: builtins.str | None = ...,
+            sql_type: global___DataType | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_jvm_class",
+                b"_jvm_class",
+                "_python_class",
+                b"_python_class",
+                "_serialized_python_class",
+                b"_serialized_python_class",
+                "jvm_class",
+                b"jvm_class",
+                "python_class",
+                b"python_class",
+                "serialized_python_class",
+                b"serialized_python_class",
+                "sql_type",
+                b"sql_type",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_jvm_class",
+                b"_jvm_class",
+                "_python_class",
+                b"_python_class",
+                "_serialized_python_class",
+                b"_serialized_python_class",
+                "jvm_class",
+                b"jvm_class",
+                "python_class",
+                b"python_class",
+                "serialized_python_class",
+                b"serialized_python_class",
+                "sql_type",
+                b"sql_type",
+                "type",
+                b"type",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_jvm_class", b"_jvm_class"]
+        ) -> typing_extensions.Literal["jvm_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_python_class", b"_python_class"]
+        ) -> typing_extensions.Literal["python_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_serialized_python_class", b"_serialized_python_class"
+            ],
+        ) -> typing_extensions.Literal["serialized_python_class"] | None: ...
+
     NULL_FIELD_NUMBER: builtins.int
     BINARY_FIELD_NUMBER: builtins.int
     BOOLEAN_FIELD_NUMBER: builtins.int
@@ -659,6 +738,7 @@ class DataType(google.protobuf.message.Message):
     ARRAY_FIELD_NUMBER: builtins.int
     STRUCT_FIELD_NUMBER: builtins.int
     MAP_FIELD_NUMBER: builtins.int
+    UDT_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -708,6 +788,9 @@ class DataType(google.protobuf.message.Message):
     def struct(self) -> global___DataType.Struct: ...
     @property
     def map(self) -> global___DataType.Map: ...
+    @property
+    def udt(self) -> global___DataType.UDT:
+        """UserDefinedType"""
     def __init__(
         self,
         *,
@@ -733,6 +816,7 @@ class DataType(google.protobuf.message.Message):
         array: global___DataType.Array | None = ...,
         struct: global___DataType.Struct | None = ...,
         map: global___DataType.Map | None = ...,
+        udt: global___DataType.UDT | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -779,6 +863,8 @@ class DataType(google.protobuf.message.Message):
             b"timestamp",
             "timestamp_ntz",
             b"timestamp_ntz",
+            "udt",
+            b"udt",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -830,6 +916,8 @@ class DataType(google.protobuf.message.Message):
             b"timestamp",
             "timestamp_ntz",
             b"timestamp_ntz",
+            "udt",
+            b"udt",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -861,6 +949,7 @@ class DataType(google.protobuf.message.Message):
         "array",
         "struct",
         "map",
+        "udt",
     ] | None: ...
 
 global___DataType = DataType

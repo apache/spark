@@ -18,7 +18,7 @@
 #
 
 # Utility for checking whether generated codes in PySpark are out of sync.
-#   usage: ./dev/check-codegen-python.py
+#   usage: ./dev/connect-check-protos.py
 
 import os
 import sys

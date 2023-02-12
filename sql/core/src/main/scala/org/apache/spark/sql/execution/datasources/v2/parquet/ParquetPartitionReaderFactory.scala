@@ -16,10 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import java.net.URI
 import java.time.ZoneId
 
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -89,7 +87,7 @@ case class ParquetPartitionReaderFactory(
 
   private def getFooter(file: PartitionedFile): ParquetMetadata = {
     val conf = broadcastedConf.value.value
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.toPath
 
     if (aggregation.isEmpty) {
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
@@ -132,7 +130,8 @@ case class ParquetPartitionReaderFactory(
           val footer = getFooter(file)
 
           if (footer != null && footer.getBlocks.size > 0) {
-            ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath, dataSchema,
+            ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
+              dataSchema,
               partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(footer.getFileMetaData))
           } else {
@@ -175,7 +174,7 @@ case class ParquetPartitionReaderFactory(
         private val batch: ColumnarBatch = {
           val footer = getFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
-            val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath,
+            val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
               dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(footer.getFileMetaData))
             AggregatePushDownUtils.convertAggregatesRowToBatch(
@@ -209,7 +208,7 @@ case class ParquetPartitionReaderFactory(
           RebaseSpec) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
 
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.toPath
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
     lazy val footerFileMetaData = getFooter(file).getFileMetaData

@@ -191,6 +191,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      executionId,
       "test",
       "test",
       df.queryExecution.toString,
@@ -343,7 +344,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -381,6 +382,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      executionId,
       "test",
       "test",
       df.queryExecution.toString,
@@ -410,6 +412,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",
@@ -452,6 +455,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      executionId,
       "test",
       "test",
       df.queryExecution.toString,
@@ -481,6 +485,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",
@@ -512,6 +517,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",
@@ -653,6 +659,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
+      1,
       "test",
       "test",
       df.queryExecution.toString,
@@ -661,6 +668,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       Map.empty))
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      2,
       2,
       "test",
       "test",
@@ -678,6 +686,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     // Start execution 3 and execution 2 should be evicted.
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      3,
       3,
       "test",
       "test",
@@ -714,6 +723,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
         .allNodes.flatMap(_.metrics.map(_.accumulatorId))
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",
@@ -999,6 +1009,21 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     }
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     assert(received)
+  }
+
+  test("SPARK-42100: onJobStart handle event with unregistered executionId shouldn't throw NPE") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 5
+    // Using protobuf serialization will throw npe before SPARK-42100
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Nil,
+      createProperties(executionId)))
+
+    assertJobs(statusStore.execution(executionId), running = Seq(0))
   }
 }
 

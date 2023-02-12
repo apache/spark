@@ -24,19 +24,16 @@ import org.apache.commons.collections4.MapUtils
 
 import org.apache.spark.status.StageDataWrapper
 import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPeakMetricsDistributions, InputMetricDistributions, InputMetrics, OutputMetricDistributions, OutputMetrics, ShufflePushReadMetricDistributions, ShufflePushReadMetrics, ShuffleReadMetricDistributions, ShuffleReadMetrics, ShuffleWriteMetricDistributions, ShuffleWriteMetrics, SpeculationStageSummary, StageData, TaskData, TaskMetricDistributions, TaskMetrics}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils._
 import org.apache.spark.util.Utils.weakIntern
 
-class StageDataWrapperSerializer extends ProtobufSerDe {
+class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
 
-  override val supportClass: Class[_] = classOf[StageDataWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val s = input.asInstanceOf[StageDataWrapper]
+  override def serialize(input: StageDataWrapper): Array[Byte] = {
     val builder = StoreTypes.StageDataWrapper.newBuilder()
-    builder.setInfo(serializeStageData(s.info))
-    s.jobIds.foreach(id => builder.addJobIds(id.toLong))
-    s.locality.foreach { entry =>
+    builder.setInfo(serializeStageData(input.info))
+    input.jobIds.foreach(id => builder.addJobIds(id.toLong))
+    input.locality.foreach { entry =>
       builder.putLocality(entry._1, entry._2)
     }
     builder.build().toByteArray
@@ -89,12 +86,12 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       .setShuffleWriteBytes(stageData.shuffleWriteBytes)
       .setShuffleWriteTime(stageData.shuffleWriteTime)
       .setShuffleWriteRecords(stageData.shuffleWriteRecords)
-      .setName(stageData.name)
-      .setDetails(stageData.details)
-      .setSchedulingPool(stageData.schedulingPool)
       .setResourceProfileId(stageData.resourceProfileId)
       .setIsShufflePushEnabled(stageData.isShufflePushEnabled)
       .setShuffleMergersCount(stageData.shuffleMergersCount)
+    setStringField(stageData.name, stageDataBuilder.setName)
+    setStringField(stageData.details, stageDataBuilder.setDetails)
+    setStringField(stageData.schedulingPool, stageDataBuilder.setSchedulingPool)
     stageData.submissionTime.foreach { d =>
       stageDataBuilder.setSubmissionTime(d.getTime)
     }
@@ -152,13 +149,13 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       .setAttempt(t.attempt)
       .setPartitionId(t.partitionId)
       .setLaunchTime(t.launchTime.getTime)
-      .setExecutorId(t.executorId)
-      .setHost(t.host)
-      .setStatus(t.status)
-      .setTaskLocality(t.taskLocality)
       .setSpeculative(t.speculative)
       .setSchedulerDelay(t.schedulerDelay)
       .setGettingResultTime(t.gettingResultTime)
+    setStringField(t.executorId, taskDataBuilder.setExecutorId)
+    setStringField(t.host, taskDataBuilder.setHost)
+    setStringField(t.status, taskDataBuilder.setStatus)
+    setStringField(t.taskLocality, taskDataBuilder.setTaskLocality)
     t.resultFetchStart.foreach { rfs =>
       taskDataBuilder.setResultFetchStart(rfs.getTime)
     }
@@ -396,10 +393,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       getOptional(binary.hasFirstTaskLaunchedTime, () => new Date(binary.getFirstTaskLaunchedTime))
     val completionTime =
       getOptional(binary.hasCompletionTime, () => new Date(binary.getCompletionTime))
-    val failureReason =
-      getOptional(binary.hasFailureReason, () => weakIntern(binary.getFailureReason))
-    val description =
-      getOptional(binary.hasDescription, () => weakIntern(binary.getDescription))
+    val failureReason = getOptional(binary.hasFailureReason, binary.getFailureReason)
+    val description = getOptional(binary.hasDescription, binary.getDescription)
     val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
     val tasks = if (MapUtils.isNotEmpty(binary.getTasksMap)) {
       Some(binary.getTasksMap.asScala.map(
@@ -470,10 +465,10 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       shuffleWriteBytes = binary.getShuffleWriteBytes,
       shuffleWriteTime = binary.getShuffleWriteTime,
       shuffleWriteRecords = binary.getShuffleWriteRecords,
-      name = weakIntern(binary.getName),
+      name = getStringField(binary.hasName, () => binary.getName),
       description = description,
-      details = weakIntern(binary.getDetails),
-      schedulingPool = weakIntern(binary.getSchedulingPool),
+      details = getStringField(binary.hasDetails, () => binary.getDetails),
+      schedulingPool = getStringField(binary.hasSchedulingPool, () => binary.getSchedulingPool),
       rddIds = binary.getRddIdsList.asScala.map(_.toInt),
       accumulatorUpdates = accumulatorUpdates,
       tasks = tasks,
@@ -641,13 +636,14 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       launchTime = new Date(binary.getLaunchTime),
       resultFetchStart = resultFetchStart,
       duration = duration,
-      executorId = weakIntern(binary.getExecutorId),
-      host = weakIntern(binary.getHost),
-      status = weakIntern(binary.getStatus),
-      taskLocality = weakIntern(binary.getTaskLocality),
+      executorId = getStringField(binary.hasExecutorId, () => weakIntern(binary.getExecutorId)),
+      host = getStringField(binary.hasHost, () => weakIntern(binary.getHost)),
+      status = getStringField(binary.hasStatus, () => weakIntern(binary.getStatus)),
+      taskLocality =
+        getStringField(binary.hasTaskLocality, () => weakIntern(binary.getTaskLocality)),
       speculative = binary.getSpeculative,
       accumulatorUpdates = accumulatorUpdates,
-      errorMessage = getOptional(binary.hasErrorMessage, () => weakIntern(binary.getErrorMessage)),
+      errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
       taskMetrics = taskMetrics,
       executorLogs = binary.getExecutorLogsMap.asScala.toMap,
       schedulerDelay = binary.getSchedulerDelay,

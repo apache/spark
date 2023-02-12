@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 from typing import (
     Any,
@@ -80,14 +83,8 @@ class GroupedData:
 
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            # There is a special case for count(*) which is rewritten into count(1).
             # Convert the dict into key value pairs
-            aggregate_cols = [
-                _invoke_function(
-                    exprs[0][k], lit(1) if exprs[0][k] == "count" and k == "*" else col(k)
-                )
-                for k in exprs[0]
-            ]
+            aggregate_cols = [_invoke_function(exprs[0][k], col(k)) for k in exprs[0]]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -223,41 +220,27 @@ GroupedData.__doc__ = PySparkGroupedData.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
-    from pyspark import SparkContext, SparkConf
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.group
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.group.__dict__.copy()
 
-    if should_test_connect:
-        import pyspark.sql.connect.group
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
+    )
 
-        globs = pyspark.sql.connect.group.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.group tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.group tests"})
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.group,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.group,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
-        )
-        globs["_spark"].stop()
-        globs["spark"].stop()
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.group doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

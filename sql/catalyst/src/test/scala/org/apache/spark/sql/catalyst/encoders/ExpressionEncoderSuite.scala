@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -480,6 +480,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(ScroogeLikeExample(1),
     "SPARK-40385 class with only a companion object constructor")
 
+  encodeDecodeTest(Array(Set(1, 2), Set(2, 3)), "array of sets")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("AnyVal class with Any fields") {
@@ -488,7 +490,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     checkError(
       exception = exception,
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "Any")
+      parameters = Map(
+        "typeName" -> "Any",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 

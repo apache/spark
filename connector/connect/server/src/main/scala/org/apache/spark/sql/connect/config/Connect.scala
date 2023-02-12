@@ -18,14 +18,15 @@ package org.apache.spark.sql.connect.config
 
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.connect.common.config.ConnectCommon
 
-private[spark] object Connect {
+object Connect {
 
   val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
       .version("3.4.0")
       .intConf
-      .createWithDefault(15002)
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_BINDING_PORT)
 
   val CONNECT_GRPC_INTERCEPTOR_CLASSES =
     ConfigBuilder("spark.connect.grpc.interceptor.classes")

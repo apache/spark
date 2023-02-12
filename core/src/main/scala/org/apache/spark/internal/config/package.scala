@@ -2462,6 +2462,13 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("5s")
 
+  private[spark] val ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE =
+    ConfigBuilder("spark.submit.proxyUser.allowCustomClasspathInClusterMode")
+      .internal()
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val RDD_CACHE_VISIBILITY_TRACKING_ENABLED =
     ConfigBuilder("spark.rdd.cache.visibilityTracking.enabled")
       .internal()

@@ -47,7 +47,10 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
 
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
-    val enc = ScalaReflection.encoderFor[T]
+    apply(ScalaReflection.encoderFor[T])
+  }
+
+  def apply[T](enc: AgnosticEncoder[T]): ExpressionEncoder[T] = {
     new ExpressionEncoder[T](
       ScalaReflection.serializerFor(enc),
       ScalaReflection.deserializerFor(enc),
@@ -56,16 +59,7 @@ object ExpressionEncoder {
 
   // TODO: improve error message for java bean encoder.
   def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
-    val schema = JavaTypeInference.inferDataType(beanClass)._1
-    assert(schema.isInstanceOf[StructType])
-
-    val objSerializer = JavaTypeInference.serializerFor(beanClass)
-    val objDeserializer = JavaTypeInference.deserializerFor(beanClass)
-
-    new ExpressionEncoder[T](
-      objSerializer,
-      objDeserializer,
-      ClassTag[T](beanClass))
+     apply(JavaTypeInference.encoderFor(beanClass))
   }
 
   /**

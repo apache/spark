@@ -24,10 +24,10 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
@@ -80,7 +80,7 @@ private[hive] object OrcFileOperator extends Logging {
             logWarning(s"Skipped the footer in the corrupted file: $path", e)
             None
           } else {
-            throw new SparkException(s"Could not read footer for file: $path", e)
+            throw QueryExecutionErrors.cannotReadFooterForFileError(path, e)
           }
       }
       path -> reader

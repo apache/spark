@@ -2027,27 +2027,33 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
+    val tableName = "t"
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true",
         SQLConf.FASTFAIL_ON_FILEFORMAT_OUTPUT.key -> fastFail.toString) {
-        withTable("t") {
+        withTable(tableName) {
           sql(
-            """
-              |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+            s"""
+              |CREATE TABLE $tableName(i INT, part1 INT) USING PARQUET
               |PARTITIONED BY (part1)
           """.stripMargin)
 
           val df = Seq((1, 1)).toDF("i", "part1")
           val err = intercept[SparkException] {
-            df.write.mode("overwrite").format("parquet").insertInto("t")
+            df.write.mode("overwrite").format("parquet").insertInto(tableName)
           }
 
           if (fastFail) {
             assert(err.getMessage.contains("can not write to output file: " +
               "org.apache.hadoop.fs.FileAlreadyExistsException"))
           } else {
-            assert(err.getMessage.contains("Task failed while writing rows"))
+            checkError(
+              exception = err.getCause.asInstanceOf[SparkException],
+              errorClass = "TASK_WRITE_FAILED",
+              parameters = Map("path" -> s".*$tableName"),
+              matchPVals = true
+            )
           }
         }
       }
@@ -2120,7 +2126,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             """.stripMargin)
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        sqlState = "42000",
+        sqlState = "42703",
         parameters = Map(
           "objectName" -> "`c3`",
           "proposal" ->
@@ -2307,6 +2313,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
       }
+    }
+  }
+
+  test("SPARK-42286: Insert into a table select from case when with cast, positive test") {
+    withTable("t1", "t2") {
+      sql("create table t1 (x int) using parquet")
+      sql("insert into t1 values (1), (2)")
+      sql("create table t2 (x Decimal(9, 0)) using parquet")
+      sql("insert into t2 select 0 - (case when x = 1 then 1 else x end) from t1 where x = 1")
+      checkAnswer(spark.table("t2"), Row(-1))
     }
   }
 }

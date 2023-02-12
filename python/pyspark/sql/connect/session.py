@@ -14,32 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from threading import RLock
+from pyspark.sql.connect import check_dependencies
+
+check_dependencies(__name__, __file__)
+
+import os
+import warnings
 from collections.abc import Sized
+from distutils.version import LooseVersion
 from functools import reduce
-
-import numpy as np
-import pandas as pd
-import pyarrow as pa
-
-from pyspark import SparkContext, SparkConf
-from pyspark.sql.session import classproperty, SparkSession as PySparkSession
-from pyspark.sql.types import (
-    _infer_schema,
-    _has_nulltype,
-    _merge_type,
-    Row,
-    DataType,
-    StructType,
-    AtomicType,
-)
-from pyspark.sql.utils import to_str
-
-from pyspark.sql.connect.client import SparkConnectClient
-from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation
-from pyspark.sql.connect.readwriter import DataFrameReader
-
+from threading import RLock
 from typing import (
     Optional,
     Any,
@@ -53,9 +37,38 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import numpy as np
+import pandas as pd
+import pyarrow as pa
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_datetime64_dtype,
+    is_datetime64tz_dtype,
+)
+
+from pyspark import SparkContext, SparkConf, __version__
+from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation
+from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
+from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
+from pyspark.sql.session import classproperty, SparkSession as PySparkSession
+from pyspark.sql.types import (
+    _infer_schema,
+    _has_nulltype,
+    _merge_type,
+    Row,
+    DataType,
+    StructType,
+    AtomicType,
+    TimestampType,
+)
+from pyspark.sql.utils import to_str
+
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
+    from pyspark.sql.connect.udf import UDFRegistration
 
 
 class SparkSession:
@@ -158,7 +171,7 @@ class SparkSession:
         infer_dict_as_struct = False
         infer_array_from_first_element = False
         prefer_timestamp_ntz = False
-        schema = reduce(
+        return reduce(
             _merge_type,
             (
                 _infer_schema(
@@ -171,9 +184,6 @@ class SparkSession:
                 for row in data
             ),
         )
-        if _has_nulltype(schema):
-            raise ValueError("Some of types cannot be determined after inferring")
-        return schema
 
     def createDataFrame(
         self,
@@ -184,13 +194,17 @@ class SparkSession:
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
-        table: Optional[pa.Table] = None
         _schema: Optional[Union[AtomicType, StructType]] = None
         _schema_str: Optional[str] = None
         _cols: Optional[List[str]] = None
+        _num_cols: Optional[int] = None
 
         if isinstance(schema, (AtomicType, StructType)):
             _schema = schema
+            if isinstance(schema, StructType):
+                _num_cols = len(schema.fields)
+            else:
+                _num_cols = 1
 
         elif isinstance(schema, str):
             _schema_str = schema
@@ -198,6 +212,7 @@ class SparkSession:
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+            _num_cols = len(_cols)
 
         if isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
@@ -207,8 +222,41 @@ class SparkSession:
             else:
                 raise ValueError("can not infer schema from empty dataset")
 
+        _table: Optional[pa.Table] = None
+        _inferred_schema: Optional[StructType] = None
+
         if isinstance(data, pd.DataFrame):
-            table = pa.Table.from_pandas(data)
+            # Logic was borrowed from `_create_from_pandas_with_arrow` in
+            # `pyspark.sql.pandas.conversion.py`. Should ideally deduplicate the logics.
+
+            # If no schema supplied by user then get the names of columns only
+            if schema is None:
+                _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+
+            # Determine arrow types to coerce data when creating batches
+            if isinstance(schema, StructType):
+                arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+                _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
+            elif isinstance(schema, DataType):
+                raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
+            else:
+                # Any timestamps must be coerced to be compatible with Spark
+                arrow_types = [
+                    to_arrow_type(TimestampType())
+                    if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
+                    else None
+                    for t in data.dtypes
+                ]
+
+            ser = ArrowStreamPandasSerializer(
+                _get_local_timezone(),  # 'spark.session.timezone' should be respected
+                False,  # 'spark.sql.execution.pandas.convertToArrowArraySafely' should be respected
+                True,
+            )
+
+            _table = pa.Table.from_batches(
+                [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
+            )
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
@@ -227,7 +275,7 @@ class SparkSession:
                         f"new values have {len(_cols)} elements"
                     )
 
-                table = pa.Table.from_arrays([pa.array(data)], _cols)
+                _table = pa.Table.from_arrays([pa.array(data)], _cols)
             else:
                 if data.shape[1] != len(_cols):
                     raise ValueError(
@@ -235,77 +283,66 @@ class SparkSession:
                         f"new values have {len(_cols)} elements"
                     )
 
-                table = pa.Table.from_arrays(
+                _table = pa.Table.from_arrays(
                     [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
                 )
 
         else:
             _data = list(data)
 
-            if _schema is None and isinstance(_data[0], (Row, dict)):
-                if isinstance(_data[0], dict):
-                    # Sort the data to respect inferred schema.
-                    # For dictionaries, we sort the schema in alphabetical order.
-                    _data = [dict(sorted(d.items())) for d in _data]
+            if isinstance(_data[0], dict):
+                # Sort the data to respect inferred schema.
+                # For dictionaries, we sort the schema in alphabetical order.
+                _data = [dict(sorted(d.items())) for d in _data]
 
-                _schema = self._inferSchemaFromList(_data, _cols)
-                if _cols is not None:
-                    for i, name in enumerate(_cols):
-                        _schema.fields[i].name = name
-                        _schema.names[i] = name
-
-            if _cols is None:
-                if _schema is None:
-                    if isinstance(_data[0], (list, tuple)):
-                        _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
-                    else:
-                        _cols = ["_1"]
-                elif isinstance(_schema, StructType):
-                    _cols = _schema.names
-                else:
-                    _cols = ["value"]
-
-            if isinstance(_data[0], Row):
-                table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
-            elif isinstance(_data[0], dict):
-                table = pa.Table.from_pylist(_data)
-            elif isinstance(_data[0], (list, tuple)):
-                table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in _data])
-            else:
+            elif not isinstance(_data[0], (Row, tuple, list, dict)) and not hasattr(
+                _data[0], "__dict__"
+            ):
                 # input data can be [1, 2, 3]
-                table = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
+                # we need to convert it to [[1], [2], [3]] to be able to infer schema.
+                _data = [[d] for d in _data]
 
-        # Validate number of columns
-        num_cols = table.shape[1]
-        if (
-            _schema is not None
-            and isinstance(_schema, StructType)
-            and len(_schema.fields) != num_cols
-        ):
-            raise ValueError(
-                f"Length mismatch: Expected axis has {num_cols} elements, "
-                f"new values have {len(_schema.fields)} elements"
-            )
+            _inferred_schema = self._inferSchemaFromList(_data, _cols)
 
-        if _cols is not None and len(_cols) != num_cols:
+            if _has_nulltype(_inferred_schema):
+                # For cases like createDataFrame([("Alice", None, 80.1)], schema)
+                # we can not infer the schema from the data itself.
+                warnings.warn("failed to infer the schema from data")
+                if _schema is None or not isinstance(_schema, StructType):
+                    raise ValueError(
+                        "Some of types cannot be determined after inferring, "
+                        "a StructType Schema is required in this case"
+                    )
+                _inferred_schema = _schema
+
+            from pyspark.sql.connect.conversion import LocalDataToArrowConversion
+
+            # Spark Connect will try its best to build the Arrow table with the
+            # inferred schema in the client side, and then rename the columns and
+            # cast the datatypes in the server side.
+            _table = LocalDataToArrowConversion.convert(_data, _inferred_schema)
+
+        # TODO: Beside the validation on number of columns, we should also check
+        # whether the Arrow Schema is compatible with the user provided Schema.
+        if _num_cols is not None and _num_cols != _table.shape[1]:
             raise ValueError(
-                f"Length mismatch: Expected axis has {num_cols} elements, "
-                f"new values have {len(_cols)} elements"
+                f"Length mismatch: Expected axis has {_num_cols} elements, "
+                f"new values have {_table.shape[1]} elements"
             )
 
         if _schema is not None:
-            return DataFrame.withPlan(LocalRelation(table, schema=_schema.json()), self)
+            return DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
         elif _schema_str is not None:
-            return DataFrame.withPlan(LocalRelation(table, schema=_schema_str), self)
+            return DataFrame.withPlan(LocalRelation(_table, schema=_schema_str), self)
         elif _cols is not None and len(_cols) > 0:
-            return DataFrame.withPlan(LocalRelation(table), self).toDF(*_cols)
+            return DataFrame.withPlan(LocalRelation(_table), self).toDF(*_cols)
         else:
-            return DataFrame.withPlan(LocalRelation(table), self)
+            return DataFrame.withPlan(LocalRelation(_table), self)
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sqlQuery), self)
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
+        return DataFrame.withPlan(SQL(sqlQuery, args), self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -322,8 +359,14 @@ class SparkSession:
         else:
             actual_end = end
 
+        if numPartitions is not None:
+            numPartitions = int(numPartitions)
+
         return DataFrame.withPlan(
-            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
+            Range(
+                start=int(start), end=int(actual_end), step=int(step), num_partitions=numPartitions
+            ),
+            self,
         )
 
     range.__doc__ = PySparkSession.range.__doc__
@@ -338,10 +381,72 @@ class SparkSession:
 
     catalog.__doc__ = PySparkSession.catalog.__doc__
 
+    def __del__(self) -> None:
+        try:
+            # Try its best to close.
+            self.client.close()
+        except Exception:
+            pass
+
     def stop(self) -> None:
+        # Stopping the session will only close the connection to the current session (and
+        # the life cycle of the session is maintained by the server),
+        # whereas the regular PySpark session immediately terminates the Spark Context
+        # itself, meaning that stopping all Spark sessions.
+        # It is controversial to follow the existing the regular Spark session's behavior
+        # specifically in Spark Connect the Spark Connect server is designed for
+        # multi-tenancy - the remote client side cannot just stop the server and stop
+        # other remote clients being used from other users.
         self.client.close()
 
+        if "SPARK_LOCAL_REMOTE" in os.environ:
+            # When local mode is in use, follow the regular Spark session's
+            # behavior by terminating the Spark Connect server,
+            # meaning that you can stop local mode, and restart the Spark Connect
+            # client with a different remote address.
+            active_session = PySparkSession.getActiveSession()
+            if active_session is not None:
+                active_session.stop()
+            with SparkContext._lock:
+                del os.environ["SPARK_LOCAL_REMOTE"]
+                del os.environ["SPARK_REMOTE"]
+
     stop.__doc__ = PySparkSession.stop.__doc__
+
+    @classmethod
+    def getActiveSession(cls) -> Any:
+        raise NotImplementedError("getActiveSession() is not implemented.")
+
+    def newSession(self) -> Any:
+        raise NotImplementedError("newSession() is not implemented.")
+
+    @property
+    def conf(self) -> Any:
+        raise NotImplementedError("conf() is not implemented.")
+
+    @property
+    def sparkContext(self) -> Any:
+        raise NotImplementedError("sparkContext() is not implemented.")
+
+    @property
+    def streams(self) -> Any:
+        raise NotImplementedError("streams() is not implemented.")
+
+    @property
+    def readStream(self) -> Any:
+        raise NotImplementedError("readStream() is not implemented.")
+
+    @property
+    def udf(self) -> "UDFRegistration":
+        from pyspark.sql.connect.udf import UDFRegistration
+
+        return UDFRegistration(self)
+
+    udf.__doc__ = PySparkSession.udf.__doc__
+
+    @property
+    def version(self) -> str:
+        raise NotImplementedError("version() is not implemented.")
 
     # SparkConnect-specific API
     @property
@@ -355,64 +460,158 @@ class SparkSession:
         """
         return self._client
 
-    def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
-        return self._client.register_udf(function, return_type)
+    @staticmethod
+    def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
+        """
+        Starts the Spark Connect server given the master (thread-unsafe).
+
+        At the high level, there are two cases. The first case is development case, e.g.,
+        you locally build Apache Spark, and run ``SparkSession.builder.remote("local")``:
+
+        1. This method automatically finds the jars for Spark Connect (because the jars for
+          Spark Connect are not bundled in the regular Apache Spark release).
+
+        2. Temporarily remove all states for Spark Connect, for example, ``SPARK_REMOTE``
+          environment variable.
+
+        3. Starts a JVM (without Spark Context) first, and adds the Spark Connect server jars
+           into the current class loader. Otherwise, Spark Context with ``spark.plugins``
+           cannot be initialized because the JVM is already running without the jars in
+           the classpath before executing this Python process for driver side (in case of
+           PySpark application submission).
+
+        4. Starts a regular Spark session that automatically starts a Spark Connect server
+           via ``spark.plugins`` feature.
+
+        The second case is when you use Apache Spark release:
+
+        1. Users must specify either the jars or package, e.g., ``--packages
+          org.apache.spark:spark-connect_2.12:3.4.0``. The jars or packages would be specified
+          in SparkSubmit automatically. This method does not do anything related to this.
+
+        2. Temporarily remove all states for Spark Connect, for example, ``SPARK_REMOTE``
+          environment variable. It does not do anything for PySpark application submission as
+          well because jars or packages were already specified before executing this Python
+          process for driver side.
+
+        3. Starts a regular Spark session that automatically starts a Spark Connect server
+          with JVM via ``spark.plugins`` feature.
+        """
+        session = PySparkSession._instantiatedSession
+        if session is None or session._sc._jsc is None:
+
+            # Configurations to be overwritten
+            overwrite_conf = opts
+            overwrite_conf["spark.master"] = master
+            overwrite_conf["spark.local.connect"] = "1"
+
+            # Configurations to be set if unset.
+            default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
+
+            if "SPARK_TESTING" in os.environ:
+                # For testing, we use 0 to use an ephemeral port to allow parallel testing.
+                # See also SPARK-42272.
+                overwrite_conf["spark.connect.grpc.binding.port"] = "0"
+
+            def create_conf(**kwargs: Any) -> SparkConf:
+                conf = SparkConf(**kwargs)
+                for k, v in overwrite_conf.items():
+                    conf.set(k, v)
+                for k, v in default_conf.items():
+                    if not conf.contains(k):
+                        conf.set(k, v)
+                return conf
+
+            # Check if we're using unreleased version that is in development.
+            # Also checks SPARK_TESTING for RC versions.
+            is_dev_mode = (
+                "dev" in LooseVersion(__version__).version or "SPARK_TESTING" in os.environ
+            )
+
+            origin_remote = os.environ.get("SPARK_REMOTE", None)
+            try:
+                if origin_remote is not None:
+                    # So SparkSubmit thinks no remote is set in order to
+                    # start the regular PySpark session.
+                    del os.environ["SPARK_REMOTE"]
+
+                SparkContext._ensure_initialized(conf=create_conf(loadDefaults=False))
+
+                if is_dev_mode:
+                    # Try and catch for a possibility in production because pyspark.testing
+                    # does not exist in the canonical release.
+                    try:
+                        from pyspark.testing.utils import search_jar
+
+                        # Note that, in production, spark.jars.packages configuration should be
+                        # set by users. Here we're automatically searching the jars locally built.
+                        connect_jar = search_jar(
+                            "connector/connect/server", "spark-connect-assembly-", "spark-connect"
+                        )
+                        if connect_jar is None:
+                            warnings.warn(
+                                "Attempted to automatically find the Spark Connect jars because "
+                                "'SPARK_TESTING' environment variable is set, or the current "
+                                f"PySpark version is dev version ({__version__}). However, the jar"
+                                " was not found. Manually locate the jars and specify them, e.g., "
+                                "'spark.jars' configuration."
+                            )
+                        else:
+                            pyutils = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
+                            pyutils.addJarToCurrentClassLoader(connect_jar)
+
+                    except ImportError:
+                        pass
+
+                # The regular PySpark session is registered as an active session
+                # so would not be garbage-collected.
+                PySparkSession(
+                    SparkContext.getOrCreate(create_conf(loadDefaults=True, _jvm=SparkContext._jvm))
+                )
+            finally:
+                if origin_remote is not None:
+                    os.environ["SPARK_REMOTE"] = origin_remote
+        else:
+            raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
 
 
 SparkSession.__doc__ = PySparkSession.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.session
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.session.__dict__.copy()
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.session tests").remote("local[4]").getOrCreate()
+    )
 
-    if should_test_connect:
-        import pyspark.sql.connect.session
+    # Uses PySpark session to test builder.
+    globs["SparkSession"] = PySparkSession
+    # Spark Connect does not support to set master together.
+    pyspark.sql.connect.session.SparkSession.__doc__ = None
+    del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+    # RDD API is not supported in Spark Connect.
+    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
 
-        globs = pyspark.sql.connect.session.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.session tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.session tests"}
-        )
+    # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
+    del pyspark.sql.connect.session.SparkSession.sql.__doc__
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.session,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        # Uses PySpark session to test builder.
-        globs["SparkSession"] = PySparkSession
-        # Spark Connect does not support to set master together.
-        pyspark.sql.connect.session.SparkSession.__doc__ = None
-        del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-        # RDD API is not supported in Spark Connect.
-        del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
+    globs["spark"].stop()
 
-        # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
-        del pyspark.sql.connect.session.SparkSession.sql.__doc__
-
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.session,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-        globs["_spark"].stop()
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.session doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ set -ex
 
 if [[ $# -gt 1 ]]; then
   echo "Illegal number of parameters."
-  echo "Usage: ./dev/generate_protos.sh [path]"
+  echo "Usage: ./dev/connect-gen-protos.sh [path]"
   exit -1
 fi
 

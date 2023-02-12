@@ -23,7 +23,7 @@ from pyspark.sql.types import IntegerType, StructField, StructType, LongType, St
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class DataSourcesTests(ReusedSQLTestCase):
+class DataSourcesTestsMixin:
     def test_linesep_text(self):
         df = self.spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
         expected = [
@@ -191,6 +191,10 @@ class DataSourcesTests(ReusedSQLTestCase):
             self.assertEqual(readback.schema, schema)
         finally:
             shutil.rmtree(path)
+
+
+class DataSourcesTests(DataSourcesTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

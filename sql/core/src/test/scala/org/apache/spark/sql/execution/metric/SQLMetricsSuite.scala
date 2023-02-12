@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -879,6 +880,21 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         }
       }
     }
+  }
+
+  test("SPARK-40711: Add spill size metrics for window") {
+    val data = Seq((1, "a"), (2, "b")).toDF("c1", "c2")
+    val w = Window.partitionBy("c1").orderBy("c2")
+    val df = data.select(rank().over(w))
+    // Project
+    //   Window
+    //     ...
+    testSparkPlanMetricsWithPredicates(df, 1, Map(
+      1L -> (("Window", Map(
+        "spill size" -> {
+          _.toString.matches(sizeMetricPattern)
+        }))))
+    )
   }
 }
 

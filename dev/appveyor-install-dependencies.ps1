@@ -81,7 +81,7 @@ if (!(Test-Path $tools)) {
 # ========================== Maven
 # Push-Location $tools
 #
-# $mavenVer = "3.8.6"
+# $mavenVer = "3.8.7"
 # Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 #
 # # extract
@@ -97,7 +97,7 @@ if (!(Test-Path $tools)) {
 # ========================== SBT
 Push-Location $tools
 
-$sbtVer = "1.8.0"
+$sbtVer = "1.8.2"
 Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 
 # extract

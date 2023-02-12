@@ -21,7 +21,7 @@ from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
-from pyspark.sql.utils import ParseException, PythonException
+from pyspark.errors import ParseException, PythonException
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -37,7 +37,7 @@ from pyspark.testing.utils import QuietTest
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class PandasUDFTests(ReusedSQLTestCase):
+class PandasUDFTestsMixin:
     def test_pandas_udf_basic(self):
         udf = pandas_udf(lambda x: x, DoubleType())
         self.assertEqual(udf.returnType, DoubleType())
@@ -171,10 +171,7 @@ class PandasUDFTests(ReusedSQLTestCase):
         def foo(x):
             raise StopIteration()
 
-        def foofoo(x, y):
-            raise StopIteration()
-
-        exc_message = "Caught StopIteration thrown from user's code; failing the task"
+        exc_message = "StopIteration"
         df = self.spark.range(0, 100)
 
         # plain udf (test for SPARK-23754)
@@ -188,6 +185,16 @@ class PandasUDFTests(ReusedSQLTestCase):
             exc_message,
             df.withColumn("v", pandas_udf(foo, "double", PandasUDFType.SCALAR)("id")).collect,
         )
+
+    def test_stopiteration_in_grouped_map(self):
+        def foo(x):
+            raise StopIteration()
+
+        def foofoo(x, y):
+            raise StopIteration()
+
+        exc_message = "StopIteration"
+        df = self.spark.range(0, 100)
 
         # pandas grouped map
         self.assertRaisesRegex(
@@ -203,6 +210,13 @@ class PandasUDFTests(ReusedSQLTestCase):
             .apply(pandas_udf(foofoo, df.schema, PandasUDFType.GROUPED_MAP))
             .collect,
         )
+
+    def test_stopiteration_in_grouped_agg(self):
+        def foo(x):
+            raise StopIteration()
+
+        exc_message = "StopIteration"
+        df = self.spark.range(0, 100)
 
         # pandas grouped agg
         self.assertRaisesRegex(
@@ -290,6 +304,10 @@ class PandasUDFTests(ReusedSQLTestCase):
         ).collect()
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
+
+
+class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

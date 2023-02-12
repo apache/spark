@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
@@ -60,6 +61,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     when(tab.sqlStore).thenReturn(statusStore)
 
     val request = mock(classOf[HttpServletRequest])
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
@@ -74,6 +76,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     when(tab.sqlStore).thenReturn(statusStore)
 
     val request = mock(classOf[HttpServletRequest])
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
@@ -82,6 +85,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
       val page = new AllExecutionsPage(tab)
       val df = createTestDataFrame
       listener.onOtherEvent(SparkListenerSQLExecutionStart(
+        0,
         0,
         "test",
         "test",
@@ -109,6 +113,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
     val request = mock(classOf[HttpServletRequest])
 
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.sqlStore).thenReturn(statusStore)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
@@ -121,6 +126,50 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     assert(html.contains("duration"))
   }
 
+  test("group sub executions") {
+    val statusStore = createStatusStore
+    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    val request = mock(classOf[HttpServletRequest])
+
+    val sparkConf = new SparkConf(false).set(UI_SQL_GROUP_SUB_EXECUTION_ENABLED, true)
+    when(tab.conf).thenReturn(sparkConf)
+    when(tab.sqlStore).thenReturn(statusStore)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    val listener = statusStore.listener.get
+    val page = new AllExecutionsPage(tab)
+    val df = createTestDataFrame
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      0,
+      0,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      1,
+      0,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    // sub execution has a missing root execution
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      2,
+      100,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    assert(html.contains("sub execution ids") && html.contains("sub-execution-list"))
+    // sub execution should still be displayed if the root execution is missing
+    assert(html.contains("id=2"))
+  }
 
   protected def createStatusStore: SQLAppStatusStore
 
@@ -146,6 +195,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     Seq(0, 1).foreach { executionId =>
       val df = createTestDataFrame
       listener.onOtherEvent(SparkListenerSQLExecutionStart(
+        executionId,
         executionId,
         "test",
         "test",

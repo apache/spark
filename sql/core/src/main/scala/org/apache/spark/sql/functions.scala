@@ -3885,6 +3885,18 @@ object functions {
   }
 
   /**
+   * Returns an ARRAY containing all elements from the source ARRAY as well as the new element.
+   * The new element/column is located at end of the ARRAY.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_append(column: Column, element: Any): Column = withExpr {
+    ArrayAppend(column.expr, lit(element).expr)
+  }
+
+
+  /**
    * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
    * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
    * `false` otherwise.
@@ -4048,6 +4060,16 @@ object functions {
    */
   def array_intersect(col1: Column, col2: Column): Column = withExpr {
     ArrayIntersect(col1.expr, col2.expr)
+  }
+
+  /**
+   * Adds an item into a given array at a specified position
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_insert(arr: Column, pos: Column, value: Column): Column = withExpr {
+    ArrayInsert(arr.expr, pos.expr, value.expr)
   }
 
   /**

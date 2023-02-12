@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.net.URI
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Try}
@@ -153,8 +151,12 @@ class ParquetFileFormat
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
     hadoopConf.setBoolean(
-      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
-      sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled)
+    hadoopConf.setBoolean(
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
+      sparkSession.sessionState.conf.legacyParquetNanosAsLong)
+
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -184,12 +186,10 @@ class ParquetFileFormat
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
     val returningBatch = sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
-      options.get(FileFormat.OPTION_RETURNING_BATCH)
-        .getOrElse {
-          throw new IllegalArgumentException(
-            "OPTION_RETURNING_BATCH should always be set for ParquetFileFormat. " +
-              "To workaround this issue, set spark.sql.parquet.enableVectorizedReader=false.")
-        }
+      options.getOrElse(FileFormat.OPTION_RETURNING_BATCH,
+        throw new IllegalArgumentException(
+          "OPTION_RETURNING_BATCH should always be set for ParquetFileFormat. " +
+            "To workaround this issue, set spark.sql.parquet.enableVectorizedReader=false."))
         .equals("true")
     if (returningBatch) {
       // If the passed option said that we are to return batches, we need to also be able to
@@ -200,7 +200,7 @@ class ParquetFileFormat
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
-      val filePath = new Path(new URI(file.filePath))
+      val filePath = file.toPath
       val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
       val sharedConf = broadcastedHadoopConf.value.value
@@ -359,7 +359,8 @@ object ParquetFileFormat extends Logging {
     val converter = new ParquetToSparkSchemaConverter(
       sparkSession.sessionState.conf.isParquetBinaryAsString,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp,
-      timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
+      inferTimestampNTZ = sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled,
+      nanosAsLong = sparkSession.sessionState.conf.legacyParquetNanosAsLong)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -429,7 +430,7 @@ object ParquetFileFormat extends Logging {
           logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
           None
         } else {
-          throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile, e)
+          throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile.getPath, e)
         }
       }
     }.flatten
@@ -455,14 +456,16 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-    val timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled
+    val inferTimestampNTZ = sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled
+    val nanosAsLong = sparkSession.sessionState.conf.legacyParquetNanosAsLong
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
         assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-        timestampNTZEnabled = timestampNTZEnabled)
+        inferTimestampNTZ = inferTimestampNTZ,
+        nanosAsLong = nanosAsLong)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))

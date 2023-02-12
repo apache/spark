@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+from pyspark.errors import AnalysisException
 from pyspark.sql.types import StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -28,9 +28,7 @@ class CatalogTestsMixin:
             spark.catalog.setCurrentDatabase("some_db")
             self.assertEqual(spark.catalog.currentDatabase(), "some_db")
             self.assertRaisesRegex(
-                # TODO(SPARK-41715): Should catch specific exceptions for both
-                #  Spark Connect and PySpark
-                Exception,
+                AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.setCurrentDatabase("does_not_exist"),
             )
@@ -181,7 +179,7 @@ class CatalogTestsMixin:
                         )
                     )
                     self.assertRaisesRegex(
-                        Exception,
+                        AnalysisException,
                         "does_not_exist",
                         lambda: spark.catalog.listTables("does_not_exist"),
                     )
@@ -209,7 +207,13 @@ class CatalogTestsMixin:
             self.assertEqual(functions, functionsDefault)
 
             with self.function("func1", "some_db.func2"):
-                if hasattr(spark, "udf"):
+                try:
+                    spark.udf
+                    support_udf = True
+                except Exception:
+                    support_udf = False
+
+                if support_udf:
                     spark.udf.register("temp_func", lambda x: str(x))
                 spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'").collect()
                 spark.sql(
@@ -221,16 +225,16 @@ class CatalogTestsMixin:
                 )
                 self.assertTrue(set(functions).issubset(set(newFunctions)))
                 self.assertTrue(set(functions).issubset(set(newFunctionsSomeDb)))
-                if hasattr(spark, "udf"):
+                if support_udf:
                     self.assertTrue("temp_func" in newFunctions)
                 self.assertTrue("func1" in newFunctions)
                 self.assertTrue("func2" not in newFunctions)
-                if hasattr(spark, "udf"):
+                if support_udf:
                     self.assertTrue("temp_func" in newFunctionsSomeDb)
                 self.assertTrue("func1" not in newFunctionsSomeDb)
                 self.assertTrue("func2" in newFunctionsSomeDb)
                 self.assertRaisesRegex(
-                    Exception,
+                    AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listFunctions("does_not_exist"),
                 )
@@ -327,9 +331,11 @@ class CatalogTestsMixin:
                         isBucket=False,
                     ),
                 )
-                self.assertRaisesRegex(Exception, "tab2", lambda: spark.catalog.listColumns("tab2"))
                 self.assertRaisesRegex(
-                    Exception,
+                    AnalysisException, "tab2", lambda: spark.catalog.listColumns("tab2")
+                )
+                self.assertRaisesRegex(
+                    AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listColumns("does_not_exist"),
                 )

@@ -18,6 +18,7 @@
 syntax = 'proto3';
 
 import "google/protobuf/any.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -30,53 +31,15 @@ option java_package = "org.apache.spark.connect.proto";
 // produce a relational result.
 message Command {
   oneof command_type {
-    CreateScalarFunction create_function = 1;
+    CommonInlineUserDefinedFunction register_function = 1;
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
+    WriteOperationV2 write_operation_v2 = 4;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
 
-  }
-}
-
-// Simple message that is used to create a scalar function based on the provided function body.
-//
-// This message is used to register for example a Python UDF in the session catalog by providing
-// the serialized method body.
-//
-// TODO(SPARK-40532) It is required to add the interpreter / language version to the command
-//   parameters.
-message CreateScalarFunction {
-  // (Required) Fully qualified name of the function including the catalog / schema names.
-  repeated string parts = 1;
-
-  // (Required) the function language.
-  FunctionLanguage language = 2;
-
-  // (Required) if this is a temporary function.
-  bool temporary = 3;
-
-  // (Optional) A list of argument types. Can be empty when the function does not take an argument.
-  repeated DataType argument_types = 4;
-
-  // (Required) the return type of the function.
-  DataType return_type = 5;
-
-  // How the function body is defined:
-  oneof function_definition {
-    // As a raw string serialized:
-    bytes serialized_function = 6;
-    // As a code literal
-    string literal_string = 7;
-  }
-
-  enum FunctionLanguage {
-    FUNCTION_LANGUAGE_UNSPECIFIED = 0;
-    FUNCTION_LANGUAGE_SQL = 1;
-    FUNCTION_LANGUAGE_PYTHON = 2;
-    FUNCTION_LANGUAGE_SCALA = 3;
   }
 }
 
@@ -140,4 +103,42 @@ message WriteOperation {
     SAVE_MODE_ERROR_IF_EXISTS = 3;
     SAVE_MODE_IGNORE = 4;
   }
+}
+
+// As writes are not directly handled during analysis and planning, they are modeled as commands.
+message WriteOperationV2 {
+  // (Required) The output of the `input` relation will be persisted according to the options.
+  Relation input = 1;
+
+  // The destination of the write operation must be either a path or a table.
+  string table_name = 2;
+
+  // A provider for the underlying output data source. Spark's default catalog supports
+  // "parquet", "json", etc.
+  string provider = 3;
+
+  // (Optional) List of columns for partitioning for output table created by `create`,
+  // `createOrReplace`, or `replace`
+  repeated Expression partitioning_columns = 4;
+
+  // (Optional) A list of configuration options.
+  map<string, string> options = 5;
+
+  // (Optional) A list of table properties.
+  map<string, string> table_properties = 6;
+
+  Mode mode = 7;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_CREATE = 1;
+    MODE_OVERWRITE = 2;
+    MODE_OVERWRITE_PARTITIONS = 3;
+    MODE_APPEND = 4;
+    MODE_REPLACE = 5;
+    MODE_CREATE_OR_REPLACE = 6;
+  }
+
+  // (Optional) A condition for overwrite saving mode
+  Expression overwrite_condition = 8;
 }

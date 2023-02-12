@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -218,7 +218,7 @@ class RateStreamProviderSuite extends StreamTest {
     withTempDir { temp =>
       val maxSeconds = (Long.MaxValue / 100)
       val endSeconds = Long.MaxValue
-      val e = intercept[SparkRuntimeException](
+      val e = intercept[SparkException](
         new RateStreamMicroBatchStream(
           rowsPerSecond = 100,
           rampUpTimeSeconds = 2,
@@ -228,11 +228,12 @@ class RateStreamProviderSuite extends StreamTest {
 
       checkError(
         exception = e,
-        errorClass = "INCORRECT_END_OFFSET",
+        errorClass = "INTERNAL_ERROR",
         parameters = Map(
-          "rowsPerSecond" -> "100",
-          "maxSeconds" -> maxSeconds.toString,
-          "endSeconds" -> endSeconds.toString))
+          ("message" ->
+            ("Max offset with 100 rowsPerSecond is 92233720368547758, " +
+            "but it's 9223372036854775807 now.")
+            )))
     }
   }
 
@@ -310,8 +311,8 @@ class RateStreamProviderSuite extends StreamTest {
       .distinct()
     testStream(input)(
       AdvanceRateManualClock(2),
-      ExpectFailure[SparkRuntimeException](t => {
-        Seq("INCORRECT_END_OFFSET", "rowsPerSecond").foreach { msg =>
+      ExpectFailure[SparkException](t => {
+        Seq("INTERNAL_ERROR", "rowsPerSecond").foreach { msg =>
           assert(t.getMessage.contains(msg))
         }
       })

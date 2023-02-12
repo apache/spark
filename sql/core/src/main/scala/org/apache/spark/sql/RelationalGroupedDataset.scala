@@ -483,7 +483,9 @@ class RelationalGroupedDataset protected[sql](
           groupingExprs,
           RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
-        throw QueryExecutionErrors.repeatedPivotsUnsupportedError()
+        throw QueryExecutionErrors.repeatedPivotsUnsupportedError(
+          clause = "PIVOT", operation = "SUBQUERY"
+        )
       case _ =>
         throw QueryExecutionErrors.pivotNotAfterGroupByUnsupportedError()
     }
