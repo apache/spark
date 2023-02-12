@@ -114,8 +114,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def desc: Column = desc_nulls_last
 
   /**
-   * Returns a sort expression based on the descending order of the column,
-   * and null values appear before non-null values.
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in descending order and null values appearing first.
    *   df.sort(df("age").desc_nulls_first)
@@ -134,8 +134,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   }
 
   /**
-   * Returns a sort expression based on the descending order of the column,
-   * and null values appear after non-null values.
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * after non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in descending order and null values appearing last.
    *   df.sort(df("age").desc_nulls_last)
@@ -169,8 +169,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def asc: Column = asc_nulls_first
 
   /**
-   * Returns a sort expression based on ascending order of the column,
-   * and null values return before non-null values.
+   * Returns a sort expression based on ascending order of the column, and null values return
+   * before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
    *   df.sort(df("age").asc_nulls_first)
@@ -189,8 +189,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   }
 
   /**
-   * Returns a sort expression based on ascending order of the column,
-   * and null values appear after non-null values.
+   * Returns a sort expression based on ascending order of the column, and null values appear
+   * after non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing last.
    *   df.sort(df("age").asc_nulls_last)

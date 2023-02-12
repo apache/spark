@@ -22,4 +22,4 @@ package org.apache.spark.sql.connect.common
 final case class InvalidPlanInput(
     private val message: String = "",
     private val cause: Throwable = None.orNull)
-  extends Exception(message, cause)
+    extends Exception(message, cause)
