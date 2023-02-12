@@ -1690,10 +1690,6 @@ def _test() -> None:
     del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
     del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
-    # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
-    del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
-
     # TODO(SPARK-41823): ambiguous column names
     del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
     del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
