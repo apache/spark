@@ -1105,6 +1105,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         pdf = self.connect.sql("SELECT 1").toPandas()
         self.assertEqual(1, len(pdf.index))
 
+    def test_sql_with_args(self):
+        df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": "7"})
+        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": "7"})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
     def test_head(self):
         # SPARK-41002: test `head` API in Python Client
         df = self.connect.read.table(self.tbl_name)
