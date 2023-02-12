@@ -2737,10 +2737,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("name" -> name))
   }
 
-  def columnNameContainsInvalidCharactersError(name: String): Throwable = {
+  def invalidColumnNameAsPathError(datasource: String, columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1289",
-      messageParameters = Map("name" -> name))
+      errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+      messageParameters = Map(
+        "datasource" -> datasource,
+        "columnName" -> toSQLId(columnName)
+      )
+    )
   }
 
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {

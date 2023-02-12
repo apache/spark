@@ -786,6 +786,12 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
+  "INVALID_COLUMN_NAME_AS_PATH" : {
+    "message" : [
+      "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
+    ],
+    "sqlState" : "46121"
+  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -3357,11 +3363,6 @@
   "_LEGACY_ERROR_TEMP_1288" : {
     "message" : [
       "Table or view '<name>' already exists. SaveMode: ErrorIfExists."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1289" : {
-    "message" : [
-      "Column name \"<name>\" contains invalid character(s). Please use alias to rename it."
     ]
   },
   "_LEGACY_ERROR_TEMP_1290" : {
