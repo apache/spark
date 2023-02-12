@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
-import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.util.Utils
 
@@ -479,7 +479,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     }
   }
 
-  private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => ()): DataFrame = {
+  private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
     session.newDataset { builder =>
       val joinBuilder = builder.getJoinBuilder
       joinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
@@ -518,7 +518,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: Dataset[_]): DataFrame = buildJoin(right){ builder =>
+  def join(right: Dataset[_]): DataFrame = buildJoin(right) { builder =>
     builder.setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
   }
 
@@ -833,7 +833,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     builder.getHintBuilder
       .setInput(plan.getRoot)
       .setName(name)
-      .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava) // todo check this
+      .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
   }
 
   /**
@@ -1156,7 +1156,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   private def buildSetOp(
       right: Dataset[T],
       setOpType: proto.SetOperation.SetOpType)(
-      f: proto.SetOperation.Builder => ()): Dataset[T] = {
+      f: proto.SetOperation.Builder => Unit): Dataset[T] = {
     session.newDataset { builder =>
       f(builder.getSetOpBuilder
         .setSetOpType(setOpType)
@@ -1647,7 +1647,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(colNames: String*): DataFrame = drop(colNames.map(functions.col))
+  def drop(colNames: String*): DataFrame = buildDrop(colNames.map(functions.col))
 
   /**
    * Returns a new Dataset with column dropped.
@@ -1661,7 +1661,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   def drop(col: Column): DataFrame = {
-    drop(col :: Nil)
+    buildDrop(col :: Nil)
   }
 
   /**
@@ -1675,9 +1675,9 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(col: Column, cols: Column*): DataFrame = drop(col +: cols)
+  def drop(col: Column, cols: Column*): DataFrame = buildDrop(col +: cols)
 
-  private def drop(cols: Seq[Column]): DataFrame = session.newDataset { builder =>
+  private def buildDrop(cols: Seq[Column]): DataFrame = session.newDataset { builder =>
     builder.getDropBuilder
       .setInput(plan.getRoot)
       .addAllCols(cols.map(_.expr).asJava)
@@ -1954,19 +1954,34 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   /**
    * Returns an iterator that contains all rows in this Dataset.
    *
-   * The iterator will consume as much memory as the largest partition in this Dataset.
-   *
-   * @note this results in multiple Spark jobs, and if the input Dataset is the result
-   * of a wide transformation (e.g. join with different partitioners), to avoid
-   * recomputing the input Dataset should be cached first.
+   * The returned iterator implements [[AutoCloseable]]. For memory management it is better to
+   * close it once you are done. If you don't close it, it and the underlying data will be cleaned
+   * up once the iterator is garbage collected.
    *
    * @group action
    * @since 3.4.0
    */
   def toLocalIterator(): java.util.Iterator[T] = {
     // TODO make this a destructive iterator.
-    // TODO document that we need to close this.
     collectResult().iterator.asInstanceOf[java.util.Iterator[T]]
+  }
+
+  private def buildRepartition(numPartitions: Int, shuffle: Boolean): Dataset[T] = {
+    session.newDataset { builder =>
+      builder.getRepartitionBuilder
+        .setInput(plan.getRoot)
+        .setNumPartitions(numPartitions)
+        .setShuffle(shuffle)
+    }
+  }
+
+  private def buildRepartitionByExpression(
+      numPartitions: Option[Int],
+      partitionExprs: Seq[Column]): Dataset[T] = session.newDataset { builder =>
+    val repartitionBuilder = builder.getRepartitionByExpressionBuilder
+      .setInput(plan.getRoot)
+      .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
+    numPartitions.foreach(repartitionBuilder.setNumPartitions)
   }
 
   /**
@@ -1975,11 +1990,8 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def repartition(numPartitions: Int): Dataset[T] = session.newDataset { builder =>
-    builder.getRepartitionBuilder
-      .setInput(plan.getRoot)
-      .setNumPartitions(numPartitions)
-      .setShuffle(true)
+  def repartition(numPartitions: Int): Dataset[T] = {
+    buildRepartition(numPartitions, shuffle = true)
   }
 
   private def repartitionByExpression(
@@ -1993,12 +2005,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
       s"""Invalid partitionExprs specified: $sortOrders
          |For range partitioning use repartitionByRange(...) instead.
        """.stripMargin)
-    session.newDataset { builder =>
-      val repartitionBuilder = builder.getRepartitionByExpressionBuilder
-        .setInput(plan.getRoot)
-        .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
-      numPartitions.foreach(repartitionBuilder.setNumPartitions)
-    }
+    buildRepartitionByExpression(numPartitions, partitionExprs)
   }
 
   /**
@@ -2035,15 +2042,10 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
       partitionExprs: Seq[Column]): Dataset[T] = {
     require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
     val sortExprs = partitionExprs.map {
-      case e if e.expr.hasSortOrder => e.expr
-      case e => e.asc.expr
+      case e if e.expr.hasSortOrder => e
+      case e => e.asc
     }
-    session.newDataset { builder =>
-      val repartitionBuilder = builder.getRepartitionByExpressionBuilder
-        .setInput(plan.getRoot)
-        .addAllPartitionExprs(sortExprs.asJava)
-      numPartitions.foreach(repartitionBuilder.setNumPartitions)
-    }
+    buildRepartitionByExpression(numPartitions, sortExprs)
   }
 
   /**
@@ -2107,11 +2109,8 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def coalesce(numPartitions: Int): Dataset[T] = session.newDataset { builder =>
-    builder.getRepartitionBuilder
-      .setInput(plan.getRoot)
-      .setNumPartitions(numPartitions)
-      .setShuffle(false)
+  def coalesce(numPartitions: Int): Dataset[T] = {
+    buildRepartition(numPartitions, shuffle = false)
   }
 
   /**

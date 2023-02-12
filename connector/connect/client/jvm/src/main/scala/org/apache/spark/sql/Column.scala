@@ -234,7 +234,7 @@ private[sql] object Column {
   private[sql] def apply(f: proto.Expression.Builder => Unit): Column = {
     val builder = proto.Expression.newBuilder()
     f(builder)
-    new Column(builder.build(), None, None)
+    new Column(builder.build())
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = Column { builder =>

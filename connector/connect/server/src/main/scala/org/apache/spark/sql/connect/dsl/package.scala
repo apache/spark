@@ -25,8 +25,9 @@ import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.connect.planner.SaveModeConverter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -209,7 +210,7 @@ package object dsl {
 
         mode
           .map(SaveMode.valueOf(_))
-          .map(DataTypeProtoConverter.toSaveModeProto(_))
+          .map(SaveModeConverter.toSaveModeProto(_))
           .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
