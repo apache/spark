@@ -2060,10 +2060,11 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     // However, we don't want to complicate the semantics of this API method.
     // Instead, let's give users a friendly error message, pointing them to the new method.
     val sortOrders = partitionExprs.filter(_.expr.hasSortOrder)
-    if (sortOrders.nonEmpty)
-      throw new IllegalArgumentException(s"""Invalid partitionExprs specified: $sortOrders
-         |For range partitioning use repartitionByRange(...) instead.
-       """.stripMargin)
+    if (sortOrders.nonEmpty) {
+      throw new IllegalArgumentException(
+        s"Invalid partitionExprs specified: $sortOrders\n" +
+          s"For range partitioning use repartitionByRange(...) instead.")
+    }
     buildRepartitionByExpression(numPartitions, partitionExprs)
   }
 
