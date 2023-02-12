@@ -1000,7 +1000,7 @@
   },
   "INVALID_SET_SYNTAX" : {
     "message" : [
-      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use quotes, e.g., SET `key`=`value`."
+      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
     ],
     "sqlState" : "42000"
   },
