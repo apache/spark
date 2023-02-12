@@ -1539,9 +1539,9 @@
   },
   "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
     "message" : [
-      "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
+      "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<suggestion>]."
     ],
-    "sqlState" : "42877"
+    "sqlState" : "42703"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
