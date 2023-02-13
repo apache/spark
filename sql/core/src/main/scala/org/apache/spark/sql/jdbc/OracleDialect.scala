@@ -178,13 +178,13 @@ private case object OracleDialect extends JdbcDialect {
   override def getLimitClause(limit: Integer): String = {
     // Oracle doesn't support LIMIT clause.
     // We can use rownum <= n to limit the number of rows in the result set.
-    if (limit > 0) s"WHERE rownum <= $limit" else ""
+    if (limit > 0) s"WHERE rn <= $limit" else ""
   }
 
   override def getOffsetClause(offset: Integer): String = {
     // Oracle doesn't support OFFSET clause.
     // We can use rownum > n to skip some rows in the result set.
-    if (offset > 0 ) s"WHERE rownum > $offset" else ""
+    if (offset > 0 ) s"WHERE rn > $offset" else ""
   }
 
   class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
@@ -199,11 +199,11 @@ private case object OracleDialect extends JdbcDialect {
             s" WHERE rn > $offset AND rn <= ${limit + offset}"
         } else {
           val limitClause = dialect.getLimitClause(limit)
-          s"SELECT tab.* FROM ($selectStmt) tab $limitClause"
+          s"SELECT $columnList FROM (SELECT tab.*, rownum rn FROM ($selectStmt) tab) $limitClause"
         }
       } else if (offset > 0) {
         val offsetClause = dialect.getOffsetClause(offset)
-        s"SELECT tab.* FROM ($selectStmt) tab $offsetClause"
+        s"SELECT $columnList FROM (SELECT tab.*, rownum rn FROM ($selectStmt) tab) $offsetClause"
       } else {
         selectStmt
       }
