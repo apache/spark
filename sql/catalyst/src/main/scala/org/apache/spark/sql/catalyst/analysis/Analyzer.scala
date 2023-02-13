@@ -3307,18 +3307,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       _.containsPattern(NATURAL_LIKE_JOIN), ruleId) {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), _, hint)
           if left.resolved && right.resolved && j.duplicateResolved =>
-        val p = commonNaturalJoinProcessing(left, right, joinType, usingCols, None, hint)
-        j.getTagValue(LogicalPlan.PLAN_ID_TAG)
-          .foreach(p.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
-        p
+        commonNaturalJoinProcessing(left, right, joinType, usingCols, None, hint,
+          j.getTagValue(LogicalPlan.PLAN_ID_TAG))
       case j @ Join(left, right, NaturalJoin(joinType), condition, hint)
           if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
-        val p = commonNaturalJoinProcessing(left, right, joinType, joinNames, condition, hint)
-        j.getTagValue(LogicalPlan.PLAN_ID_TAG)
-          .foreach(p.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
-        p
+        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition, hint,
+          j.getTagValue(LogicalPlan.PLAN_ID_TAG))
     }
   }
 
@@ -3448,7 +3444,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       joinType: JoinType,
       joinNames: Seq[String],
       condition: Option[Expression],
-      hint: JoinHint): LogicalPlan = {
+      hint: JoinHint,
+      planId: Option[Long] = None): LogicalPlan = {
     import org.apache.spark.sql.catalyst.util._
 
     val leftKeys = joinNames.map { keyName =>
@@ -3489,9 +3486,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case _ =>
         throw QueryExecutionErrors.unsupportedNaturalJoinTypeError(joinType)
     }
+
+    val newJoin = Join(left, right, joinType, newCondition, hint)
+    // retain the plan id used in Spark Connect
+    planId.foreach(newJoin.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
+
     // use Project to hide duplicated common keys
     // propagate hidden columns from nested USING/NATURAL JOINs
-    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
+    val project = Project(projectList, newJoin)
     project.setTagValue(
       Project.hiddenOutputTag,
       hiddenList.map(_.markAsQualifiedAccessOnly()) ++

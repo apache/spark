@@ -392,7 +392,6 @@ trait ColumnResolutionHelper extends Logging {
     e match {
       case u: UnresolvedAttribute =>
         resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
-      case l: LeafExpression => l
       case _ =>
         e.mapChildren(c => resolveExpressionByPlanId(c, q))
     }
@@ -400,7 +399,7 @@ trait ColumnResolutionHelper extends Logging {
 
   private def resolveUnresolvedAttributeByPlanId(
       u: UnresolvedAttribute,
-      q: LogicalPlan): Option[AttributeReference] = {
+      q: LogicalPlan): Option[NamedExpression] = {
     val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
     if (planIdOpt.isEmpty) return None
     val planId = planIdOpt.get
@@ -414,13 +413,10 @@ trait ColumnResolutionHelper extends Logging {
     val plan = planOpt.get
 
     try {
-      plan.resolve(u.nameParts, conf.resolver) match {
-        case Some(attr: AttributeReference) => Some(attr)
-        case _ => None
-      }
+      plan.resolve(u.nameParts, conf.resolver)
     } catch {
       case _: AnalysisException =>
-        logDebug(s"Fail to resolve $u against $plan")
+        logDebug(s"Fail to resolve $u with $plan")
         None
     }
   }
