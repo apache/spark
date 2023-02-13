@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -27,14 +28,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
  *    includes metadata columns as well.
  * 2. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.
- * 3. If the child plan is Aggregate, resolves the column to [[TempResolvedColumn]] with the output
- *    of Aggregate's child plan. This is to allow Sort to host grouping expressions and aggregate
- *    functions, which can be pushed down to the Aggregate later. For example,
- *    `SELECT max(a) FROM t GROUP BY b ORDER BY min(a)`.
- * 4. Resolves the column to [[AttributeReference]] with the output of a descendant plan node.
+ * 3. Resolves the column to [[AttributeReference]] with the output of a descendant plan node.
  *    Spark will propagate the missing attributes from the descendant plan node to the Sort node.
  *    This is to allow users to ORDER BY columns that are not in the SELECT clause, which is
  *    widely supported in other SQL dialects. For example, `SELECT a FROM t ORDER BY b`.
+ * 4. If the child plan is Aggregate, resolves the column to [[TempResolvedColumn]] with the output
+ *    of Aggregate's child plan. This is to allow Sort to host grouping expressions and aggregate
+ *    functions, which can be pushed down to the Aggregate later. For example,
+ *    `SELECT max(a) FROM t GROUP BY b ORDER BY min(a)`.
  * 5. If the order by expressions only have one single unresolved column named ALL, expanded it to
  *    include all columns in the SELECT list. This is to support SQL pattern like
  *    `SELECT col1, col2 FROM t ORDER BY ALL`. This should also support specifying asc/desc, and
@@ -49,16 +50,16 @@ object ResolveReferencesInSort extends SQLConfHelper with ColumnResolutionHelper
 
   def apply(s: Sort): LogicalPlan = {
     val resolvedNoOuter = s.order.map(resolveExpressionByPlanOutput(_, s.child))
-    val resolvedWithAgg = resolvedNoOuter.map(resolveColWithAgg(_, s.child))
-    val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
+    val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedNoOuter, s.child)
+    val resolvedWithAgg = missingAttrResolved.map(resolveColWithAgg(_, s.child))
     val orderByAllResolved = resolveOrderByAll(
-      s.global, newChild, missingAttrResolved.map(_.asInstanceOf[SortOrder]))
+      s.global, newChild, resolvedWithAgg.map(_.asInstanceOf[SortOrder]))
     val finalOrdering = orderByAllResolved.map(e => resolveOuterRef(e).asInstanceOf[SortOrder])
     if (s.child.output == newChild.output) {
-      s.copy(order = finalOrdering)
+      rewriteAggregate(s.copy(order = finalOrdering))
     } else {
       // Add missing attributes and then project them away.
-      val newSort = s.copy(order = finalOrdering, child = newChild)
+      val newSort = rewriteAggregate(s.copy(order = finalOrdering, child = newChild))
       Project(s.child.output, newSort)
     }
   }

@@ -1504,6 +1504,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * details:
    *  - [[ResolveReferencesInAggregate]]
    *  - [[ResolveReferencesInSort]]
+   *  - [[ResolveReferencesInFilter]]
    *
    * Note: even if we use a single rule to resolve columns, it's still non-trivial to have a
    *       reliable column resolution order, as the rule will be executed multiple times, with other
@@ -1741,7 +1742,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           // Columns in HAVING should be resolved with `agg.child.output` first, to follow the SQL
           // standard. See more details in SPARK-31519.
           val resolvedWithAgg = resolveColWithAgg(e, agg)
-          resolveExpressionByPlanChildren(resolvedWithAgg, u, allowOuter = true)
+          rewriteAggregate(resolveExpressionByPlanChildren(resolvedWithAgg, u, allowOuter = true))
         }
 
       // RepartitionByExpression can host missing attributes that are from a descendant node.
@@ -1761,22 +1762,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           Project(child.output, r.copy(finalPartitionExprs, newChild))
         }
 
-      // Filter can host both grouping expressions/aggregate functions and missing attributes.
-      // The grouping expressions/aggregate functions resolution takes precedence over missing
-      // attributes. See the classdoc of `ResolveReferences` for details.
-      case f @ Filter(cond, child) if !cond.resolved || f.missingInput.nonEmpty =>
-        val resolvedNoOuter = resolveExpressionByPlanChildren(cond, f)
-        val resolvedWithAgg = resolveColWithAgg(resolvedNoOuter, child)
-        val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(resolvedWithAgg), child)
-        // Outer reference has lowermost priority. See the doc of `ResolveReferences`.
-        val finalCond = resolveOuterRef(newCond.head)
-        if (child.output == newChild.output) {
-          f.copy(condition = finalCond)
-        } else {
-          // Add missing attributes and then project them away.
-          val newFilter = Filter(finalCond, newChild)
-          Project(child.output, newFilter)
-        }
+      case f: Filter if !f.resolved || f.missingInput.nonEmpty => ResolveReferencesInFilter(f)
 
       case s: Sort if !s.resolved || s.missingInput.nonEmpty => ResolveReferencesInSort(s)
 
@@ -2535,8 +2521,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(AGGREGATE), ruleId) {
-      case UnresolvedHaving(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+      _.containsPattern(AGGREGATE_FOR_TEMP_RESOLVED_COL), ruleId) {
+      case UnresolvedHaving(cond, agg: AggregateForTempResolvedCol) if cond.resolved =>
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
           val newCond = newExprs.head
           if (newCond.resolved) {
@@ -2551,12 +2537,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           }
         })
 
-      case Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+      case Filter(cond, agg: AggregateForTempResolvedCol) if cond.resolved =>
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
           Filter(newExprs.head, newChild)
         })
 
-      case s @ Sort(_, _, agg: Aggregate) if agg.resolved && s.order.forall(_.resolved) =>
+      case s @ Sort(_, _, agg: AggregateForTempResolvedCol) if s.order.forall(_.resolved) =>
         resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
           val newSortOrder = s.order.zip(newExprs).map {
             case (sortOrder, expr) => sortOrder.copy(child = expr)
@@ -2646,14 +2632,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     def resolveOperatorWithAggregate(
         exprs: Seq[Expression],
-        agg: Aggregate,
+        agg: AggregateForTempResolvedCol,
         buildOperator: (Seq[Expression], Aggregate) => LogicalPlan): LogicalPlan = {
-      val (extraAggExprs, resolvedExprs) = resolveExprsWithAggregate(exprs, agg)
+      val realAgg = agg.toAggregate
+      val (extraAggExprs, resolvedExprs) = resolveExprsWithAggregate(exprs, realAgg)
       if (extraAggExprs.isEmpty) {
-        buildOperator(resolvedExprs, agg)
+        buildOperator(resolvedExprs, realAgg)
       } else {
-        Project(agg.output, buildOperator(resolvedExprs, agg.copy(
-          aggregateExpressions = agg.aggregateExpressions ++ extraAggExprs)))
+        Project(realAgg.output, buildOperator(resolvedExprs, realAgg.copy(
+          aggregateExpressions = realAgg.aggregateExpressions ++ extraAggExprs)))
       }
     }
   }
@@ -4006,13 +3993,16 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveExpressionsWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN)) {
-      case t: TempResolvedColumn =>
-        if (t.hasTried) {
-          UnresolvedAttribute(t.nameParts)
-        } else {
-          t.child
-        }
+    plan.resolveOperators {
+      case a: AggregateForTempResolvedCol => a.toAggregate
+      case p => p.transformExpressionsWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN), ruleId) {
+        case t: TempResolvedColumn =>
+          if (t.hasTried) {
+            UnresolvedAttribute(t.nameParts)
+          } else {
+            t.child
+          }
+      }
     }
   }
 }

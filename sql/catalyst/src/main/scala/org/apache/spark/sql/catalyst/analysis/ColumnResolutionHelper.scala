@@ -256,6 +256,28 @@ trait ColumnResolutionHelper extends Logging {
     case _ => e
   }
 
+  // When columns are resolved to `TempResolvedColumn`, it's important to keep the child Aggregate
+  // unchanged, as the rule `ResolveAggregateFunctions` needs to match the plan pair. We rewrite
+  // Aggregate to AggregateForTempResolvedCol as a protection, to make sure no rules will change
+  // the plan shape, like adding an extra Project above Aggregate.
+  protected def rewriteAggregate(plan: UnaryNode): LogicalPlan = {
+    plan.child match {
+      case a: Aggregate if a.resolved =>
+        val hasTempResolvedCol = plan.expressions.exists(_.exists {
+          // If we have tried to resolve it before but failed, no need to rewrite the Aggregate.
+          case t: TempResolvedColumn => !t.hasTried
+          case _ => false
+        })
+        if (hasTempResolvedCol) {
+          a.withNewChildren(Seq(AggregateForTempResolvedCol(
+            a.groupingExpressions, a.aggregateExpressions, a.child)))
+        } else {
+          plan
+        }
+      case _ => plan
+    }
+  }
+
   protected def resolveLateralColumnAlias(selectList: Seq[Expression]): Seq[Expression] = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) return selectList
 

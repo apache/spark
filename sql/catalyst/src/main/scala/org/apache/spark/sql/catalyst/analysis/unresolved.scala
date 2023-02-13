@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -726,4 +726,33 @@ case class TempResolvedColumn(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(TEMP_RESOLVED_COLUMN)
+}
+
+/**
+ * A temporary representation of [[Aggregate]]. This is created when the parent node of
+ * [[Aggregate]] resolves columns to [[TempResolvedColumn]]. The resolution of TempResolvedColumn
+ * requires the plan shape to be stable (parent + Aggregate), otherwise
+ * the resolution rule `ResolveAggregateFunctions` can't match the plan. This plan is to make sure
+ * no analyzer rules will rewrite Aggregate to something else, such as adding an extra Project above
+ * it, as only `ResolveAggregateFunctions` will match it. We will convert it back to Aggregate at
+ * the end.
+ */
+case class AggregateForTempResolvedCol(
+    groupingExpressions: Seq[Expression],
+    aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode {
+  assert(resolved)
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE_FOR_TEMP_RESOLVED_COL)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+
+  def toAggregate: Aggregate = {
+    org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(this.origin) {
+      val agg = Aggregate(groupingExpressions, aggregateExpressions, child)
+      agg.copyTagsFrom(this)
+      agg
+    }
+  }
 }
