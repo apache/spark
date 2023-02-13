@@ -1224,6 +1224,12 @@
     ],
     "sqlState" : "428FT"
   },
+  "PATH_ALREADY_EXISTS" : {
+    "message" : [
+      "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
+    ],
+    "sqlState" : "42K04"
+  },
   "PATH_NOT_FOUND" : {
     "message" : [
       "Path does not exist: <path>."
@@ -2763,11 +2769,6 @@
   "_LEGACY_ERROR_TEMP_1151" : {
     "message" : [
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1152" : {
-    "message" : [
-      "Path <outputPath> already exists."
     ]
   },
   "_LEGACY_ERROR_TEMP_1153" : {
