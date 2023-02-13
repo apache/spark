@@ -34,7 +34,8 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
+  TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -79,7 +80,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val configMapName = KubernetesClientUtils.configMapNameExecutor
     val resolvedExecutorProperties =
       Map(KUBERNETES_NAMESPACE.key -> namespace)
-    val extraSize = s"${KUBERNETES_NAMESPACE.key}: ${namespace}".length
+    val extraSize = s"${KUBERNETES_NAMESPACE.key}: $namespace".length
     val confFilesMap = KubernetesClientUtils
       .buildSparkConfDirFilesMap(configMapName, conf, resolvedExecutorProperties, extraSize) ++
       resolvedExecutorProperties

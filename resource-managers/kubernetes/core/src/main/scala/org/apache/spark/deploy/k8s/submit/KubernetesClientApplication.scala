@@ -103,10 +103,11 @@ private[spark] class Client(
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
     val configMapName = KubernetesClientUtils.configMapNameDriver
+    val extraSize = s"${KUBERNETES_NAMESPACE.key}: ${conf.namespace}".length
     val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
-      conf.sparkConf,
-      resolvedDriverSpec.systemProperties ++ Map(KUBERNETES_NAMESPACE.key -> conf.namespace))
-    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap)
+      conf.sparkConf, resolvedDriverSpec.systemProperties, extraSize)
+    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap +
+        (KUBERNETES_NAMESPACE.key -> conf.namespace))
 
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
