@@ -123,7 +123,6 @@ copyright = ''
 # The short X.Y version.
 import pyspark
 import re
-#version = str(pyspark.__version__)
 version = re.sub(r"(\.?)dev.*", "", pyspark.__version__)
 
 # The full version, including alpha/beta/rc tags.
@@ -196,7 +195,7 @@ html_theme = 'pydata_sphinx_theme'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = "../../../docs/img/pyspark-logo-rev.svg"
+html_logo = "../../../docs/img/spark-logo-reverse.png"
 
 # The name of an image file (within the static path) to use as a favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
