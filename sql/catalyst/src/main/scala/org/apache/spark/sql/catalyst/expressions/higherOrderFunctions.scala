@@ -293,6 +293,63 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 }
 
 /**
+ * Return the value if the function returns true, otherwise null. This is the same as
+ * CASE WHEN func(value) THEN value else NULL except value is guaranteed to only be
+ * evaluated once.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, func) - Return the value if func returns true, otherwise return null.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
+       [2,3,4]
+      > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
+       [1,3,5]
+  """,
+  since = "3.5.0",
+  group = "lambda_funcs")
+case class FilterValue(
+    argument: Expression,
+    function: Expression)
+  extends SimpleHigherOrderFunction with CodegenFallback {
+
+  override def argumentType: AbstractDataType = AnyDataType
+
+  override def functionType: AbstractDataType = BooleanType
+
+  override def dataType: DataType = argument.dataType
+
+  override def nullable: Boolean = true
+
+  override protected def bindInternal(
+    f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): FilterValue = {
+    copy(function = f(function, (argument.dataType, argument.nullable) :: Nil))
+  }
+
+  @transient lazy val elementVar = {
+    val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+    elementVar
+  }
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue
+    val f = functionForEval
+    elementVar.value.set(arr)
+    if (f.eval(inputRow).asInstanceOf[Boolean]) {
+      arr
+    } else {
+      null
+    }
+  }
+
+  override def nodeName: String = "filter_value"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): FilterValue =
+    copy(argument = newLeft, function = newRight)
+}
+
+/**
  * Transform elements in an array using the transform function. This is similar to
  * a `map` in functional programming.
  */
