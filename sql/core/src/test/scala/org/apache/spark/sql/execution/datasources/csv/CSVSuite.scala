@@ -2654,7 +2654,7 @@ abstract class CSVSuite
           } else {
             val id = csv.select("_c2").collect()
             id.zipWithIndex.foreach { case (id, index) =>
-                assert(id === Row(skipLines + index))
+                assert(id.toString === Row(skipLines + index).toString)
             }
           }
         }
@@ -2680,7 +2680,7 @@ abstract class CSVSuite
         } else {
           val id = csv.select("_c2").collect()
           id.zipWithIndex.foreach { case (id, index) =>
-            assert(id === Row(skipLines + index))
+            assert(id.get(0) === skipLines + index)
           }
         }
       }
