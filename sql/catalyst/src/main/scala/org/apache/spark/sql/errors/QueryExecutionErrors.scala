@@ -1120,7 +1120,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("cost" -> cost))
   }
 
-  def unsupportedDataTypeError(typeName: String): SparkUnsupportedOperationException = {
+  def unsupportedDataTypeError(typeName: DataType): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_DATATYPE",
       messageParameters = Map("typeName" -> toSQLType(typeName)))

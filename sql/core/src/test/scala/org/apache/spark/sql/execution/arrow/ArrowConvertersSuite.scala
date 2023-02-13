@@ -1265,7 +1265,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     spark.conf.unset(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key)
   }
 
-  test("interval is unsupported for arrow") {
+  testQuietly("interval is unsupported for arrow") {
     val e = intercept[SparkException] {
       calendarIntervalData.toDF().toArrowBatchRdd.collect()
     }
