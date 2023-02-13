@@ -39,6 +39,11 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
+  "IS_NOT_ITERABLE" : {
+    "message" : [
+      "<objectName> is not iterable."
+    ]
+  },
   "NOT_BOOL" : {
     "message" : [
       "Argument `<arg_name>` should be a bool, got <arg_type>."
@@ -99,9 +104,19 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a DataFrame, got <arg_type>."
     ]
   },
+  "NOT_DATATYPE_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a DataType or str, got <arg_type>."
+    ]
+  },
   "NOT_DICT" : {
     "message" : [
       "Argument `<arg_name>` should be a dict, got <arg_type>."
+    ]
+  },
+  "NOT_EXPRESSION" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Expression, got <arg_type>."
     ]
   },
   "NOT_FLOAT_OR_INT" : {
@@ -129,9 +144,19 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
     ]
   },
+  "NOT_SAME_TYPE" : {
+    "message" : [
+      "Argument `<arg_name1>` and `<arg_name2>` should be the same type, got <arg_type1> and <arg_type2>."
+    ]
+  },
   "NOT_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a str, got <arg_type>."
+    ]
+  },
+  "NOT_WINDOWSPEC" : {
+    "message" : [
+      "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
