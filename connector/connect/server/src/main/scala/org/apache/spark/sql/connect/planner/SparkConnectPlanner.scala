@@ -1539,7 +1539,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       w.partitionBy(names.toSeq: _*)
     }
 
-    if (writeOperation.getSource != null) {
+    if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
 
