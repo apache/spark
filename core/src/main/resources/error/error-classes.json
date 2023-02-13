@@ -1065,7 +1065,7 @@
   },
   "MALFORMED_RECORD_IN_PARSING" : {
     "message" : [
-      "Malformed records are detected in record parsing: <badRecord>",
+      "Malformed records are detected in record parsing: <badRecord>.",
       "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
