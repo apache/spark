@@ -28,11 +28,11 @@ unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
     "arccos": F.acos,
-    "arccosh": pandas_udf(lambda s: np.arccosh(s), DoubleType()),  # type: ignore[call-overload]
+    "arccosh": pandas_udf(lambda s: np.arccosh(s), DoubleType()),
     "arcsin": F.asin,
-    "arcsinh": pandas_udf(lambda s: np.arcsinh(s), DoubleType()),  # type: ignore[call-overload]
+    "arcsinh": pandas_udf(lambda s: np.arcsinh(s), DoubleType()),
     "arctan": F.atan,
-    "arctanh": pandas_udf(lambda s: np.arctanh(s), DoubleType()),  # type: ignore[call-overload]
+    "arctanh": pandas_udf(lambda s: np.arctanh(s), DoubleType()),
     "bitwise_not": F.bitwiseNOT,
     "cbrt": F.cbrt,
     "ceil": F.ceil,
@@ -40,17 +40,17 @@ unary_np_spark_mappings = {
     "conj": lambda _: NotImplemented,
     "conjugate": lambda _: NotImplemented,  # It requires complex type
     "cos": F.cos,
-    "cosh": pandas_udf(lambda s: np.cosh(s), DoubleType()),  # type: ignore[call-overload]
-    "deg2rad": pandas_udf(lambda s: np.deg2rad(s), DoubleType()),  # type: ignore[call-overload]
+    "cosh": pandas_udf(lambda s: np.cosh(s), DoubleType()),
+    "deg2rad": pandas_udf(lambda s: np.deg2rad(s), DoubleType()),
     "degrees": F.degrees,
     "exp": F.exp,
-    "exp2": pandas_udf(lambda s: np.exp2(s), DoubleType()),  # type: ignore[call-overload]
+    "exp2": pandas_udf(lambda s: np.exp2(s), DoubleType()),
     "expm1": F.expm1,
-    "fabs": pandas_udf(lambda s: np.fabs(s), DoubleType()),  # type: ignore[call-overload]
+    "fabs": pandas_udf(lambda s: np.fabs(s), DoubleType()),
     "floor": F.floor,
     "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
     # and it cannot be supported via pandas UDF.
-    "invert": pandas_udf(lambda s: np.invert(s), DoubleType()),  # type: ignore[call-overload]
+    "invert": pandas_udf(lambda s: np.invert(s), DoubleType()),
     "isfinite": lambda c: c != float("inf"),
     "isinf": lambda c: c == float("inf"),
     "isnan": F.isnan,
@@ -58,27 +58,25 @@ unary_np_spark_mappings = {
     "log": F.log,
     "log10": F.log10,
     "log1p": F.log1p,
-    "log2": pandas_udf(lambda s: np.log2(s), DoubleType()),  # type: ignore[call-overload]
+    "log2": pandas_udf(lambda s: np.log2(s), DoubleType()),
     "logical_not": lambda c: ~(c.cast(BooleanType())),
     "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
     "negative": lambda c: c * -1,
     "positive": lambda c: c,
-    "rad2deg": pandas_udf(lambda s: np.rad2deg(s), DoubleType()),  # type: ignore[call-overload]
+    "rad2deg": pandas_udf(lambda s: np.rad2deg(s), DoubleType()),
     "radians": F.radians,
-    "reciprocal": pandas_udf(  # type: ignore[call-overload]
-        lambda s: np.reciprocal(s), DoubleType()
-    ),
-    "rint": pandas_udf(lambda s: np.rint(s), DoubleType()),  # type: ignore[call-overload]
+    "reciprocal": pandas_udf(lambda s: np.reciprocal(s), DoubleType()),
+    "rint": pandas_udf(lambda s: np.rint(s), DoubleType()),
     "sign": lambda c: F.when(c == 0, 0).when(c < 0, -1).otherwise(1),
     "signbit": lambda c: F.when(c < 0, True).otherwise(False),
     "sin": F.sin,
-    "sinh": pandas_udf(lambda s: np.sinh(s), DoubleType()),  # type: ignore[call-overload]
-    "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
+    "sinh": pandas_udf(lambda s: np.sinh(s), DoubleType()),
+    "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),
     "sqrt": F.sqrt,
-    "square": pandas_udf(lambda s: np.square(s), DoubleType()),  # type: ignore[call-overload]
+    "square": pandas_udf(lambda s: np.square(s), DoubleType()),
     "tan": F.tan,
-    "tanh": pandas_udf(lambda s: np.tanh(s), DoubleType()),  # type: ignore[call-overload]
-    "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),  # type: ignore[call-overload]
+    "tanh": pandas_udf(lambda s: np.tanh(s), DoubleType()),
+    "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),
 }
 
 binary_np_spark_mappings = {
@@ -86,36 +84,20 @@ binary_np_spark_mappings = {
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
     "bitwise_or": lambda c1, c2: c1.bitwiseOR(c2),
     "bitwise_xor": lambda c1, c2: c1.bitwiseXOR(c2),
-    "copysign": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.copysign(s1, s2), DoubleType()
-    ),
-    "float_power": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.float_power(s1, s2), DoubleType()
-    ),
-    "floor_divide": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
-    ),
-    "fmax": pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmin": pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmod": pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "heaviside": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.heaviside(s1, s2), DoubleType()
-    ),
+    "copysign": pandas_udf(lambda s1, s2: np.copysign(s1, s2), DoubleType()),
+    "float_power": pandas_udf(lambda s1, s2: np.float_power(s1, s2), DoubleType()),
+    "floor_divide": pandas_udf(lambda s1, s2: np.floor_divide(s1, s2), DoubleType()),
+    "fmax": pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType()),
+    "fmin": pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType()),
+    "fmod": pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType()),
+    "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),
+    "heaviside": pandas_udf(lambda s1, s2: np.heaviside(s1, s2), DoubleType()),
     "hypot": F.hypot,
-    "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "ldexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.ldexp(s1, s2), DoubleType()
-    ),
-    "left_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.left_shift(s1, s2), LongType()
-    ),
-    "logaddexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.logaddexp(s1, s2), DoubleType()
-    ),
-    "logaddexp2": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.logaddexp2(s1, s2), DoubleType()
-    ),
+    "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),
+    "ldexp": pandas_udf(lambda s1, s2: np.ldexp(s1, s2), DoubleType()),
+    "left_shift": pandas_udf(lambda s1, s2: np.left_shift(s1, s2), LongType()),
+    "logaddexp": pandas_udf(lambda s1, s2: np.logaddexp(s1, s2), DoubleType()),
+    "logaddexp2": pandas_udf(lambda s1, s2: np.logaddexp2(s1, s2), DoubleType()),
     "logical_and": lambda c1, c2: c1.cast(BooleanType()) & c2.cast(BooleanType()),
     "logical_or": lambda c1, c2: c1.cast(BooleanType()) | c2.cast(BooleanType()),
     "logical_xor": lambda c1, c2: (
@@ -125,13 +107,9 @@ binary_np_spark_mappings = {
     ),
     "maximum": F.greatest,
     "minimum": F.least,
-    "modf": pandas_udf(lambda s1, s2: np.modf(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "nextafter": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.nextafter(s1, s2), DoubleType()
-    ),
-    "right_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.right_shift(s1, s2), LongType()
-    ),
+    "modf": pandas_udf(lambda s1, s2: np.modf(s1, s2), DoubleType()),
+    "nextafter": pandas_udf(lambda s1, s2: np.nextafter(s1, s2), DoubleType()),
+    "right_shift": pandas_udf(lambda s1, s2: np.right_shift(s1, s2), LongType()),
 }
 
 

@@ -57,7 +57,7 @@ def ser_to_frame_pandas_udf_example(spark: SparkSession) -> None:
 
     from pyspark.sql.functions import pandas_udf
 
-    @pandas_udf("col1 string, col2 long")  # type: ignore[call-overload]
+    @pandas_udf("col1 string, col2 long")
     def func(s1: pd.Series, s2: pd.Series, s3: pd.DataFrame) -> pd.DataFrame:
         s3['col2'] = s1 + s2.str.len()
         return s3
@@ -90,7 +90,7 @@ def ser_to_ser_pandas_udf_example(spark: SparkSession) -> None:
     def multiply_func(a: pd.Series, b: pd.Series) -> pd.Series:
         return a * b
 
-    multiply = pandas_udf(multiply_func, returnType=LongType())  # type: ignore[call-overload]
+    multiply = pandas_udf(multiply_func, returnType=LongType())
 
     # The function for a pandas_udf should be able to execute with local Pandas data
     x = pd.Series([1, 2, 3])
@@ -125,7 +125,7 @@ def iter_ser_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
     df = spark.createDataFrame(pdf)
 
     # Declare the function and create the UDF
-    @pandas_udf("long")  # type: ignore[call-overload]
+    @pandas_udf("long")
     def plus_one(iterator: Iterator[pd.Series]) -> Iterator[pd.Series]:
         for x in iterator:
             yield x + 1
@@ -151,7 +151,7 @@ def iter_sers_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
     df = spark.createDataFrame(pdf)
 
     # Declare the function and create the UDF
-    @pandas_udf("long")  # type: ignore[call-overload]
+    @pandas_udf("long")
     def multiply_two_cols(
             iterator: Iterator[Tuple[pd.Series, pd.Series]]) -> Iterator[pd.Series]:
         for a, b in iterator:
@@ -178,7 +178,7 @@ def ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
         ("id", "v"))
 
     # Declare the function and create the UDF
-    @pandas_udf("double")  # type: ignore[call-overload]
+    @pandas_udf("double")
     def mean_udf(v: pd.Series) -> float:
         return v.mean()
 
