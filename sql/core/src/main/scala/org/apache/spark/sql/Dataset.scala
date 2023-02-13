@@ -1929,7 +1929,7 @@ class Dataset[T] private[sql](
    *       this Dataset with that function.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def groupByKey[K: Encoder](column: Column, columns: Column*): KeyValueGroupedDataset[K, T] =
     groupBy(column +: columns: _*).as[K, T]
@@ -1945,7 +1945,7 @@ class Dataset[T] private[sql](
    *       this Dataset with that function.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def groupByKey[K: Encoder](column: String, columns: String*): KeyValueGroupedDataset[K, T] =
     groupBy(column, columns: _*).as[K, T]
@@ -1987,7 +1987,7 @@ class Dataset[T] private[sql](
    *       this Dataset with that function.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @scala.annotation.varargs
   def groupByKey[K](encoder: Encoder[K], column: Column, columns: Column*):
@@ -2005,7 +2005,7 @@ class Dataset[T] private[sql](
    *       this Dataset with that function.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @scala.annotation.varargs
   def groupByKey[K](encoder: Encoder[K],
