@@ -2681,6 +2681,7 @@ abstract class CSVSuite
           val id = csv.select("_c2").collect()
           id.zipWithIndex.foreach { case (id, index) =>
             assert(id === Row(skipLines + index))
+          }
         }
       }
     }
