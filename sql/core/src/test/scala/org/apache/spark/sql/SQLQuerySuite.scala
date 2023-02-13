@@ -4546,7 +4546,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(2), Row(1)))
   }
 
-  test("SPARK-42416: Dateset.show() should not resolve the analyzed logical plan again") {
+  test("SPARK-42416: Dateset operations should not resolve the analyzed logical plan again") {
     withTable("app") {
       withView("view1") {
         sql(
