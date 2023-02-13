@@ -615,11 +615,11 @@ class TorchDistributor(Distributor):
             TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
             try:
                 output = TorchDistributor._get_pickled_output(output_file_path)
-            except FileNotFoundError:
+            except FileNotFoundError as e:
                 raise RuntimeError(
                     "TorchDistributor failed during training. "
                     "View stdout logs for detailed error message."
-                )
+                ) from e
         return output
 
     @staticmethod
