@@ -99,11 +99,15 @@ def arrow_udf(
     f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: ArrowScalarIterUDFType
 ) -> Callable[[ArrowScalarIterFunction], UserDefinedFunctionLike]: ...
 @overload
+def pandas_udf(f: PandasScalarToScalarFunction, returnType: Union[AtomicDataTypeOrString, ArrayType]) -> UserDefinedFunctionLike: ...  # type: ignore[misc]
+@overload
 def pandas_udf(
     f: PandasScalarToScalarFunction,
     returnType: Union[AtomicDataTypeOrString, ArrayType],
     functionType: PandasScalarUDFType,
 ) -> UserDefinedFunctionLike: ...
+@overload
+def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType]) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[misc]
 @overload
 def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType], returnType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[overload-overlap]
 @overload
@@ -111,11 +115,15 @@ def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: Pan
 @overload
 def pandas_udf(*, returnType: Union[AtomicDataTypeOrString, ArrayType], functionType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[overload-overlap]
 @overload
+def pandas_udf(f: PandasScalarToStructFunction, returnType: Union[StructType, str]) -> UserDefinedFunctionLike: ...  # type: ignore[misc]
+@overload
 def pandas_udf(
     f: PandasScalarToStructFunction,
     returnType: Union[StructType, str],
     functionType: PandasScalarUDFType,
 ) -> UserDefinedFunctionLike: ...
+@overload
+def pandas_udf(f: Union[StructType, str]) -> Callable[[PandasScalarToStructFunction], UserDefinedFunctionLike]: ...  # type: ignore[misc]
 @overload
 def pandas_udf(
     f: Union[StructType, str], returnType: PandasScalarUDFType
@@ -129,11 +137,15 @@ def pandas_udf(
     *, returnType: Union[StructType, str], functionType: PandasScalarUDFType
 ) -> Callable[[PandasScalarToStructFunction], UserDefinedFunctionLike]: ...
 @overload
+def pandas_udf(f: PandasScalarIterFunction, returnType: Union[AtomicDataTypeOrString, ArrayType]) -> UserDefinedFunctionLike: ...  # type: ignore[misc]
+@overload
 def pandas_udf(
     f: PandasScalarIterFunction,
     returnType: Union[AtomicDataTypeOrString, ArrayType],
     functionType: PandasScalarIterUDFType,
 ) -> UserDefinedFunctionLike: ...
+@overload
+def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType]) -> Callable[[PandasScalarIterFunction], UserDefinedFunctionLike]: ...  # type: ignore[misc]
 @overload
 def pandas_udf(
     f: Union[AtomicDataTypeOrString, ArrayType], returnType: PandasScalarIterUDFType
@@ -147,11 +159,15 @@ def pandas_udf(
     f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: PandasScalarIterUDFType
 ) -> Callable[[PandasScalarIterFunction], UserDefinedFunctionLike]: ...
 @overload
+def pandas_udf(f: PandasGroupedMapFunction, returnType: Union[StructType, str]) -> GroupedMapPandasUserDefinedFunction: ...  # type: ignore[misc]
+@overload
 def pandas_udf(
     f: PandasGroupedMapFunction,
     returnType: Union[StructType, str],
     functionType: Union[PandasGroupedMapUDFType, PandasGroupedMapIterUDFType],
 ) -> GroupedMapPandasUserDefinedFunction: ...
+@overload
+def pandas_udf(f: Union[StructType, str]) -> Callable[[PandasGroupedMapFunction], GroupedMapPandasUserDefinedFunction]: ...  # type: ignore[misc]
 @overload
 def pandas_udf(
     f: Union[StructType, str],
@@ -170,11 +186,15 @@ def pandas_udf(
     functionType: Union[PandasGroupedMapUDFType, PandasGroupedMapIterUDFType],
 ) -> Callable[[PandasGroupedMapFunction], GroupedMapPandasUserDefinedFunction]: ...
 @overload
+def pandas_udf(f: PandasGroupedAggFunction, returnType: Union[AtomicDataTypeOrString, ArrayType]) -> UserDefinedFunctionLike: ...  # type: ignore[misc]
+@overload
 def pandas_udf(
     f: PandasGroupedAggFunction,
     returnType: Union[AtomicDataTypeOrString, ArrayType],
     functionType: PandasGroupedAggUDFType,
 ) -> UserDefinedFunctionLike: ...
+@overload
+def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType]) -> Callable[[PandasGroupedAggFunction], UserDefinedFunctionLike]: ...  # type: ignore[misc]
 @overload
 def pandas_udf(
     f: Union[AtomicDataTypeOrString, ArrayType], returnType: PandasGroupedAggUDFType
