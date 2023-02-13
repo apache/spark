@@ -1931,8 +1931,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.4.0
    */
-  def groupByKey[K: Encoder](columns: Column*): KeyValueGroupedDataset[K, T] =
-    groupBy(columns: _*).as[K, T]
+  def groupByKey[K: Encoder](column: Column, columns: Column*): KeyValueGroupedDataset[K, T] =
+    groupBy(column +: columns: _*).as[K, T]
 
   /**
    * (Scala-specific)
@@ -1947,8 +1947,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.4.0
    */
-  def groupByKey[K: Encoder](col1: String, columns: String*): KeyValueGroupedDataset[K, T] =
-    groupBy(col1, columns: _*).as[K, T]
+  def groupByKey[K: Encoder](column: String, columns: String*): KeyValueGroupedDataset[K, T] =
+    groupBy(column, columns: _*).as[K, T]
 
   /**
    * (Scala-specific)
@@ -1990,8 +1990,9 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def groupByKey[K](encoder: Encoder[K], columns: Column*) : KeyValueGroupedDataset[K, T] =
-    groupBy(columns: _*).as(encoderFor(encoder), exprEnc)
+  def groupByKey[K](encoder: Encoder[K], column: Column, columns: Column*):
+      KeyValueGroupedDataset[K, T] =
+    groupBy(column +: columns: _*).as(encoderFor(encoder), exprEnc)
 
   /**
    * (Java-specific)
@@ -2008,9 +2009,9 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def groupByKey[K](encoder: Encoder[K],
-                    col1: String,
+                    column: String,
                     columns: String*): KeyValueGroupedDataset[K, T] =
-    groupBy(col1, columns: _*).as(encoderFor(encoder), exprEnc)
+    groupBy(column, columns: _*).as(encoderFor(encoder), exprEnc)
 
   /**
    * (Java-specific)
