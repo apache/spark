@@ -1,0 +1,5 @@
+*i
+$Z" struct<id:bigint,a:int,b:double>*Z(&struct<a:int,id:bigint,payload:binary>
+=
+a
+a 

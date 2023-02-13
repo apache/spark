@@ -1019,6 +1019,22 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   def where(conditionExpr: String): Dataset[T] = filter(conditionExpr)
 
+  private def buildUnpivot(
+      ids: Array[Column],
+      valuesOption: Option[Array[Column]],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame = session.newDataset { builder =>
+    val unpivot = builder.getUnpivotBuilder
+      .setInput(plan.getRoot)
+      .addAllIds(ids.toSeq.map(_.expr).asJava)
+      .setValueColumnName(variableColumnName)
+      .setValueColumnName(valueColumnName)
+    valuesOption.foreach { values =>
+      unpivot.getValuesBuilder
+        .addAllValues(values.toSeq.map(_.expr).asJava)
+    }
+  }
+
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
    * set. This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
@@ -1081,13 +1097,8 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
       ids: Array[Column],
       values: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): DataFrame = session.newDataset { builder =>
-    builder.getUnpivotBuilder
-      .setInput(plan.getRoot)
-      .addAllIds(ids.toSeq.map(_.expr).asJava)
-      .addAllValues(values.toSeq.map(_.expr).asJava)
-      .setValueColumnName(variableColumnName)
-      .setValueColumnName(valueColumnName)
+      valueColumnName: String): DataFrame = {
+    buildUnpivot(ids, Option(values), variableColumnName, valueColumnName)
   }
 
   /**
@@ -1115,7 +1126,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
       ids: Array[Column],
       variableColumnName: String,
       valueColumnName: String): DataFrame = {
-    unpivot(ids, Array.empty, valueColumnName, valueColumnName)
+    buildUnpivot(ids, None, variableColumnName, valueColumnName)
   }
 
   /**
@@ -1237,7 +1248,9 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   def union(other: Dataset[T]): Dataset[T] = {
-    buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_UNION)(_ => ())
+    buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_UNION) { builder =>
+      builder.setIsAll(true)
+    }
   }
 
   /**
@@ -1329,7 +1342,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_UNION) { builder =>
-      builder.setByName(true).setAllowMissingColumns(allowMissingColumns)
+      builder.setByName(true).setIsAll(true).setAllowMissingColumns(allowMissingColumns)
     }
   }
 
@@ -1754,7 +1767,11 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(): Dataset[T] = dropDuplicates(this.columns)
+  def dropDuplicates(): Dataset[T] = session.newDataset { builder =>
+    builder.getDeduplicateBuilder
+      .setInput(plan.getRoot)
+      .setAllColumnsAsKeys(true)
+  }
 
   /**
    * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only the

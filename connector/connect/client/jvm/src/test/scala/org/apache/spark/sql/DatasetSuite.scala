@@ -27,6 +27,10 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
 
+// Add sample tests.
+// - sample fraction: simple.sample(0.1)
+// - sample withReplacement_fraction: simple.sample(withReplacement = true, 0.11)
+// Add tests for exceptions thrown
 class DatasetSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterEach {

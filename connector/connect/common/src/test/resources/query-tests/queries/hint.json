@@ -1,0 +1,15 @@
+{
+  "hint": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "name": "coalesce",
+    "parameters": [{
+      "literal": {
+        "integer": 100
+      }
+    }]
+  }
+}

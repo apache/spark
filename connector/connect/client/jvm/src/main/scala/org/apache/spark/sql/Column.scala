@@ -127,11 +127,9 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = Column { builder =>
-    builder.getSortOrderBuilder
-      .setDirection(SortDirection.SORT_DIRECTION_DESCENDING)
-      .setNullOrdering(NullOrdering.SORT_NULLS_FIRST)
-  }
+  def desc_nulls_first: Column = buildSortOrder(
+    SortDirection.SORT_DIRECTION_DESCENDING,
+    NullOrdering.SORT_NULLS_FIRST)
 
   /**
    * Returns a sort expression based on the descending order of the column, and null values appear
@@ -147,11 +145,9 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = Column { builder =>
-    builder.getSortOrderBuilder
-      .setDirection(SortDirection.SORT_DIRECTION_DESCENDING)
-      .setNullOrdering(NullOrdering.SORT_NULLS_LAST)
-  }
+  def desc_nulls_last: Column = buildSortOrder(
+    SortDirection.SORT_DIRECTION_DESCENDING,
+    NullOrdering.SORT_NULLS_LAST)
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -182,11 +178,9 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = Column { builder =>
-    builder.getSortOrderBuilder
-      .setDirection(SortDirection.SORT_DIRECTION_ASCENDING)
-      .setNullOrdering(NullOrdering.SORT_NULLS_FIRST)
-  }
+  def asc_nulls_first: Column = buildSortOrder(
+    SortDirection.SORT_DIRECTION_ASCENDING,
+    NullOrdering.SORT_NULLS_FIRST)
 
   /**
    * Returns a sort expression based on ascending order of the column, and null values appear
@@ -202,10 +196,17 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = Column { builder =>
+  def asc_nulls_last: Column = buildSortOrder(
+    SortDirection.SORT_DIRECTION_ASCENDING,
+    NullOrdering.SORT_NULLS_LAST)
+
+  private def buildSortOrder(
+      sortDirection: SortDirection,
+      nullOrdering: NullOrdering): Column = Column { builder =>
     builder.getSortOrderBuilder
-      .setDirection(SortDirection.SORT_DIRECTION_ASCENDING)
-      .setNullOrdering(NullOrdering.SORT_NULLS_LAST)
+      .setChild(expr)
+      .setDirection(sortDirection)
+      .setNullOrdering(nullOrdering)
   }
 
   private[sql] def sortOrder: proto.Expression.SortOrder = {

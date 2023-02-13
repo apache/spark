@@ -1,0 +1,5 @@
+Project [none#3, element_at(none#0, none#3, None, false) AS #0, element_at(none#1, none#3, None, false) AS #1, element_at(none#2, none#3, None, false) AS #2]
++- !Project [none#0, none#1, none#2, none#3]
+   +- Generate explode([mean,min]), false, [none#0]
+      +- Aggregate [map(cast(mean as string), cast(avg(none#0L) as string), cast(min as string), cast(min(none#0L) as string)) AS #0, map(cast(mean as string), cast(avg(none#1) as string), cast(min as string), cast(min(none#1) as string)) AS #1, map(cast(mean as string), cast(avg(none#2) as string), cast(min as string), cast(min(none#2) as string)) AS #2]
+         +- LocalRelation <empty>, [none#0L, none#1, none#2]
