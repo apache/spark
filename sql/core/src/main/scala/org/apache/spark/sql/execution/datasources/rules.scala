@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -78,9 +77,10 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
-          throw new SparkIllegalArgumentException(
-            errorClass = "_LEGACY_ERROR_TEMP_2332",
-            messageParameters = Map("msg" -> e.getMessage)
+          u.failAnalysis(
+            errorClass = "UNSUPPORTED_DATASOURCE",
+            messageParameters = Map("dataSourceType" -> u.multipartIdentifier.head),
+            cause = e
           )
       }
   }

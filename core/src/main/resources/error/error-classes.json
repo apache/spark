@@ -5107,9 +5107,9 @@
       "failed to evaluate expression <sqlExpr>: <msg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2332" : {
+  "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
-      "<msg>"
+      "Unsupported data source type for direct query on files: <dataSourceType>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2400" : {
