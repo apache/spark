@@ -76,8 +76,8 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     val relativePath = inputFilePath.relativize(file)
     val fileName = relativePath.getFileName.toString
     if ((versionNumberString.startsWith("2.12") && fileName.endsWith("2.13.proto.bin")) ||
-        (versionNumberString.startsWith("2.13") && fileName.endsWith("2.12.proto.bin"))) {
-       return
+      (versionNumberString.startsWith("2.13") && fileName.endsWith("2.12.proto.bin"))) {
+      return
     }
     if (!fileName.endsWith(".proto.bin")) {
       logError(s"Skipping $fileName")
