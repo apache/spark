@@ -658,7 +658,7 @@ class PandasOnSparkFrameMethods:
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(  # type: ignore[call-overload]
+                pudf = pandas_udf(
                     output_func, returnType=return_schema
                 )
                 temp_struct_column = verify_temp_column_name(
@@ -726,7 +726,7 @@ class PandasOnSparkFrameMethods:
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(  # type: ignore[call-overload]
+                pudf = pandas_udf(
                     output_func, returnType=return_schema
                 )
                 temp_struct_column = verify_temp_column_name(
