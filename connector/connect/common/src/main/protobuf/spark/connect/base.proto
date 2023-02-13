@@ -36,7 +36,7 @@ message Plan {
   oneof op_type {
     Relation root = 1;
     Command command = 2;
-    MlCommand ml_command = 3;
+    RemoteCall remote_call = 3;
   }
 }
 

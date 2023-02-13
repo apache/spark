@@ -24,6 +24,62 @@ import "spark/connect/relations.proto";
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
+
+message RemoteCall {
+  oneof call_type {
+    ConstructObject construct_object = 1;
+    DestructObject destruct_object = 2;
+    CallMethod call_method = 3;
+    CallFunction call_function = 4;
+  }
+
+  message ArgValue {
+    oneof arg_type {
+      int32 int32_value = 1;
+      int64 int64_value = 2;
+      float float_value = 3;
+      double double_value = 4;
+      bool bool_value = 5;
+      string string_value = 6;
+      List list = 7;
+      Map map = 8;
+      Relation relation = 9;
+      RemoteObject remote_object = 10;
+    }
+  }
+
+  message List {
+    repeated ArgValue element = 1;
+  }
+  message Map {
+    map<string, ArgValue> map = 1;
+  }
+  message RemoteObject {
+    string id = 1;
+  }
+
+  message ConstructObject {
+    string className = 1;
+    repeated ArgValue values = 2;
+  }
+
+  message DestructObject {
+    RemoteObject remote_object = 1;
+  }
+
+  message CallMethod {
+    RemoteObject remote_object = 1;
+    string method_name = 2;
+    repeated ArgValue arg_values = 3;
+  }
+
+  message CallFunction {
+    string module_name = 1;
+    repeated ArgValue arg_values = 3;
+  }
+}
+
+
 message MlCommand {
   oneof op_type {
     ConstructStage construct_stage = 1;

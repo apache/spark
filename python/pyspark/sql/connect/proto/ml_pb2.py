@@ -33,10 +33,20 @@ from pyspark.sql.connect.proto import relations_pb2 as spark_dot_connect_dot_rel
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b"\n\x16spark/connect/ml.proto\x12\rspark.connect\x1a\x1dspark/connect/relations.proto\"\xaa\x11\n\tMlCommand\x12R\n\x0f\x63onstruct_stage\x18\x01 \x01(\x0b\x32'.spark.connect.MlCommand.ConstructStageH\x00R\x0e\x63onstructStage\x12R\n\x0f\x64\x65struct_object\x18\x02 \x01(\x0b\x32'.spark.connect.MlCommand.DestructObjectH\x00R\x0e\x64\x65structObject\x12\x30\n\x03\x66it\x18\x03 \x01(\x0b\x32\x1c.spark.connect.MlCommand.FitH\x00R\x03\x66it\x12\x42\n\ttransform\x18\x04 \x01(\x0b\x32\".spark.connect.MlCommand.TransformH\x00R\ttransform\x12l\n\x19transfer_params_to_server\x18\x05 \x01(\x0b\x32/.spark.connect.MlCommand.TransferParamsToServerH\x00R\x16transferParamsToServer\x12r\n\x1btransfer_params_from_server\x18\x06 \x01(\x0b\x32\x31.spark.connect.MlCommand.TransferParamsFromServerH\x00R\x18transferParamsFromServer\x1a\x99\x07\n\nParamValue\x12\x1b\n\x08long_val\x18\x01 \x01(\x03H\x00R\x07longVal\x12\x19\n\x07int_val\x18\x02 \x01(\x05H\x00R\x06intVal\x12\x1f\n\ndouble_val\x18\x03 \x01(\x01H\x00R\tdoubleVal\x12\x1d\n\tfloat_val\x18\x04 \x01(\x02H\x00R\x08\x66loatVal\x12\x1b\n\x08\x62ool_val\x18\x05 \x01(\x08H\x00R\x07\x62oolVal\x12\x19\n\x07str_val\x18\x06 \x01(\tH\x00R\x06strVal\x12T\n\x0c\x64ouble_array\x18\x07 \x01(\x0b\x32/.spark.connect.MlCommand.ParamValue.DoubleArrayH\x00R\x0b\x64oubleArray\x12Q\n\x0b\x66loat_array\x18\x08 \x01(\x0b\x32..spark.connect.MlCommand.ParamValue.FloatArrayH\x00R\nfloatArray\x12N\n\nlong_array\x18\t \x01(\x0b\x32-.spark.connect.MlCommand.ParamValue.LongArrayH\x00R\tlongArray\x12K\n\tint_array\x18\n \x01(\x0b\x32,.spark.connect.MlCommand.ParamValue.IntArrayH\x00R\x08intArray\x12N\n\tstr_array\x18\x0b \x01(\x0b\x32/.spark.connect.MlCommand.ParamValue.StringArrayH\x00R\x08strArray\x12N\n\nbool_array\x18\x0c \x01(\x0b\x32-.spark.connect.MlCommand.ParamValue.BoolArrayH\x00R\tboolArray\x1a'\n\x0b\x44oubleArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x01R\x07\x65lement\x1a&\n\nFloatArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x02R\x07\x65lement\x1a%\n\tLongArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x03R\x07\x65lement\x1a$\n\x08IntArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x05R\x07\x65lement\x1a'\n\x0bStringArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\tR\x07\x65lement\x1a%\n\tBoolArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x08R\x07\x65lementB\x07\n\x05value\x1a\xef\x02\n\x06Params\x12\x43\n\x06params\x18\x01 \x03(\x0b\x32+.spark.connect.MlCommand.Params.ParamsEntryR\x06params\x12Y\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32\x32.spark.connect.MlCommand.Params.DefaultParamsEntryR\rdefaultParams\x1a^\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x39\n\x05value\x18\x02 \x01(\x0b\x32#.spark.connect.MlCommand.ParamValueR\x05value:\x02\x38\x01\x1a\x65\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x39\n\x05value\x18\x02 \x01(\x0b\x32#.spark.connect.MlCommand.ParamValueR\x05value:\x02\x38\x01\x1a\x41\n\x0e\x43onstructStage\x12\x10\n\x03uid\x18\x01 \x01(\tR\x03uid\x12\x1d\n\nclass_name\x18\x02 \x01(\tR\tclassName\x1a \n\x0e\x44\x65structObject\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x1a\x44\n\x03\x46it\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x12-\n\x05input\x18\x02 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x1aJ\n\tTransform\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x12-\n\x05input\x18\x02 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x1a\x61\n\x16TransferParamsToServer\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x12\x37\n\x06params\x18\x02 \x01(\x0b\x32\x1f.spark.connect.MlCommand.ParamsR\x06params\x1a*\n\x18TransferParamsFromServer\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02idB\t\n\x07op_typeB\"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3"
+    b'\n\x16spark/connect/ml.proto\x12\rspark.connect\x1a\x1dspark/connect/relations.proto"\xbe\x0c\n\nRemoteCall\x12V\n\x10\x63onstruct_object\x18\x01 \x01(\x0b\x32).spark.connect.RemoteCall.ConstructObjectH\x00R\x0f\x63onstructObject\x12S\n\x0f\x64\x65struct_object\x18\x02 \x01(\x0b\x32(.spark.connect.RemoteCall.DestructObjectH\x00R\x0e\x64\x65structObject\x12G\n\x0b\x63\x61ll_method\x18\x03 \x01(\x0b\x32$.spark.connect.RemoteCall.CallMethodH\x00R\ncallMethod\x12M\n\rcall_function\x18\x04 \x01(\x0b\x32&.spark.connect.RemoteCall.CallFunctionH\x00R\x0c\x63\x61llFunction\x1a\xd9\x03\n\x08\x41rgValue\x12!\n\x0bint32_value\x18\x01 \x01(\x05H\x00R\nint32Value\x12!\n\x0bint64_value\x18\x02 \x01(\x03H\x00R\nint64Value\x12!\n\x0b\x66loat_value\x18\x03 \x01(\x02H\x00R\nfloatValue\x12#\n\x0c\x64ouble_value\x18\x04 \x01(\x01H\x00R\x0b\x64oubleValue\x12\x1f\n\nbool_value\x18\x05 \x01(\x08H\x00R\tboolValue\x12#\n\x0cstring_value\x18\x06 \x01(\tH\x00R\x0bstringValue\x12\x34\n\x04list\x18\x07 \x01(\x0b\x32\x1e.spark.connect.RemoteCall.ListH\x00R\x04list\x12\x31\n\x03map\x18\x08 \x01(\x0b\x32\x1d.spark.connect.RemoteCall.MapH\x00R\x03map\x12\x35\n\x08relation\x18\t \x01(\x0b\x32\x17.spark.connect.RelationH\x00R\x08relation\x12M\n\rremote_object\x18\n \x01(\x0b\x32&.spark.connect.RemoteCall.RemoteObjectH\x00R\x0cremoteObjectB\n\n\x08\x61rg_type\x1a\x44\n\x04List\x12<\n\x07\x65lement\x18\x01 \x03(\x0b\x32".spark.connect.RemoteCall.ArgValueR\x07\x65lement\x1a\x9b\x01\n\x03Map\x12\x38\n\x03map\x18\x01 \x03(\x0b\x32&.spark.connect.RemoteCall.Map.MapEntryR\x03map\x1aZ\n\x08MapEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x38\n\x05value\x18\x02 \x01(\x0b\x32".spark.connect.RemoteCall.ArgValueR\x05value:\x02\x38\x01\x1a\x1e\n\x0cRemoteObject\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x1ak\n\x0f\x43onstructObject\x12\x1c\n\tclassName\x18\x01 \x01(\tR\tclassName\x12:\n\x06values\x18\x02 \x03(\x0b\x32".spark.connect.RemoteCall.ArgValueR\x06values\x1a]\n\x0e\x44\x65structObject\x12K\n\rremote_object\x18\x01 \x01(\x0b\x32&.spark.connect.RemoteCall.RemoteObjectR\x0cremoteObject\x1a\xbd\x01\n\nCallMethod\x12K\n\rremote_object\x18\x01 \x01(\x0b\x32&.spark.connect.RemoteCall.RemoteObjectR\x0cremoteObject\x12\x1f\n\x0bmethod_name\x18\x02 \x01(\tR\nmethodName\x12\x41\n\narg_values\x18\x03 \x03(\x0b\x32".spark.connect.RemoteCall.ArgValueR\targValues\x1ar\n\x0c\x43\x61llFunction\x12\x1f\n\x0bmodule_name\x18\x01 \x01(\tR\nmoduleName\x12\x41\n\narg_values\x18\x03 \x03(\x0b\x32".spark.connect.RemoteCall.ArgValueR\targValuesB\x0b\n\tcall_type"\xaa\x11\n\tMlCommand\x12R\n\x0f\x63onstruct_stage\x18\x01 \x01(\x0b\x32\'.spark.connect.MlCommand.ConstructStageH\x00R\x0e\x63onstructStage\x12R\n\x0f\x64\x65struct_object\x18\x02 \x01(\x0b\x32\'.spark.connect.MlCommand.DestructObjectH\x00R\x0e\x64\x65structObject\x12\x30\n\x03\x66it\x18\x03 \x01(\x0b\x32\x1c.spark.connect.MlCommand.FitH\x00R\x03\x66it\x12\x42\n\ttransform\x18\x04 \x01(\x0b\x32".spark.connect.MlCommand.TransformH\x00R\ttransform\x12l\n\x19transfer_params_to_server\x18\x05 \x01(\x0b\x32/.spark.connect.MlCommand.TransferParamsToServerH\x00R\x16transferParamsToServer\x12r\n\x1btransfer_params_from_server\x18\x06 \x01(\x0b\x32\x31.spark.connect.MlCommand.TransferParamsFromServerH\x00R\x18transferParamsFromServer\x1a\x99\x07\n\nParamValue\x12\x1b\n\x08long_val\x18\x01 \x01(\x03H\x00R\x07longVal\x12\x19\n\x07int_val\x18\x02 \x01(\x05H\x00R\x06intVal\x12\x1f\n\ndouble_val\x18\x03 \x01(\x01H\x00R\tdoubleVal\x12\x1d\n\tfloat_val\x18\x04 \x01(\x02H\x00R\x08\x66loatVal\x12\x1b\n\x08\x62ool_val\x18\x05 \x01(\x08H\x00R\x07\x62oolVal\x12\x19\n\x07str_val\x18\x06 \x01(\tH\x00R\x06strVal\x12T\n\x0c\x64ouble_array\x18\x07 \x01(\x0b\x32/.spark.connect.MlCommand.ParamValue.DoubleArrayH\x00R\x0b\x64oubleArray\x12Q\n\x0b\x66loat_array\x18\x08 \x01(\x0b\x32..spark.connect.MlCommand.ParamValue.FloatArrayH\x00R\nfloatArray\x12N\n\nlong_array\x18\t \x01(\x0b\x32-.spark.connect.MlCommand.ParamValue.LongArrayH\x00R\tlongArray\x12K\n\tint_array\x18\n \x01(\x0b\x32,.spark.connect.MlCommand.ParamValue.IntArrayH\x00R\x08intArray\x12N\n\tstr_array\x18\x0b \x01(\x0b\x32/.spark.connect.MlCommand.ParamValue.StringArrayH\x00R\x08strArray\x12N\n\nbool_array\x18\x0c \x01(\x0b\x32-.spark.connect.MlCommand.ParamValue.BoolArrayH\x00R\tboolArray\x1a\'\n\x0b\x44oubleArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x01R\x07\x65lement\x1a&\n\nFloatArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x02R\x07\x65lement\x1a%\n\tLongArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x03R\x07\x65lement\x1a$\n\x08IntArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x05R\x07\x65lement\x1a\'\n\x0bStringArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\tR\x07\x65lement\x1a%\n\tBoolArray\x12\x18\n\x07\x65lement\x18\x01 \x03(\x08R\x07\x65lementB\x07\n\x05value\x1a\xef\x02\n\x06Params\x12\x43\n\x06params\x18\x01 \x03(\x0b\x32+.spark.connect.MlCommand.Params.ParamsEntryR\x06params\x12Y\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32\x32.spark.connect.MlCommand.Params.DefaultParamsEntryR\rdefaultParams\x1a^\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x39\n\x05value\x18\x02 \x01(\x0b\x32#.spark.connect.MlCommand.ParamValueR\x05value:\x02\x38\x01\x1a\x65\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x39\n\x05value\x18\x02 \x01(\x0b\x32#.spark.connect.MlCommand.ParamValueR\x05value:\x02\x38\x01\x1a\x41\n\x0e\x43onstructStage\x12\x10\n\x03uid\x18\x01 \x01(\tR\x03uid\x12\x1d\n\nclass_name\x18\x02 \x01(\tR\tclassName\x1a \n\x0e\x44\x65structObject\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x1a\x44\n\x03\x46it\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x12-\n\x05input\x18\x02 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x1aJ\n\tTransform\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x12-\n\x05input\x18\x02 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x1a\x61\n\x16TransferParamsToServer\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02id\x12\x37\n\x06params\x18\x02 \x01(\x0b\x32\x1f.spark.connect.MlCommand.ParamsR\x06params\x1a*\n\x18TransferParamsFromServer\x12\x0e\n\x02id\x18\x01 \x01(\x03R\x02idB\t\n\x07op_typeB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
+_REMOTECALL = DESCRIPTOR.message_types_by_name["RemoteCall"]
+_REMOTECALL_ARGVALUE = _REMOTECALL.nested_types_by_name["ArgValue"]
+_REMOTECALL_LIST = _REMOTECALL.nested_types_by_name["List"]
+_REMOTECALL_MAP = _REMOTECALL.nested_types_by_name["Map"]
+_REMOTECALL_MAP_MAPENTRY = _REMOTECALL_MAP.nested_types_by_name["MapEntry"]
+_REMOTECALL_REMOTEOBJECT = _REMOTECALL.nested_types_by_name["RemoteObject"]
+_REMOTECALL_CONSTRUCTOBJECT = _REMOTECALL.nested_types_by_name["ConstructObject"]
+_REMOTECALL_DESTRUCTOBJECT = _REMOTECALL.nested_types_by_name["DestructObject"]
+_REMOTECALL_CALLMETHOD = _REMOTECALL.nested_types_by_name["CallMethod"]
+_REMOTECALL_CALLFUNCTION = _REMOTECALL.nested_types_by_name["CallFunction"]
 _MLCOMMAND = DESCRIPTOR.message_types_by_name["MlCommand"]
 _MLCOMMAND_PARAMVALUE = _MLCOMMAND.nested_types_by_name["ParamValue"]
 _MLCOMMAND_PARAMVALUE_DOUBLEARRAY = _MLCOMMAND_PARAMVALUE.nested_types_by_name["DoubleArray"]
@@ -54,6 +64,107 @@ _MLCOMMAND_FIT = _MLCOMMAND.nested_types_by_name["Fit"]
 _MLCOMMAND_TRANSFORM = _MLCOMMAND.nested_types_by_name["Transform"]
 _MLCOMMAND_TRANSFERPARAMSTOSERVER = _MLCOMMAND.nested_types_by_name["TransferParamsToServer"]
 _MLCOMMAND_TRANSFERPARAMSFROMSERVER = _MLCOMMAND.nested_types_by_name["TransferParamsFromServer"]
+RemoteCall = _reflection.GeneratedProtocolMessageType(
+    "RemoteCall",
+    (_message.Message,),
+    {
+        "ArgValue": _reflection.GeneratedProtocolMessageType(
+            "ArgValue",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _REMOTECALL_ARGVALUE,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.ArgValue)
+            },
+        ),
+        "List": _reflection.GeneratedProtocolMessageType(
+            "List",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _REMOTECALL_LIST,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.List)
+            },
+        ),
+        "Map": _reflection.GeneratedProtocolMessageType(
+            "Map",
+            (_message.Message,),
+            {
+                "MapEntry": _reflection.GeneratedProtocolMessageType(
+                    "MapEntry",
+                    (_message.Message,),
+                    {
+                        "DESCRIPTOR": _REMOTECALL_MAP_MAPENTRY,
+                        "__module__": "spark.connect.ml_pb2"
+                        # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.Map.MapEntry)
+                    },
+                ),
+                "DESCRIPTOR": _REMOTECALL_MAP,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.Map)
+            },
+        ),
+        "RemoteObject": _reflection.GeneratedProtocolMessageType(
+            "RemoteObject",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _REMOTECALL_REMOTEOBJECT,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.RemoteObject)
+            },
+        ),
+        "ConstructObject": _reflection.GeneratedProtocolMessageType(
+            "ConstructObject",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _REMOTECALL_CONSTRUCTOBJECT,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.ConstructObject)
+            },
+        ),
+        "DestructObject": _reflection.GeneratedProtocolMessageType(
+            "DestructObject",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _REMOTECALL_DESTRUCTOBJECT,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.DestructObject)
+            },
+        ),
+        "CallMethod": _reflection.GeneratedProtocolMessageType(
+            "CallMethod",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _REMOTECALL_CALLMETHOD,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.CallMethod)
+            },
+        ),
+        "CallFunction": _reflection.GeneratedProtocolMessageType(
+            "CallFunction",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _REMOTECALL_CALLFUNCTION,
+                "__module__": "spark.connect.ml_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall.CallFunction)
+            },
+        ),
+        "DESCRIPTOR": _REMOTECALL,
+        "__module__": "spark.connect.ml_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.RemoteCall)
+    },
+)
+_sym_db.RegisterMessage(RemoteCall)
+_sym_db.RegisterMessage(RemoteCall.ArgValue)
+_sym_db.RegisterMessage(RemoteCall.List)
+_sym_db.RegisterMessage(RemoteCall.Map)
+_sym_db.RegisterMessage(RemoteCall.Map.MapEntry)
+_sym_db.RegisterMessage(RemoteCall.RemoteObject)
+_sym_db.RegisterMessage(RemoteCall.ConstructObject)
+_sym_db.RegisterMessage(RemoteCall.DestructObject)
+_sym_db.RegisterMessage(RemoteCall.CallMethod)
+_sym_db.RegisterMessage(RemoteCall.CallFunction)
+
 MlCommand = _reflection.GeneratedProtocolMessageType(
     "MlCommand",
     (_message.Message,),
@@ -229,42 +340,64 @@ if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
+    _REMOTECALL_MAP_MAPENTRY._options = None
+    _REMOTECALL_MAP_MAPENTRY._serialized_options = b"8\001"
     _MLCOMMAND_PARAMS_PARAMSENTRY._options = None
     _MLCOMMAND_PARAMS_PARAMSENTRY._serialized_options = b"8\001"
     _MLCOMMAND_PARAMS_DEFAULTPARAMSENTRY._options = None
     _MLCOMMAND_PARAMS_DEFAULTPARAMSENTRY._serialized_options = b"8\001"
-    _MLCOMMAND._serialized_start = 73
-    _MLCOMMAND._serialized_end = 2291
-    _MLCOMMAND_PARAMVALUE._serialized_start = 599
-    _MLCOMMAND_PARAMVALUE._serialized_end = 1520
-    _MLCOMMAND_PARAMVALUE_DOUBLEARRAY._serialized_start = 1275
-    _MLCOMMAND_PARAMVALUE_DOUBLEARRAY._serialized_end = 1314
-    _MLCOMMAND_PARAMVALUE_FLOATARRAY._serialized_start = 1316
-    _MLCOMMAND_PARAMVALUE_FLOATARRAY._serialized_end = 1354
-    _MLCOMMAND_PARAMVALUE_LONGARRAY._serialized_start = 1356
-    _MLCOMMAND_PARAMVALUE_LONGARRAY._serialized_end = 1393
-    _MLCOMMAND_PARAMVALUE_INTARRAY._serialized_start = 1395
-    _MLCOMMAND_PARAMVALUE_INTARRAY._serialized_end = 1431
-    _MLCOMMAND_PARAMVALUE_STRINGARRAY._serialized_start = 1433
-    _MLCOMMAND_PARAMVALUE_STRINGARRAY._serialized_end = 1472
-    _MLCOMMAND_PARAMVALUE_BOOLARRAY._serialized_start = 1474
-    _MLCOMMAND_PARAMVALUE_BOOLARRAY._serialized_end = 1511
-    _MLCOMMAND_PARAMS._serialized_start = 1523
-    _MLCOMMAND_PARAMS._serialized_end = 1890
-    _MLCOMMAND_PARAMS_PARAMSENTRY._serialized_start = 1693
-    _MLCOMMAND_PARAMS_PARAMSENTRY._serialized_end = 1787
-    _MLCOMMAND_PARAMS_DEFAULTPARAMSENTRY._serialized_start = 1789
-    _MLCOMMAND_PARAMS_DEFAULTPARAMSENTRY._serialized_end = 1890
-    _MLCOMMAND_CONSTRUCTSTAGE._serialized_start = 1892
-    _MLCOMMAND_CONSTRUCTSTAGE._serialized_end = 1957
-    _MLCOMMAND_DESTRUCTOBJECT._serialized_start = 1959
-    _MLCOMMAND_DESTRUCTOBJECT._serialized_end = 1991
-    _MLCOMMAND_FIT._serialized_start = 1993
-    _MLCOMMAND_FIT._serialized_end = 2061
-    _MLCOMMAND_TRANSFORM._serialized_start = 2063
-    _MLCOMMAND_TRANSFORM._serialized_end = 2137
-    _MLCOMMAND_TRANSFERPARAMSTOSERVER._serialized_start = 2139
-    _MLCOMMAND_TRANSFERPARAMSTOSERVER._serialized_end = 2236
-    _MLCOMMAND_TRANSFERPARAMSFROMSERVER._serialized_start = 2238
-    _MLCOMMAND_TRANSFERPARAMSFROMSERVER._serialized_end = 2280
+    _REMOTECALL._serialized_start = 73
+    _REMOTECALL._serialized_end = 1671
+    _REMOTECALL_ARGVALUE._serialized_start = 413
+    _REMOTECALL_ARGVALUE._serialized_end = 886
+    _REMOTECALL_LIST._serialized_start = 888
+    _REMOTECALL_LIST._serialized_end = 956
+    _REMOTECALL_MAP._serialized_start = 959
+    _REMOTECALL_MAP._serialized_end = 1114
+    _REMOTECALL_MAP_MAPENTRY._serialized_start = 1024
+    _REMOTECALL_MAP_MAPENTRY._serialized_end = 1114
+    _REMOTECALL_REMOTEOBJECT._serialized_start = 1116
+    _REMOTECALL_REMOTEOBJECT._serialized_end = 1146
+    _REMOTECALL_CONSTRUCTOBJECT._serialized_start = 1148
+    _REMOTECALL_CONSTRUCTOBJECT._serialized_end = 1255
+    _REMOTECALL_DESTRUCTOBJECT._serialized_start = 1257
+    _REMOTECALL_DESTRUCTOBJECT._serialized_end = 1350
+    _REMOTECALL_CALLMETHOD._serialized_start = 1353
+    _REMOTECALL_CALLMETHOD._serialized_end = 1542
+    _REMOTECALL_CALLFUNCTION._serialized_start = 1544
+    _REMOTECALL_CALLFUNCTION._serialized_end = 1658
+    _MLCOMMAND._serialized_start = 1674
+    _MLCOMMAND._serialized_end = 3892
+    _MLCOMMAND_PARAMVALUE._serialized_start = 2200
+    _MLCOMMAND_PARAMVALUE._serialized_end = 3121
+    _MLCOMMAND_PARAMVALUE_DOUBLEARRAY._serialized_start = 2876
+    _MLCOMMAND_PARAMVALUE_DOUBLEARRAY._serialized_end = 2915
+    _MLCOMMAND_PARAMVALUE_FLOATARRAY._serialized_start = 2917
+    _MLCOMMAND_PARAMVALUE_FLOATARRAY._serialized_end = 2955
+    _MLCOMMAND_PARAMVALUE_LONGARRAY._serialized_start = 2957
+    _MLCOMMAND_PARAMVALUE_LONGARRAY._serialized_end = 2994
+    _MLCOMMAND_PARAMVALUE_INTARRAY._serialized_start = 2996
+    _MLCOMMAND_PARAMVALUE_INTARRAY._serialized_end = 3032
+    _MLCOMMAND_PARAMVALUE_STRINGARRAY._serialized_start = 3034
+    _MLCOMMAND_PARAMVALUE_STRINGARRAY._serialized_end = 3073
+    _MLCOMMAND_PARAMVALUE_BOOLARRAY._serialized_start = 3075
+    _MLCOMMAND_PARAMVALUE_BOOLARRAY._serialized_end = 3112
+    _MLCOMMAND_PARAMS._serialized_start = 3124
+    _MLCOMMAND_PARAMS._serialized_end = 3491
+    _MLCOMMAND_PARAMS_PARAMSENTRY._serialized_start = 3294
+    _MLCOMMAND_PARAMS_PARAMSENTRY._serialized_end = 3388
+    _MLCOMMAND_PARAMS_DEFAULTPARAMSENTRY._serialized_start = 3390
+    _MLCOMMAND_PARAMS_DEFAULTPARAMSENTRY._serialized_end = 3491
+    _MLCOMMAND_CONSTRUCTSTAGE._serialized_start = 3493
+    _MLCOMMAND_CONSTRUCTSTAGE._serialized_end = 3558
+    _MLCOMMAND_DESTRUCTOBJECT._serialized_start = 3560
+    _MLCOMMAND_DESTRUCTOBJECT._serialized_end = 3592
+    _MLCOMMAND_FIT._serialized_start = 3594
+    _MLCOMMAND_FIT._serialized_end = 3662
+    _MLCOMMAND_TRANSFORM._serialized_start = 3664
+    _MLCOMMAND_TRANSFORM._serialized_end = 3738
+    _MLCOMMAND_TRANSFERPARAMSTOSERVER._serialized_start = 3740
+    _MLCOMMAND_TRANSFERPARAMSTOSERVER._serialized_end = 3837
+    _MLCOMMAND_TRANSFERPARAMSFROMSERVER._serialized_start = 3839
+    _MLCOMMAND_TRANSFERPARAMSFROMSERVER._serialized_end = 3881
 # @@protoc_insertion_point(module_scope)

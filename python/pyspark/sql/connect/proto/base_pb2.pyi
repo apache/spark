@@ -66,29 +66,29 @@ class Plan(google.protobuf.message.Message):
 
     ROOT_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
-    ML_COMMAND_FIELD_NUMBER: builtins.int
+    REMOTE_CALL_FIELD_NUMBER: builtins.int
     @property
     def root(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
     @property
     def command(self) -> pyspark.sql.connect.proto.commands_pb2.Command: ...
     @property
-    def ml_command(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand: ...
+    def remote_call(self) -> pyspark.sql.connect.proto.ml_pb2.RemoteCall: ...
     def __init__(
         self,
         *,
         root: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         command: pyspark.sql.connect.proto.commands_pb2.Command | None = ...,
-        ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
+        remote_call: pyspark.sql.connect.proto.ml_pb2.RemoteCall | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "command",
             b"command",
-            "ml_command",
-            b"ml_command",
             "op_type",
             b"op_type",
+            "remote_call",
+            b"remote_call",
             "root",
             b"root",
         ],
@@ -98,17 +98,17 @@ class Plan(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "command",
             b"command",
-            "ml_command",
-            b"ml_command",
             "op_type",
             b"op_type",
+            "remote_call",
+            b"remote_call",
             "root",
             b"root",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
-    ) -> typing_extensions.Literal["root", "command", "ml_command"] | None: ...
+    ) -> typing_extensions.Literal["root", "command", "remote_call"] | None: ...
 
 global___Plan = Plan
 

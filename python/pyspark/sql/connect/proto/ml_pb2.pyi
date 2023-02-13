@@ -49,6 +49,359 @@ else:
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 @typing_extensions.final
+class RemoteCall(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    @typing_extensions.final
+    class ArgValue(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INT32_VALUE_FIELD_NUMBER: builtins.int
+        INT64_VALUE_FIELD_NUMBER: builtins.int
+        FLOAT_VALUE_FIELD_NUMBER: builtins.int
+        DOUBLE_VALUE_FIELD_NUMBER: builtins.int
+        BOOL_VALUE_FIELD_NUMBER: builtins.int
+        STRING_VALUE_FIELD_NUMBER: builtins.int
+        LIST_FIELD_NUMBER: builtins.int
+        MAP_FIELD_NUMBER: builtins.int
+        RELATION_FIELD_NUMBER: builtins.int
+        REMOTE_OBJECT_FIELD_NUMBER: builtins.int
+        int32_value: builtins.int
+        int64_value: builtins.int
+        float_value: builtins.float
+        double_value: builtins.float
+        bool_value: builtins.bool
+        string_value: builtins.str
+        @property
+        def list(self) -> global___RemoteCall.List: ...
+        @property
+        def map(self) -> global___RemoteCall.Map: ...
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
+        @property
+        def remote_object(self) -> global___RemoteCall.RemoteObject: ...
+        def __init__(
+            self,
+            *,
+            int32_value: builtins.int = ...,
+            int64_value: builtins.int = ...,
+            float_value: builtins.float = ...,
+            double_value: builtins.float = ...,
+            bool_value: builtins.bool = ...,
+            string_value: builtins.str = ...,
+            list: global___RemoteCall.List | None = ...,
+            map: global___RemoteCall.Map | None = ...,
+            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            remote_object: global___RemoteCall.RemoteObject | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "arg_type",
+                b"arg_type",
+                "bool_value",
+                b"bool_value",
+                "double_value",
+                b"double_value",
+                "float_value",
+                b"float_value",
+                "int32_value",
+                b"int32_value",
+                "int64_value",
+                b"int64_value",
+                "list",
+                b"list",
+                "map",
+                b"map",
+                "relation",
+                b"relation",
+                "remote_object",
+                b"remote_object",
+                "string_value",
+                b"string_value",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "arg_type",
+                b"arg_type",
+                "bool_value",
+                b"bool_value",
+                "double_value",
+                b"double_value",
+                "float_value",
+                b"float_value",
+                "int32_value",
+                b"int32_value",
+                "int64_value",
+                b"int64_value",
+                "list",
+                b"list",
+                "map",
+                b"map",
+                "relation",
+                b"relation",
+                "remote_object",
+                b"remote_object",
+                "string_value",
+                b"string_value",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["arg_type", b"arg_type"]
+        ) -> typing_extensions.Literal[
+            "int32_value",
+            "int64_value",
+            "float_value",
+            "double_value",
+            "bool_value",
+            "string_value",
+            "list",
+            "map",
+            "relation",
+            "remote_object",
+        ] | None: ...
+
+    @typing_extensions.final
+    class List(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ELEMENT_FIELD_NUMBER: builtins.int
+        @property
+        def element(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___RemoteCall.ArgValue
+        ]: ...
+        def __init__(
+            self,
+            *,
+            element: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["element", b"element"]
+        ) -> None: ...
+
+    @typing_extensions.final
+    class Map(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        @typing_extensions.final
+        class MapEntry(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_FIELD_NUMBER: builtins.int
+            VALUE_FIELD_NUMBER: builtins.int
+            key: builtins.str
+            @property
+            def value(self) -> global___RemoteCall.ArgValue: ...
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: global___RemoteCall.ArgValue | None = ...,
+            ) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["value", b"value"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            ) -> None: ...
+
+        MAP_FIELD_NUMBER: builtins.int
+        @property
+        def map(
+            self,
+        ) -> google.protobuf.internal.containers.MessageMap[
+            builtins.str, global___RemoteCall.ArgValue
+        ]: ...
+        def __init__(
+            self,
+            *,
+            map: collections.abc.Mapping[builtins.str, global___RemoteCall.ArgValue] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["map", b"map"]) -> None: ...
+
+    @typing_extensions.final
+    class RemoteObject(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ID_FIELD_NUMBER: builtins.int
+        id: builtins.str
+        def __init__(
+            self,
+            *,
+            id: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
+
+    @typing_extensions.final
+    class ConstructObject(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        CLASSNAME_FIELD_NUMBER: builtins.int
+        VALUES_FIELD_NUMBER: builtins.int
+        className: builtins.str
+        @property
+        def values(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___RemoteCall.ArgValue
+        ]: ...
+        def __init__(
+            self,
+            *,
+            className: builtins.str = ...,
+            values: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["className", b"className", "values", b"values"],
+        ) -> None: ...
+
+    @typing_extensions.final
+    class DestructObject(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        REMOTE_OBJECT_FIELD_NUMBER: builtins.int
+        @property
+        def remote_object(self) -> global___RemoteCall.RemoteObject: ...
+        def __init__(
+            self,
+            *,
+            remote_object: global___RemoteCall.RemoteObject | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["remote_object", b"remote_object"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["remote_object", b"remote_object"]
+        ) -> None: ...
+
+    @typing_extensions.final
+    class CallMethod(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        REMOTE_OBJECT_FIELD_NUMBER: builtins.int
+        METHOD_NAME_FIELD_NUMBER: builtins.int
+        ARG_VALUES_FIELD_NUMBER: builtins.int
+        @property
+        def remote_object(self) -> global___RemoteCall.RemoteObject: ...
+        method_name: builtins.str
+        @property
+        def arg_values(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___RemoteCall.ArgValue
+        ]: ...
+        def __init__(
+            self,
+            *,
+            remote_object: global___RemoteCall.RemoteObject | None = ...,
+            method_name: builtins.str = ...,
+            arg_values: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["remote_object", b"remote_object"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "arg_values",
+                b"arg_values",
+                "method_name",
+                b"method_name",
+                "remote_object",
+                b"remote_object",
+            ],
+        ) -> None: ...
+
+    @typing_extensions.final
+    class CallFunction(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MODULE_NAME_FIELD_NUMBER: builtins.int
+        ARG_VALUES_FIELD_NUMBER: builtins.int
+        module_name: builtins.str
+        @property
+        def arg_values(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___RemoteCall.ArgValue
+        ]: ...
+        def __init__(
+            self,
+            *,
+            module_name: builtins.str = ...,
+            arg_values: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "arg_values", b"arg_values", "module_name", b"module_name"
+            ],
+        ) -> None: ...
+
+    CONSTRUCT_OBJECT_FIELD_NUMBER: builtins.int
+    DESTRUCT_OBJECT_FIELD_NUMBER: builtins.int
+    CALL_METHOD_FIELD_NUMBER: builtins.int
+    CALL_FUNCTION_FIELD_NUMBER: builtins.int
+    @property
+    def construct_object(self) -> global___RemoteCall.ConstructObject: ...
+    @property
+    def destruct_object(self) -> global___RemoteCall.DestructObject: ...
+    @property
+    def call_method(self) -> global___RemoteCall.CallMethod: ...
+    @property
+    def call_function(self) -> global___RemoteCall.CallFunction: ...
+    def __init__(
+        self,
+        *,
+        construct_object: global___RemoteCall.ConstructObject | None = ...,
+        destruct_object: global___RemoteCall.DestructObject | None = ...,
+        call_method: global___RemoteCall.CallMethod | None = ...,
+        call_function: global___RemoteCall.CallFunction | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "call_function",
+            b"call_function",
+            "call_method",
+            b"call_method",
+            "call_type",
+            b"call_type",
+            "construct_object",
+            b"construct_object",
+            "destruct_object",
+            b"destruct_object",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "call_function",
+            b"call_function",
+            "call_method",
+            b"call_method",
+            "call_type",
+            b"call_type",
+            "construct_object",
+            b"construct_object",
+            "destruct_object",
+            b"destruct_object",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["call_type", b"call_type"]
+    ) -> typing_extensions.Literal[
+        "construct_object", "destruct_object", "call_method", "call_function"
+    ] | None: ...
+
+global___RemoteCall = RemoteCall
+
+@typing_extensions.final
 class MlCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
