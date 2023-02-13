@@ -78,7 +78,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(
-            errorClass = "UNSUPPORTED_DATASOURCE",
+            errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
             messageParameters = Map("dataSourceType" -> u.multipartIdentifier.head),
             cause = e
           )
