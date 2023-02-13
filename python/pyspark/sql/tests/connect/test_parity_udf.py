@@ -165,11 +165,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_in_left_outer_join_condition(self):
         super().test_udf_in_left_outer_join_condition()
 
-    # TODO(SPARK-42269): support return type as a collection DataType in DDL strings
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_with_string_return_type(self):
-        super().test_udf_with_string_return_type()
-
     def test_udf_registration_returns_udf(self):
         df = self.spark.range(10)
         add_three = self.spark.udf.register("add_three", lambda x: x + 3, IntegerType())

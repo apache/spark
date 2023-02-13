@@ -68,12 +68,12 @@ from pyspark.sql.connect.expressions import (
     PythonUDF,
     CommonInlineUserDefinedFunction,
 )
+from pyspark.sql.connect.types import parse_data_type
 from pyspark.sql.types import (
     DataType,
     StructType,
     StructField,
 )
-from pyspark.sql.utils import is_remote
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.rdd import PythonEvalType
 
@@ -443,23 +443,12 @@ class SparkConnectClient(object):
         """Create a temporary UDF in the session catalog on the other side. We generate a
         temporary name for it."""
 
-        from pyspark.sql import SparkSession as PySparkSession
-
         if name is None:
             name = f"fun_{uuid.uuid4().hex}"
 
         # convert str return_type to DataType
         if isinstance(return_type, str):
-
-            assert is_remote()
-            return_type_schema = (  # a workaround to parse the DataType from DDL strings
-                PySparkSession.builder.getOrCreate()
-                .createDataFrame(data=[], schema=return_type)
-                .schema
-            )
-            assert len(return_type_schema.fields) == 1, "returnType should be singular"
-            return_type = return_type_schema.fields[0].dataType
-
+            return_type = parse_data_type(return_type)
         # construct a PythonUDF
         py_udf = PythonUDF(
             output_type=return_type.json(),
