@@ -278,7 +278,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
@@ -342,7 +342,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
@@ -399,7 +399,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
@@ -419,7 +419,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
@@ -586,7 +586,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
@@ -603,7 +603,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
@@ -620,7 +620,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
@@ -637,7 +637,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
@@ -793,7 +793,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal1`",
@@ -842,7 +842,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal2`",
@@ -891,7 +891,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal3`",
@@ -940,7 +940,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal4`",
@@ -957,7 +957,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
     "obj" : "view",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal5`",

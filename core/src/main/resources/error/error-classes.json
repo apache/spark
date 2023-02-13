@@ -177,11 +177,6 @@
     ],
     "sqlState" : "22018"
   },
-  "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT" : {
-    "message" : [
-      "Cannot create a persistent <obj> <objName> by referencing a temporary <tempObj> <tempObjName>. Please make the temporary <tempObj> persistent, or make the persistent <obj> temporary."
-    ]
-  },
   "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
     "message" : [
       "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid."
@@ -954,6 +949,11 @@
       }
     },
     "sqlState" : "42823"
+  },
+  "INVALID_TEMP_OBJ_REFERENCE" : {
+    "message" : [
+      "Cannot create a persistent <obj> <objName> by referencing a temporary <tempObj> <tempObjName>. Please make the temporary <tempObj> persistent, or make the persistent <obj> temporary."
+    ]
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [

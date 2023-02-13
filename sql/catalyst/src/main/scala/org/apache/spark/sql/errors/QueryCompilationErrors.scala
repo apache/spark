@@ -2700,7 +2700,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: TableIdentifier,
       nameParts: String): Throwable = {
     new AnalysisException(
-      errorClass = "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+      errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "view",
         "objName" -> name.toString,
@@ -2712,7 +2712,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: TableIdentifier,
       funcName: String): Throwable = {
      new AnalysisException(
-      errorClass = "CREATE_PERSISTENT_OBJECT_OVER_TEMP_OBJECT",
+      errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "view",
         "objName" -> name.toString,
