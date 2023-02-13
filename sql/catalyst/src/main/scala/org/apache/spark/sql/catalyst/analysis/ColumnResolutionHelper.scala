@@ -362,8 +362,9 @@ trait ColumnResolutionHelper extends Logging {
       // expression are from Spark Connect, and need to be resolved in this way:
       //    1, extract the attached plan id from the expression (UnresolvedAttribute only for now);
       //    2, top-down traverse the query plan to find the plan node that matches the plan id;
-      //    3, resolve the expression with the matching node;
-      //    4, if can not find a matching node or any error occurs, apply the old code path;
+      //    3, if can not find the matching node, fail the analysis due to illegal references;
+      //    4, resolve the expression with the matching node, if any error occurs here, apply the
+      //    old code path;
       resolveExpressionByPlanId(e, q)
     } else {
       e
@@ -407,6 +408,10 @@ trait ColumnResolutionHelper extends Logging {
 
     val planOpt = q.find(_.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId))
     if (planOpt.isEmpty) {
+      // For example:
+      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+      //  df1.select(df2.a)   <-   illegal reference df2.a
       throw new AnalysisException(s"When resolving $u, " +
         s"fail to find subplan with plan_id=$planId in $q")
     }
@@ -415,8 +420,8 @@ trait ColumnResolutionHelper extends Logging {
     try {
       plan.resolve(u.nameParts, conf.resolver)
     } catch {
-      case _: AnalysisException =>
-        logDebug(s"Fail to resolve $u with $plan")
+      case e: AnalysisException =>
+        logDebug(s"Fail to resolve $u with $plan due to $e")
         None
     }
   }

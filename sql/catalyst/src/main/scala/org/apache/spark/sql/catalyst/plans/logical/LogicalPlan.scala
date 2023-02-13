@@ -160,10 +160,12 @@ abstract class LogicalPlan
 object LogicalPlan {
   // A dedicated tag for Spark Connect.
   // If an expression (only support UnresolvedAttribute for now) was attached by this tag,
-  // the analyzer will extract the plan id, try to top-down traverse the query plan to find
-  // the plan node that was attached by the same tag, and then resolve this expression with
-  // the matching node.
-  // If can not find a matching node or any error occurs, analyzer fallbacks to the old code path.
+  // the analyzer will:
+  //    1, extract the plan id;
+  //    2, top-down traverse the query plan to find the node that was attached by the same tag.
+  //    and fails the whole analysis if can not find it;
+  //    3, resolve this expression with the matching node. If any error occurs, analyzer fallbacks
+  //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
 }
 
