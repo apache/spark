@@ -142,3 +142,5 @@ spark-events-broken/*
 # Spark Connect related files with custom licence
 any.proto
 empty.proto
+.*\.explain
+.*\.proto.bin

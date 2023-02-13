@@ -36,6 +36,14 @@ import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedF
 object functions {
 // scalastyle:on
 
+  /**
+   * Returns a [[Column]] based on the given column name.
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  def col(colName: String): Column = Column(colName)
+
   private def createLiteral(f: proto.Expression.Literal.Builder => Unit): Column = Column {
     builder =>
       val literalBuilder = proto.Expression.Literal.newBuilder()

@@ -1004,6 +1004,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SET_SYNTAX" : {
+    "message" : [
+      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
@@ -2056,11 +2062,6 @@
   "_LEGACY_ERROR_TEMP_0041" : {
     "message" : [
       "Found duplicate clauses: <clauseName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0042" : {
-    "message" : [
-      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use quotes, e.g., SET `key`=`value`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0043" : {

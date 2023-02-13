@@ -676,7 +676,7 @@ class DataFrame:
 
     def unpivot(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        ids: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]],
         values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
         variableColumnName: str,
         valueColumnName: str,
@@ -698,7 +698,11 @@ class DataFrame:
 
         return DataFrame.withPlan(
             plan.Unpivot(
-                self._plan, to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+                self._plan,
+                to_jcols(ids),
+                to_jcols(values) if values is not None else None,
+                variableColumnName,
+                valueColumnName,
             ),
             self._session,
         )
