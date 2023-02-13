@@ -1073,9 +1073,14 @@ abstract class JsonSuite
         .schema("a string")
         .json(corruptRecords)
         .collect()
-    }.getMessage
-    assert(exceptionTwo.contains(
-      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+    }.getCause
+    checkError(
+      exception = exceptionTwo.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      parameters = Map(
+        "badRecord" -> "[null]",
+        "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1989,9 +1994,14 @@ abstract class JsonSuite
           .schema(schema)
           .json(path)
           .collect()
-      }
-      assert(exceptionTwo.getMessage.contains("Malformed records are detected in record " +
-        "parsing. Parse Mode: FAILFAST."))
+      }.getCause
+      checkError(
+        exception = exceptionTwo.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map(
+          "badRecord" -> "[null]",
+          "failFastMode" -> "FAILFAST")
+      )
     }
   }
 
