@@ -66,7 +66,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
-    rel.getRelTypeCase match {
+    val plan = rel.getRelTypeCase match {
       // DataFrame API
       case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
@@ -124,6 +124,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformRelationPlugin(rel.getExtension)
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
     }
+
+    if (rel.hasCommon && rel.getCommon.hasPlanId) {
+      plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
+    }
+    plan
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -702,10 +707,6 @@ class SparkConnectPlanner(val session: SparkSession) {
     logical.Project(projectList = projection, child = baseRel)
   }
 
-  private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute.quotedString(exp.getUnresolvedAttribute.getUnparsedIdentifier)
-  }
-
   /**
    * Transforms an input protobuf expression into the Catalyst expression. This is usually not
    * called directly. Typically the planner will traverse the expressions automatically, only
@@ -720,7 +721,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
-        transformUnresolvedExpression(exp)
+        transformUnresolvedAttribute(exp.getUnresolvedAttribute)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformUnregisteredFunction(exp.getUnresolvedFunction)
           .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
@@ -756,6 +757,15 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
     case named: NamedExpression => named
     case expr => UnresolvedAlias(expr)
+  }
+
+  private def transformUnresolvedAttribute(
+      attr: proto.Expression.UnresolvedAttribute): UnresolvedAttribute = {
+    val expr = UnresolvedAttribute.quotedString(attr.getUnparsedIdentifier)
+    if (attr.hasPlanId) {
+      expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
+    }
+    expr
   }
 
   private def transformExpressionPlugin(extension: ProtoAny): Expression = {

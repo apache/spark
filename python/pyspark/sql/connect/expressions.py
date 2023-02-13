@@ -339,10 +339,13 @@ class ColumnReference(Expression):
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
-    def __init__(self, unparsed_identifier: str) -> None:
+    def __init__(self, unparsed_identifier: str, plan_id: Optional[int] = None) -> None:
         super().__init__()
         assert isinstance(unparsed_identifier, str)
         self._unparsed_identifier = unparsed_identifier
+
+        assert plan_id is None or isinstance(plan_id, int)
+        self._plan_id = plan_id
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -352,6 +355,8 @@ class ColumnReference(Expression):
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
+        if self._plan_id is not None:
+            expr.unresolved_attribute.plan_id = self._plan_id
         return expr
 
     def __repr__(self) -> str:

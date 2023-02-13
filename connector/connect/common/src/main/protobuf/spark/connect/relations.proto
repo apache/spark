@@ -93,6 +93,9 @@ message Unknown {}
 message RelationCommon {
   // (Required) Shared relation metadata.
   string source_info = 1;
+
+  // (Optional) A per-client globally unique id for a given connect plan.
+  optional int64 plan_id = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
