@@ -1191,12 +1191,6 @@
     ],
     "sqlState" : "42805"
   },
-  "OUTPUT_PATH_ALREADY_EXISTS" : {
-    "message" : [
-      "Path <outputPath> already exists."
-    ],
-    "sqlState" : "42K04"
-  },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
       "Syntax error, unexpected empty statement."
@@ -1223,6 +1217,12 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "428FT"
+  },
+  "PATH_ALREADY_EXISTS" : {
+    "message" : [
+      "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
+    ],
+    "sqlState" : "42K04"
   },
   "PATH_NOT_FOUND" : {
     "message" : [

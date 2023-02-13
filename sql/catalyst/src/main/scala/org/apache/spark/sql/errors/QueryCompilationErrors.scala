@@ -1566,7 +1566,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def outputPathAlreadyExistsError(outputPath: Path): Throwable = {
     new AnalysisException(
-      errorClass = "OUTPUT_PATH_ALREADY_EXISTS",
+      errorClass = "PATH_ALREADY_EXISTS",
       messageParameters = Map("outputPath" -> outputPath.toString))
   }
 

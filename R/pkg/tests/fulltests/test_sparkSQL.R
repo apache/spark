@@ -622,7 +622,7 @@ test_that("read/write json files", {
 
     # Test errorifexists
     expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
-                 "Error in save : analysis error - \\[OUTPUT_PATH_ALREADY_EXISTS\\].*")
+                 "Error in save : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
@@ -3990,13 +3990,13 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
                paste("Error in save : org.apache.spark.SparkIllegalArgumentException:",
                      "Expected exactly one path to be specified"))
   expect_error(write.json(df, jsonPath),
-              "Error in json : analysis error - \\[OUTPUT_PATH_ALREADY_EXISTS\\].*")
+              "Error in json : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.text(df, jsonPath),
-              "Error in text : analysis error - \\[OUTPUT_PATH_ALREADY_EXISTS\\].*")
+              "Error in text : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.orc(df, jsonPath),
-              "Error in orc : analysis error - \\[OUTPUT_PATH_ALREADY_EXISTS\\].*")
+              "Error in orc : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath),
-              "Error in parquet : analysis error - \\[OUTPUT_PATH_ALREADY_EXISTS\\].*")
+              "Error in parquet : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.
