@@ -2738,13 +2738,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
 
-    def test_unsupported_catalog_functions(self):
-        # SPARK-41939: Disable unsupported functions.
-
-        for f in ("registerFunction",):
-            with self.assertRaises(NotImplementedError):
-                getattr(self.connect.catalog, f)()
-
     def test_unsupported_io_functions(self):
         # SPARK-41964: Disable unsupported functions.
         df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
