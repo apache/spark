@@ -7681,7 +7681,7 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     """
     Collection function: adds an item into a given array at a specified array index.
     Array indices start at 1, or start from the end if index is negative.
-    Index above array size extends the array, or prepends the array if index is negative,
+    Index above array size appends the array, or prepends the array if index is negative,
     with 'null' elements.
 
     .. versionadded:: 3.4.0

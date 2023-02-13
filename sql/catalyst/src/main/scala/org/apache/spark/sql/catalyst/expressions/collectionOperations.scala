@@ -4605,7 +4605,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   usage = """
     _FUNC_(x, pos, val) - Places val into index pos of array x.
       Array indices start at 1, or start from the end if index is negative.
-      Index above array size extends the array, or prepends the array if index is negative,
+      Index above array size appends the array, or prepends the array if index is negative,
       with 'null' elements.
   """,
   examples = """
