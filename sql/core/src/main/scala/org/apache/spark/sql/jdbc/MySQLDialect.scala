@@ -291,4 +291,22 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError()
     }
   }
+
+  class MySQLSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    override def build(): String = {
+      if (limit < 1 && offset > 0) {
+        val offsetClause = dialect.getOffsetClause(offset)
+        options.prepareQuery +
+          s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+          s" $whereClause $groupByClause $orderByClause LIMIT 18446744073709551610 $offsetClause"
+      } else {
+        super.build()
+      }
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new MySQLSQLQueryBuilder(this, options)
 }

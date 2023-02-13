@@ -568,6 +568,10 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Returns ture if dialect supports OFFSET clause.
+   *
+   * Note: Some build-in dialect supports OFFSET clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
    */
   def supportsOffset: Boolean = true
 
