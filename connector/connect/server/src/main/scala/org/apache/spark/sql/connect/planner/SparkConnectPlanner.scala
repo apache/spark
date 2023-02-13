@@ -515,7 +515,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       Column(transformExpression(expr))
     }
 
-    if (rel.getValuesList.isEmpty) {
+    if (!rel.hasValues) {
       Unpivot(
         Some(ids.map(_.named)),
         None,
@@ -524,7 +524,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         Seq(rel.getValueColumnName),
         transformRelation(rel.getInput))
     } else {
-      val values = rel.getValuesList.asScala.toArray.map { expr =>
+      val values = rel.getValues.getValuesList.asScala.toArray.map { expr =>
         Column(transformExpression(expr))
       }
 
