@@ -3218,8 +3218,10 @@ class CSVv1Suite extends CSVSuite {
 
       checkError(
         exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "_LEGACY_ERROR_TEMP_2177",
-        parameters = Map("failFastMode" -> "FAILFAST")
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map(
+          "badRecord" -> "[2015,Chevy,Volt,null,null]",
+          "failFastMode" -> "FAILFAST")
       )
     }
   }
