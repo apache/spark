@@ -478,16 +478,29 @@ class RelationCommon(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     SOURCE_INFO_FIELD_NUMBER: builtins.int
+    PLAN_ID_FIELD_NUMBER: builtins.int
     source_info: builtins.str
     """(Required) Shared relation metadata."""
+    plan_id: builtins.int
+    """(Optional) A per-client globally unique id for a given connect plan."""
     def __init__(
         self,
         *,
         source_info: builtins.str = ...,
+        plan_id: builtins.int | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"]
+    ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["source_info", b"source_info"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_plan_id", b"_plan_id", "plan_id", b"plan_id", "source_info", b"source_info"
+        ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+    ) -> typing_extensions.Literal["plan_id"] | None: ...
 
 global___RelationCommon = RelationCommon
 

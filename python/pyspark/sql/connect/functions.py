@@ -63,6 +63,15 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
 
 
+def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col, plan_id=plan_id))
+
+
 def _to_col(col: "ColumnOrName") -> Column:
     assert isinstance(col, (Column, str))
     return col if isinstance(col, Column) else column(col)
@@ -202,12 +211,7 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
-    elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
-    else:
-        return Column(ColumnReference(unparsed_identifier=col))
+    return _to_col_with_plan_id(col=col, plan_id=None)
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -2469,9 +2473,6 @@ def _test() -> None:
     del pyspark.sql.connect.functions.from_unixtime.__doc__
     del pyspark.sql.connect.functions.timestamp_seconds.__doc__
     del pyspark.sql.connect.functions.unix_timestamp.__doc__
-
-    # TODO(SPARK-41812): Proper column names after join
-    del pyspark.sql.connect.functions.count_distinct.__doc__
 
     # TODO(SPARK-41843): Implement SparkSession.udf
     del pyspark.sql.connect.functions.call_udf.__doc__

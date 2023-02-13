@@ -50,12 +50,14 @@ from pyspark.sql.dataframe import (
 )
 
 from pyspark.errors import PySparkTypeError
+from pyspark.errors.exceptions.connect import SparkConnectException
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
+    _to_col_with_plan_id,
     _to_col,
     _invoke_function,
     col,
@@ -1284,10 +1286,12 @@ class DataFrame:
         if isinstance(item, str):
             # Check for alias
             alias = self._get_alias()
-            if alias is not None:
-                return col(alias)
-            else:
-                return col(item)
+            if self._plan is None:
+                raise SparkConnectException("Cannot analyze on empty plan.")
+            return _to_col_with_plan_id(
+                col=alias if alias is not None else item,
+                plan_id=self._plan._plan_id,
+            )
         elif isinstance(item, Column):
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
@@ -1694,9 +1698,8 @@ def _test() -> None:
     del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
     del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
-    # TODO(SPARK-41823): ambiguous column names
+    # TODO(SPARK-42367): DataFrame.drop should handle duplicated columns
     del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
