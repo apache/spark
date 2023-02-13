@@ -292,7 +292,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  metadataColumnsTest("filter", schema) { (df, f0, _) =>
+  metadataColumnsTest("filter", schema) { (df, f0, f1) =>
     val filteredDF = df.select("name", "age", METADATA_FILE_NAME)
       .where(Column(METADATA_FILE_NAME) === f0(METADATA_FILE_NAME))
 
@@ -312,6 +312,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         // _file_name == f0's name, so we will only have 1 row
         Row("jack", 24, f0(METADATA_FILE_NAME))
       )
+    )
+
+    checkAnswer(
+      df.where(s"$METADATA_FILE_SIZE > 0").select(METADATA_FILE_SIZE),
+      Seq(
+        Row(f0(METADATA_FILE_SIZE)),
+        Row(f1(METADATA_FILE_SIZE)))
+    )
+    checkAnswer(
+      df.where(s"$METADATA_FILE_SIZE > 0").select(METADATA_FILE_PATH),
+      Seq(
+        Row(f0(METADATA_FILE_PATH)),
+        Row(f1(METADATA_FILE_PATH)))
     )
   }
 
@@ -574,6 +587,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             sourceFileMetadata(METADATA_FILE_SIZE),
             sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME))
         )
+      )
+
+      checkAnswer(
+        newDF.where(s"$METADATA_FILE_SIZE > 0").select(METADATA_FILE_SIZE),
+        Seq(
+          Row(sourceFileMetadata(METADATA_FILE_SIZE)),
+          Row(sourceFileMetadata(METADATA_FILE_SIZE)))
+      )
+      checkAnswer(
+        newDF.where(s"$METADATA_FILE_SIZE > 0").select(METADATA_FILE_PATH),
+        Seq(
+          Row(sourceFileMetadata(METADATA_FILE_PATH)),
+          Row(sourceFileMetadata(METADATA_FILE_PATH)))
       )
 
       // Verify self-union

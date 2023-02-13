@@ -354,15 +354,21 @@ class DatasetSuite extends QueryTest
           start = 0,
           stop = 8))
 
-      var e = intercept[AnalysisException] {
-        ds.select(ds("`(_1)?+.+`"))
-      }
-      assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(ds("`(_1)?+.+`"))
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`(_1)?+.+`", "proposal" -> "`_1`, `_2`")
+      )
 
-      e = intercept[AnalysisException] {
-        ds.select(ds("`(_1|_2)`"))
-      }
-      assert(e.getMessage.contains("Cannot resolve column name \"`(_1|_2)`\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(ds("`(_1|_2)`"))
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`(_1|_2)`", "proposal" -> "`_1`, `_2`")
+      )
     }
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
@@ -952,6 +958,19 @@ class DatasetSuite extends QueryTest
     observe(spark.range(0), Map("percentile_approx_val" -> null))
     observe(spark.range(1, 10), Map("percentile_approx_val" -> 5))
     observe(spark.range(1, 10, 1, 11), Map("percentile_approx_val" -> 5))
+  }
+
+  test("observation on datasets when a DataSet trigger foreach action") {
+    def f(): Unit = {}
+
+    val namedObservation = Observation("named")
+    val observed_df = spark.range(100).observe(
+      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+
+    observed_df.foreach(r => f)
+    val expected = Map("percentile_approx_val" -> 49)
+
+    assert(namedObservation.get === expected)
   }
 
   test("sample with replacement") {
@@ -2166,10 +2185,14 @@ class DatasetSuite extends QueryTest
     forAll(dotColumnTestModes) { (caseSensitive, colName) =>
       val ds = Seq(SpecialCharClass("1", "2")).toDS
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        val errorMsg = intercept[AnalysisException] {
-          ds(colName)
-        }
-        assert(errorMsg.getMessage.contains(s"did you mean to quote the `$colName` column?"))
+        val colName = if (caseSensitive == "true") "`Field`.`1`" else "`field`.`1`"
+        checkError(
+          exception = intercept[AnalysisException] {
+            ds(colName)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          parameters = Map("objectName" -> colName, "proposal" -> "`field`.`1`, `field 2`")
+        )
       }
     }
   }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
@@ -158,7 +158,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -168,7 +169,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
     assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes() ==
@@ -1781,7 +1783,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -1792,7 +1795,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
-        "actualNum" -> "4")
+        "actualNum" -> "4",
+        "docroot" -> SPARK_DOC_ROOT)
     )
     assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes() == DataTypeMismatch(
       errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -1912,7 +1916,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "1")
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     // first input to function etl should have IntegerType

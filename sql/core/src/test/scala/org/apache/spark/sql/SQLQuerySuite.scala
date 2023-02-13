@@ -28,7 +28,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{AccumulatorSuite, SparkException}
+import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -2646,7 +2646,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       parameters = Map(
         "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
-        "actualNum" -> "3"
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         start = 7,
@@ -2702,15 +2703,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2430",
+        errorClass = "INCOMPATIBLE_COLUMN_TYPE",
         parameters = Map(
+          "tableOrdinalNumber" -> "second",
+          "columnOrdinalNumber" -> "first",
+          "dataType2" -> "\"STRUCT<a: INT>\"",
           "operator" -> "EXCEPT",
-          "dt1" -> "struct<A:int>",
-          "dt2" -> "struct<a:int>",
           "hint" -> "",
-          "ci" -> "first",
-          "ti" -> "second"
-        ),
+          "dataType1" -> "\"STRUCT<A: INT>\""),
         context = ExpectedContext(
           fragment = "SELECT struct(1 a) EXCEPT (SELECT struct(2 A))",
           start = 0,

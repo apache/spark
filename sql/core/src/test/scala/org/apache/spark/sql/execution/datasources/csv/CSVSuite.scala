@@ -3101,6 +3101,53 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-42335: Pass the comment option through to univocity " +
+    "if users set it explicitly in CSV dataSource") {
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.option("comment", "\u0000").csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("\"def\""), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.option("comment", "#").csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.option("comment", "\u0000").csv(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("xyz")))
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.option("comment", "#").csv(path.getCanonicalPath),
+        Seq(Row("\u0000def"), Row("xyz")))
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.csv(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("\u0000def"), Row("xyz"))
+      )
+    }
+  }
+
   test("SPARK-40667: validate CSV Options") {
     assert(CSVOptions.getAllOptions.size == 38)
     // Please add validation on any new CSV options here

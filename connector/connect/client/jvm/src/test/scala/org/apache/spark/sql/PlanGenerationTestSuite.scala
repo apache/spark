@@ -20,6 +20,7 @@ import java.nio.file.{Files, Path}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+import scala.util.Properties.versionNumberString
 
 import com.google.protobuf.util.JsonFormat
 import io.grpc.inprocess.InProcessChannelBuilder
@@ -56,6 +57,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+
+  private val scala = versionNumberString.substring(0, versionNumberString.indexOf(".", 2))
 
   // Borrowed from SparkFunSuite
   private def getWorkspaceFilePath(first: String, more: String*): Path = {
@@ -467,6 +470,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   test("distinct") {
     simple
   }
+
   /* Column API */
   test("column by name") {
     select(fn.col("b"))
@@ -489,7 +493,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     select(fn.col("id"))
   }
 
-  test("function udf") {
+  test("function udf " + scala) {
     // This test might be a bit tricky if different JVM
     // versions are used to generate the golden files.
     val functions = Seq(

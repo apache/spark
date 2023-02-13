@@ -22,83 +22,17 @@ from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import is_instance_of
 
 from pyspark import SparkContext
-from pyspark.errors.utils import ErrorClassesReader
-
-
-class PySparkException(Exception):
-    """
-    Base Exception for handling errors generated from PySpark.
-    """
-
-    def __init__(
-        self,
-        message: Optional[str] = None,
-        error_class: Optional[str] = None,
-        message_parameters: Optional[Dict[str, str]] = None,
-    ):
-        # `message` vs `error_class` & `message_parameters` are mutually exclusive.
-        assert (message is not None and (error_class is None and message_parameters is None)) or (
-            message is None and (error_class is not None and message_parameters is not None)
-        )
-
-        self.error_reader = ErrorClassesReader()
-
-        if message is None:
-            self.message = self.error_reader.get_error_message(
-                cast(str, error_class), cast(Dict[str, str], message_parameters)
-            )
-        else:
-            self.message = message
-
-        self.error_class = error_class
-        self.message_parameters = message_parameters
-
-    def getErrorClass(self) -> Optional[str]:
-        """
-        Returns an error class as a string.
-
-        .. versionadded:: 3.4.0
-
-        See Also
-        --------
-        :meth:`PySparkException.getMessageParameters`
-        :meth:`PySparkException.getSqlState`
-        """
-        return self.error_class
-
-    def getMessageParameters(self) -> Optional[Dict[str, str]]:
-        """
-        Returns a message parameters as a dictionary.
-
-        .. versionadded:: 3.4.0
-
-        See Also
-        --------
-        :meth:`PySparkException.getErrorClass`
-        :meth:`PySparkException.getSqlState`
-        """
-        return self.message_parameters
-
-    def getSqlState(self) -> None:
-        """
-        Returns an SQLSTATE as a string.
-
-        Errors generated in Python have no SQLSTATE, so it always returns None.
-
-        .. versionadded:: 3.4.0
-
-        See Also
-        --------
-        :meth:`PySparkException.getErrorClass`
-        :meth:`PySparkException.getMessageParameters`
-        """
-        return None
-
-    def __str__(self) -> str:
-        if self.getErrorClass() is not None:
-            return f"[{self.getErrorClass()}] {self.message}"
-        else:
-            return self.message
+from pyspark.errors.exceptions.base import (
+    AnalysisException as BaseAnalysisException,
+    IllegalArgumentException as BaseIllegalArgumentException,
+    ParseException as BaseParseException,
+    PySparkException,
+    PythonException as BasePythonException,
+    QueryExecutionException as BaseQueryExecutionException,
+    SparkUpgradeException as BaseSparkUpgradeException,
+    StreamingQueryException as BaseStreamingQueryException,
+    UnknownException as BaseUnknownException,
+)
 
 
 class CapturedException(PySparkException):
@@ -247,133 +181,49 @@ def install_exception_handler() -> None:
     py4j.java_gateway.get_return_value = patched
 
 
-class AnalysisException(CapturedException):
+class AnalysisException(CapturedException, BaseAnalysisException):
     """
     Failed to analyze a SQL query plan.
     """
 
 
-class ParseException(CapturedException):
+class ParseException(CapturedException, BaseParseException):
     """
     Failed to parse a SQL command.
     """
 
 
-class IllegalArgumentException(CapturedException):
+class IllegalArgumentException(CapturedException, BaseIllegalArgumentException):
     """
     Passed an illegal or inappropriate argument.
     """
 
 
-class StreamingQueryException(CapturedException):
+class StreamingQueryException(CapturedException, BaseStreamingQueryException):
     """
     Exception that stopped a :class:`StreamingQuery`.
     """
 
 
-class QueryExecutionException(CapturedException):
+class QueryExecutionException(CapturedException, BaseQueryExecutionException):
     """
     Failed to execute a query.
     """
 
 
-class PythonException(CapturedException):
+class PythonException(CapturedException, BasePythonException):
     """
     Exceptions thrown from Python workers.
     """
 
 
-class UnknownException(CapturedException):
+class UnknownException(CapturedException, BaseUnknownException):
     """
     None of the above exceptions.
     """
 
 
-class SparkUpgradeException(CapturedException):
+class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
     Exception thrown because of Spark upgrade.
-    """
-
-
-class SparkConnectException(PySparkException):
-    """
-    Exception thrown from Spark Connect.
-    """
-
-
-class SparkConnectGrpcException(SparkConnectException):
-    """
-    Base class to handle the errors from GRPC.
-    """
-
-    def __init__(
-        self,
-        message: Optional[str] = None,
-        error_class: Optional[str] = None,
-        message_parameters: Optional[Dict[str, str]] = None,
-        reason: Optional[str] = None,
-    ) -> None:
-        self.message = message  # type: ignore[assignment]
-        if reason is not None:
-            self.message = f"({reason}) {self.message}"
-
-        super().__init__(
-            message=self.message,
-            error_class=error_class,
-            message_parameters=message_parameters,
-        )
-
-
-class SparkConnectAnalysisException(SparkConnectGrpcException):
-    """
-    Failed to analyze a SQL query plan from Spark Connect server.
-    """
-
-    def __init__(
-        self,
-        message: Optional[str] = None,
-        error_class: Optional[str] = None,
-        message_parameters: Optional[Dict[str, str]] = None,
-        plan: Optional[str] = None,
-        reason: Optional[str] = None,
-    ) -> None:
-        self.message = message  # type: ignore[assignment]
-        if plan is not None:
-            self.message = f"{self.message}\nPlan: {plan}"
-
-        super().__init__(
-            message=self.message,
-            error_class=error_class,
-            message_parameters=message_parameters,
-            reason=reason,
-        )
-
-
-class SparkConnectParseException(SparkConnectGrpcException):
-    """
-    Failed to parse a SQL command from Spark Connect server.
-    """
-
-
-class SparkConnectTempTableAlreadyExistsException(SparkConnectAnalysisException):
-    """
-    Failed to create temp view since it is already exists.
-    """
-
-
-class PySparkValueError(PySparkException, ValueError):
-    """
-    Wrapper class for ValueError to support error classes.
-    """
-
-
-class PySparkTypeError(PySparkException, TypeError):
-    """
-    Wrapper class for TypeError to support error classes.
-    """
-
-
-class SparkConnectIllegalArgumentException(SparkConnectGrpcException):
-    """
-    Passed an illegal or inappropriate argument from Spark Connect server.
     """

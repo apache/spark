@@ -777,6 +777,38 @@ class JsonProtocolSuite extends SparkFunSuite {
         |}""".stripMargin
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
   }
+
+  test("SPARK-42403: properly handle null string values") {
+    // Null string values can appear in a few different event types,
+    // so we test multiple known cases here:
+    val stackTraceJson =
+      """
+        |[
+        |  {
+        |    "Declaring Class": "someClass",
+        |    "Method Name": "someMethod",
+        |    "File Name": null,
+        |    "Line Number": -1
+        |  }
+        |]
+        |""".stripMargin
+    val stackTrace = JsonProtocol.stackTraceFromJson(stackTraceJson)
+    assert(stackTrace === Array(new StackTraceElement("someClass", "someMethod", null, -1)))
+
+    val exceptionFailureJson =
+      """
+        |{
+        |  "Reason": "ExceptionFailure",
+        |  "Class Name": "java.lang.Exception",
+        |  "Description": null,
+        |  "Stack Trace": [],
+        |  "Accumulator Updates": []
+        |}
+        |""".stripMargin
+    val exceptionFailure =
+      JsonProtocol.taskEndReasonFromJson(exceptionFailureJson).asInstanceOf[ExceptionFailure]
+    assert(exceptionFailure.description == null)
+  }
 }
 
 
