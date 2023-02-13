@@ -402,17 +402,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_invalid_column(self):
         # SPARK-41812: fail df1.select(df2.col)
-        data1 = [Row(id=1, value="foo"), Row(id=2, value=None)]
+        data1 = [Row(a=1, b=2, c=3)]
         cdf1 = self.connect.createDataFrame(data1)
 
-        data2 = [Row(value="bar"), Row(value=None), Row(value="foo")]
+        data2 = [Row(a=2, b=0)]
         cdf2 = self.connect.createDataFrame(data2)
 
         with self.assertRaises(AnalysisException):
-            cdf1.select(cdf2.value).schema
+            cdf1.select(cdf2.a).schema
 
         with self.assertRaises(AnalysisException):
-            cdf2.withColumn("b", cdf1.id + 1).schema
+            cdf2.withColumn("x", cdf1.a + 1).schema
+
+        with self.assertRaisesRegex(AnalysisException, "attribute.*missing"):
+            cdf3 = cdf1.select(cdf1.a)
+            cdf3.select(cdf1.b).schema
 
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)
