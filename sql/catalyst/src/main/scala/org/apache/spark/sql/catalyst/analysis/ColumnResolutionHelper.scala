@@ -357,8 +357,7 @@ trait ColumnResolutionHelper extends Logging {
       e: Expression,
       q: LogicalPlan,
       allowOuter: Boolean = false): Expression = {
-    val newE = if (e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)
-      && q.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
+    val newE = if (e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
       // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
       // expression are from Spark Connect, and need to be resolved in this way:
       //    1, extract the attached plan id from the expression (UnresolvedAttribute only for now);
@@ -408,9 +407,11 @@ trait ColumnResolutionHelper extends Logging {
     logDebug(s"Extract plan_id $planId from $u")
 
     val planOpt = q.find(_.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId))
-    if (planOpt.isEmpty) return None
+    if (planOpt.isEmpty) {
+      throw new AnalysisException(s"When resolving $u, " +
+        s"fail to find subplan with plan_id=$planId in $q")
+    }
     val plan = planOpt.get
-    logDebug(s"Find child node $plan with plan_id==$planId")
 
     try {
       plan.resolve(u.nameParts, conf.resolver) match {

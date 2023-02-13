@@ -400,6 +400,20 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf7.schema, sdf7.schema)
         self.assertEqual(cdf7.collect(), sdf7.collect())
 
+    def test_invalid_column(self):
+        # SPARK-41812: fail df1.select(df2.col)
+        data1 = [Row(id=1, value="foo"), Row(id=2, value=None)]
+        cdf1 = self.connect.createDataFrame(data1)
+
+        data2 = [Row(value="bar"), Row(value=None), Row(value="foo")]
+        cdf2 = self.connect.createDataFrame(data2)
+
+        with self.assertRaises(AnalysisException):
+            cdf1.select(cdf2.value).schema
+
+        with self.assertRaises(AnalysisException):
+            cdf2.withColumn("b", cdf1.id + 1).schema
+
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)
         sdf = self.spark.read.table(self.tbl_name)

@@ -50,6 +50,7 @@ from pyspark.sql.dataframe import (
 )
 
 from pyspark.errors import PySparkTypeError
+from pyspark.errors.exceptions.connect import SparkConnectException
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
@@ -1286,7 +1287,7 @@ class DataFrame:
             # Check for alias
             alias = self._get_alias()
             if self._plan is None:
-                raise Exception("Cannot analyze on empty plan.")
+                raise SparkConnectException("Cannot analyze on empty plan.")
             return _to_col_with_plan_id(
                 col=alias if alias is not None else item,
                 plan_id=self._plan._plan_id,
