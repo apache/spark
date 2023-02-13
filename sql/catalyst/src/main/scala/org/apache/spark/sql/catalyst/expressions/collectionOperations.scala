@@ -4840,7 +4840,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override def third: Expression = itemExpr
 
   override def prettyName: String = "array_insert"
-  override def dataType: DataType = first.dataType
+  override def dataType: DataType = if (third.nullable) first.dataType.asNullable else first.dataType
   override def nullable: Boolean = first.nullable | second.nullable
 
   @transient private lazy val elementType: DataType =
@@ -5024,7 +5024,7 @@ case class ArrayAppend(left: Expression, right: Expression)
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
-  override def dataType: DataType = left.dataType
+  override def dataType: DataType = if (right.nullable) left.dataType.asNullable else left.dataType
   protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayAppend =
     copy(left = newLeft, right = newRight)
 
