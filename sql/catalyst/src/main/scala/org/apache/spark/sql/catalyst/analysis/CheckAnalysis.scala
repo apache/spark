@@ -142,6 +142,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
     checkAnalysis0(inlineCTE(plan))
+    plan.setAnalyzed()
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
@@ -775,8 +776,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           summary = o.origin.context.summary)
       case _ =>
     }
-
-    plan.setAnalyzed()
   }
 
   private def getAllExpressions(plan: LogicalPlan): Seq[Expression] = {
