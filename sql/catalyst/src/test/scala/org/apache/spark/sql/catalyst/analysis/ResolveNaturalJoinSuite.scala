@@ -112,12 +112,12 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
       r1.join(r2, UsingJoin(Inner, Seq("d"))),
       expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       expectedMessageParameters = Map(
-        "colName" -> "`d`", "side" -> "left", "suggestion" -> "`b`, `a`"))
+        "colName" -> "`d`", "side" -> "left", "suggestion" -> "`a`, `b`"))
     assertAnalysisErrorClass(
       r1.join(r2, UsingJoin(Inner, Seq("b"))),
       expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       expectedMessageParameters = Map(
-        "colName" -> "`b`", "side" -> "right", "suggestion" -> "`c`, `a`"))
+        "colName" -> "`b`", "side" -> "right", "suggestion" -> "`a`, `c`"))
   }
 
   test("using join with a case sensitive analyzer") {
@@ -130,7 +130,7 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
       r1.join(r2, UsingJoin(Inner, Seq("A"))),
       expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       expectedMessageParameters = Map(
-        "colName" -> "`A`", "side" -> "left", "suggestion" -> "`b`, `a`"))
+        "colName" -> "`A`", "side" -> "left", "suggestion" -> "`a`, `b`"))
   }
 
   test("using join on nested fields") {

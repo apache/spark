@@ -3448,13 +3448,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
         throw QueryCompilationErrors.unresolvedUsingColForJoinError(
-          keyName, left.schema.fieldNames.map(toSQLId).mkString(", "), "left")
+          keyName, left.schema.fieldNames.sorted.map(toSQLId).mkString(", "), "left")
       }
     }
     val rightKeys = joinNames.map { keyName =>
       right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
         throw QueryCompilationErrors.unresolvedUsingColForJoinError(
-          keyName, right.schema.fieldNames.map(toSQLId).mkString(", "), "right")
+          keyName, right.schema.fieldNames.sorted.map(toSQLId).mkString(", "), "right")
       }
     }
     val joinPairs = leftKeys.zip(rightKeys)
