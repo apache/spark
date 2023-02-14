@@ -593,6 +593,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(cmd)
       assert(Files.exists(Paths.get(f.getPath)), s"Output file must exist: ${f.getPath}")
     }
+
+    // should work if format is not set
+    withTempPath { f =>
+      transform(localRelation.write(path = Some(f.getCanonicalPath)))
+      assert(Files.exists(Paths.get(f.getPath)), s"Output file must exist: ${f.getPath}")
+    }
   }
 
   test("Write to Path with invalid input") {
@@ -600,10 +606,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     assertThrows[SparkClassNotFoundException](
       transform(
         localRelation.write(path = Some("/tmp/tmppath"), format = Some("ThisAintNoFormat"))))
-
-    // Default data source not found.
-    assertThrows[SparkClassNotFoundException](
-      transform(localRelation.write(path = Some("/tmp/tmppath"))))
   }
 
   test("Write with sortBy") {
