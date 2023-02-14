@@ -396,7 +396,7 @@ abstract class ParquetPartitionDiscoverySuite
           s"hdfs://host:9000/path/a=2014-01-01 00%3A01%3A00.0/b=$defaultPartitionName"),
           PartitionSpec(
             StructType(Seq(
-              StructField("a", SQLConf.get.timestampTypeInSchemaInference),
+              StructField("a", SQLConf.get.timestampType),
               StructField("b", DecimalType(22, 0)))),
             Seq(
               Partition(
@@ -696,7 +696,7 @@ abstract class ParquetPartitionDiscoverySuite
             DecimalType(10, 5),
             DecimalType.SYSTEM_DEFAULT,
             DateType,
-            SQLConf.get.timestampTypeInSchemaInference,
+            SQLConf.get.timestampType,
             StringType)
 
         val partitionColumns = partitionColumnTypes.zipWithIndex.map {
@@ -750,7 +750,7 @@ abstract class ParquetPartitionDiscoverySuite
             DoubleType,
             DecimalType(20, 0),
             DateType,
-            SQLConf.get.timestampTypeInSchemaInference,
+            SQLConf.get.timestampType,
             StringType)
 
         val partitionColumns = partitionColumnTypes.zipWithIndex.map {

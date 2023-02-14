@@ -4852,7 +4852,7 @@ class SQLConf extends Serializable with Logging {
 
   // Preferred timestamp type in schema reference when a column can be either Timestamp type or
   // TimestampNTZ type.
-  def timestampTypeInSchemaInference: AtomicType = {
+  def timestampType: AtomicType = {
     if (getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)) {
       TimestampNTZType
     } else {
