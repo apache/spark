@@ -7677,7 +7677,7 @@ def array_distinct(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName") -> Column:
+def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
     """
     Collection function: adds an item into a given array at a specified array index.
     Array indices start at 1 (or from the end if the index is negative).
@@ -7686,15 +7686,18 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     arr : :class:`~pyspark.sql.Column` or str
         name of column containing an array
-    pos : :class:`~pyspark.sql.Column` or str
+    pos : :class:`~pyspark.sql.Column` or str or int
         name of Numeric type column indicating position of insertion
         (starting at index 1, negative position is a start from the back of the array)
-    value : :class:`~pyspark.sql.Column` or str
-        name of column containing values for insertion into array
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
 
     Returns
     -------
@@ -7709,8 +7712,12 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     ... )
     >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val).alias('data')).collect()
     [Row(data=['a', 'd', 'b', 'c']), Row(data=['c', 'd', 'b', 'a'])]
+    >>> df.select(array_insert(df.data, 5, 'hello').alias('data')).collect()
+    [Row(data=['a', 'b', 'c', None, 'hello']), Row(data=['c', 'b', 'a', None, 'hello'])]
     """
-    return _invoke_function_over_columns("array_insert", arr, pos, value)
+    pos = lit(pos) if isinstance(pos, int) else pos
+
+    return _invoke_function_over_columns("array_insert", arr, pos, lit(value))
 
 
 @try_remote_functions
