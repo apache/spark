@@ -638,7 +638,9 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
         "Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
-        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
+        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
+      DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "3.5.0",
+        "Please use spark.shuffle.localDisk.file.output.buffer")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
