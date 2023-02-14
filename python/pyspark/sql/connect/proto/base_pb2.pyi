@@ -571,51 +571,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["metrics", b"metrics"]
         ) -> None: ...
 
-    @typing_extensions.final
-    class MlCommandResponse(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        SERVER_SIDE_OBJECT_ID_FIELD_NUMBER: builtins.int
-        PARAMS_FIELD_NUMBER: builtins.int
-        server_side_object_id: builtins.int
-        @property
-        def params(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand.Params: ...
-        def __init__(
-            self,
-            *,
-            server_side_object_id: builtins.int = ...,
-            params: pyspark.sql.connect.proto.ml_pb2.MlCommand.Params | None = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "params",
-                b"params",
-                "server_side_object_id",
-                b"server_side_object_id",
-                "value",
-                b"value",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "params",
-                b"params",
-                "server_side_object_id",
-                b"server_side_object_id",
-                "value",
-                b"value",
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["value", b"value"]
-        ) -> typing_extensions.Literal["server_side_object_id", "params"] | None: ...
-
     CLIENT_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
-    ML_COMMAND_RESPONSE_FIELD_NUMBER: builtins.int
+    REMOTE_CALL_RETURN_VALUE_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
@@ -625,8 +584,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         batch of results and then represent the overall state of the query execution.
         """
     @property
-    def ml_command_response(self) -> global___ExecutePlanResponse.MlCommandResponse:
-        """Used for optional ML command results.
+    def remote_call_return_value(self) -> pyspark.sql.connect.proto.ml_pb2.RemoteCall.ArgValue:
+        """Used for getting remote call results.
         TODO: Move this field to a better place
         """
     def __init__(
@@ -635,7 +594,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         client_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
-        ml_command_response: global___ExecutePlanResponse.MlCommandResponse | None = ...,
+        remote_call_return_value: pyspark.sql.connect.proto.ml_pb2.RemoteCall.ArgValue | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -644,8 +603,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"arrow_batch",
             "metrics",
             b"metrics",
-            "ml_command_response",
-            b"ml_command_response",
+            "remote_call_return_value",
+            b"remote_call_return_value",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -657,8 +616,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"client_id",
             "metrics",
             b"metrics",
-            "ml_command_response",
-            b"ml_command_response",
+            "remote_call_return_value",
+            b"remote_call_return_value",
         ],
     ) -> None: ...
 

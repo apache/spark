@@ -228,11 +228,11 @@ class RemoteCall(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         ID_FIELD_NUMBER: builtins.int
-        id: builtins.str
+        id: builtins.int
         def __init__(
             self,
             *,
-            id: builtins.str = ...,
+            id: builtins.int = ...,
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
 
@@ -241,10 +241,10 @@ class RemoteCall(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         CLASSNAME_FIELD_NUMBER: builtins.int
-        VALUES_FIELD_NUMBER: builtins.int
+        ARG_VALUES_FIELD_NUMBER: builtins.int
         className: builtins.str
         @property
-        def values(
+        def arg_values(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             global___RemoteCall.ArgValue
@@ -253,11 +253,13 @@ class RemoteCall(google.protobuf.message.Message):
             self,
             *,
             className: builtins.str = ...,
-            values: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
+            arg_values: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal["className", b"className", "values", b"values"],
+            field_name: typing_extensions.Literal[
+                "arg_values", b"arg_values", "className", b"className"
+            ],
         ) -> None: ...
 
     @typing_extensions.final
@@ -322,8 +324,10 @@ class RemoteCall(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         MODULE_NAME_FIELD_NUMBER: builtins.int
+        FUNCTION_NAME_FIELD_NUMBER: builtins.int
         ARG_VALUES_FIELD_NUMBER: builtins.int
         module_name: builtins.str
+        function_name: builtins.str
         @property
         def arg_values(
             self,
@@ -334,12 +338,18 @@ class RemoteCall(google.protobuf.message.Message):
             self,
             *,
             module_name: builtins.str = ...,
+            function_name: builtins.str = ...,
             arg_values: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "arg_values", b"arg_values", "module_name", b"module_name"
+                "arg_values",
+                b"arg_values",
+                "function_name",
+                b"function_name",
+                "module_name",
+                b"module_name",
             ],
         ) -> None: ...
 

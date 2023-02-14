@@ -55,12 +55,12 @@ message RemoteCall {
     map<string, ArgValue> map = 1;
   }
   message RemoteObject {
-    string id = 1;
+    int64 id = 1;
   }
 
   message ConstructObject {
     string className = 1;
-    repeated ArgValue values = 2;
+    repeated ArgValue arg_values = 2;
   }
 
   message DestructObject {
@@ -75,6 +75,7 @@ message RemoteCall {
 
   message CallFunction {
     string module_name = 1;
+    string function_name = 2;
     repeated ArgValue arg_values = 3;
   }
 }

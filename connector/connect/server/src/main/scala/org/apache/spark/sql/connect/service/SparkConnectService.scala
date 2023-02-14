@@ -171,10 +171,10 @@ class SparkConnectService(debug: Boolean)
           new UnsupportedOperationException(
             s"${request.getPlan.getOpTypeCase} not supported for analysis."))
       }
-      val session =
+      val sessionHolder =
         SparkConnectService
           .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
-          .session
+      val session = sessionHolder.session
 
       val explainMode = request.getExplain.getExplainMode match {
         case proto.Explain.ExplainMode.SIMPLE => SimpleMode
@@ -188,7 +188,7 @@ class SparkConnectService(debug: Boolean)
               "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
       }
 
-      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, session, explainMode)
+      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, sessionHolder, explainMode)
       response.setClientId(request.getClientId)
       responseObserver.onNext(response.build())
       responseObserver.onCompleted()
@@ -197,11 +197,11 @@ class SparkConnectService(debug: Boolean)
 
   def handleAnalyzePlanRequest(
       relation: proto.Relation,
-      session: SparkSession,
+      sessionHolder: SessionHolder,
       explainMode: ExplainMode): proto.AnalyzePlanResponse.Builder = {
-    val logicalPlan = new SparkConnectPlanner(session).transformRelation(relation)
+    val logicalPlan = new SparkConnectPlanner(sessionHolder).transformRelation(relation)
 
-    val ds = Dataset.ofRows(session, logicalPlan)
+    val ds = Dataset.ofRows(sessionHolder.session, logicalPlan)
     val explainString = ds.queryExecution.explainString(explainMode)
 
     val response = proto.AnalyzePlanResponse.newBuilder()

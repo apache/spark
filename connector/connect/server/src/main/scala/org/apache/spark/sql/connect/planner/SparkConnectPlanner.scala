@@ -26,7 +26,7 @@ import com.google.protobuf.{Any => ProtoAny}
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.UdfPacket
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -60,7 +61,9 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) {
+class SparkConnectPlanner(val sessionHolder: SessionHolder) {
+  val session = sessionHolder.session
+
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
@@ -113,6 +116,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
+      case proto.Relation.RelTypeCase.SERVER_SIDE_DATAFRAME_ID =>
+        sessionHolder.serverSideObjectManager.getObject(rel.getServerSideDataframeId)
+          .asInstanceOf[Dataset[Any]].logicalPlan
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -1493,7 +1499,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    */
   private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
     // Transform the input plan into the logical plan.
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(sessionHolder)
     val plan = planner.transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
@@ -1553,7 +1559,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    */
   def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
     // Transform the input plan into the logical plan.
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(sessionHolder)
     val plan = planner.transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
     val dataset = Dataset.ofRows(session, logicalPlan = plan)

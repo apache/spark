@@ -160,9 +160,9 @@ message ExecutePlanResponse {
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
 
-  // Used for optional ML command results.
+  // Used for getting remote call results.
   // TODO: Move this field to a better place
-  MlCommandResponse ml_command_response = 5;
+  RemoteCall.ArgValue remote_call_return_value = 5;
 
   // Batch results of metrics.
   message ArrowBatch {
@@ -185,13 +185,6 @@ message ExecutePlanResponse {
       string name = 1;
       int64 value = 2;
       string metric_type = 3;
-    }
-  }
-
-  message MlCommandResponse {
-    oneof value {
-      int64 server_side_object_id = 1;
-      MlCommand.Params params = 2;
     }
   }
 }
