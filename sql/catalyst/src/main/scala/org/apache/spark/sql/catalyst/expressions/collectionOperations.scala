@@ -4601,6 +4601,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(x, pos, val) - Places val into index pos of array x.
