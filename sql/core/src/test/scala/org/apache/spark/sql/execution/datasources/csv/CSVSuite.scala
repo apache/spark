@@ -2652,12 +2652,12 @@ abstract class CSVSuite
             assert(csv.schema.fieldNames === Seq("a", "b", String.valueOf(skipLines)))
             val id = csv.select(String.valueOf(skipLines)).collect()
             id.zipWithIndex.foreach { case (id, index) =>
-              assert(id.get(0) === String.valueOf(skipLines + index + 1))
+              assert(String.valueOf(id.get(0)) === String.valueOf(skipLines + index + 1))
             }
           } else {
             val id = csv.select("_c2").collect()
             id.zipWithIndex.foreach { case (id, index) =>
-              assert(id.get(0) === String.valueOf(skipLines + index))
+              assert(String.valueOf(id.get(0)) === String.valueOf(skipLines + index))
             }
           }
         }
@@ -2681,12 +2681,12 @@ abstract class CSVSuite
           assert(csv.schema.fieldNames === Seq("a", "b\nb", String.valueOf(skipLines)))
           val id = csv.select(String.valueOf(skipLines)).collect()
           id.zipWithIndex.foreach { case (id, index) =>
-            assert(id.get(0) === String.valueOf(skipLines + index + 1))
+            assert(String.valueOf(id.get(0)) === String.valueOf(skipLines + index + 1))
           }
         } else {
           val id = csv.select("_c2").collect()
           id.zipWithIndex.foreach { case (id, index) =>
-            assert(id.get(0) === String.valueOf(skipLines + index))
+            assert(String.valueOf(id.get(0)) === String.valueOf(skipLines + index))
           }
         }
       }
