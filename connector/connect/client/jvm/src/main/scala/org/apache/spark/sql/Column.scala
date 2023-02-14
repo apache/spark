@@ -65,15 +65,13 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   override def hashCode: Int = expr.hashCode()
 
   /**
-   * Extracts a value or values from a complex type.
-   * The following types of extraction are supported:
-   * <ul>
-   * <li>Given an Array, an integer ordinal can be used to retrieve a single value.</li>
-   * <li>Given a Map, a key of the correct type can be used to retrieve an individual value.</li>
-   * <li>Given a Struct, a string fieldName can be used to extract that field.</li>
-   * <li>Given an Array of Structs, a string fieldName can be used to extract filed
-   *    of every struct in that array, and return an Array of fields.</li>
-   * </ul>
+   * Extracts a value or values from a complex type. The following types of extraction are
+   * supported:
+   *   - Given an Array, an integer ordinal can be used to retrieve a single value.
+   *   - Given a Map, a key of the correct type can be used to retrieve an individual value.
+   *   - Given a Struct, a string fieldName can be used to extract that field.
+   *   - Given an Array of Structs, a string fieldName can be used to extract filed of every
+   *     struct in that array, and return an Array of fields.
    * @group expr_ops
    * @since 3.4.0
    */
@@ -114,6 +112,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @since 1.3.0
    */
   def unary_! : Column = fn("!")
+
   /**
    * Equality test.
    * {{{
@@ -161,7 +160,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.0.0
    */
-  def =!= (other: Any): Column = !(this === other)
+  def =!=(other: Any): Column = !(this === other)
 
   /**
    * Inequality test.
@@ -179,7 +178,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @since 1.3.0
    */
   @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
-  def !== (other: Any): Column = this =!= other
+  def !==(other: Any): Column = this =!= other
 
   /**
    * Inequality test.
@@ -212,7 +211,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def > (other: Any): Column = fn(">", other)
+  def >(other: Any): Column = fn(">", other)
 
   /**
    * Greater than.
@@ -243,7 +242,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def < (other: Any): Column = fn("<", other)
+  def <(other: Any): Column = fn("<", other)
 
   /**
    * Less than.
@@ -273,7 +272,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def <= (other: Any): Column = fn("<=", other)
+  def <=(other: Any): Column = fn("<=", other)
 
   /**
    * Less than or equal to.
@@ -303,7 +302,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def >= (other: Any): Column = fn(">=", other)
+  def >=(other: Any): Column = fn(">=", other)
 
   /**
    * Greater than or equal to an expression.
@@ -326,7 +325,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def <=> (other: Any): Column = fn("<=>", other)
+  def <=>(other: Any): Column = fn("<=>", other)
 
   /**
    * Equality test that is safe for null values.
@@ -352,8 +351,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   }
 
   /**
-   * Evaluates a list of conditions and returns one of multiple possible result expressions.
-   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   * Evaluates a list of conditions and returns one of multiple possible result expressions. If
+   * otherwise is not defined at the end, null is returned for unmatched conditions.
    *
    * {{{
    *   // Example: encoding gender string column into integer.
@@ -375,8 +374,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def when(condition: Column, value: Any): Column = {
     val expressions = extractWhen("when")
     if (expressions.size() % 2 == 1) {
-      throw new IllegalArgumentException(
-        "when() cannot be applied once otherwise() is applied")
+      throw new IllegalArgumentException("when() cannot be applied once otherwise() is applied")
     }
     Column { builder =>
       builder.getUnresolvedFunctionBuilder
@@ -387,8 +385,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   }
 
   /**
-   * Evaluates a list of conditions and returns one of multiple possible result expressions.
-   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   * Evaluates a list of conditions and returns one of multiple possible result expressions. If
+   * otherwise is not defined at the end, null is returned for unmatched conditions.
    *
    * {{{
    *   // Example: encoding gender string column into integer.
@@ -467,7 +465,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def || (other: Any): Column = fn("or", other)
+  def ||(other: Any): Column = fn("or", other)
 
   /**
    * Boolean OR.
@@ -497,7 +495,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def && (other: Any): Column = fn("and", other)
+  def &&(other: Any): Column = fn("and", other)
 
   /**
    * Boolean AND.
@@ -557,7 +555,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def - (other: Any): Column = fn("-", other)
+  def -(other: Any): Column = fn("-", other)
 
   /**
    * Subtraction. Subtract the other expression from this expression.
@@ -587,7 +585,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def * (other: Any): Column = fn("*", other)
+  def *(other: Any): Column = fn("*", other)
 
   /**
    * Multiplication of this expression and another expression.
@@ -617,7 +615,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def / (other: Any): Column = fn("/", other)
+  def /(other: Any): Column = fn("/", other)
 
   /**
    * Division this expression by another expression.
@@ -640,7 +638,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 1.3.0
    */
-  def % (other: Any): Column = fn("%", other)
+  def %(other: Any): Column = fn("%", other)
 
   /**
    * Modulo (a.k.a. remainder) expression.
@@ -654,13 +652,11 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
    *
-   * Note: Since the type of the elements in the list are inferred only during the run time,
-   * the elements will be "up-casted" to the most common type for comparison.
-   * For eg:
-   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
-   * comparison will look like "String vs String".
-   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
-   * comparison will look like "Double vs Double"
+   * Note: Since the type of the elements in the list are inferred only during the run time, the
+   * elements will be "up-casted" to the most common type for comparison. For eg: 1) In the case
+   * of "Int vs String", the "Int" will be up-casted to "String" and the comparison will look like
+   * "String vs String". 2) In the case of "Float vs Double", the "Float" will be up-casted to
+   * "Double" and the comparison will look like "Double vs Double"
    *
    * @group expr_ops
    * @since 1.5.0
@@ -673,12 +669,10 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * by the provided collection.
    *
    * Note: Since the type of the elements in the collection are inferred only during the run time,
-   * the elements will be "up-casted" to the most common type for comparison.
-   * For eg:
-   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
-   * comparison will look like "String vs String".
-   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
-   * comparison will look like "Double vs Double"
+   * the elements will be "up-casted" to the most common type for comparison. For eg: 1) In the
+   * case of "Int vs String", the "Int" will be up-casted to "String" and the comparison will look
+   * like "String vs String". 2) In the case of "Float vs Double", the "Float" will be up-casted
+   * to "Double" and the comparison will look like "Double vs Double"
    *
    * @group expr_ops
    * @since 2.4.0
@@ -690,12 +684,10 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * by the provided collection.
    *
    * Note: Since the type of the elements in the collection are inferred only during the run time,
-   * the elements will be "up-casted" to the most common type for comparison.
-   * For eg:
-   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
-   * comparison will look like "String vs String".
-   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
-   * comparison will look like "Double vs Double"
+   * the elements will be "up-casted" to the most common type for comparison. For eg: 1) In the
+   * case of "Int vs String", the "Int" will be up-casted to "String" and the comparison will look
+   * like "String vs String". 2) In the case of "Float vs Double", the "Float" will be up-casted
+   * to "Double" and the comparison will look like "Double vs Double"
    *
    * @group java_expr_ops
    * @since 2.4.0
@@ -711,8 +703,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def like(literal: String): Column = fn("like", literal)
 
   /**
-   * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
-   * match.
+   * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex match.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -728,8 +719,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def ilike(literal: String): Column = fn("ilike", literal)
 
   /**
-   * An expression that gets an item at position `ordinal` out of an array,
-   * or gets a value by key `key` in a `MapType`.
+   * An expression that gets an item at position `ordinal` out of an array, or gets a value by key
+   * `key` in a `MapType`.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -774,8 +765,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
    * }}}
    *
-   * However, if you are going to add/replace multiple nested fields, it is more optimal to extract
-   * out the nested struct before adding/replacing multiple fields e.g.
+   * However, if you are going to add/replace multiple nested fields, it is more optimal to
+   * extract out the nested struct before adding/replacing multiple fields e.g.
    *
    * {{{
    *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
@@ -800,8 +791,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
 
   // scalastyle:off line.size.limit
   /**
-   * An expression that drops fields in `StructType` by name.
-   * This is a no-op if schema doesn't contain field name(s).
+   * An expression that drops fields in `StructType` by name. This is a no-op if schema doesn't
+   * contain field name(s).
    *
    * {{{
    *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
@@ -845,8 +836,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    *   // result: {"a":{"a":1}}
    * }}}
    *
-   * However, if you are going to drop multiple nested fields, it is more optimal to extract
-   * out the nested struct before dropping multiple fields from it e.g.
+   * However, if you are going to drop multiple nested fields, it is more optimal to extract out
+   * the nested struct before dropping multiple fields from it e.g.
    *
    * {{{
    *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
@@ -878,8 +869,10 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
 
   /**
    * An expression that returns a substring.
-   * @param startPos expression for the starting position.
-   * @param len expression for the length of the substring.
+   * @param startPos
+   *   expression for the starting position.
+   * @param len
+   *   expression for the length of the substring.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -888,8 +881,10 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
 
   /**
    * An expression that returns a substring.
-   * @param startPos starting position.
-   * @param len length of the substring.
+   * @param startPos
+   *   starting position.
+   * @param len
+   *   length of the substring.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -955,9 +950,9 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    *   df.select($"colA".as("colB"))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicit metadata.
+   * If the current column has metadata associated with it, this metadata will be propagated to
+   * the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)` with
+   * explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -997,9 +992,9 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    *   df.select($"colA".as("colB"))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicit metadata.
+   * If the current column has metadata associated with it, this metadata will be propagated to
+   * the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)` with
+   * explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1060,9 +1055,9 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   }
 
   /**
-   * Casts the column to a different data type, using the canonical string representation
-   * of the type. The supported types are: `string`, `boolean`, `byte`, `short`, `int`, `long`,
-   * `float`, `double`, `decimal`, `date`, `timestamp`.
+   * Casts the column to a different data type, using the canonical string representation of the
+   * type. The supported types are: `string`, `boolean`, `byte`, `short`, `int`, `long`, `float`,
+   * `double`, `decimal`, `date`, `timestamp`.
    * {{{
    *   // Casts colA to integer.
    *   df.select(df("colA").cast("int"))
@@ -1102,9 +1097,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = buildSortOrder(
-    SortDirection.SORT_DIRECTION_DESCENDING,
-    NullOrdering.SORT_NULLS_FIRST)
+  def desc_nulls_first: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_DESCENDING, NullOrdering.SORT_NULLS_FIRST)
 
   /**
    * Returns a sort expression based on the descending order of the column, and null values appear
@@ -1120,9 +1114,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = buildSortOrder(
-    SortDirection.SORT_DIRECTION_DESCENDING,
-    NullOrdering.SORT_NULLS_LAST)
+  def desc_nulls_last: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_DESCENDING, NullOrdering.SORT_NULLS_LAST)
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -1153,9 +1146,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = buildSortOrder(
-    SortDirection.SORT_DIRECTION_ASCENDING,
-    NullOrdering.SORT_NULLS_FIRST)
+  def asc_nulls_first: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_ASCENDING, NullOrdering.SORT_NULLS_FIRST)
 
   /**
    * Returns a sort expression based on ascending order of the column, and null values appear
@@ -1171,18 +1163,16 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = buildSortOrder(
-    SortDirection.SORT_DIRECTION_ASCENDING,
-    NullOrdering.SORT_NULLS_LAST)
+  def asc_nulls_last: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_ASCENDING, NullOrdering.SORT_NULLS_LAST)
 
-  private def buildSortOrder(
-      sortDirection: SortDirection,
-      nullOrdering: NullOrdering): Column = Column { builder =>
-    builder.getSortOrderBuilder
-      .setChild(expr)
-      .setDirection(sortDirection)
-      .setNullOrdering(nullOrdering)
-  }
+  private def buildSortOrder(sortDirection: SortDirection, nullOrdering: NullOrdering): Column =
+    Column { builder =>
+      builder.getSortOrderBuilder
+        .setChild(expr)
+        .setDirection(sortDirection)
+        .setNullOrdering(nullOrdering)
+    }
 
   /**
    * Prints the expression to the console for debugging purposes.
