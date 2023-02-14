@@ -62,7 +62,7 @@ trait FileWrite extends Write {
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = paths.head)
-    lazy val description =
+    val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
     committer.setupJob(job)
