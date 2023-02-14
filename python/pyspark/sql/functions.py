@@ -7839,7 +7839,7 @@ def array_compact(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+def array_append(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: returns an array of the elements in col1 along
     with the added element in col2 at the last of the array.
@@ -7851,10 +7851,10 @@ def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column containing array
-    col2 : :class:`~pyspark.sql.Column` or str
-        name of column containing element
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
 
     Returns
     -------
@@ -7867,8 +7867,10 @@ def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
     >>> df.select(array_append(df.c1, df.c2)).collect()
     [Row(array_append(c1, c2)=['b', 'a', 'c', 'c'])]
+    >>> df.select(array_append(df.c1, 'x')).collect()
+    [Row(array_append(c1, x)=['b', 'a', 'c', 'x'])]
     """
-    return _invoke_function_over_columns("array_append", col1, col2)
+    return _invoke_function_over_columns("array_append", col, lit(value))
 
 
 @try_remote_functions
