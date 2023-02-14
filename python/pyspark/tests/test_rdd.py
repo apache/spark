@@ -897,7 +897,6 @@ class RDDTests(ReusedPySparkTestCase):
         # A list which records whether job is cancelled.
         # The index of the array is the thread index which job run in.
         is_job_cancelled = [False for _ in thread_ids]
-        is_job_cancelled = [False for _ in thread_ids]
 
         def run_job(job_group, index):
             """
