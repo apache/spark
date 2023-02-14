@@ -556,8 +556,7 @@ class CommonInlineUserDefinedFunction(Expression):
 
     def __repr__(self) -> str:
         return (
-            f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])}), "
-            f"{self._deterministic}, {self._function}"
+            f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
         )
 
 
