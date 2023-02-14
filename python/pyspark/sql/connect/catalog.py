@@ -18,8 +18,9 @@ from pyspark.sql.connect import check_dependencies
 
 check_dependencies(__name__, __file__)
 
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
+import warnings
 import pandas as pd
 
 from pyspark.sql.types import StructType
@@ -36,6 +37,7 @@ from pyspark.sql.connect import plan
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.connect._typing import DataTypeOrString, UserDefinedFunctionLike
 
 
 class Catalog:
@@ -306,8 +308,13 @@ class Catalog:
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
 
-    def registerFunction(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("registerFunction() is not implemented.")
+    def registerFunction(
+        self, name: str, f: Callable[..., Any], returnType: Optional["DataTypeOrString"] = None
+    ) -> "UserDefinedFunctionLike":
+        warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
+        return self._sparkSession.udf.register(name, f, returnType)
+
+    registerFunction.__doc__ = PySparkCatalog.registerFunction.__doc__
 
 
 Catalog.__doc__ = PySparkCatalog.__doc__
