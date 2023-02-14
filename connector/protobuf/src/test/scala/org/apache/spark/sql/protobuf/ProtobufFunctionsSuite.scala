@@ -415,17 +415,20 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("Setting recursive depth to 0 should result in an error (same as -1) (B -> A -> B)") {
-    val e = intercept[AnalysisException] {
-      emptyBinaryDF.select(
-        functions.from_protobuf(
-          $"binary", "recursiveB", testFileDesc, Map("recursive.fields.max.depth" -> "0").asJava
-        ).as("messageFromProto")
-      ).show()
+  test("Setting depth to 0 or -1 should trigger error on recursive fields (B -> A -> B)") {
+    for (depth <- Seq("0", "-1")) {
+      val e = intercept[AnalysisException] {
+        emptyBinaryDF.select(
+          functions.from_protobuf(
+            $"binary", "recursiveB", testFileDesc,
+            Map("recursive.fields.max.depth" -> depth).asJava
+          ).as("messageFromProto")
+        ).show()
+      }
+      assert(e.getMessage.contains(
+        "Found recursive reference in Protobuf schema, which can not be processed by Spark"
+      ))
     }
-    assert(e.getMessage.contains(
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark"
-    ))
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
