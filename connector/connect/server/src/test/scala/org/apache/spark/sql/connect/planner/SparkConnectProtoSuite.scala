@@ -602,7 +602,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         localRelation.write(path = Some("/tmp/tmppath"), format = Some("ThisAintNoFormat"))))
 
     // Default data source not found.
-    assertThrows[SparkClassNotFoundException](
+    assertThrows[AnalysisException](
       transform(localRelation.write(path = Some("/tmp/tmppath"))))
   }
 
