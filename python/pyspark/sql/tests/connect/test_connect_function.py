@@ -1073,6 +1073,10 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         # test array_append
         self.assert_eq(
+            cdf.select(CF.array_append(cdf.a, "xyz")).toPandas(),
+            sdf.select(SF.array_append(sdf.a, "xyz")).toPandas(),
+        )
+        self.assert_eq(
             cdf.select(CF.array_append(cdf.a, CF.lit("ab"))).toPandas(),
             sdf.select(SF.array_append(sdf.a, SF.lit("ab"))).toPandas(),
         )
