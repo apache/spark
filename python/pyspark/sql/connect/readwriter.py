@@ -472,6 +472,8 @@ class DataFrameWriter(OptionUtils):
     def insertInto(self, tableName: str, overwrite: Optional[bool] = None) -> None:
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
+        elif self._write.mode is None or self._write.mode != "overwrite":
+            self.mode("append")
         self.saveAsTable(tableName)
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
@@ -695,9 +697,8 @@ def _test() -> None:
     del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
     del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
 
-    # TODO(SPARK-41818): Support saveAsTable
+    # TODO(SPARK-42426): insertInto fails when the column names are different from the table columns
     del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")
