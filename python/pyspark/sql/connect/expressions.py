@@ -555,9 +555,7 @@ class CommonInlineUserDefinedFunction(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return (
-            f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
-        )
+        return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
 
 
 class WithField(Expression):
