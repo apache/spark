@@ -446,7 +446,7 @@ class DataFrameWriter(OptionUtils):
         if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
-        self._write.sort_cols = cast(List[str], cols)
+        self._write.sort_cols = cast(List[str], [col, *cols])
         return self
 
     sortBy.__doc__ = PySparkDataFrameWriter.sortBy.__doc__
@@ -694,7 +694,6 @@ def _test() -> None:
     # TODO(SPARK-41817): Support reading with schema
     del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
     del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
 
     # TODO(SPARK-42426): insertInto fails when the column names are different from the table columns
     del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
