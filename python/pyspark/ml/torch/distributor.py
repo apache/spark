@@ -678,14 +678,14 @@ class TorchDistributor(Distributor):
             If train_object is a python function and not a path to a python file, args need
             to be the input parameters to that function. It would look like
 
-            >>> model = distributor.run(train, 1e-3)
+            >>> model = distributor.run(train, 1e-3, 64)
 
             where train is a function and 1e-3 is a regular numeric input to the function.
 
             If train_object is a python file, then args would be the command-line arguments for
             that python file which are all in the form of strings. An example would be
 
-            >>> distributor.run("/path/to/train.py", "--learning-rate=1e-3")
+            >>> distributor.run("/path/to/train.py", "--learning-rate=1e-3", "--batch-size=64")
 
             where since the input is a path, all of the parameters are strings that can be
             handled by argparse in that python file.
