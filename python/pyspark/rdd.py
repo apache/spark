@@ -2799,6 +2799,8 @@ class RDD(Generic[T_co]):
         >>> sc.parallelize(range(100), 100).filter(lambda x: x > 90).take(3)
         [91, 92, 93]
         """
+        scaleUpFactor = max(int(self.ctx.getConf().get("spark.rdd.limit.scaleUpFactor", "4")), 2)
+
         items: List[T] = []
         totalParts = self.getNumPartitions()
         partsScanned = 0
@@ -2807,18 +2809,18 @@ class RDD(Generic[T_co]):
             # The number of partitions to try in this iteration.
             # It is ok for this number to be greater than totalParts because
             # we actually cap it at totalParts in runJob.
-            numPartsToTry = 1
+            numPartsToTry = int(self.ctx.getConf().get("spark.rdd.limit.initialNumPartitions", "1"))
             if partsScanned > 0:
                 # If we didn't find any rows after the previous iteration,
                 # quadruple and retry.  Otherwise, interpolate the number of
                 # partitions we need to try, but overestimate it by 50%.
                 # We also cap the estimation in the end.
                 if len(items) == 0:
-                    numPartsToTry = partsScanned * 4
+                    numPartsToTry = partsScanned * scaleUpFactor
                 else:
                     # the first parameter of max is >=1 whenever partsScanned >= 2
                     numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
-                    numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
+                    numPartsToTry = min(max(numPartsToTry, 1), partsScanned * scaleUpFactor)
 
             left = num - len(items)
 

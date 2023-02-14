@@ -735,6 +735,27 @@ class RDDTests(ReusedPySparkTestCase):
         expected = [list(data[0])]
         self.assertEqual(expected, actual)
 
+    def test_take_with_initialNumPartitions(self):
+        total_elements = 100
+        num_to_take = 50
+        rdd = self.sc.parallelize(range(total_elements), num_to_take)
+        tracker = self.sc.statusTracker()
+
+        # spark.rdd.limit.initialNumPartitions unset
+        unset_job_group_id = "test_take_without_initialNumPartitions"
+        self.sc.setJobGroup(unset_job_group_id, "", True)
+        rdd.take(num_to_take)
+        unset_job_ids = tracker.getJobIdsForGroup(unset_job_group_id)
+        self.assertGreater(len(unset_job_ids), 1)
+
+        # spark.rdd.limit.initialNumPartitions set
+        set_job_group_id = "test_take_with_initialNumPartitions"
+        self.sc._conf.set("spark.rdd.limit.initialNumPartitions", str(total_elements))
+        self.sc.setJobGroup(set_job_group_id, "", True)
+        rdd.take(num_to_take)
+        set_job_ids = tracker.getJobIdsForGroup(set_job_group_id)
+        self.assertEqual(len(set_job_ids), 1)
+
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
         # Regression test for SPARK-5969
         seq = [(i * 59 % 101, i) for i in range(101)]  # unsorted sequence
@@ -875,6 +896,7 @@ class RDDTests(ReusedPySparkTestCase):
 
         # A list which records whether job is cancelled.
         # The index of the array is the thread index which job run in.
+        is_job_cancelled = [False for _ in thread_ids]
         is_job_cancelled = [False for _ in thread_ids]
 
         def run_job(job_group, index):
