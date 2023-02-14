@@ -190,7 +190,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Union") {
-    intercept[AssertionError](
+    intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder.setSetOp(proto.SetOperation.newBuilder.build()).build))
     val union = proto.Relation.newBuilder
       .setSetOp(
