@@ -194,13 +194,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unresolvedUsingColForJoinError(
-      colName: String, plan: LogicalPlan, side: String): Throwable = {
+      colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1001",
+      errorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       messageParameters = Map(
-        "colName" -> colName,
+        "colName" -> toSQLId(colName),
         "side" -> side,
-        "plan" -> plan.output.map(_.name).mkString(", ")))
+        "suggestion" -> suggestion))
   }
 
   def unresolvedAttributeError(
