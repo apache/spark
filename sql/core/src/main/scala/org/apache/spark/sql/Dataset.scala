@@ -3064,13 +3064,31 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def drop(col: Column, cols: Column*): DataFrame = {
-    val allColumns = col +: cols
-    val expressions = (for (col <- allColumns) yield col match {
+    val expressions = (col +: cols).map {
       case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(
+        val plan = u.getTagValue(LogicalPlan.PLAN_ID_TAG) match {
+          case Some(planId) =>
+            val matched = queryExecution.analyzed.collect {
+              case p if p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId) => p
+            }
+            if (matched.length > 1) {
+              throw new AnalysisException(
+                errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+                messageParameters = Map("name" -> toSQLId(u.nameParts)),
+                origin = u.origin
+              )
+            }
+            matched.headOption.getOrElse(
+              throw new AnalysisException(s"When resolving $u, " +
+                s"fail to find subplan with plan_id=$planId in ${queryExecution.analyzed}"))
+
+          case None => queryExecution.analyzed
+        }
+
+        plan.resolveQuoted(
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
-    })
+    }
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
       expressions.forall(expression => !attr.semanticEquals(expression))
