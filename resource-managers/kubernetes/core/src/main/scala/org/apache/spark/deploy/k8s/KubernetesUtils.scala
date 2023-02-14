@@ -418,7 +418,7 @@ object KubernetesUtils extends Logging {
   /**
    * Create pre-resource in need before pod creation
    */
-  @Since("3.4.0")
+  @Since("3.5.0")
   def createPreResource(
       client: KubernetesClient,
       resource: HasMetadata,
@@ -435,7 +435,7 @@ object KubernetesUtils extends Logging {
    * Refresh OwnerReference in the given resource
    * making the driver or executor pod an owner of them
    */
-  @Since("3.4.0")
+  @Since("3.5.0")
   def refreshOwnerReferenceInResource(
       client: KubernetesClient,
       resource: HasMetadata,
@@ -450,13 +450,13 @@ object KubernetesUtils extends Logging {
             .withName(pvc.getMetadata.getName)
             .get()
         addOwnerReference(pod, Seq(createdPVC))
-        logDebug(s"Trying to refresh PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
-          s"OwnerReference ${pvc.getMetadata.getOwnerReferences}")
+        logDebug(s"Trying to refresh PersistentVolumeClaim ${createdPVC.getMetadata.getName}" +
+          s"with OwnerReference ${createdPVC.getMetadata.getOwnerReferences}")
         client
           .persistentVolumeClaims()
           .inNamespace(namespace)
-          .withName(pvc.getMetadata.getName)
-          .patch(pvc)
+          .withName(createdPVC.getMetadata.getName)
+          .patch(createdPVC)
       case other =>
         addOwnerReference(pod, Seq(other))
         client.resourceList(Seq(other): _*).createOrReplace()
