@@ -92,7 +92,9 @@ message WriteOperation {
   map<string, string> options = 9;
 
   message SaveTable {
+    // (Required) The table name.
     string table_name = 1;
+    // (Required) The method to be called to write to the table.
     TableSaveMethod save_method = 2;
 
     enum TableSaveMethod {
