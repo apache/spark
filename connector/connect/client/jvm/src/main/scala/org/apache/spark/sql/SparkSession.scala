@@ -68,7 +68,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
+  def range(end: Long): Dataset[Row] = range(0, end)
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -76,7 +76,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long): Dataset[java.lang.Long] = {
+  def range(start: Long, end: Long): Dataset[Row] = {
     range(start, end, step = 1)
   }
 
@@ -86,7 +86,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
+  def range(start: Long, end: Long, step: Long): Dataset[Row] = {
     range(start, end, step, None)
   }
 
@@ -96,7 +96,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Row] = {
     range(start, end, step, Option(numPartitions))
   }
 
@@ -104,7 +104,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
       start: Long,
       end: Long,
       step: Long,
-      numPartitions: Option[Int]): Dataset[java.lang.Long] = {
+      numPartitions: Option[Int]): Dataset[Row] = {
     newDataset { builder =>
       val rangeBuilder = builder.getRangeBuilder
         .setStart(start)
@@ -121,8 +121,10 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     new Dataset[T](this, plan)
   }
 
-  private[sql] def analyze(plan: proto.Plan): proto.AnalyzePlanResponse =
-    client.analyze(plan)
+  private[sql] def analyze(
+      plan: proto.Plan,
+      mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
+    client.analyze(plan, mode)
 
   private[sql] def execute(plan: proto.Plan): SparkResult = {
     val value = client.execute(plan)

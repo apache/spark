@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
@@ -642,7 +643,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("SaveMode conversion tests") {
     assertThrows[IllegalArgumentException](
-      DataTypeProtoConverter.toSaveMode(proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED))
+      SaveModeConverter.toSaveMode(proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED))
 
     val combinations = Seq(
       (SaveMode.Append, proto.WriteOperation.SaveMode.SAVE_MODE_APPEND),
@@ -650,8 +651,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       (SaveMode.Overwrite, proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE),
       (SaveMode.ErrorIfExists, proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS))
     combinations.foreach { a =>
-      assert(DataTypeProtoConverter.toSaveModeProto(a._1) == a._2)
-      assert(DataTypeProtoConverter.toSaveMode(a._2) == a._1)
+      assert(SaveModeConverter.toSaveModeProto(a._1) == a._2)
+      assert(SaveModeConverter.toSaveMode(a._2) == a._1)
     }
   }
 

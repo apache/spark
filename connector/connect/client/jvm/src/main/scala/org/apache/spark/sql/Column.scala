@@ -19,6 +19,8 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering
+import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Column.fn
 import org.apache.spark.sql.connect.client.unsupported
@@ -94,6 +96,121 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    */
   def name(alias: String): Column = Column { builder =>
     builder.getAliasBuilder.addName(alias).setExpr(expr)
+  }
+
+  /**
+   * Returns a sort expression based on the descending order of the column.
+   * {{{
+   *   // Scala
+   *   df.sort(df("age").desc)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.3.0
+   */
+  def desc: Column = desc_nulls_last
+
+  /**
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * before non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in descending order and null values appearing first.
+   *   df.sort(df("age").desc_nulls_first)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc_nulls_first());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def desc_nulls_first: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_DESCENDING, NullOrdering.SORT_NULLS_FIRST)
+
+  /**
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * after non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in descending order and null values appearing last.
+   *   df.sort(df("age").desc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def desc_nulls_last: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_DESCENDING, NullOrdering.SORT_NULLS_LAST)
+
+  /**
+   * Returns a sort expression based on ascending order of the column.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order.
+   *   df.sort(df("age").asc)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.3.0
+   */
+  def asc: Column = asc_nulls_first
+
+  /**
+   * Returns a sort expression based on ascending order of the column, and null values return
+   * before non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
+   *   df.sort(df("age").asc_nulls_first)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc_nulls_first());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def asc_nulls_first: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_ASCENDING, NullOrdering.SORT_NULLS_FIRST)
+
+  /**
+   * Returns a sort expression based on ascending order of the column, and null values appear
+   * after non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order and null values appearing last.
+   *   df.sort(df("age").asc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def asc_nulls_last: Column =
+    buildSortOrder(SortDirection.SORT_DIRECTION_ASCENDING, NullOrdering.SORT_NULLS_LAST)
+
+  private def buildSortOrder(sortDirection: SortDirection, nullOrdering: NullOrdering): Column =
+    Column { builder =>
+      builder.getSortOrderBuilder
+        .setChild(expr)
+        .setDirection(sortDirection)
+        .setNullOrdering(nullOrdering)
+    }
+
+  private[sql] def sortOrder: proto.Expression.SortOrder = {
+    val base = if (expr.hasSortOrder) {
+      expr
+    } else {
+      asc.expr
+    }
+    base.getSortOrder
   }
 }
 
