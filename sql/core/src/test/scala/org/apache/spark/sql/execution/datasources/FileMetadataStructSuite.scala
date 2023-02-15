@@ -842,21 +842,38 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         assert(df.rdd.partitions.length > 1)
         val res = df.collect()
         assert(res.length == 2)
-        assert(res.head.getLong(0) == 0)
-        assert(res.head.getLong(1) == 0)
-        assert(res.head.getLong(2) > 0)
-        assert(res(1).getLong(0) == 1L)
-        assert(res(1).getLong(1) > 0)
-        assert(res(1).getLong(2) > 0)
+        assert(res.head.getLong(0) == 0) // id
+        assert(res.head.getLong(1) == 0) // file_block_start
+        assert(res.head.getLong(2) > 0) // file_block_length
+        assert(res(1).getLong(0) == 1L) // id
+        assert(res(1).getLong(1) > 0) // file_block_start
+        assert(res(1).getLong(2) > 0) // file_block_length
 
+        // make sure `_metadata.file_block_start` and `_metadata.file_block_length` does not affect
+        // pruning listed files
         val df2 = spark.read.json(path.getCanonicalPath)
-          .where("_metadata.File_bLoCk_start > 0 and _metadata.file_SizE > 0")
+          .where("_metadata.File_bLoCk_start > 0 and _metadata.file_block_length > 0 " +
+            "and _metadata.file_SizE > 0")
           .select("id", METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH)
+        val fileSourceScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec])
+        assert(fileSourceScan2.isDefined)
+        val files2 = fileSourceScan2.get.asInstanceOf[FileSourceScanExec].selectedPartitions
+        assert(files2.length == 1 && files2.head.files.length == 1)
         val res2 = df2.collect()
         assert(res2.length == 1)
-        assert(res2.head.getLong(0) == 1L)
-        assert(res2.head.getLong(1) > 0)
-        assert(res2.head.getLong(2) > 0)
+        assert(res2.head.getLong(0) == 1L) // id
+        assert(res2.head.getLong(1) > 0) // file_block_start
+        assert(res2.head.getLong(2) > 0) // file_block_length
+
+        // make sure `_metadata.file_size > 1000000` still work for pruning listed files
+        val df3 = spark.read.json(path.getCanonicalPath)
+          .where("_metadata.File_bLoCk_start > 0 and _metadata.file_SizE > 1000000")
+          .select("id", METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH)
+        val fileSourceScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec])
+        assert(fileSourceScan3.isDefined)
+        val files3 = fileSourceScan3.get.asInstanceOf[FileSourceScanExec].selectedPartitions
+        assert(files3.length == 1 && files3.head.files.isEmpty)
+        assert(df3.collect().isEmpty)
       }
     }
   }

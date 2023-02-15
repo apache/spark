@@ -237,9 +237,12 @@ object FileFormat {
       fieldNames: Seq[String],
       filePath: Path,
       fileSize: Long,
-      fileModificationTime: Long): InternalRow =
+      fileModificationTime: Long): InternalRow = {
+    // We are not aware of `FILE_BLOCK_START` and `FILE_BLOCK_LENGTH` before splitting files
+    assert(!fieldNames.contains(FILE_BLOCK_START) && !fieldNames.contains(FILE_BLOCK_LENGTH))
     updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames,
-      filePath, fileSize, 0L, 0L, fileModificationTime)
+      filePath, fileSize, 0L, fileSize, fileModificationTime)
+  }
 
   // update an internal row given required metadata fields and file information
   def updateMetadataInternalRow(
