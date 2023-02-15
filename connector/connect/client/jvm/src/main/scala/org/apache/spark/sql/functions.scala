@@ -44,7 +44,6 @@ object functions {
    */
   def col(colName: String): Column = Column(colName)
 
-
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
    *
