@@ -670,12 +670,15 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     import org.apache.spark.sql.types.DayTimeIntervalType._
     Seq(
       ("10 12:40:60", 60, DAY, SECOND),
+      ("10 12:40:99", 99, DAY, SECOND),
       ("10 12:40:60.999999999", 60, DAY, SECOND),
       ("10 12:40:99.999999999", 99, DAY, SECOND),
       ("12:40:60", 60, HOUR, SECOND),
+      ("12:40:99", 99, HOUR, SECOND),
       ("12:40:60.999999999", 60, HOUR, SECOND),
       ("12:40:99.999999999", 99, HOUR, SECOND),
       ("40:60", 60, MINUTE, SECOND),
+      ("40:99", 99, MINUTE, SECOND),
       ("40:60.999999999", 60, MINUTE, SECOND),
       ("40:99.999999999", 99, MINUTE, SECOND),
     ).foreach { case(input, second, from, to) =>
