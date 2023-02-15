@@ -117,6 +117,8 @@ trait RemoteSparkSession
   override def beforeAll(): Unit = {
     super.beforeAll()
     SparkConnectServerUtils.start()
+//    System.setProperty("arrow.memory.debug.allocator",
+//      System.getProperty("spark.arrow.memory.debug.allocator", "true"))
     System.setProperty("arrow.memory.debug.allocator", false.toString)
     spark = SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
 
