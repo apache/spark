@@ -82,6 +82,9 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       // Filter unsupported rules:
       // Two sql overloading methods are marked experimental in the API and skipped in the client.
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
+      // Deprecated json methods and RDD related methods are skipped in the client.
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.csv"),
       // Skip all shaded dependencies in the client.
       ProblemFilters.exclude[Problem]("org.sparkproject.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
