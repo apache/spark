@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.Locale
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 import org.apache.spark.unsafe.types.UTF8String
 
 object NumberConverter {
@@ -29,29 +32,61 @@ object NumberConverter {
    * @param toBase base to convert a given number. Should be between 2 and 36 by absolute value.
    *               if it is lower then 0, then the result will be signed value, otherwise
    *               it will calculate unsigned value.
-   * @throws NumberFormatException if `num` has invalid format.
    * @return converted value in case of valid arguments, null otherwise.
    */
   def convert(num: UTF8String, fromBase: Int, toBase: Int): UTF8String = {
-    if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
-      || Math.abs(toBase) < Character.MIN_RADIX
-      || Math.abs(toBase) > Character.MAX_RADIX) {
-      return null
+    if (isValidBase(fromBase, toBase)) {
+      getLongestValidPrefix(num, fromBase) match {
+        case None => null
+        case Some(number) =>
+          val bigIntNum = BigInt(number, fromBase)
+          val bigIntResolvedNum = if (toBase > 0) getUnsignedBigInt(bigIntNum) else bigIntNum
+
+          val convertedValue = bigIntResolvedNum
+            .toString(math.abs(toBase))
+            .toUpperCase(Locale.ROOT)
+          UTF8String.fromString(convertedValue)
+      }
+    } else {
+      null
+    }
+  }
+
+  private def isValidBase(fromBase: Int, toBase: Int): Boolean =
+    fromBase >= Character.MIN_RADIX &&
+      fromBase <= Character.MAX_RADIX &&
+      math.abs(toBase) >= Character.MIN_RADIX &&
+      math.abs(toBase) <= Character.MAX_RADIX
+
+  private def getLongestValidPrefix(num: UTF8String, radix: Int): Option[String] = {
+    def isSign(c: Char) = c == '-' || c == '+'
+
+    def isValidDigit(digit: Char) = Character.digit(digit, radix) >= 0
+
+    @tailrec
+    def getValidNumPrefix(numChars: List[Char])(
+      implicit resultNums: mutable.StringBuilder): mutable.StringBuilder = numChars match {
+      case head :: tail if isValidDigit(head) =>
+        resultNums.append(head)
+        getValidNumPrefix(tail)
+      case _ => resultNums
     }
 
-    val number = num.trim().toString
-    if (number.isEmpty) {
-      return null
+    lazy val emptyBuilder = mutable.StringBuilder.newBuilder
+    val listOfNumbers = num.toString.trim().toList
+    listOfNumbers match {
+      case head :: tail if isSign(head) =>
+        val validNums = getValidNumPrefix(tail)(mutable.StringBuilder.newBuilder)
+        if (validNums.isEmpty) {
+          None
+        } else {
+          val result = emptyBuilder.append(head).append(validNums).toString()
+          Some(result)
+        }
+      case numsWithoutSign =>
+        val validNums = getValidNumPrefix(numsWithoutSign)(emptyBuilder)
+        if (validNums.isEmpty) None else Some(validNums.toString())
     }
-
-    val bigIntValue = BigInt(number, fromBase)
-    val isToBaseUnsigned = toBase > 0
-    val bigIntResolvedValue = if (isToBaseUnsigned) getUnsignedBigInt(bigIntValue) else bigIntValue
-
-    val convertedValue = bigIntResolvedValue
-      .toString(math.abs(toBase))
-      .toUpperCase(Locale.ROOT)
-    UTF8String.fromString(convertedValue)
   }
 
   private def getUnsignedBigInt(value: BigInt): BigInt = {

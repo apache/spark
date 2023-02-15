@@ -171,8 +171,13 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Conv(Literal("3"), Literal(-10), Literal(-2)), null)
     checkEvaluation(Conv(Literal("3"), Literal(0), Literal(-2)), null)
     checkEvaluation(Conv(Literal("3"), Literal(10), Literal(0)), null)
+    checkEvaluation(Conv(Literal("3"), Literal(2), Literal(10)), null)
+    checkEvaluation(Conv(Literal("a"), Literal(36), Literal(10)), "10")
+    checkEvaluation(Conv(Literal("A"), Literal(36), Literal(10)), "10")
+    checkEvaluation(Conv(Literal("10"), Literal(10), Literal(36)), "A")
+  }
 
-    // Test big numbers
+  test("conv with big values") {
     checkEvaluation(Conv(Literal("9223372036854775807"), Literal(36), Literal(16)),
       "12DDAC15F246BAF8C0D551AC7")
     checkEvaluation(Conv(Literal("92233720368547758070"), Literal(10), Literal(16)),
@@ -183,17 +188,36 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "3000000000000000A")
     checkEvaluation(
       Conv(Literal("100000000000000000000000000000000000000000000000000000000000000000"),
-      Literal(2), Literal(10)), "36893488147419103232")
+        Literal(2), Literal(10)), "36893488147419103232")
     checkEvaluation(
       Conv(Literal("100000000000000000000000000000000000000000000000000000000000000000"),
-      Literal(2), Literal(8)), "4000000000000000000000")
+        Literal(2), Literal(8)), "4000000000000000000000")
+    checkEvaluation(
+      Conv(Literal("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        Literal(16), Literal(10)),
+      "115792089237316195423570985008687907853269984665640564039457584007913129639935")
   }
 
-  test("conv number format exception") {
-    checkExceptionInExpression[NumberFormatException](
-      Conv(Literal("abc"), Literal(10), Literal(16)), "For input string: \"abc\"")
-    checkExceptionInExpression[NumberFormatException](
-      Conv(Literal("345"), Literal(2), Literal(10)), "For input string: \"345\"")
+  test("conv with invalid characters") {
+    checkEvaluation(Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
+    checkEvaluation(Conv(Literal("ABC325TGH"), Literal(16), Literal(10)), "11256613")
+    checkEvaluation(Conv(Literal("ABC325 TGH"), Literal(16), Literal(10)), "11256613")
+    checkEvaluation(Conv(Literal("-11abc"), Literal(10), Literal(-16)), "-B")
+    checkEvaluation(Conv(Literal("+010134"), Literal(2), Literal(10)), "5")
+    checkEvaluation(Conv(Literal("+01A0134"), Literal(2), Literal(10)), "1")
+    checkEvaluation(Conv(Literal("+01-01"), Literal(2), Literal(10)), "1")
+    checkEvaluation(Conv(Literal("++01A0134"), Literal(2), Literal(10)), null)
+    checkEvaluation(Conv(Literal("--1"), Literal(2), Literal(10)), null)
+    checkEvaluation(Conv(Literal("++1"), Literal(2), Literal(10)), null)
+    checkEvaluation(Conv(Literal("-"), Literal(2), Literal(10)), null)
+    checkEvaluation(Conv(Literal("+"), Literal(2), Literal(10)), null)
+    checkEvaluation(Conv(Literal("?"), Literal(2), Literal(10)), null)
+
+    // Queries from hive tests
+    checkEvaluation(Conv(Literal("123455"), Literal(3), Literal(10)), "5")
+    checkEvaluation(Conv(Literal("131"), Literal(1), Literal(5)), null)
+    checkEvaluation(Conv(Literal("515"), Literal(5), Literal(100)), null)
+    checkEvaluation(Conv(Literal("10"), Literal(-2), Literal(2)), null)
   }
 
   test("e") {

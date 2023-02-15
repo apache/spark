@@ -730,70 +730,22 @@ struct<conv(9223372036854775808, 10, 16):string>
 -- !query
 SELECT conv('92233720368547758070', 10, 16)
 -- !query schema
-struct<>
+struct<conv(92233720368547758070, 10, 16):string>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Overflow in function conv()"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 43,
-    "fragment" : "conv('92233720368547758070', 10, 16)"
-  } ]
-}
+4FFFFFFFFFFFFFFF6
 
 
 -- !query
 SELECT conv('9223372036854775807', 36, 10)
 -- !query schema
-struct<>
+struct<conv(9223372036854775807, 36, 10):string>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Overflow in function conv()"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 42,
-    "fragment" : "conv('9223372036854775807', 36, 10)"
-  } ]
-}
+93419446956697119914106100423
 
 
 -- !query
 SELECT conv('-9223372036854775807', 36, 10)
 -- !query schema
-struct<>
+struct<conv(-9223372036854775807, 36, 10):string>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Overflow in function conv()"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 43,
-    "fragment" : "conv('-9223372036854775807', 36, 10)"
-  } ]
-}
+65036878071831555272981800249

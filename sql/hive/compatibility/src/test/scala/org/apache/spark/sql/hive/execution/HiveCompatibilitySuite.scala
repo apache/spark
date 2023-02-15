@@ -606,7 +606,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "orc_dictionary_threshold",
     "udf_hash",
     // Moved to HiveQuerySuite
-    "udf_radians"
+    "udf_radians",
+    // SPARK-42399 conv function in spark works with big numbers without overflow
+    "udf_conv"
   )
 
   private def commonIncludeList = Seq(
@@ -1011,7 +1013,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_concat_insert1",
     "udf_concat_insert2",
     "udf_concat_ws",
-    "udf_conv",
     "udf_cos",
     "udf_count",
     "udf_date_add",
