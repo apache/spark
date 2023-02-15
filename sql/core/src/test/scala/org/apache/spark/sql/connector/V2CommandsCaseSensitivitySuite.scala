@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, RootTableSchema, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, Column, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, TableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, ColumnDefinition, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -153,7 +153,7 @@ class V2CommandsCaseSensitivitySuite
           table,
           Seq(QualifiedColType(
             UnresolvedFieldName(field.init),
-            Column(field.last, LongType, true)))),
+            ColumnDefinition(field.last, LongType, true)))),
         Seq("Missing field " + field.head)
       )
     }
@@ -165,7 +165,7 @@ class V2CommandsCaseSensitivitySuite
         table,
         Seq(QualifiedColType(
           RootTableSchema,
-          Column("f", LongType, true),
+          ColumnDefinition("f", LongType, true),
           Some(UnresolvedFieldPosition(ColumnPosition.after(ref))))))
       Seq(true, false).foreach { caseSensitive =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
@@ -185,11 +185,11 @@ class V2CommandsCaseSensitivitySuite
       Seq(
         QualifiedColType(
           RootTableSchema,
-          Column("x", LongType, true),
+          ColumnDefinition("x", LongType, true),
           Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
         QualifiedColType(
           RootTableSchema,
-          Column("y", LongType, true),
+          ColumnDefinition("y", LongType, true),
           Some(UnresolvedFieldPosition(ColumnPosition.after("X"))))
       ))
     Seq(true, false).foreach { caseSensitive =>
@@ -209,7 +209,7 @@ class V2CommandsCaseSensitivitySuite
         table,
         Seq(QualifiedColType(
           UnresolvedFieldName(Seq("point")),
-          Column("z", LongType, true),
+          ColumnDefinition("z", LongType, true),
           Some(UnresolvedFieldPosition(ColumnPosition.after(ref))))))
       Seq(true, false).foreach { caseSensitive =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
@@ -229,10 +229,10 @@ class V2CommandsCaseSensitivitySuite
       Seq(
         QualifiedColType(
           UnresolvedFieldName(Seq("point")),
-          Column("z", LongType, true)),
+          ColumnDefinition("z", LongType, true)),
         QualifiedColType(
           UnresolvedFieldName(Seq("point")),
-          Column("zz", LongType, true),
+          ColumnDefinition("zz", LongType, true),
           Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))))
       ))
     Seq(true, false).foreach { caseSensitive =>
@@ -253,10 +253,10 @@ class V2CommandsCaseSensitivitySuite
         Seq(
           QualifiedColType(
             UnresolvedFieldName(Seq("point")),
-            Column("z", LongType, true)),
+            ColumnDefinition("z", LongType, true)),
           QualifiedColType(
             UnresolvedFieldName(Seq("point")),
-            Column("Z", LongType, true))
+            ColumnDefinition("Z", LongType, true))
         )),
       "COLUMN_ALREADY_EXISTS",
       Map("columnName" -> toSQLId("point.z")),
@@ -269,7 +269,7 @@ class V2CommandsCaseSensitivitySuite
         table,
         Seq(QualifiedColType(
           RootTableSchema,
-          Column("ID", LongType, true),
+          ColumnDefinition("ID", LongType, true),
           Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
       Seq("Cannot add column, because ID already exists in root"),
       expectErrorOnCaseSensitive = false)
@@ -343,8 +343,8 @@ class V2CommandsCaseSensitivitySuite
       ReplaceColumns(
         table,
         Seq(
-          QualifiedColType(RootTableSchema, Column("f", LongType, true)),
-          QualifiedColType(RootTableSchema, Column("F", LongType, true)))),
+          QualifiedColType(RootTableSchema, ColumnDefinition("f", LongType, true)),
+          QualifiedColType(RootTableSchema, ColumnDefinition("F", LongType, true)))),
       "COLUMN_ALREADY_EXISTS",
       Map("columnName" -> toSQLId("f")),
       caseSensitive = false)

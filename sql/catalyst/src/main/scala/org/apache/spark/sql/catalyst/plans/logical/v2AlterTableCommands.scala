@@ -107,7 +107,7 @@ case class UnsetTableProperties(
  */
 case class QualifiedColType(
     path: FieldName,
-    column: Column,
+    column: ColumnDefinition,
     position: Option[FieldPosition] = None) extends Expression with Unevaluable {
   def name: Seq[String] = path.name :+ column.name
   override def children: Seq[Expression] = path +: column +: position.toSeq
@@ -121,7 +121,7 @@ case class QualifiedColType(
     newChildren: IndexedSeq[Expression]): Expression = {
     copy(
       newChildren(0).asInstanceOf[FieldName],
-      newChildren(1).asInstanceOf[Column],
+      newChildren(1).asInstanceOf[ColumnDefinition],
       newChildren.drop(2).headOption.map(_.asInstanceOf[FieldPosition]))
   }
 }

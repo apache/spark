@@ -618,7 +618,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  private def convertToStructField(col: Column): StructField = {
+  private def convertToStructField(col: ColumnDefinition): StructField = {
     assert(col.resolved)
     CatalogV2Util.v2ColumnToStructField(col.toV2Column)
   }

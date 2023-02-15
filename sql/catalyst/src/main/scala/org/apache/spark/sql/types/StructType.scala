@@ -27,7 +27,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering, Literal}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.plans.logical.{Column, DefaultValueExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStructType}
 import org.apache.spark.sql.catalyst.util.{truncatedString, ResolveDefaultColumns, StringUtils}
@@ -395,16 +395,16 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
 
-  private[sql] def toColumns: Array[Column] = fields.map { f =>
+  private[sql] def toColumns: Array[ColumnDefinition] = fields.map { f =>
     def createColumn(
         defaultValue: Option[DefaultValueExpression],
-        metadata: Metadata): Column = {
+        metadata: Metadata): ColumnDefinition = {
       val metadataJSON = if (metadata == Metadata.empty) {
         None
       } else {
         Some(metadata.json)
       }
-      Column(f.name, f.dataType, f.nullable, f.getComment(), defaultValue, metadataJSON)
+      ColumnDefinition(f.name, f.dataType, f.nullable, f.getComment(), defaultValue, metadataJSON)
     }
     if (f.getCurrentDefaultValue().isDefined && f.getExistenceDefaultValue().isDefined) {
       val e = ResolveDefaultColumns.analyze(

@@ -2995,7 +2995,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a [[StructType]] from a number of CREATE TABLE column definitions.
    */
   override def visitCreateOrReplaceTableColTypeList(
-      ctx: CreateOrReplaceTableColTypeListContext): Seq[Column] = withOrigin(ctx) {
+      ctx: CreateOrReplaceTableColTypeListContext): Seq[ColumnDefinition] = withOrigin(ctx) {
     ctx.createOrReplaceTableColType().asScala.map(visitCreateOrReplaceTableColType).toSeq
   }
 
@@ -3003,7 +3003,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a top level column from a CREATE TABLE column definition.
    */
   override def visitCreateOrReplaceTableColType(
-      ctx: CreateOrReplaceTableColTypeContext): Column = withOrigin(ctx) {
+      ctx: CreateOrReplaceTableColTypeContext): ColumnDefinition = withOrigin(ctx) {
     import ctx._
 
     val name: String = colName.getText
@@ -3038,7 +3038,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       }
     }
 
-    Column(
+    ColumnDefinition(
       name = name,
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = nullable,
@@ -3239,7 +3239,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * types like `i INT`, which should be appended to the existing table schema.
    */
   type TableClauses = (
-      Seq[Transform], Seq[Column], Option[BucketSpec], Map[String, String],
+      Seq[Transform], Seq[ColumnDefinition], Option[BucketSpec], Map[String, String],
       Map[String, String], Option[String], Option[String], Option[SerdeInfo])
 
   /**
@@ -3267,13 +3267,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Parse a list of transforms or columns.
    */
   override def visitPartitionFieldList(
-      ctx: PartitionFieldListContext): (Seq[Transform], Seq[Column]) = withOrigin(ctx) {
+      ctx: PartitionFieldListContext): (Seq[Transform], Seq[ColumnDefinition]) = withOrigin(ctx) {
     val (transforms, columns) = ctx.fields.asScala.map {
       case transform: PartitionTransformContext =>
         (Some(visitPartitionTransform(transform)), None)
       case field: PartitionColumnContext =>
         val f = visitColType(field.colType)
-        val col = Column(f.name, f.dataType, f.nullable, f.getComment(), defaultValue = None)
+        val col = ColumnDefinition(f.name, f.dataType, f.nullable, f.getComment(), None)
         (None, Some(col))
     }.unzip
 
@@ -3729,7 +3729,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   private def partitionExpressions(
       partTransforms: Seq[Transform],
-      partCols: Seq[Column],
+      partCols: Seq[ColumnDefinition],
       ctx: ParserRuleContext): Seq[Transform] = {
     if (partTransforms.nonEmpty) {
       if (partCols.nonEmpty) {
@@ -3981,7 +3981,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       path = if (name.length > 1) UnresolvedFieldName(name.init) else RootTableSchema,
       position = Option(ctx.colPosition).map( pos =>
         UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))),
-      column = Column(
+      column = ColumnDefinition(
         name = name.last,
         dataType = typedVisit[DataType](ctx.dataType),
         nullable = ctx.NULL == null,

@@ -47,8 +47,8 @@ class DDLParserSuite extends AnalysisTest {
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
       Some(Seq(
-        Column("a", IntegerType, comment = Some("test")),
-        Column("b", StringType, nullable = false)
+        ColumnDefinition("a", IntegerType, comment = Some("test")),
+        ColumnDefinition("b", StringType, nullable = false)
       )),
       Seq.empty[Transform],
       Map.empty[String, String],
@@ -75,7 +75,7 @@ class DDLParserSuite extends AnalysisTest {
       sql,
       TableSpec(
         Seq("my_tab"),
-        Some(Seq(Column("a", IntegerType), Column("b", StringType))),
+        Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
         Seq.empty[Transform],
         Map.empty[String, String],
         Some("parquet"),
@@ -93,7 +93,9 @@ class DDLParserSuite extends AnalysisTest {
       "USING parquet PARTITIONED BY (a)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("a", IntegerType, comment = Some("test")), Column("b", StringType))),
+      Some(Seq(
+        ColumnDefinition("a", IntegerType, comment = Some("test")),
+        ColumnDefinition("b", StringType))),
       Seq(IdentityTransform(FieldReference("a"))),
       Map.empty[String, String],
       Some("parquet"),
@@ -135,9 +137,9 @@ class DDLParserSuite extends AnalysisTest {
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
       Some(Seq(
-        Column("a", IntegerType),
-        Column("b", StringType),
-        Column("ts", TimestampType)
+        ColumnDefinition("a", IntegerType),
+        ColumnDefinition("b", StringType),
+        ColumnDefinition("ts", TimestampType)
       )),
       Seq(
         IdentityTransform(FieldReference("a")),
@@ -170,7 +172,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("a", IntegerType), Column("b", StringType))),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
       List(bucket(5, Array(FieldReference.column("a")), Array(FieldReference.column("b")))),
       Map.empty[String, String],
       Some("parquet"),
@@ -189,7 +191,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("a", IntegerType), Column("b", StringType))),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
@@ -209,7 +211,7 @@ class DDLParserSuite extends AnalysisTest {
       " TBLPROPERTIES('test' = 'test')"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("a", IntegerType), Column("b", StringType))),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
       Seq.empty[Transform],
       Map("test" -> "test"),
       Some("parquet"),
@@ -227,7 +229,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("a", IntegerType), Column("b", StringType))),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
@@ -245,7 +247,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE 1m.2g(a INT) USING parquet"
     val expectedTableSpec = TableSpec(
       Seq("1m", "2g"),
-      Some(Seq(Column("a", IntegerType))),
+      Some(Seq(ColumnDefinition("a", IntegerType))),
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
@@ -263,7 +265,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab (id bigint) PARTITIONED BY (part string)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("id", LongType), Column("part", StringType))),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -281,7 +283,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab PARTITIONED BY (part string)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("part", StringType))),
+      Some(Seq(ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -299,7 +301,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab (id bigint) USING parquet PARTITIONED BY (part string)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("id", LongType), Column("part", StringType))),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       Some("parquet"),
@@ -372,7 +374,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("id", LongType), Column("part", StringType))),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -397,7 +399,7 @@ class DDLParserSuite extends AnalysisTest {
       val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
       val expectedTableSpec = TableSpec(
         Seq("my_tab"),
-        Some(Seq(Column("id", LongType), Column("part", StringType))),
+        Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
         Seq(IdentityTransform(FieldReference("part"))),
         Map.empty[String, String],
         None,
@@ -454,7 +456,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("id", LongType), Column("part", StringType))),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -505,7 +507,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("id", LongType), Column("part", StringType))),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -528,7 +530,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(Seq(Column("id", LongType), Column("part", StringType))),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -1034,7 +1036,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", IntegerType))
+        Seq(QualifiedColType(RootTableSchema, ColumnDefinition("x", IntegerType))
       )))
   }
 
@@ -1043,8 +1045,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", IntegerType)),
-          QualifiedColType(RootTableSchema, Column("y", StringType))
+        Seq(QualifiedColType(RootTableSchema, ColumnDefinition("x", IntegerType)),
+          QualifiedColType(RootTableSchema, ColumnDefinition("y", StringType))
       )))
   }
 
@@ -1053,7 +1055,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", IntegerType))
+        Seq(QualifiedColType(RootTableSchema, ColumnDefinition("x", IntegerType))
       )))
   }
 
@@ -1062,7 +1064,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", IntegerType))
+        Seq(QualifiedColType(RootTableSchema, ColumnDefinition("x", IntegerType))
       )))
   }
 
@@ -1071,7 +1073,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", IntegerType, comment = Some("doc")))
+        Seq(QualifiedColType(
+          RootTableSchema, ColumnDefinition("x", IntegerType, comment = Some("doc")))
       )))
   }
 
@@ -1080,7 +1083,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int NOT NULL"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", IntegerType, nullable = false))
+        Seq(QualifiedColType(
+          RootTableSchema, ColumnDefinition("x", IntegerType, nullable = false))
       )))
   }
 
@@ -1089,7 +1093,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", IntegerType, comment = Some("doc")))
+        Seq(QualifiedColType(
+          RootTableSchema, ColumnDefinition("x", IntegerType, comment = Some("doc")))
       )))
   }
 
@@ -1100,7 +1105,7 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
           RootTableSchema,
-          Column("x", IntegerType),
+          ColumnDefinition("x", IntegerType),
           Some(UnresolvedFieldPosition(first())))
       )))
 
@@ -1110,7 +1115,7 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
           RootTableSchema,
-          Column("x", IntegerType),
+          ColumnDefinition("x", IntegerType),
           Some(UnresolvedFieldPosition(after("y"))))
       )))
   }
@@ -1122,7 +1127,7 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
           UnresolvedFieldName(Seq("x", "y")),
-          Column("z", IntegerType, comment = Some("doc")))
+          ColumnDefinition("z", IntegerType, comment = Some("doc")))
       )))
   }
 
@@ -1134,10 +1139,10 @@ class DDLParserSuite extends AnalysisTest {
         Seq(
           QualifiedColType(
             UnresolvedFieldName(Seq("x", "y")),
-            Column("z", IntegerType, comment = Some("doc"))),
+            ColumnDefinition("z", IntegerType, comment = Some("doc"))),
           QualifiedColType(
             UnresolvedFieldName(Seq("a")),
-            Column("b", StringType),
+            ColumnDefinition("b", StringType),
             Some(UnresolvedFieldPosition(first())))
       )))
   }
@@ -1376,21 +1381,24 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan(sql1),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", StringType)))))
+        Seq(QualifiedColType(RootTableSchema, ColumnDefinition("x", StringType)))))
 
     comparePlans(
       parsePlan(sql2),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(RootTableSchema, Column("x", StringType, comment = Some("x1"))))))
+        Seq(QualifiedColType(
+          RootTableSchema, ColumnDefinition("x", StringType, comment = Some("x1"))))))
 
     comparePlans(
       parsePlan(sql3),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(RootTableSchema, Column("x", StringType, comment = Some("x1"))),
-          QualifiedColType(RootTableSchema, Column("y", IntegerType))
+          QualifiedColType(
+            RootTableSchema, ColumnDefinition("x", StringType, comment = Some("x1"))),
+          QualifiedColType(
+            RootTableSchema, ColumnDefinition("y", IntegerType))
         )))
 
     comparePlans(
@@ -1398,8 +1406,10 @@ class DDLParserSuite extends AnalysisTest {
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(RootTableSchema, Column("x", StringType, comment = Some("x1"))),
-          QualifiedColType(RootTableSchema, Column("y", IntegerType, comment = Some("y1")))
+          QualifiedColType(
+            RootTableSchema, ColumnDefinition("x", StringType, comment = Some("x1"))),
+          QualifiedColType(
+            RootTableSchema, ColumnDefinition("y", IntegerType, comment = Some("y1")))
         )))
 
     val sql5 = "ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)"
@@ -2400,7 +2410,7 @@ class DDLParserSuite extends AnalysisTest {
 
   private case class TableSpec(
       name: Seq[String],
-      columns: Option[Seq[Column]],
+      columns: Option[Seq[ColumnDefinition]],
       partitioning: Seq[Transform],
       properties: Map[String, String],
       provider: Option[String],
@@ -2488,7 +2498,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE 1m.2g(a INT)"
     val expectedTableSpec = TableSpec(
       Seq("1m", "2g"),
-      Some(Seq(Column("a", IntegerType))),
+      Some(Seq(ColumnDefinition("a", IntegerType))),
       Seq.empty[Transform],
       Map.empty[String, String],
       None,
@@ -2535,8 +2545,8 @@ class DDLParserSuite extends AnalysisTest {
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
     // These CREATE/REPLACE TABLE statements should parse successfully.
     val columnsWithDefaultValue = Seq(
-      Column("a", IntegerType),
-      Column(
+      ColumnDefinition("a", IntegerType),
+      ColumnDefinition(
         "b",
         StringType,
         nullable = false,
@@ -2563,7 +2573,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(RootTableSchema, Column(
+        Seq(QualifiedColType(RootTableSchema, ColumnDefinition(
           "x",
           IntegerType,
           nullable = false,

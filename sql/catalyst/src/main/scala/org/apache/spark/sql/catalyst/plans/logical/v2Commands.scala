@@ -396,7 +396,7 @@ trait V2CreateTablePlan extends LogicalPlan {
   def name: LogicalPlan
   def tableSpec: TableSpec
   def partitioning: Seq[Transform]
-  def columns: Seq[Column]
+  def columns: Seq[ColumnDefinition]
   def tableSchema: StructType = StructType(columns.map { col =>
     // Schema only cares about the tree structure with name and data type.
     StructField(col.name, col.dataType, col.nullable)
@@ -436,7 +436,7 @@ case class DefaultValueExpression(child: Expression, originalSQL: String)
  * Column definition for tables. This is an expression so that analyzer can resolve the default
  * value expression in DDL commands automatically.
  */
-case class Column(
+case class ColumnDefinition(
     name: String,
     dataType: DataType,
     nullable: Boolean = true,
@@ -466,7 +466,7 @@ case class Column(
  */
 case class CreateTable(
     name: LogicalPlan,
-    columns: Seq[Column],
+    columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
@@ -494,7 +494,7 @@ case class CreateTableAsSelect(
     analyzedQuery: Option[LogicalPlan] = None)
   extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
 
-  override def columns: Seq[Column] = query.schema.toColumns
+  override def columns: Seq[ColumnDefinition] = query.schema.toColumns
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
   override def right: LogicalPlan = query
@@ -529,7 +529,7 @@ case class CreateTableAsSelect(
  */
 case class ReplaceTable(
     name: LogicalPlan,
-    columns: Seq[Column],
+    columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
@@ -560,7 +560,7 @@ case class ReplaceTableAsSelect(
     analyzedQuery: Option[LogicalPlan] = None)
   extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
 
-  override def columns: Seq[Column] = query.schema.toColumns
+  override def columns: Seq[ColumnDefinition] = query.schema.toColumns
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
   override def right: LogicalPlan = query

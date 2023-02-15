@@ -201,11 +201,12 @@ object ResolveDefaultColumns {
       case cmd: V2CreateTablePlan if cmd.columns.exists(_.defaultValue.isDefined) =>
         val ident = cmd.resolvedName
         checkTableProvider(ident.catalog, ident.name, cmd.tableSpec.provider)
-        cmd.columns.filter(_.defaultValue.isDefined).foreach { col =>
-          val Column(name, dataType, _, _, Some(default), _) = col
-          // CREATE/REPLACE TABLE only has top-level columns
-          val colName = Seq(name)
-          checkDefaultValue(default, ident.name, colName, dataType, isForV1)
+        cmd.columns.foreach { col =>
+          if (col.defaultValue.isDefined) {
+            // CREATE/REPLACE TABLE only has top-level columns
+            val colName = Seq(col.name)
+            checkDefaultValue(col.defaultValue.get, ident.name, colName, col.dataType, isForV1)
+          }
         }
 
       case cmd: AlterTableCommand =>
@@ -213,14 +214,13 @@ object ResolveDefaultColumns {
         val provider = getTableProviderFromProp(table.table.properties())
         val isAddColumns = cmd.isInstanceOf[AddColumns]
         cmd.transformExpressionsDown {
-          case q @ QualifiedColType(path, Column(name, dataType, _, _, Some(default), _), _)
-              if path.resolved =>
+          case q @ QualifiedColType(path, col, _) if col.defaultValue.isDefined && path.resolved =>
             checkTableProvider(table.catalog, table.name, provider, isAddColumns)
             checkDefaultValue(
-              default,
+              col.defaultValue.get,
               table.name,
-              path.name :+ name,
-              dataType,
+              path.name :+ col.name,
+              col.dataType,
               isForV1)
             q
         }
