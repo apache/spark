@@ -35,13 +35,12 @@
 #' For \code{hadoopVersion = "without"}, [Hadoop version] in the filename is then
 #' \code{without-hadoop}.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is \code{"3"}. It can take other
-#'                      version number in the format of "x.y" where x and y are integer.
+#' @param hadoopVersion Version of Hadoop to install. Default is \code{"3"}.
 #'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
 #'                      See
 #'                      \href{https://spark.apache.org/docs/latest/hadoop-provided.html}{
 #'                      "Hadoop Free" Build} for more information.
-#'                      Other patched version names can also be used, e.g. \code{"cdh4"}
+#'                      Other patched version names can also be used.
 #' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
 #'                  \href{https://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
 #' @param localDir a local directory where Spark is installed. The directory contains
