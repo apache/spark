@@ -2,11 +2,6 @@
   "read": {
     "dataSource": {
       "format": "text",
-      "schema": "name STRING,age INT",
-      "options": {
-        "op1": "op1",
-        "op2": "op2"
-      },
       "paths": ["connector/connect/common/src/test/resources/query-test/people.txt"]
     }
   }

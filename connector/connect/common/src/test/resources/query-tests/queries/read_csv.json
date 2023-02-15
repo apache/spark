@@ -1,0 +1,8 @@
+{
+  "read": {
+    "dataSource": {
+      "format": "csv",
+      "paths": ["connector/connect/common/src/test/resources/query-test/people.csv"]
+    }
+  }
+}

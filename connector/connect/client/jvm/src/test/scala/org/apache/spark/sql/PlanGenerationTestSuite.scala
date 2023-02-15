@@ -82,6 +82,16 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   protected val queryFilePath: Path = baseResourcePath.resolve("queries")
 
+  // A relative path to spark home
+  protected val testDataPath: Path = Path.of(
+    "connector",
+    "connect",
+    "common",
+    "src",
+    "test",
+    "resources",
+    "query-test")
+
   private val printer = JsonFormat.printer()
 
   private var session: SparkSession = _
@@ -199,13 +209,34 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   test("read") {
     session.read.format("text")
-      .schema(StructType(
-        StructField("a", IntegerType, true) ::
-          StructField("b", LongType, false) ::
-          StructField("c", BooleanType, false) :: Nil))
+      .schema(StructType(StructField("name", StringType) :: StructField("age", IntegerType) :: Nil))
       .option("op1", "op1")
       .options(Map("op2" -> "op2"))
-      .load("test_path")
+      .load(testDataPath.resolve("people.txt").toString)
+  }
+
+  test("read json") {
+    session.read.json(testDataPath.resolve("people.json").toString)
+  }
+
+  test("read csv") {
+    session.read.csv(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("read parquet") {
+    session.read.parquet(testDataPath.resolve("users.parquet").toString)
+  }
+
+  test("read orc") {
+    session.read.orc(testDataPath.resolve("users.orc").toString)
+  }
+
+  test("read table") {
+    session.read.table("myTable")
+  }
+
+  test("read text") {
+    session.read.text(testDataPath.resolve("people.txt").toString)
   }
 
   /* Dataset API */

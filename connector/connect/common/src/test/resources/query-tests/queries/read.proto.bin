@@ -1,6 +1,6 @@
-WU
-text*a INT,b BIGINT NOT NULL,c BOOLEAN NOT NULL
+xv
+textname STRING,age INT
 
 op1op1
 
-op2op2"	test_path
+op2op2"Aconnector/connect/common/src/test/resources/query-test/people.txt

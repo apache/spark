@@ -1,0 +1,8 @@
+{
+  "read": {
+    "dataSource": {
+      "format": "json",
+      "paths": ["connector/connect/common/src/test/resources/query-test/people.json"]
+    }
+  }
+}
