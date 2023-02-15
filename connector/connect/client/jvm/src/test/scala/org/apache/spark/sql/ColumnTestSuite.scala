@@ -24,6 +24,7 @@ import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ign
 
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.types.StringType
+
 /**
  * Tests for client local Column behavior.
  */
@@ -33,10 +34,15 @@ class ColumnTestSuite extends ConnectFunSuite {
     val a = expr
     val b = expr
     val c = expr.as("nope")
+    assert(a == a)
+    assert(b == b)
+    assert(c == c)
     assert(a == b)
     assert(b == a)
     assert(a != c)
+    assert(c != a)
     assert(b != c)
+    assert(c != b)
     assert(a.hashCode == b.hashCode)
     assert(a.hashCode != c.hashCode)
   }
