@@ -1156,8 +1156,8 @@ def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName
 array.__doc__ = pysparkfuncs.array.__doc__
 
 
-def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("array_append", col1, col2)
+def array_append(col: "ColumnOrName", value: Any) -> Column:
+    return _invoke_function("array_append", _to_col(col), lit(value))
 
 
 array_append.__doc__ = pysparkfuncs.array_append.__doc__
@@ -1182,6 +1182,14 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 array_except.__doc__ = pysparkfuncs.array_except.__doc__
+
+
+def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
+    _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
+    return _invoke_function("array_insert", _to_col(arr), _pos, lit(value))
+
+
+array_insert.__doc__ = pysparkfuncs.array_insert.__doc__
 
 
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:

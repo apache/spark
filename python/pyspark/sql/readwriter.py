@@ -468,7 +468,7 @@ class DataFrameReader(OptionUtils):
         |  8|
         |  9|
         +---+
-        >>> _ = spark.sql("DROP TABLE tblA")
+        >>> _ = spark.sql("DROP TABLE tblA").collect()
         """
         return self._df(self._jreader.table(tableName))
 
@@ -1234,7 +1234,7 @@ class DataFrameWriter(OptionUtils):
 
         >>> from pyspark.sql.functions import input_file_name
         >>> # Write a DataFrame into a Parquet file in a bucketed manner.
-        ... _ = spark.sql("DROP TABLE IF EXISTS bucketed_table")
+        ... _ = spark.sql("DROP TABLE IF EXISTS bucketed_table").collect()
         >>> spark.createDataFrame([
         ...     (100, "Hyukjin Kwon"), (120, "Hyukjin Kwon"), (140, "Haejoon Lee")],
         ...     schema=["age", "name"]
@@ -1248,7 +1248,7 @@ class DataFrameWriter(OptionUtils):
         |120|Hyukjin Kwon|
         |140| Haejoon Lee|
         +---+------------+
-        >>> _ = spark.sql("DROP TABLE bucketed_table")
+        >>> _ = spark.sql("DROP TABLE bucketed_table").collect()
         """
         if not isinstance(numBuckets, int):
             raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
@@ -1298,7 +1298,7 @@ class DataFrameWriter(OptionUtils):
 
         >>> from pyspark.sql.functions import input_file_name
         >>> # Write a DataFrame into a Parquet file in a sorted-bucketed manner.
-        ... _ = spark.sql("DROP TABLE IF EXISTS sorted_bucketed_table")
+        ... _ = spark.sql("DROP TABLE IF EXISTS sorted_bucketed_table").collect()
         >>> spark.createDataFrame([
         ...     (100, "Hyukjin Kwon"), (120, "Hyukjin Kwon"), (140, "Haejoon Lee")],
         ...     schema=["age", "name"]
@@ -1313,7 +1313,7 @@ class DataFrameWriter(OptionUtils):
         |120|Hyukjin Kwon|
         |140| Haejoon Lee|
         +---+------------+
-        >>> _ = spark.sql("DROP TABLE sorted_bucketed_table")
+        >>> _ = spark.sql("DROP TABLE sorted_bucketed_table").collect()
         """
         if isinstance(col, (list, tuple)):
             if cols:
@@ -1419,7 +1419,7 @@ class DataFrameWriter(OptionUtils):
 
         Examples
         --------
-        >>> _ = spark.sql("DROP TABLE IF EXISTS tblA")
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tblA").collect()
         >>> df = spark.createDataFrame([
         ...     (100, "Hyukjin Kwon"), (120, "Hyukjin Kwon"), (140, "Haejoon Lee")],
         ...     schema=["age", "name"]
@@ -1440,7 +1440,7 @@ class DataFrameWriter(OptionUtils):
         |140| Haejoon Lee|
         |140| Haejoon Lee|
         +---+------------+
-        >>> _ = spark.sql("DROP TABLE tblA")
+        >>> _ = spark.sql("DROP TABLE tblA").collect()
         """
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
@@ -1497,7 +1497,7 @@ class DataFrameWriter(OptionUtils):
         --------
         Creates a table from a DataFrame, and read it back.
 
-        >>> _ = spark.sql("DROP TABLE IF EXISTS tblA")
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tblA").collect()
         >>> spark.createDataFrame([
         ...     (100, "Hyukjin Kwon"), (120, "Hyukjin Kwon"), (140, "Haejoon Lee")],
         ...     schema=["age", "name"]
@@ -1510,7 +1510,7 @@ class DataFrameWriter(OptionUtils):
         |120|Hyukjin Kwon|
         |140| Haejoon Lee|
         +---+------------+
-        >>> _ = spark.sql("DROP TABLE tblA")
+        >>> _ = spark.sql("DROP TABLE tblA").collect()
         """
         self.mode(mode).options(**options)
         if partitionBy is not None:

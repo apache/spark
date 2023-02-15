@@ -924,6 +924,9 @@ class Catalog:
 
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
         """
         warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self._sparkSession.udf.register(name, f, returnType)

@@ -259,7 +259,7 @@ class WriteOperation(google.protobuf.message.Message):
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
     source: builtins.str
-    """(Required) Format value according to the Spark documentation. Examples are: text, parquet, delta."""
+    """(Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta."""
     path: builtins.str
     table_name: builtins.str
     mode: global___WriteOperation.SaveMode.ValueType
@@ -286,7 +286,7 @@ class WriteOperation(google.protobuf.message.Message):
         self,
         *,
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
-        source: builtins.str = ...,
+        source: builtins.str | None = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
         mode: global___WriteOperation.SaveMode.ValueType = ...,
@@ -298,6 +298,8 @@ class WriteOperation(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_source",
+            b"_source",
             "bucket_by",
             b"bucket_by",
             "input",
@@ -306,6 +308,8 @@ class WriteOperation(google.protobuf.message.Message):
             b"path",
             "save_type",
             b"save_type",
+            "source",
+            b"source",
             "table_name",
             b"table_name",
         ],
@@ -313,6 +317,8 @@ class WriteOperation(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_source",
+            b"_source",
             "bucket_by",
             b"bucket_by",
             "input",
@@ -335,6 +341,11 @@ class WriteOperation(google.protobuf.message.Message):
             b"table_name",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_source", b"_source"]
+    ) -> typing_extensions.Literal["source"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["save_type", b"save_type"]
     ) -> typing_extensions.Literal["path", "table_name"] | None: ...

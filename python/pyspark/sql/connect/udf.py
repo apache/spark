@@ -212,7 +212,7 @@ class UDFRegistration:
                 )
             return_udf = f
             self.sparkSession._client.register_udf(
-                f, f.returnType, name, f.evalType, f.deterministic
+                f.func, f.returnType, name, f.evalType, f.deterministic
             )
         else:
             if returnType is None:

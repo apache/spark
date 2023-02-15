@@ -66,8 +66,8 @@ message WriteOperation {
   // (Required) The output of the `input` relation will be persisted according to the options.
   Relation input = 1;
 
-  // (Required) Format value according to the Spark documentation. Examples are: text, parquet, delta.
-  string source = 2;
+  // (Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta.
+  optional string source = 2;
 
   // The destination of the write operation must be either a path or a table.
   oneof save_type {

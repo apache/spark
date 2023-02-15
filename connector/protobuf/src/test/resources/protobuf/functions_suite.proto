@@ -224,9 +224,13 @@ message EM2 {
   Employee em2Manager = 2;
 }
 
-message EventPerson {
+message EventPerson { // Used for simple recursive field testing.
   string name = 1;
   EventPerson bff = 2;
+}
+
+message EventPersonWrapper {
+  EventPerson person = 1;
 }
 
 message OneOfEventWithRecursion {
