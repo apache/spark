@@ -29,13 +29,13 @@
 #' \code{mirrorUrl} specifies the remote path to a Spark folder. It is followed by a subfolder
 #' named after the Spark version (that corresponds to SparkR), and then the tar filename.
 #' The filename is composed of four parts, i.e. [Spark version]-bin-[Hadoop version].tgz.
-#' For example, the full path for a Spark 2.0.0 package for Hadoop 2.7 from
-#' \code{http://apache.osuosl.org} has path:
-#' \code{http://apache.osuosl.org/spark/spark-2.0.0/spark-2.0.0-bin-hadoop2.7.tgz}.
+#' For example, the full path for a Spark 3.3.1 package from
+#' \code{https://archive.apache.org} has path:
+#' \code{http://archive.apache.org/dist/spark/spark-3.3.1/spark-3.3.1-bin-hadoop3.tgz}.
 #' For \code{hadoopVersion = "without"}, [Hadoop version] in the filename is then
 #' \code{without-hadoop}.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is \code{"2.7"}. It can take other
+#' @param hadoopVersion Version of Hadoop to install. Default is \code{"3"}. It can take other
 #'                      version number in the format of "x.y" where x and y are integer.
 #'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
 #'                      See
@@ -65,7 +65,7 @@
 #' @note install.spark since 2.1.0
 #' @seealso See available Hadoop versions:
 #'          \href{https://spark.apache.org/downloads.html}{Apache Spark}
-install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
+install.spark <- function(hadoopVersion = "3", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   sparkHome <- Sys.getenv("SPARK_HOME")
   if (isSparkRShell()) {
