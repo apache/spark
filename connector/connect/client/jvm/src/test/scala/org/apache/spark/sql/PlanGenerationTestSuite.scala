@@ -202,9 +202,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("to") {
-    simple.to(new StructType()
-      .add("b", "double")
-      .add("id", "int"))
+    simple.to(
+      new StructType()
+        .add("b", "double")
+        .add("id", "int"))
   }
 
   test("join inner_no_condition") {
@@ -315,7 +316,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("where column") {
-    simple.where(fn.col("id") === fn.lit(1L) )
+    simple.where(fn.col("id") === fn.lit(1L))
   }
 
   test("where expr") {
@@ -401,9 +402,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("withColumns scala_map") {
-    simple.withColumns(Map(
-      ("b", fn.lit("redacted")),
-      ("z", fn.expr("a + 100"))))
+    simple.withColumns(Map(("b", fn.lit("redacted")), ("z", fn.expr("a + 100"))))
   }
 
   test("withColumns java_map") {
@@ -418,9 +417,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("withColumnRenamed scala_map") {
-    simple.withColumnsRenamed(Map(
-      ("a", "alpha"),
-      ("b", "beta")))
+    simple.withColumnsRenamed(Map(("a", "alpha"), ("b", "beta")))
   }
 
   test("withColumnRenamed java_map") {

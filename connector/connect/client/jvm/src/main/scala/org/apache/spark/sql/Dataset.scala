@@ -2212,11 +2212,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group basic
    * @since 3.4.0
    */
-  def inputFiles: Array[String] = {
-    analyze.getInputFilesList.toArray { n: Int =>
-      new Array[String](n)
-    }
-  }
+  def inputFiles: Array[String] = analyze.getInputFilesList.asScala.toArray
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {
     session.analyze(plan, proto.Explain.ExplainMode.SIMPLE)

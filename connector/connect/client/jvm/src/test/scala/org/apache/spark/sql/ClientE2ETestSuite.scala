@@ -139,7 +139,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       simpleExplainFragments
     testCapturedStdOut(df.explain(true), extendedExplainFragments: _*)
     testCapturedStdOut(df.explain("extended"), extendedExplainFragments: _*)
-    testCapturedStdOut(df.explain("cost"),
+    testCapturedStdOut(
+      df.explain("cost"),
       simpleExplainFragments :+ "== Optimized Logical Plan ==": _*)
     testCapturedStdOut(df.explain("codegen"), "WholeStageCodegen subtrees.")
     testCapturedStdOut(df.explain("formatted"), "Range", "Arguments: ")
@@ -172,32 +173,44 @@ class ClientE2ETestSuite extends RemoteSparkSession {
 
   test("Dataset show") {
     val df = spark.range(20)
-    testCapturedStdOut(df.show(), 25, 5,
-    "+---+",
-      "| id|",
-      "|  0|",
-      "| 19|")
-    testCapturedStdOut(df.show(10), 16, 24,
+    testCapturedStdOut(df.show(), 25, 5, "+---+", "| id|", "|  0|", "| 19|")
+    testCapturedStdOut(
+      df.show(10),
+      16,
+      24,
       "+---+",
       "| id|",
       "|  0|",
       "|  9|",
       "only showing top 10 rows")
-    val wideDf = spark.range(4).selectExpr("id", "concat('very_very_very_long_string', id) as val")
-    testCapturedStdOut(wideDf.show(true), 9, 26,
-    "+---+--------------------+",
+    val wideDf =
+      spark.range(4).selectExpr("id", "concat('very_very_very_long_string', id) as val")
+    testCapturedStdOut(
+      wideDf.show(true),
+      9,
+      26,
+      "+---+--------------------+",
       "| id|                 val|",
       "|  0|very_very_very_lo...|")
-    testCapturedStdOut(wideDf.show(false), 9, 33,
+    testCapturedStdOut(
+      wideDf.show(false),
+      9,
+      33,
       "+---+---------------------------+",
       "|id |val                        |",
       "|2  |very_very_very_long_string2|")
-    testCapturedStdOut(wideDf.show(2, truncate = false), 8, 33,
+    testCapturedStdOut(
+      wideDf.show(2, truncate = false),
+      8,
+      33,
       "+---+---------------------------+",
       "|id |val                        |",
       "|1  |very_very_very_long_string1|",
       "only showing top 2 rows")
-    testCapturedStdOut(df.show(8, 10, vertical = true), 18, 23,
+    testCapturedStdOut(
+      df.show(8, 10, vertical = true),
+      18,
+      23,
       "-RECORD 3--",
       "id  | 7",
       "only showing top 8 rows")
