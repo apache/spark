@@ -44,6 +44,28 @@ object functions {
    */
   def col(colName: String): Column = Column(colName)
 
+
+  /**
+   * Aggregate function: returns the maximum value of the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def max(e: Column): Column = withUnresolvedFunction("max", e.expr)
+
+  private def withUnresolvedFunction(
+      funcName: String,
+      expr: proto.Expression,
+      isDistinct: Boolean = false): Column = {
+    Column { builder =>
+      val funcBuilder = proto.Expression.UnresolvedFunction.newBuilder()
+      funcBuilder.setFunctionName(funcName)
+      funcBuilder.addArguments(expr)
+      funcBuilder.setIsDistinct(isDistinct)
+      builder.setUnresolvedFunction(funcBuilder)
+    }
+  }
+
   private def createLiteral(f: proto.Expression.Literal.Builder => Unit): Column = Column {
     builder =>
       val literalBuilder = proto.Expression.Literal.newBuilder()
