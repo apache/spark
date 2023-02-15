@@ -1231,7 +1231,7 @@ private[sql] object Column {
       case "*" =>
         builder.getUnresolvedStarBuilder
       case _ if name.endsWith(".*") =>
-        unsupported("* with prefix is not supported yet.")
+        builder.getUnresolvedStarBuilder.setUnparsedTarget(name)
       case _ =>
         builder.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name)
     }

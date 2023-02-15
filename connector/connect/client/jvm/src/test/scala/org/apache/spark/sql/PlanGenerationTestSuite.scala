@@ -191,20 +191,202 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   /* Column API */
-  test("column by name") {
-    select(fn.col("b"))
+  private def columnTest(name: String)(f: => Column): Unit = {
+    test("column " + name) {
+      simple.select(f)
+    }
   }
 
-  test("column add") {
-    select(fn.col("a") + fn.col("b"))
+  columnTest("apply") {
+    fn.lit(1)
   }
 
-  test("column alias") {
-    select(fn.col("a").name("b"))
+  columnTest("unary minus") {
+    fn.lit(1)
   }
 
-  test("column equals") {
-    select(fn.col("a") === fn.col("b"))
+  columnTest("not") {
+    fn.lit(1)
+  }
+
+  columnTest("equals") {
+    fn.col("a") === fn.col("b")
+  }
+
+  columnTest("not equals") {
+    fn.lit(1)
+  }
+
+  columnTest("gt") {
+    fn.lit(1)
+  }
+
+  columnTest("lt") {
+    fn.lit(1)
+  }
+
+  columnTest("geq") {
+    fn.lit(1)
+  }
+
+  columnTest("leq") {
+    fn.lit(1)
+  }
+
+  columnTest("eqNullSafe") {
+    fn.lit(1)
+  }
+
+  columnTest("when otherwise") {
+    fn.lit(1)
+  }
+
+  columnTest("between") {
+    fn.lit(1)
+  }
+
+  columnTest("isNaN") {
+    fn.lit(1)
+  }
+
+  columnTest("isNull") {
+    fn.lit(1)
+  }
+
+  columnTest("isNotNull") {
+    fn.lit(1)
+  }
+
+  columnTest("or") {
+    fn.lit(1)
+  }
+
+  columnTest("add") {
+    fn.col("a") + fn.col("b")
+  }
+
+  columnTest("subtract") {
+    fn.lit(1)
+  }
+
+  columnTest("multiply") {
+    fn.lit(1)
+  }
+
+  columnTest("divide") {
+    fn.lit(1)
+  }
+
+  columnTest("modulo") {
+    fn.lit(1)
+  }
+
+  columnTest("isin") {
+    fn.lit(1)
+  }
+
+  columnTest("like") {
+    fn.lit(1)
+  }
+
+  columnTest("rlike") {
+    fn.lit(1)
+  }
+
+  columnTest("ilike") {
+    fn.lit(1)
+  }
+
+  columnTest("getItem") {
+    fn.lit(1)
+  }
+
+  columnTest("withField") {
+    fn.lit(1)
+  }
+
+  columnTest("dropFields") {
+    fn.lit(1)
+  }
+
+  columnTest("getField") {
+    fn.lit(1)
+  }
+
+  columnTest("substr") {
+    fn.lit(1)
+  }
+
+  columnTest("contains") {
+    fn.lit(1)
+  }
+
+  columnTest("startsWith") {
+    fn.lit(1)
+  }
+
+  columnTest("endsWith") {
+    fn.lit(1)
+  }
+
+  columnTest("alias") {
+    fn.col("a").name("b")
+  }
+
+  columnTest("as multi") {
+    fn.lit(1)
+  }
+
+  columnTest("as with metadata") {
+    fn.lit(1)
+  }
+
+  columnTest("cast") {
+    fn.lit(1)
+  }
+
+  columnTest("desc") {
+    fn.lit(1)
+  }
+
+  columnTest("desc_nulls_first") {
+    fn.lit(1)
+  }
+
+  columnTest("desc_nulls_last") {
+    fn.lit(1)
+  }
+
+  columnTest("asc") {
+    fn.lit(1)
+  }
+
+  columnTest("asc_nulls_first") {
+    fn.lit(1)
+  }
+
+  columnTest("asc_nulls_last") {
+    fn.lit(1)
+  }
+
+  columnTest("bitwiseOR") {
+    fn.lit(1)
+  }
+
+  columnTest("bitwiseAND") {
+    fn.lit(1)
+  }
+
+  columnTest("bitwiseXOR") {
+    fn.lit(1)
+  }
+
+  columnTest("star") {
+    Column("*")
+  }
+
+  columnTest("star with target") {
+    Column("str.*")
   }
 
   /* Function API */
