@@ -18,16 +18,14 @@ package org.apache.spark.sql
 
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.LocalDate
+
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
+
 import com.google.protobuf.ByteString
+
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Grouping, GroupingID, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproximatePercentile, Average, CollectList, CollectSet, CollectTopK, Corr, Count, CovPopulation, CovSample, First, HyperLogLogPlusPlus, Kurtosis, Last, Max, MaxBy, Median, Min, MinBy, Mode, Product, Skewness, StddevPop, StddevSamp, Sum, VariancePop, VarianceSamp}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
-import org.apache.spark.sql.functions.withAggregateFunction
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here provides
@@ -110,6 +108,7 @@ object functions {
    *
    * @since 3.4.0
    */
+  @scala.annotation.tailrec
   def lit(literal: Any): Column = {
     literal match {
       case c: Column => c
@@ -133,6 +132,79 @@ object functions {
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
   }
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Sort functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns a sort expression based on ascending order of the column.
+   * {{{
+   *   df.sort(asc("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 3.4.0
+   */
+  def asc(columnName: String): Column = Column(columnName).asc
+
+  /**
+   * Returns a sort expression based on ascending order of the column,
+   * and null values return before non-null values.
+   * {{{
+   *   df.sort(asc_nulls_first("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 3.4.0
+   */
+  def asc_nulls_first(columnName: String): Column = Column(columnName).asc_nulls_first
+
+  /**
+   * Returns a sort expression based on ascending order of the column,
+   * and null values appear after non-null values.
+   * {{{
+   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 3.4.0
+   */
+  def asc_nulls_last(columnName: String): Column = Column(columnName).asc_nulls_last
+
+  /**
+   * Returns a sort expression based on the descending order of the column.
+   * {{{
+   *   df.sort(asc("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 3.4.0
+   */
+  def desc(columnName: String): Column = Column(columnName).desc
+
+  /**
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear before non-null values.
+   * {{{
+   *   df.sort(asc("dept"), desc_nulls_first("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 3.4.0
+   */
+  def desc_nulls_first(columnName: String): Column = Column(columnName).desc_nulls_first
+
+  /**
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear after non-null values.
+   * {{{
+   *   df.sort(asc("dept"), desc_nulls_last("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 3.4.0
+   */
+  def desc_nulls_last(columnName: String): Column = Column(columnName).desc_nulls_last
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Aggregate functions
@@ -161,7 +233,7 @@ object functions {
 
   /**
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(columnName: String, rsd: Double): Column = {
@@ -331,7 +403,7 @@ object functions {
    * Aggregate function: returns the population covariance for two columns.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def covar_pop(column1: Column, column2: Column): Column =
     Column.fn("covar_pop", column1, column2)
@@ -340,7 +412,7 @@ object functions {
    * Aggregate function: returns the population covariance for two columns.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def covar_pop(columnName1: String, columnName2: String): Column = {
     covar_pop(Column(columnName1), Column(columnName2))
@@ -350,7 +422,7 @@ object functions {
    * Aggregate function: returns the sample covariance for two columns.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def covar_samp(column1: Column, column2: Column): Column =
     Column.fn("covar_samp", column1, column2)
@@ -359,7 +431,7 @@ object functions {
    * Aggregate function: returns the sample covariance for two columns.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def covar_samp(columnName1: String, columnName2: String): Column =
     covar_samp(Column(columnName1), Column(columnName2))
@@ -374,7 +446,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def first(e: Column, ignoreNulls: Boolean): Column =
     Column.fn("first", e, lit(ignoreNulls))
@@ -389,7 +461,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def first(columnName: String, ignoreNulls: Boolean): Column = {
     first(Column(columnName), ignoreNulls)
@@ -405,7 +477,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def first(e: Column): Column = first(e, ignoreNulls = false)
 
@@ -419,7 +491,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def first(columnName: String): Column = first(Column(columnName))
 
@@ -428,7 +500,7 @@ object functions {
    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def grouping(e: Column): Column = Column.fn("grouping", e)
 
@@ -437,7 +509,7 @@ object functions {
    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def grouping(columnName: String): Column = grouping(Column(columnName))
 
@@ -452,7 +524,7 @@ object functions {
    * grouping columns).
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def grouping_id(cols: Column*): Column = Column.fn("grouping_id", cols: _*)
 
@@ -466,7 +538,7 @@ object functions {
    * @note The list of columns should match with grouping columns exactly.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def grouping_id(colName: String, colNames: String*): Column =
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
@@ -475,7 +547,7 @@ object functions {
    * Aggregate function: returns the kurtosis of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def kurtosis(e: Column): Column = Column.fn("kurtosis", e)
 
@@ -483,7 +555,7 @@ object functions {
    * Aggregate function: returns the kurtosis of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
@@ -497,7 +569,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def last(e: Column, ignoreNulls: Boolean): Column =
     Column.fn("last", e, lit(ignoreNulls))
@@ -512,7 +584,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def last(columnName: String, ignoreNulls: Boolean): Column =
     last(Column(columnName), ignoreNulls)
@@ -527,7 +599,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def last(e: Column): Column = last(e, ignoreNulls = false)
 
@@ -541,7 +613,7 @@ object functions {
    * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
@@ -557,7 +629,7 @@ object functions {
    * Aggregate function: returns the maximum value of the expression in a group.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def max(e: Column): Column = Column.fn("max", e)
 
@@ -565,7 +637,7 @@ object functions {
    * Aggregate function: returns the maximum value of the column in a group.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def max(columnName: String): Column = max(Column(columnName))
 
@@ -573,7 +645,7 @@ object functions {
    * Aggregate function: returns the value associated with the maximum value of ord.
    *
    * @group agg_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def max_by(e: Column, ord: Column): Column = Column.fn("max_by", e, ord)
 
@@ -582,7 +654,7 @@ object functions {
    * Alias for avg.
    *
    * @group agg_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def mean(e: Column): Column = avg(e)
 
@@ -591,7 +663,7 @@ object functions {
    * Alias for avg.
    *
    * @group agg_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def mean(columnName: String): Column = avg(columnName)
 
@@ -607,7 +679,7 @@ object functions {
    * Aggregate function: returns the minimum value of the expression in a group.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def min(e: Column): Column = Column.fn("min", e)
 
@@ -615,7 +687,7 @@ object functions {
    * Aggregate function: returns the minimum value of the column in a group.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def min(columnName: String): Column = min(Column(columnName))
 
@@ -623,7 +695,7 @@ object functions {
    * Aggregate function: returns the value associated with the minimum value of ord.
    *
    * @group agg_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
@@ -641,7 +713,7 @@ object functions {
    * is the relative error of the approximation.
    *
    * @group agg_funcs
-   * @since 3.1.0
+   * @since 3.4.0
    */
   def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column =
     Column.fn("percentile_approx", e, percentage, accuracy)
@@ -650,7 +722,7 @@ object functions {
    * Aggregate function: returns the product of all numerical elements in a group.
    *
    * @group agg_funcs
-   * @since 3.2.0
+   * @since 3.4.0
    */
   def product(e: Column): Column = Column.fn("product", e)
 
@@ -658,15 +730,15 @@ object functions {
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def skewness(e: Column): Column = withAggregateFunction { Skewness(e.expr) }
+  def skewness(e: Column): Column = Column.fn("skewness", e)
 
   /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
@@ -674,15 +746,15 @@ object functions {
    * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
+  def stddev(e: Column): Column = Column.fn("stddev", e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def stddev(columnName: String): Column = stddev(Column(columnName))
 
@@ -691,16 +763,16 @@ object functions {
    * the expression in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def stddev_samp(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
+  def stddev_samp(e: Column): Column = Column.fn("stddev_samp", e)
 
   /**
    * Aggregate function: returns the sample standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def stddev_samp(columnName: String): Column = stddev_samp(Column(columnName))
 
@@ -709,16 +781,16 @@ object functions {
    * the expression in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def stddev_pop(e: Column): Column = withAggregateFunction { StddevPop(e.expr) }
+  def stddev_pop(e: Column): Column = Column.fn("stddev_pop", e)
 
   /**
    * Aggregate function: returns the population standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def stddev_pop(columnName: String): Column = stddev_pop(Column(columnName))
 
@@ -726,15 +798,15 @@ object functions {
    * Aggregate function: returns the sum of all values in the expression.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
-  def sum(e: Column): Column = withAggregateFunction { Sum(e.expr) }
+  def sum(e: Column): Column = Column.fn("sum", e)
 
   /**
    * Aggregate function: returns the sum of all values in the given column.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def sum(columnName: String): Column = sum(Column(columnName))
 
@@ -742,16 +814,16 @@ object functions {
    * Aggregate function: returns the sum of distinct values in the expression.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   @deprecated("Use sum_distinct", "3.2.0")
-  def sumDistinct(e: Column): Column = withAggregateFunction(Sum(e.expr), isDistinct = true)
+  def sumDistinct(e: Column): Column = sum_distinct(e)
 
   /**
    * Aggregate function: returns the sum of distinct values in the expression.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   @deprecated("Use sum_distinct", "3.2.0")
   def sumDistinct(columnName: String): Column = sum_distinct(Column(columnName))
@@ -760,23 +832,23 @@ object functions {
    * Aggregate function: returns the sum of distinct values in the expression.
    *
    * @group agg_funcs
-   * @since 3.2.0
+   * @since 3.4.0
    */
-  def sum_distinct(e: Column): Column = withAggregateFunction(Sum(e.expr), isDistinct = true)
+  def sum_distinct(e: Column): Column = Column.fn("sum", isDistinct = true, e)
 
   /**
    * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
+  def variance(e: Column): Column = Column.fn("variance", e)
 
   /**
    * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def variance(columnName: String): Column = variance(Column(columnName))
 
@@ -784,15 +856,15 @@ object functions {
    * Aggregate function: returns the unbiased variance of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
+  def var_samp(e: Column): Column = Column.fn("var_samp", e)
 
   /**
    * Aggregate function: returns the unbiased variance of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def var_samp(columnName: String): Column = var_samp(Column(columnName))
 
@@ -800,17 +872,598 @@ object functions {
    * Aggregate function: returns the population variance of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
+  def var_pop(e: Column): Column = Column.fn("var_pop", e)
 
   /**
    * Aggregate function: returns the population variance of the values in a group.
    *
    * @group agg_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Window functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Window function: returns the cumulative distribution of values within a window partition,
+   * i.e. the fraction of rows that are below the current row.
+   *
+   * {{{
+   *   N = total number of rows in the partition
+   *   cumeDist(x) = number of values before (and including) x / N
+   * }}}
+   *
+   * @group window_funcs
+   * @since 1.6.0
+   */
+  def cume_dist(): Column = withExpr { new CumeDist }
+
+  /**
+   * Window function: returns the rank of rows within a window partition, without any gaps.
+   *
+   * The difference between rank and dense_rank is that denseRank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
+   * and had three people tie for second place, you would say that all three were in second
+   * place and that the next person came in third. Rank would give me sequential numbers, making
+   * the person that came in third place (after the ties) would register as coming in fifth.
+   *
+   * This is equivalent to the DENSE_RANK function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.6.0
+   */
+  def dense_rank(): Column = withExpr { new DenseRank }
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `null` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(e: Column, offset: Int): Column = lag(e, offset, null)
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `null` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(columnName: String, offset: Int): Column = lag(columnName, offset, null)
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(columnName: String, offset: Int, defaultValue: Any): Column = {
+    lag(Column(columnName), offset, defaultValue)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(e: Column, offset: Int, defaultValue: Any): Column = {
+    lag(e, offset, defaultValue, false)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. `ignoreNulls`
+   * determines whether null values of row are included in or eliminated from the calculation.
+   * For example, an `offset` of one will return the previous row at any given point in the
+   * window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.2.0
+   */
+  def lag(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = withExpr {
+    Lag(e.expr, Literal(offset), Literal(defaultValue), ignoreNulls)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `null` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(columnName: String, offset: Int): Column = { lead(columnName, offset, null) }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `null` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(e: Column, offset: Int): Column = { lead(e, offset, null) }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(columnName: String, offset: Int, defaultValue: Any): Column = {
+    lead(Column(columnName), offset, defaultValue)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(e: Column, offset: Int, defaultValue: Any): Column = {
+    lead(e, offset, defaultValue, false)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. `ignoreNulls`
+   * determines whether null values of row are included in or eliminated from the calculation.
+   * The default value of `ignoreNulls` is false. For example, an `offset` of one will return
+   * the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.2.0
+   */
+  def lead(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = withExpr {
+    Lead(e.expr, Literal(offset), Literal(defaultValue), ignoreNulls)
+  }
+
+  /**
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * It will return the `offset`th non-null value it sees when ignoreNulls is set to true.
+   * If all values are null, then null is returned.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
+  def nth_value(e: Column, offset: Int, ignoreNulls: Boolean): Column = withExpr {
+    NthValue(e.expr, Literal(offset), ignoreNulls)
+  }
+
+  /**
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
+  def nth_value(e: Column, offset: Int): Column = withExpr {
+    NthValue(e.expr, Literal(offset), false)
+  }
+
+  /**
+   * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
+   * partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
+   * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
+   *
+   * This is equivalent to the NTILE function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def ntile(n: Int): Column = withExpr { new NTile(Literal(n)) }
+
+  /**
+   * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+   *
+   * This is computed by:
+   * {{{
+   *   (rank of row in its partition - 1) / (number of rows in the partition - 1)
+   * }}}
+   *
+   * This is equivalent to the PERCENT_RANK function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.6.0
+   */
+  def percent_rank(): Column = withExpr { new PercentRank }
+
+  /**
+   * Window function: returns the rank of rows within a window partition.
+   *
+   * The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
+   * and had three people tie for second place, you would say that all three were in second
+   * place and that the next person came in third. Rank would give me sequential numbers, making
+   * the person that came in third place (after the ties) would register as coming in fifth.
+   *
+   * This is equivalent to the RANK function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def rank(): Column = withExpr { new Rank }
+
+  /**
+   * Window function: returns a sequential number starting at 1 within a window partition.
+   *
+   * @group window_funcs
+   * @since 1.6.0
+   */
+  def row_number(): Column = withExpr { RowNumber() }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Non-aggregate functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Creates a new array column. The input columns must all have the same data type.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def array(cols: Column*): Column = withExpr { CreateArray(cols.map(_.expr)) }
+
+  /**
+   * Creates a new array column. The input columns must all have the same data type.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def array(colName: String, colNames: String*): Column = {
+    array((colName +: colNames).map(col) : _*)
+  }
+
+  /**
+   * Creates a new map column. The input columns must be grouped as key-value pairs, e.g.
+   * (key1, value1, key2, value2, ...). The key columns must all have the same data type, and can't
+   * be null. The value columns must all have the same data type.
+   *
+   * @group normal_funcs
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
+
+  /**
+   * Creates a new map column. The array in the first column is used for keys. The array in the
+   * second column is used for values. All elements in the array for key should not be null.
+   *
+   * @group normal_funcs
+   * @since 2.4
+   */
+  def map_from_arrays(keys: Column, values: Column): Column = withExpr {
+    MapFromArrays(keys.expr, values.expr)
+  }
+
+  /**
+   * Marks a DataFrame as small enough for use in broadcast joins.
+   *
+   * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
+   * {{{
+   *   // left and right are DataFrames
+   *   left.join(broadcast(right), "joinKey")
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def broadcast[T](df: Dataset[T]): Dataset[T] = {
+    Dataset[T](df.sparkSession,
+      ResolvedHint(df.logicalPlan, HintInfo(strategy = Some(BROADCAST))))(df.exprEnc)
+  }
+
+  /**
+   * Returns the first column that is not null, or null if all inputs are null.
+   *
+   * For example, `coalesce(a, b, c)` will return a if a is not null,
+   * or b if a is null and b is not null, or c if both a and b are null but c is not null.
+   *
+   * @group normal_funcs
+   * @since 1.3.0
+   */
+  @scala.annotation.varargs
+  def coalesce(e: Column*): Column = withExpr { Coalesce(e.map(_.expr)) }
+
+  /**
+   * Creates a string column for the file name of the current Spark task.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def input_file_name(): Column = withExpr { InputFileName() }
+
+  /**
+   * Return true iff the column is NaN.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
+
+  /**
+   * Return true iff the column is null.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   *
+   * {{{
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use monotonically_increasing_id()", "2.0.0")
+  def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   *
+   * {{{
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
+
+  /**
+   * Returns col1 if it is not NaN, or col2 if col1 is NaN.
+   *
+   * Both inputs should be floating point columns (DoubleType or FloatType).
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def nanvl(col1: Column, col2: Column): Column = withExpr { NaNvl(col1.expr, col2.expr) }
+
+  /**
+   * Unary minus, i.e. negate the expression.
+   * {{{
+   *   // Select the amount column and negates all values.
+   *   // Scala:
+   *   df.select( -df("amount") )
+   *
+   *   // Java:
+   *   df.select( negate(df.col("amount")) );
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.3.0
+   */
+  def negate(e: Column): Column = -e
+
+  /**
+   * Inversion of boolean expression, i.e. NOT.
+   * {{{
+   *   // Scala: select rows that are not active (isActive === false)
+   *   df.filter( !df("isActive") )
+   *
+   *   // Java:
+   *   df.filter( not(df.col("isActive")) );
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.3.0
+   */
+  def not(e: Column): Column = !e
+
+  /**
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * uniformly distributed in [0.0, 1.0).
+   *
+   * @note The function is non-deterministic in general case.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  def rand(seed: Long): Column = withExpr { Rand(seed) }
+
+  /**
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * uniformly distributed in [0.0, 1.0).
+   *
+   * @note The function is non-deterministic in general case.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  def rand(): Column = rand(Utils.random.nextLong)
+
+  /**
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
+   *
+   * @note The function is non-deterministic in general case.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  def randn(seed: Long): Column = withExpr { Randn(seed) }
+
+  /**
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
+   *
+   * @note The function is non-deterministic in general case.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  def randn(): Column = randn(Utils.random.nextLong)
+
+  /**
+   * Partition ID.
+   *
+   * @note This is non-deterministic because it depends on data partitioning and task scheduling.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def spark_partition_id(): Column = withExpr { SparkPartitionID() }
+
+  /**
+   * Computes the square root of the specified float value.
+   *
+   * @group math_funcs
+   * @since 1.3.0
+   */
+  def sqrt(e: Column): Column = withExpr { Sqrt(e.expr) }
+
+  /**
+   * Computes the square root of the specified float value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def sqrt(colName: String): Column = sqrt(Column(colName))
+
+  /**
+   * Creates a new struct column.
+   * If the input column is a column in a `DataFrame`, or a derived column expression
+   * that is named (i.e. aliased), its name would be retained as the StructField's name,
+   * otherwise, the newly generated StructField's name would be auto generated as
+   * `col` with a suffix `index + 1`, i.e. col1, col2, col3, ...
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def struct(cols: Column*): Column = withExpr { CreateStruct.create(cols.map(_.expr)) }
+
+  /**
+   * Creates a new struct column that composes multiple input columns.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def struct(colName: String, colNames: String*): Column = {
+    struct((colName +: colNames).map(col) : _*)
+  }
+
+  /**
+   * Evaluates a list of conditions and returns one of multiple possible result expressions.
+   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   *
+   * {{{
+   *   // Example: encoding gender string column into integer.
+   *
+   *   // Scala:
+   *   people.select(when(people("gender") === "male", 0)
+   *     .when(people("gender") === "female", 1)
+   *     .otherwise(2))
+   *
+   *   // Java:
+   *   people.select(when(col("gender").equalTo("male"), 0)
+   *     .when(col("gender").equalTo("female"), 1)
+   *     .otherwise(2))
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  def when(condition: Column, value: Any): Column = withExpr {
+    CaseWhen(Seq((condition.expr, lit(value).expr)))
+  }
+
+  /**
+   * Computes bitwise NOT (~) of a number.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use bitwise_not", "3.2.0")
+  def bitwiseNOT(e: Column): Column = bitwise_not(e)
+
+  /**
+   * Computes bitwise NOT (~) of a number.
+   *
+   * @group normal_funcs
+   * @since 3.2.0
+   */
+  def bitwise_not(e: Column): Column = withExpr { BitwiseNot(e.expr) }
+
+  /**
+   * Parses the expression string into the column that it represents, similar to
+   * [[Dataset#selectExpr]].
+   * {{{
+   *   // get the number of words of each length
+   *   df.groupBy(expr("length(word)")).count()
+   * }}}
+   *
+   * @group normal_funcs
+   */
+  def expr(expr: String): Column = Column { builder =>
+    builder.getExpressionStringBuilder.setExpression(expr)
+  }
 
   // scalastyle:off line.size.limit
 

@@ -83,7 +83,9 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
       // Skip all shaded dependencies in the client.
       ProblemFilters.exclude[Problem]("org.sparkproject.*"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"))
+      ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
+      // Disable Range until we support typed APIs
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.range"))
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
