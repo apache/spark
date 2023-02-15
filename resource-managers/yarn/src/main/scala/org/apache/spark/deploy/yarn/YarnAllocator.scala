@@ -548,7 +548,7 @@ private[yarn] class YarnAllocator(
 
         if (availableContainers >= newLocalityRequests.size) {
           // more containers are available than needed for locality, fill in requests for any host
-          for (i <- 0 until (availableContainers - newLocalityRequests.size)) {
+          for (_ <- 0 until (availableContainers - newLocalityRequests.size)) {
             newLocalityRequests += createContainerRequest(resource, null, null, rpId)
           }
         } else {

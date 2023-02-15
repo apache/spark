@@ -595,7 +595,7 @@ private[spark] class ApplicationMaster(
         }
         failureCount = 0
       } catch {
-        case i: InterruptedException => // do nothing
+        case _: InterruptedException => // do nothing
         case e: ApplicationAttemptNotFoundException =>
           failureCount += 1
           logError("Exception from Reporter thread.", e)
@@ -652,7 +652,7 @@ private[spark] class ApplicationMaster(
               s"Slept for $sleepDuration/$sleepInterval.")
         }
       } catch {
-        case e: InterruptedException =>
+        case _: InterruptedException =>
       }
     }
   }

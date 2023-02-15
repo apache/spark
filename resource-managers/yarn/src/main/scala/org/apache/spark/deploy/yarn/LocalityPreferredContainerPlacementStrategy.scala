@@ -120,7 +120,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
 
     val containerLocalityPreferences = ArrayBuffer[ContainerLocalityPreferences]()
     if (requiredLocalityFreeContainerNum > 0) {
-      for (i <- 0 until requiredLocalityFreeContainerNum) {
+      for (_ <- 0 until requiredLocalityFreeContainerNum) {
         containerLocalityPreferences += ContainerLocalityPreferences(
           null.asInstanceOf[Array[String]], null.asInstanceOf[Array[String]])
       }
@@ -135,7 +135,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
         (k, adjustedRatio.ceil.toInt)
       }
 
-      for (i <- 0 until requiredLocalityAwareContainerNum) {
+      for (_ <- 0 until requiredLocalityAwareContainerNum) {
         // Only filter out the ratio which is larger than 0, which means the current host can
         // still be allocated with new container request.
         val hosts = preferredLocalityRatio.filter(_._2 > 0).keys.toArray
