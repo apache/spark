@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MapType, StringType, StructType}
 
 // scalastyle:off
 /**
@@ -159,6 +159,12 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     .add("b", "double")
 
   private val simpleSchemaString = simpleSchema.catalogString
+
+  private val complexString = simpleSchema
+    .add("d", simpleSchema)
+    .add("e", "array<int>")
+    .add("f", MapType(StringType, simpleSchema))
+    .add("g", "string")
 
   // We manually construct a simple empty data frame.
   private def simple = session.newDataset { builder =>
