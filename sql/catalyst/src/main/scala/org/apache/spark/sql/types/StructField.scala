@@ -89,7 +89,7 @@ case class StructField(
   /**
    * Updates the StructField with a new current default value.
    */
-  private[sql] def withCurrentDefaultValue(value: String): StructField = {
+  def withCurrentDefaultValue(value: String): StructField = {
     val newMetadata = new MetadataBuilder()
       .withMetadata(metadata)
       .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
@@ -100,7 +100,7 @@ case class StructField(
   /**
    * Clears the StructField of its current default value, if any.
    */
-  private[sql] def clearCurrentDefaultValue(): StructField = {
+  def clearCurrentDefaultValue(): StructField = {
     val newMetadata = new MetadataBuilder()
       .withMetadata(metadata)
       .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
@@ -111,7 +111,7 @@ case class StructField(
   /**
    * Return the current default value of this StructField.
    */
-  private[sql] def getCurrentDefaultValue(): Option[String] = {
+  def getCurrentDefaultValue(): Option[String] = {
     if (metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
       Option(metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
     } else {
@@ -122,7 +122,7 @@ case class StructField(
   /**
    * Updates the StructField with a new existence default value.
    */
-  private[sql] def withExistenceDefaultValue(value: String): StructField = {
+  def withExistenceDefaultValue(value: String): StructField = {
     val newMetadata = new MetadataBuilder()
       .withMetadata(metadata)
       .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, value)
