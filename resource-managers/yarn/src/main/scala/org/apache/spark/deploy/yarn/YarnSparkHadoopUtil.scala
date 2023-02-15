@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.regex.{Matcher, Pattern}
-
 import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.util.matching.Regex
