@@ -791,6 +791,11 @@
       "Cannot CREATE/REPLACE/ALTER TABLE <tableName> because column <colName> has an invalid DEFAULT value: <defaultValue>."
     ],
     "subClass" : {
+      "SUBQUERY_EXPRESSION" : {
+        "message" : [
+          "Subquery expressions are not allowed in the default value."
+        ]
+      },
       "INCOMPATIBLE_DATA_TYPE" : {
         "message" : [
           "The default value has an incompatible data type with the column:",

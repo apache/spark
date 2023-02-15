@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -262,7 +263,10 @@ object ResolveDefaultColumns {
       colName: Seq[String],
       targetType: DataType,
       isForV1: Boolean): Unit = {
-    if (default.resolved) {
+    if (default.containsPattern(PLAN_EXPRESSION)) {
+      throw QueryCompilationErrors.hasSubqueryDefaultValueError(
+        tblName, colName, default.originalSQL)
+    } else if (default.resolved) {
       if (!default.child.foldable) {
         throw QueryCompilationErrors.notConstantDefaultValueError(
           tblName, colName, default.originalSQL)
@@ -271,23 +275,29 @@ object ResolveDefaultColumns {
         throw QueryCompilationErrors.incompatibleTypeDefaultValueError(
           tblName, colName, targetType, default.child, default.originalSQL)
       }
-    } else {
+      // Check passes.
+    } else if (default.references.nonEmpty) {
       // Ideally we should let the rest of `CheckAnalysis` to report errors about why the default
       // expression is unresolved. But we should report a better error here if the default
-      // expression references columns or contains subquery expressions, which means it's not a
-      // constant for sure.
-      if (default.references.nonEmpty || default.containsPattern(PLAN_EXPRESSION)) {
-        throw QueryCompilationErrors.notConstantDefaultValueError(
-          tblName, colName, default.originalSQL)
-      }
+      // expression references columns, which means it's not a constant for sure.
+      throw QueryCompilationErrors.notConstantDefaultValueError(
+        tblName, colName, default.originalSQL)
+    } else if (isForV1) {
       // When converting to v1 commands, the plan is not fully resolved and we can't do a complete
       // analysis check. There is no "rest of CheckAnalysis" to report better errors and we must
       // fail here. This is temporary and we can remove it when using v2 commands by default.
-      if (isForV1) {
-        throw QueryCompilationErrors.notConstantDefaultValueError(
-          tblName, colName, default.originalSQL)
-      }
+      throw QueryCompilationErrors.notConstantDefaultValueError(
+        tblName, colName, default.originalSQL)
     }
+  }
+
+  /**
+   * Applies constant folding for DDL commands. This is used when converting v2 commands to v1
+   * commands, where we don't have a chance to go through the optimizer but the default value
+   * framework requires a literal value of the default value expression.
+   */
+  def contantFoldDDLCommand[T <: LogicalPlan](cmd: T): T = {
+    ConstantFolding(cmd).asInstanceOf[T]
   }
 
   /**

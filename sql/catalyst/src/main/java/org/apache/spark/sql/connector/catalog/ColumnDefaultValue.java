@@ -41,7 +41,7 @@ public class ColumnDefaultValue {
   }
 
   /**
-   * Returns the SQL string of the default value expression.
+   * Returns the SQL string (Spark SQL dialect) of the default value expression.
    */
   @Nonnull
   public String getSql() {

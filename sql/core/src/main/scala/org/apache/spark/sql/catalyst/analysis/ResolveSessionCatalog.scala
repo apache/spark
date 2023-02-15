@@ -23,7 +23,6 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultColumnUtil}
@@ -64,9 +63,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // Check default values before converting to v1 command.
       DefaultColumnUtil.checkDefaultValuesInPlan(a, isForV1 = true)
       val cols = if (colsToAdd.exists(_.column.defaultValue.isDefined)) {
-        // Do a constant-folding, as we need to store the expression SQL string which should be in
-        // its simplest form.
-        ConstantFolding(a).asInstanceOf[AddColumns].columnsToAdd.map(_.column)
+        DefaultColumnUtil.contantFoldDDLCommand(a).columnsToAdd.map(_.column)
       } else {
         colsToAdd.map(_.column)
       }
@@ -112,9 +109,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // Check default values before converting to v1 command.
       DefaultColumnUtil.checkDefaultValuesInPlan(a, isForV1 = true)
       val defaultValue = if (a.defaultExpression.isDefined) {
-        // Do a constant-folding, as we need to store the expression SQL string which should be in
-        // its simplest form.
-        ConstantFolding(a).asInstanceOf[AlterColumn].defaultExpression
+        DefaultColumnUtil.contantFoldDDLCommand(a).defaultExpression
       } else {
         a.defaultExpression
       }
@@ -191,9 +186,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         // Check default values before converting to v1 command.
         DefaultColumnUtil.checkDefaultValuesInPlan(c, isForV1 = true)
         val cols = if (c.columns.exists(_.defaultValue.isDefined)) {
-          // Do a constant-folding, as we need to store the expression SQL string which should be in
-          // its simplest form.
-          ConstantFolding(c).asInstanceOf[CreateTable].columns
+          DefaultColumnUtil.contantFoldDDLCommand(c).columns
         } else {
           c.columns
         }

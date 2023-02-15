@@ -3162,6 +3162,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("dataSource" -> dataSource))
   }
 
+  def hasSubqueryDefaultValueError(
+      tableName: String,
+      colName: Seq[String],
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_COLUMN_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue))
+  }
+
   def notConstantDefaultValueError(
       tableName: String,
       colName: Seq[String],
