@@ -97,8 +97,9 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       expectedMaxWidth: Int,
       fragmentsToCheck: String*): Unit = {
     val result = captureStdOut(block)
-    assert(result.lines.count() === expectedNumLines)
-    assert(result.lines.mapToInt((s: String) => s.length).max().getAsInt <= expectedMaxWidth)
+    val lines = result.split('\n')
+    assert(lines.length === expectedNumLines)
+    assert(lines.map((s: String) => s.length).max <= expectedMaxWidth)
     checkFragments(result, fragmentsToCheck)
   }
 
@@ -173,10 +174,10 @@ class ClientE2ETestSuite extends RemoteSparkSession {
 
   test("Dataset show") {
     val df = spark.range(20)
-    testCapturedStdOut(df.show(), 25, 5, "+---+", "| id|", "|  0|", "| 19|")
+    testCapturedStdOut(df.show(), 24, 5, "+---+", "| id|", "|  0|", "| 19|")
     testCapturedStdOut(
       df.show(10),
-      16,
+      15,
       24,
       "+---+",
       "| id|",
@@ -187,21 +188,21 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       spark.range(4).selectExpr("id", "concat('very_very_very_long_string', id) as val")
     testCapturedStdOut(
       wideDf.show(true),
-      9,
+      8,
       26,
       "+---+--------------------+",
       "| id|                 val|",
       "|  0|very_very_very_lo...|")
     testCapturedStdOut(
       wideDf.show(false),
-      9,
+      8,
       33,
       "+---+---------------------------+",
       "|id |val                        |",
       "|2  |very_very_very_long_string2|")
     testCapturedStdOut(
       wideDf.show(2, truncate = false),
-      8,
+      7,
       33,
       "+---+---------------------------+",
       "|id |val                        |",
@@ -209,7 +210,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       "only showing top 2 rows")
     testCapturedStdOut(
       df.show(8, 10, vertical = true),
-      18,
+      17,
       23,
       "-RECORD 3--",
       "id  | 7",

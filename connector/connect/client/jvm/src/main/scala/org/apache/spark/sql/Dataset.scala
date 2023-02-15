@@ -199,7 +199,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * Returns the schema of this Dataset.
    *
    * @group basic
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def schema: StructType = {
     DataTypeProtoConverter.toCatalystType(analyze.getSchema).asInstanceOf[StructType]
@@ -841,7 +841,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    *   The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def apply(colName: String): Column = col(colName)
 
@@ -854,7 +854,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * }}}
    *
    * @group basic
-   * @since 2.2.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def hint(name: String, parameters: Any*): Dataset[T] = session.newDataset { builder =>
