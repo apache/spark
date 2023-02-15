@@ -3156,6 +3156,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "operation" -> "column default value"))
   }
 
+  def addNewDefaultColumnToExistingTableNotAllowed(dataSource: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1345",
+      messageParameters = Map("dataSource" -> dataSource))
+  }
+
   def notConstantDefaultValueError(
       tableName: String,
       colName: Seq[String],

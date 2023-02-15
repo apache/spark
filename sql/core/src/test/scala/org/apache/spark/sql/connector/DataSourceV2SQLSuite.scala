@@ -46,7 +46,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -603,7 +603,7 @@ class DataSourceV2SQLSuiteV1Filter
         "Replaced table should have new schema.")
       val actual = replaced.columns.head
       val expected = ColumnV2.create("id", LongType, false, null,
-        new ColumnDefaultValue("41 + 1", LiteralValue(42, IntegerType)), null)
+        new ColumnDefaultValue("41 + 1", LiteralValue(42L, LongType)), null)
       assert(actual === expected,
         "Replaced table should have new schema with DEFAULT column metadata.")
     }

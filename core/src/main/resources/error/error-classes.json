@@ -3636,6 +3636,11 @@
       "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
     ]
   },
+  "_LEGACY_ERROR_TEMP_1345" : {
+    "message" : [
+      "Failed to execute ALTER TABLE ADD COLUMNS command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_1346" : {
     "message" : [
       "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."

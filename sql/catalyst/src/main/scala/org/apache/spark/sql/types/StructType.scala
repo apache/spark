@@ -25,7 +25,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering, Literal}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.plans.logical.{Column, DefaultValueExpression}
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -396,28 +396,38 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
 
   private[sql] def toColumns: Array[Column] = fields.map { f =>
-    val defaultValue = f.getCurrentDefaultValue().map { sql =>
-      val existDefaultOpt = f.getExistenceDefaultValue()
-      assert(existDefaultOpt.isDefined, "current and exist default must be both set or neither")
-      val e = CatalystSqlParser.parseExpression(f.getExistenceDefaultValue().get)
+    def createColumn(
+        defaultValue: Option[DefaultValueExpression],
+        metadata: Metadata): Column = {
+      val metadataJSON = if (metadata == Metadata.empty) {
+        None
+      } else {
+        Some(metadata.json)
+      }
+      Column(f.name, f.dataType, f.nullable, f.getComment(), defaultValue, metadataJSON)
+    }
+    if (f.getCurrentDefaultValue().isDefined && f.getExistenceDefaultValue().isDefined) {
+      val e = ResolveDefaultColumns.analyze(
+        f, ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
       assert(e.resolved && e.foldable,
-        "exist default must be simple SQL string that is resolved and foldable after parsing, " +
-          "but got: " + existDefaultOpt.get)
-      DefaultValueExpression(e, sql)
-    }
-
-    val cleanedMetadata = new MetadataBuilder()
-      .withMetadata(f.metadata)
-      .remove("comment")
-      .remove(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-      .remove(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-      .build()
-    val metadataInJSON = if (cleanedMetadata == Metadata.empty) {
-      None
+        "exist default must be simple SQL string that is resolved and foldable, " +
+          "but got: " + f.getExistenceDefaultValue().get)
+      val defaultValue = Some(DefaultValueExpression(
+        Literal(e.eval(), f.dataType), f.getCurrentDefaultValue().get))
+      val cleanedMetadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .remove("comment")
+        .remove(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+        .remove(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+        .build()
+      createColumn(defaultValue, cleanedMetadata)
     } else {
-      Some(cleanedMetadata.json)
+      val cleanedMetadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .remove("comment")
+        .build()
+      createColumn(None, cleanedMetadata)
     }
-    Column(f.name, f.dataType, f.nullable, f.getComment(), defaultValue, metadataInJSON)
   }
 
   def treeString: String = treeString(Int.MaxValue)

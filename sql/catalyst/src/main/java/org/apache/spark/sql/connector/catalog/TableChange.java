@@ -22,7 +22,6 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -386,7 +385,7 @@ public interface TableChange {
   /**
    * A TableChange to add a field. The implementation may need to back-fill all the existing data
    * to add this new column, or remember the column default value specified here and let the reader
-   * to fill the column value when reading these existing data that do not have this column.
+   * fill the column value when reading existing data that do not have this new column.
    * <p>
    * If the field already exists, the change must result in an {@link IllegalArgumentException}.
    * If the new field is nested and its parent does not exist or is not a struct, the change must
@@ -697,6 +696,7 @@ public interface TableChange {
     /**
      * Returns the column default value SQL string (Spark SQL dialect). The default value literal
      * is not provided as updating column default values does not need to back-fill existing data.
+     * Null means dropping the column default value.
      */
     @Nullable
     public String newDefaultValue() { return newDefaultValue; }

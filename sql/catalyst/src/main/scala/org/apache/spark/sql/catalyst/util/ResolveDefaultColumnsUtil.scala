@@ -75,14 +75,12 @@ object ResolveDefaultColumns {
    *
    * @param field         represents the DEFAULT column value whose "default" metadata to parse
    *                      and analyze.
-   * @param statementType which type of statement we are running, such as INSERT; useful for errors.
    * @param metadataKey   which key to look up from the column metadata; generally either
    *                      CURRENT_DEFAULT_COLUMN_METADATA_KEY or EXISTS_DEFAULT_COLUMN_METADATA_KEY.
    * @return Result of the analysis and constant-folding operation.
    */
   def analyze(
       field: StructField,
-      statementType: String,
       metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
     // Parse the expression.
     val colText: String = field.metadata.getString(metadataKey)
@@ -129,7 +127,7 @@ object ResolveDefaultColumns {
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+          val expr = analyze(field, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
           expr match {
             case _: ExprLiteral | _: Cast => expr
           }
@@ -211,11 +209,12 @@ object ResolveDefaultColumns {
 
       case cmd: AlterTableCommand =>
         val table = cmd.resolvedTable
+        val provider = getTableProviderFromProp(table.table.properties())
+        val isAddColumns = cmd.isInstanceOf[AddColumns]
         cmd.transformExpressionsDown {
           case q @ QualifiedColType(path, Column(name, dataType, _, _, Some(default), _), _)
-            if path.resolved =>
-            checkTableProvider(
-              table.catalog, table.name, getTableProviderFromProp(table.table.properties()))
+              if path.resolved =>
+            checkTableProvider(table.catalog, table.name, provider, isAddColumns)
             checkDefaultValue(
               default,
               table.name,
@@ -236,16 +235,23 @@ object ResolveDefaultColumns {
   private def checkTableProvider(
       catalog: CatalogPlugin,
       tableName: String,
-      provider: Option[String]): Unit = {
+      provider: Option[String],
+      isAddColumns: Boolean = false): Unit = {
     // We only need to check table provider for the session catalog. Other custom v2 catalogs
     // can check table providers in their implementations of createTable, alterTable, etc.
     if (CatalogV2Util.isSessionCatalog(catalog)) {
       val conf = SQLConf.get
-      val allowedProviders: Array[String] = conf.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+      val keywords: Array[String] = conf.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
         .toLowerCase().split(",").map(_.trim)
-      val providerName = provider.getOrElse(conf.defaultDataSourceName).toLowerCase()
-      if (!allowedProviders.contains(providerName)) {
+      val allowedTableProviders: Array[String] = keywords.map(_.stripSuffix("*"))
+      val addColumnExistingTableBannedProviders: Array[String] =
+        keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
+      val providerName: String = provider.getOrElse(conf.defaultDataSourceName).toLowerCase()
+      if (!allowedTableProviders.contains(providerName)) {
         throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(tableName)
+      }
+      if (isAddColumns && addColumnExistingTableBannedProviders.contains(providerName)) {
+        throw QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(providerName)
       }
     }
   }
