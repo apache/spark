@@ -472,9 +472,9 @@ class DataFrameWriter(OptionUtils):
     def insertInto(self, tableName: str, overwrite: Optional[bool] = None) -> None:
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
-        elif self._write.mode is None or self._write.mode != "overwrite":
-            self.mode("append")
-        self.saveAsTable(tableName)
+        self._write.table_name = tableName
+        self._write.table_save_method = "insert_into"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
 
@@ -492,6 +492,7 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.table_name = name
+        self._write.table_save_method = "save_as_table"
         self._spark.client.execute_command(self._write.command(self._spark.client))
 
     saveAsTable.__doc__ = PySparkDataFrameWriter.saveAsTable.__doc__
@@ -694,9 +695,6 @@ def _test() -> None:
     # TODO(SPARK-41817): Support reading with schema
     del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
     del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-
-    # TODO(SPARK-42426): insertInto fails when the column names are different from the table columns
-    del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")

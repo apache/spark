@@ -213,7 +213,9 @@ package object dsl {
           .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
-          tableName.foreach(writeOp.setTableName(_))
+          tableName.foreach { tn =>
+            writeOp.setTable(WriteOperation.SaveTable.newBuilder().setTableName(tn).build())
+          }
         } else {
           path.foreach(writeOp.setPath(_))
         }
