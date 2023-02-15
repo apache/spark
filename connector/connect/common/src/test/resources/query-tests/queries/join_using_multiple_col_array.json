@@ -1,0 +1,16 @@
+{
+  "join": {
+    "left": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "right": {
+      "localRelation": {
+        "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
+      }
+    },
+    "joinType": "JOIN_TYPE_FULL_OUTER",
+    "usingColumns": ["id", "a"]
+  }
+}

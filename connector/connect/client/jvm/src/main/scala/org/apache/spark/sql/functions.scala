@@ -92,6 +92,20 @@ object functions {
     }
   }
 
+  /**
+   * Parses the expression string into the column that it represents, similar to
+   * [[Dataset#selectExpr]].
+   * {{{
+   *   // get the number of words of each length
+   *   df.groupBy(expr("length(word)")).count()
+   * }}}
+   *
+   * @group normal_funcs
+   */
+  def expr(expr: String): Column = Column { builder =>
+    builder.getExpressionStringBuilder.setExpression(expr)
+  }
+
   // scalastyle:off line.size.limit
 
   /**

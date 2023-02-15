@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 // scalastyle:off
 /**
@@ -153,18 +153,25 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     }
   }
 
+  private def createLocalRelation(schema: StructType): DataFrame = session.newDataset { builder =>
+    // TODO API is not consistent. Now we have two different ways of working with schemas!
+    builder.getLocalRelationBuilder.setSchema(schema.catalogString)
+  }
+
   private val simpleSchema = new StructType()
     .add("id", "long")
     .add("a", "int")
     .add("b", "double")
 
-  private val simpleSchemaString = simpleSchema.catalogString
+  private val otherSchema = new StructType()
+    .add("a", "int")
+    .add("id", "long")
+    .add("payload", "binary")
 
-  // We manually construct a simple empty data frame.
-  private def simple = session.newDataset { builder =>
-    // TODO API is not consistent. Now we have two different ways of working with schemas!
-    builder.getLocalRelationBuilder.setSchema(simpleSchemaString)
-  }
+  // A few helper dataframes.
+  private def simple: DataFrame = createLocalRelation(simpleSchema)
+  private def left: DataFrame = simple
+  private def right: DataFrame = createLocalRelation(otherSchema)
 
   private def select(cs: Column*): DataFrame = simple.select(cs: _*)
 
@@ -188,6 +195,310 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   test("filter") {
     simple.filter(fn.col("id") === fn.lit(10L))
+  }
+
+  test("toDF") {
+    simple.toDF("x1", "x2", "x3")
+  }
+
+  test("to") {
+    simple.to(
+      new StructType()
+        .add("b", "double")
+        .add("id", "int"))
+  }
+
+  test("join inner_no_condition") {
+    left.join(right)
+  }
+
+  test("join inner_using_single_col") {
+    left.join(right, "id")
+  }
+
+  test("join inner_using_multiple_col_array") {
+    left.join(right, Array("id", "a"))
+  }
+
+  test("join inner_using_multiple_col_seq") {
+    left.join(right, Seq("id", "a"))
+  }
+
+  test("join using_single_col") {
+    left.join(right, "id", "left_semi")
+  }
+
+  test("join using_multiple_col_array") {
+    left.join(right, Array("id", "a"), "full_outer")
+  }
+
+  test("join using_multiple_col_seq") {
+    left.join(right, Seq("id", "a"), "right_outer")
+  }
+
+  test("join inner_condition") {
+    left.join(right, fn.col("a") === fn.col("a"))
+  }
+
+  test("join condition") {
+    left.join(right, fn.col("id") === fn.col("id"), "left_anti")
+  }
+
+  test("crossJoin") {
+    left.crossJoin(right)
+  }
+
+  test("sortWithinPartitions strings") {
+    simple.sortWithinPartitions("a", "id")
+  }
+
+  test("sortWithinPartitions columns") {
+    simple.sortWithinPartitions(fn.col("id"), fn.col("b"))
+  }
+
+  test("sort strings") {
+    simple.sort("b", "a")
+  }
+
+  test("sort columns") {
+    simple.sort(fn.col("id"), fn.col("b"))
+  }
+
+  test("orderBy strings") {
+    simple.sort("b", "id", "a")
+  }
+
+  test("orderBy columns") {
+    simple.sort(fn.col("id"), fn.col("b"), fn.col("a"))
+  }
+
+  test("apply") {
+    simple.select(simple.apply("a"))
+  }
+
+  test("hint") {
+    simple.hint("coalesce", 100)
+  }
+
+  test("col") {
+    simple.select(simple.col("id"), simple.col("b"))
+  }
+
+  test("colRegex") {
+    simple.select(simple.colRegex("a|id"))
+  }
+
+  test("as string") {
+    simple.as("foo")
+  }
+
+  test("as symbol") {
+    simple.as('bar)
+  }
+  test("alias string") {
+    simple.alias("fooz")
+  }
+
+  test("alias symbol") {
+    simple.alias("bob")
+  }
+
+  test("select strings") {
+    simple.select("id", "a")
+  }
+
+  test("selectExpr") {
+    simple.selectExpr("a + 10 as x", "id % 10 as grp")
+  }
+
+  test("filter expr") {
+    simple.filter("exp(a) < 10.0")
+  }
+
+  test("where column") {
+    simple.where(fn.col("id") === fn.lit(1L))
+  }
+
+  test("where expr") {
+    simple.where("a + id < 1000")
+  }
+
+  test("unpivot values") {
+    simple.unpivot(
+      ids = Array(fn.col("id"), fn.col("a")),
+      values = Array(fn.col("b")),
+      variableColumnName = "name",
+      valueColumnName = "value")
+  }
+
+  test("unpivot no_values") {
+    simple.unpivot(
+      ids = Array(fn.col("id")),
+      variableColumnName = "name",
+      valueColumnName = "value")
+  }
+
+  test("melt values") {
+    simple.unpivot(
+      ids = Array(fn.col("a")),
+      values = Array(fn.col("id")),
+      variableColumnName = "name",
+      valueColumnName = "value")
+  }
+
+  test("melt no_values") {
+    simple.melt(
+      ids = Array(fn.col("id"), fn.col("a")),
+      variableColumnName = "name",
+      valueColumnName = "value")
+  }
+
+  test("offset") {
+    simple.offset(1000)
+  }
+
+  test("union") {
+    simple.union(simple)
+  }
+
+  test("unionAll") {
+    simple.union(simple)
+  }
+
+  test("unionByName") {
+    simple.unionByName(right)
+  }
+
+  test("unionByName allowMissingColumns") {
+    simple.unionByName(right, allowMissingColumns = true)
+  }
+
+  test("intersect") {
+    simple.intersect(simple)
+  }
+
+  test("intersectAll") {
+    simple.intersectAll(simple)
+  }
+
+  test("except") {
+    simple.except(simple)
+  }
+
+  test("exceptAll") {
+    simple.exceptAll(simple)
+  }
+
+  test("sample fraction_seed") {
+    simple.sample(0.43, 9890823L)
+  }
+
+  test("sample withReplacement_fraction_seed") {
+    simple.sample(withReplacement = true, 0.23, 898L)
+  }
+
+  test("withColumn single") {
+    simple.withColumn("z", fn.expr("a + 100"))
+  }
+
+  test("withColumns scala_map") {
+    simple.withColumns(Map(("b", fn.lit("redacted")), ("z", fn.expr("a + 100"))))
+  }
+
+  test("withColumns java_map") {
+    val map = new java.util.HashMap[String, Column]
+    map.put("g", fn.col("id"))
+    map.put("a", fn.lit("123"))
+    simple.withColumns(map)
+  }
+
+  test("withColumnRenamed single") {
+    simple.withColumnRenamed("id", "nid")
+  }
+
+  test("withColumnRenamed scala_map") {
+    simple.withColumnsRenamed(Map(("a", "alpha"), ("b", "beta")))
+  }
+
+  test("withColumnRenamed java_map") {
+    val map = new java.util.HashMap[String, String]
+    map.put("id", "nid")
+    map.put("b", "bravo")
+    simple.withColumnsRenamed(map)
+  }
+
+  test("withMetadata") {
+    val builder = new MetadataBuilder
+    builder.putString("description", "unique identifier")
+    simple.withMetadata("id", builder.build())
+  }
+
+  test("drop single string") {
+    simple.drop("a")
+  }
+
+  test("drop multiple strings") {
+    simple.drop("id", "a", "b")
+  }
+
+  test("drop single column") {
+    simple.drop(fn.col("b"))
+  }
+
+  test("drop multiple column") {
+    simple.drop(fn.col("b"), fn.col("id"))
+  }
+
+  test("dropDuplicates") {
+    simple.dropDuplicates()
+  }
+
+  test("dropDuplicates names seq") {
+    simple.dropDuplicates("a" :: "b" :: Nil)
+  }
+
+  test("dropDuplicates names array") {
+    simple.dropDuplicates(Array("a", "id"))
+  }
+
+  test("dropDuplicates varargs") {
+    simple.dropDuplicates("a", "b", "id")
+  }
+
+  test("describe") {
+    simple.describe("id", "b")
+  }
+
+  test("summary") {
+    simple.summary("mean", "min")
+  }
+
+  test("repartition") {
+    simple.repartition(24)
+  }
+
+  test("repartition num_partitions_expressions") {
+    simple.repartition(22, fn.col("a"), fn.col("id"))
+  }
+
+  test("repartition expressions") {
+    simple.repartition(fn.col("id"), fn.col("b"))
+  }
+
+  test("repartitionByRange num_partitions_expressions") {
+    simple.repartitionByRange(33, fn.col("b"), fn.col("id").desc_nulls_first)
+  }
+
+  test("repartitionByRange expressions") {
+    simple.repartitionByRange(fn.col("a").asc, fn.col("id").desc_nulls_first)
+  }
+
+  test("coalesce") {
+    simple.coalesce(5)
+  }
+
+  test("distinct") {
+    simple.distinct()
   }
 
   /* Column API */
