@@ -133,6 +133,14 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
 
   override def close(): Unit = {
     client.shutdown()
+    releaseAndCloseAllocator()
+  }
+
+  private def releaseAndCloseAllocator(): Unit = {
+    val allocatedMemory = allocator.getAllocatedMemory
+    if (allocatedMemory > 0L) {
+      allocator.releaseBytes(allocatedMemory)
+    }
     allocator.close()
   }
 }
