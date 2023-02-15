@@ -96,8 +96,9 @@ message WriteOperation {
     TableSaveMethod save_method = 2;
 
     enum TableSaveMethod {
-      SAVE_AS_TABLE = 0;
-      INSERT_INTO = 1;
+      TABLE_SAVE_METHOD_UNSPECIFIED = 0;
+      TABLE_SAVE_METHOD_SAVE_AS_TABLE = 1;
+      TABLE_SAVE_METHOD_INSERT_INTO = 2;
     }
   }
 

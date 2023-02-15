@@ -199,6 +199,7 @@ package object dsl {
           format: Option[String] = None,
           path: Option[String] = None,
           tableName: Option[String] = None,
+          tableSaveMethod: Option[String] = None,
           mode: Option[String] = None,
           sortByColumns: Seq[String] = Seq.empty,
           partitionByCols: Seq[String] = Seq.empty,
@@ -214,7 +215,11 @@ package object dsl {
 
         if (tableName.nonEmpty) {
           tableName.foreach { tn =>
-            writeOp.setTable(WriteOperation.SaveTable.newBuilder().setTableName(tn).build())
+            val saveTable = WriteOperation.SaveTable.newBuilder().setTableName(tn)
+            tableSaveMethod
+              .map(DataTypeProtoConverter.toTableSaveMethodProto(_))
+              .foreach(saveTable.setSaveMethod(_))
+            writeOp.setTable(saveTable.build())
           }
         } else {
           path.foreach(writeOp.setPath(_))

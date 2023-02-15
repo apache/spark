@@ -1547,9 +1547,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.WriteOperation.SaveTypeCase.TABLE =>
         val tableName = writeOperation.getTable.getTableName
         writeOperation.getTable.getSaveMethod match {
-          case proto.WriteOperation.SaveTable.TableSaveMethod.SAVE_AS_TABLE =>
+          case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE =>
             w.saveAsTable(tableName)
-          case proto.WriteOperation.SaveTable.TableSaveMethod.INSERT_INTO =>
+          case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
             w.insertInto(tableName)
           case _ =>
             throw new UnsupportedOperationException(

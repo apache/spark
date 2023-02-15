@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.Locale
+
 import scala.collection.convert.ImplicitConversions._
 
 import org.apache.spark.connect.proto
@@ -382,6 +384,19 @@ object DataTypeProtoConverter {
       case _ =>
         throw new IllegalArgumentException(
           s"Cannot convert from SaveMode to WriteOperation.SaveMode: ${mode.name()}")
+    }
+  }
+
+  def toTableSaveMethodProto(method: String): proto.WriteOperation.SaveTable.TableSaveMethod = {
+    method.toLowerCase(Locale.ROOT) match {
+      case "save_as_table" =>
+        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE
+      case "insert_into" =>
+        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
+      case _ =>
+        throw new IllegalArgumentException(
+          "Cannot convert from TableSaveMethod to WriteOperation.SaveTable.TableSaveMethod: " +
+            s"${method}")
     }
   }
 }
