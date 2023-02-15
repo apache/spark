@@ -1553,8 +1553,8 @@ class SparkConnectPlanner(val session: SparkSession) {
             w.insertInto(tableName)
           case _ =>
             throw new UnsupportedOperationException(
-              "WriteOperation:Table:SaveMethodCase not supported "
-                + s"${writeOperation.getTable.getSaveMethod}")
+              "WriteOperation:SaveTable:TableSaveMethod not supported "
+                + s"${writeOperation.getTable.getSaveMethodValue}")
         }
       case _ =>
         throw new UnsupportedOperationException(
@@ -1626,7 +1626,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
       case _ =>
         throw new UnsupportedOperationException(
-          "WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
+          s"WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
     }
   }
 
