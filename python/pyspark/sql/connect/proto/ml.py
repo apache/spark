@@ -4,6 +4,17 @@ from collections import namedtuple
 from pyspark.sql.connect.dataframe import DataFrame
 
 
+_spark_client_mode_enabled = True
+
+
+def set_spark_client_mode(enabled):
+    _spark_client_mode_enabled = enabled
+
+
+def is_spark_client_mode():
+    return _spark_client_mode_enabled
+
+
 class RemoteObject:
 
     def __init__(self, object_id):
@@ -29,25 +40,26 @@ class RemoteDataFramePlan:
 
 
 def _serialize_arg(arg_value, session):
+    if isinstance(arg_value, bool):
+        # Note: bool type must be put before int type.
+        return proto.RemoteCall.ArgValue(bool_value=arg_value)
     if isinstance(arg_value, int):
         return proto.RemoteCall.ArgValue(int64_value=arg_value)
     if isinstance(arg_value, float):
         return proto.RemoteCall.ArgValue(double_value=arg_value)
-    if isinstance(arg_value, bool):
-        return proto.RemoteCall.ArgValue(bool_value=arg_value)
     if isinstance(arg_value, str):
         return proto.RemoteCall.ArgValue(string_value=arg_value)
     if isinstance(arg_value, list):
         proto_list = proto.RemoteCall.List()
         for elem in arg_value:
-            proto_elem = _serialize_arg(elem)
+            proto_elem = _serialize_arg(elem, session)
             proto_list.element.append(proto_elem)
         return proto.RemoteCall.ArgValue(list=proto_list)
     if isinstance(arg_value, dict):
         proto_map = proto.RemoteCall.Map()
         for key, value in arg_value.items():
-            proto_value = _serialize_arg(value)
-            proto_map[key].CopyFrom(proto_value)
+            proto_value = _serialize_arg(value, session)
+            proto_map.map[key].CopyFrom(proto_value)
         return proto.RemoteCall.ArgValue(map=proto_map)
     if isinstance(arg_value, RemoteObject):
         proto_remote_obj = proto.RemoteCall.RemoteObject(id=arg_value.object_id)
@@ -105,7 +117,7 @@ def invoke_remote_function(module_name, function_name, arg_value_list, session):
 
 def construct_remote_object(class_name, arg_value_list, session):
     proto_construct_object = proto.RemoteCall.ConstructObject(
-        className=class_name,
+        class_name=class_name,
     )
     for arg_value in arg_value_list:
         proto_construct_object.arg_values.append(_serialize_arg(arg_value, session))

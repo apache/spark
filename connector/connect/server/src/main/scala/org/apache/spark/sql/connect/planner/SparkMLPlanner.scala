@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse, RemoteCall}
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.service.{SessionHolder}
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.Utils
 
 object SparkMLPlanner {
@@ -50,199 +50,6 @@ object SparkMLPlanner {
     val plan = relationalPlanner.transformRelation(inputRelation)
     Dataset.ofRows(sessionHolder.session, plan)
   }
-
-  /*
-  def createStage(uid: String, className: String): PipelineStage = {
-    val clazz = Utils.classForName(className)
-    val ctorOpt = clazz.getConstructors.find { ctor =>
-      // Find the constructor with signature `this(uid: String)`
-      ctor.getParameterCount == 1 && ctor.getParameterTypes()(0).eq(classOf[String])
-    }
-    if (ctorOpt.isEmpty) {
-      throw new RuntimeException(
-        s"Could not find 'this(uid: String)' constructor for class $className"
-      )
-    }
-
-    ctorOpt.get.newInstance(uid).asInstanceOf[PipelineStage]
-  }
-
-  def extractParamPair(
-     instance: Params,
-     paramName: String,
-     protoValue: MlCommand.ParamValue
-  ): (Param[Any], Any) = {
-    import MlCommand.ParamValue.ValueCase
-
-    val param = instance.getParam(paramName)
-    val valueType = param.paramValueClassTag.runtimeClass
-    val extractedValue = protoValue.getValueCase match {
-      case ValueCase.INT_VAL =>
-        assert(valueType == classOf[Int])
-        protoValue.getIntVal
-
-      case ValueCase.LONG_VAL =>
-        if (valueType == classOf[Long]) {
-          protoValue.getLongVal
-        } else if (valueType == classOf[Int]) {
-          protoValue.getLongVal.toInt
-        } else {
-          throw new java.lang.AssertionError()
-        }
-
-      case ValueCase.FLOAT_VAL =>
-        assert(valueType == classOf[Float])
-        protoValue.getFloatVal
-
-      case ValueCase.DOUBLE_VAL =>
-        if (valueType == classOf[Double]) {
-          protoValue.getDoubleVal
-        } else if (valueType == classOf[Float]) {
-          protoValue.getDoubleVal.toFloat
-        } else {
-          throw new java.lang.AssertionError()
-        }
-
-      case ValueCase.BOOL_VAL =>
-        assert(valueType == classOf[Boolean])
-        protoValue.getBoolVal
-
-      case ValueCase.STR_VAL =>
-        assert(valueType == classOf[String])
-        protoValue.getStrVal
-
-      case ValueCase.INT_ARRAY =>
-        assert(valueType == classOf[Array[Int]])
-        protoValue.getIntArray.getElementList.stream().mapToInt(_.toInt).toArray
-
-      case ValueCase.LONG_ARRAY =>
-        val elemList = protoValue.getLongArray.getElementList
-        if (valueType == classOf[Array[Long]]) {
-          elemList.stream().mapToLong(_.toLong).toArray
-        } else if (valueType == classOf[Array[Int]]) {
-          elemList.stream().mapToInt(_.toInt).toArray
-        } else {
-          throw new java.lang.AssertionError()
-        }
-
-      case ValueCase.FLOAT_ARRAY =>
-        assert(valueType == classOf[Float])
-        val floatList = protoValue.getFloatArray.getElementList
-        val floatArray = new Array[Float](floatList.size())
-        for (i <- 0 until floatList.size()) {
-          floatArray(i) = floatList.get(i)
-        }
-        floatArray
-
-      case ValueCase.DOUBLE_ARRAY =>
-        val doubleList = protoValue.getDoubleArray.getElementList
-        if (valueType == classOf[Array[Double]]) {
-          doubleList.stream().mapToDouble(_.toDouble).toArray
-        } else if (valueType == classOf[Array[Float]]) {
-          val floatArray = new Array[Float](doubleList.size())
-          for (i <- 0 until doubleList.size()) {
-            floatArray(i) = doubleList.get(i).toFloat
-          }
-          floatArray
-        } else {
-          throw new java.lang.AssertionError()
-        }
-
-      case ValueCase.STR_ARRAY =>
-        assert(valueType == classOf[Array[String]])
-        protoValue.getStrArray.getElementList.toArray(Array[String]())
-
-      case ValueCase.BOOL_ARRAY =>
-        assert(valueType == classOf[Array[Boolean]])
-        val boolList = protoValue.getBoolArray.getElementList
-        val boolArray = new Array[Boolean](boolList.size())
-        for (i <- 0 until boolList.size()) {
-          boolArray(i) = boolList.get(i)
-        }
-        boolArray
-
-      case _ =>
-        throw InvalidPlanInput()
-    }
-    (param, extractedValue)
-  }
-
-  def setParams(instance: Params, protoParams: MlCommand.Params): Unit = {
-    protoParams.getParamsMap.forEach { (paramName, protoValue) =>
-      val (param, paramValue) = extractParamPair(
-        instance, paramName, protoValue
-      )
-      instance.set(param, paramValue)
-    }
-    protoParams.getDefaultParamsMap.forEach { (paramName, protoValue) =>
-      val (param, paramValue) = extractParamPair(
-        instance, paramName, protoValue
-      )
-      instance._setDefault(param, paramValue)
-    }
-  }
-
-  def handleRemoteCall(
-       sessionHolder: SessionHolder,
-       request: ExecutePlanRequest,
-       responseObserver: StreamObserver[ExecutePlanResponse]
-  ): Unit = {
-    val mlCommand = request.getPlan.getMlCommand
-    mlCommand.getOpTypeCase match {
-      case proto.MlCommand.OpTypeCase.CONSTRUCT_STAGE =>
-        val constructStage = mlCommand.getConstructStage
-        val stage = createStage(
-          constructStage.getUid,
-          constructStage.getClassName
-        )
-        val objectId = serverSideObjectManager.registerObject(stage)
-
-        val resp = ExecutePlanResponse.MlCommandResponse
-          .newBuilder.setServerSideObjectId(objectId).build()
-
-        buildMlResponse(request, responseObserver, Some(resp))
-
-      case proto.MlCommand.OpTypeCase.DESTRUCT_OBJECT =>
-        serverSideObjectManager.removeObject(mlCommand.getDestructObject.getId)
-
-      case proto.MlCommand.OpTypeCase.FIT =>
-        val estimator = serverSideObjectManager
-          .getObject(mlCommand.getFit.getId).asInstanceOf[Estimator[_]]
-        val inputDF = loadInputRelation(session, mlCommand.getFit.getInput)
-        val model = estimator.fit(inputDF)
-        val modelObjId = serverSideObjectManager.
-          registerObject(model.asInstanceOf[Object])
-
-        val resp = ExecutePlanResponse.MlCommandResponse
-          .newBuilder.setServerSideObjectId(modelObjId).build()
-
-        buildMlResponse(request, responseObserver, Some(resp))
-
-      case proto.MlCommand.OpTypeCase.TRANSFORM =>
-        val transformer = serverSideObjectManager.getObject(mlCommand.getTransform.getId)
-          .asInstanceOf[Transformer]
-        val inputDF = loadInputRelation(session, mlCommand.getTransform.getInput)
-        val transformedDF = transformer.transform(inputDF)
-        val transformedDFId = serverSideObjectManager.registerObject(transformedDF)
-
-        val resp = ExecutePlanResponse.MlCommandResponse
-          .newBuilder.setServerSideObjectId(transformedDFId).build()
-
-        buildMlResponse(request, responseObserver, Some(resp))
-
-      case proto.MlCommand.OpTypeCase.TRANSFER_PARAMS_TO_SERVER =>
-        val instance = serverSideObjectManager.getObject(mlCommand.getTransferParamsToServer.getId)
-          .asInstanceOf[Params]
-        val protoParams = mlCommand.getTransferParamsToServer.getParams
-        setParams(instance, protoParams)
-
-        buildMlResponse(request, responseObserver, None)
-
-      case _ =>
-        throw new UnsupportedOperationException(s"${mlCommand.getOpTypeCase} not supported.")
-    }
-  }
-  */
 
   def parseArg(protoArg: proto.RemoteCall.ArgValue, sessionHolder: SessionHolder): Object = {
     import scala.collection.JavaConverters._
@@ -323,6 +130,29 @@ object SparkMLPlanner {
     protoBuilder.build()
   }
 
+  def _checkArgTypeMatch(argType: Class[_], argValue: Object): Boolean = {
+    argValue match {
+      case _: lang.Integer | _: lang.Long => argType == classOf[Int] || argType == classOf[Long]
+      case _: lang.Float | _: lang.Double => argType == classOf[Float] || argType == classOf[Double]
+      case _: lang.Boolean => argType == classOf[Boolean]
+      case _: Object => argType.isInstance(argValue)
+    }
+  }
+
+  def _castArgValue(argType: Class[_], argValue: Object): Object = {
+    if (argType == classOf[Int]) {
+      lang.Integer.valueOf(argValue.asInstanceOf[lang.Number].intValue())
+    } else if (argType == classOf[Long]) {
+      lang.Long.valueOf(argValue.asInstanceOf[lang.Number].longValue())
+    } else if (argType == classOf[Float]) {
+      lang.Float.valueOf(argValue.asInstanceOf[lang.Number].floatValue())
+    } else if (argType == classOf[Double]) {
+      lang.Double.valueOf(argValue.asInstanceOf[lang.Number].doubleValue())
+    } else {
+      argValue
+    }
+  }
+
   def invokeMethod(
         instance: Object,
         methodName: String,
@@ -332,10 +162,13 @@ object SparkMLPlanner {
     val method = instance.getClass.getMethods().find { method =>
       method.getName == methodName &&
         method.getParameterTypes().zip(argValues).forall {
-          case (clazz, instance) => clazz.isInstance(instance)
+          case (clazz, argValue) => _checkArgTypeMatch(clazz, argValue)
         }
     }.get
-    val result = method.invoke(instance, argValues: _*)
+    val castedArgValues = method.getParameterTypes().zip(argValues).map {
+      case (clazz, argValue) => _castArgValue(clazz, argValue)
+    }
+    val result = method.invoke(instance, castedArgValues: _*)
 
     if (result != null) {
       Some(serializeValue(result, sessionHolder))
@@ -359,10 +192,13 @@ object SparkMLPlanner {
         // TODO: primitive type checking.
         val ctor = clazz.getConstructors().find { ctor =>
           ctor.getParameterTypes().zip(argValues).forall {
-            case (clazz, instance) => clazz.isInstance(instance)
+            case (clazz, argValue) => _checkArgTypeMatch(clazz, argValue)
           }
         }.get
-        val instance = ctor.newInstance(argValues: _*).asInstanceOf[Object]
+        val castedArgValues = ctor.getParameterTypes().zip(argValues).map {
+          case (clazz, argValue) => _castArgValue(clazz, argValue)
+        }
+        val instance = ctor.newInstance(castedArgValues: _*).asInstanceOf[Object]
         val serializedReturnValue = serializeValue(instance, sessionHolder)
 
         buildRemoteCallResponse(request, responseObserver, Some(serializedReturnValue))

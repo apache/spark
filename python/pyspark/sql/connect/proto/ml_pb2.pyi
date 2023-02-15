@@ -240,9 +240,9 @@ class RemoteCall(google.protobuf.message.Message):
     class ConstructObject(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        CLASSNAME_FIELD_NUMBER: builtins.int
+        CLASS_NAME_FIELD_NUMBER: builtins.int
         ARG_VALUES_FIELD_NUMBER: builtins.int
-        className: builtins.str
+        class_name: builtins.str
         @property
         def arg_values(
             self,
@@ -252,13 +252,13 @@ class RemoteCall(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            className: builtins.str = ...,
+            class_name: builtins.str = ...,
             arg_values: collections.abc.Iterable[global___RemoteCall.ArgValue] | None = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "arg_values", b"arg_values", "className", b"className"
+                "arg_values", b"arg_values", "class_name", b"class_name"
             ],
         ) -> None: ...
 

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
-import org.apache.spark.ml.param.{Param, Params}
+import org.apache.spark.ml.param.{Param, ParamMap, Params}
 
 object SparkConnectUtils {
 
@@ -50,7 +50,7 @@ object SparkConnectUtils {
     } else if (paramType == classOf[Array[String]]) {
       paramValue.asInstanceOf[List[String]].toArray
     } else {
-      throw new RuntimeException()
+      paramValue
     }
   }
 
@@ -76,4 +76,7 @@ object SparkConnectUtils {
       instance._setDefault(param, castedValue)
     }
   }
+
+  def copyInstance(instance: Params): Params = instance.copy(ParamMap.empty)
+
 }

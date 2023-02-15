@@ -27,6 +27,9 @@ from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.sql.connect import proto
+from pyspark.sql.connect.proto import ml as proto_ml
+from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
 
 if TYPE_CHECKING:
@@ -50,6 +53,8 @@ class JavaWrapper:
         self._java_obj = java_obj
 
     def __del__(self) -> None:
+        if proto_ml.is_spark_client_mode():
+            return
         if SparkContext._active_spark_context and self._java_obj is not None:
             SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
                 self._java_obj
@@ -76,6 +81,10 @@ class JavaWrapper:
         """
         Returns a new Java object.
         """
+        if proto_ml.is_spark_client_mode():
+            session = RemoteSparkSession.getActiveSession()
+            return proto_ml.construct_remote_object(java_class, list(args), session)
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 
@@ -164,6 +173,29 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         Transforms the embedded params to the companion Java object.
         """
         assert self._java_obj is not None
+
+        if proto_ml.is_spark_client_mode():
+            session = RemoteSparkSession.getActiveSession()
+            param_map = {
+                k.name: v
+                for k, v in self._paramMap.items()
+            }
+            default_param_map = {
+                k.name: v
+                for k, v in self._defaultParamMap.items()
+            }
+
+            proto_ml.invoke_remote_function(
+                "org.apache.spark.sql.connect.planner.SparkConnectUtils",
+                "setInstanceParams",
+                [
+                    self._java_obj,
+                    param_map,
+                    default_param_map,
+                ],
+                session,
+            )
+            return
 
         pair_defaults = []
         for param in self.params:
@@ -375,6 +407,16 @@ class JavaEstimator(JavaParams, Estimator[JM], metaclass=ABCMeta):
         assert self._java_obj is not None
 
         self._transfer_params_to_java()
+
+        if proto_ml.is_spark_client_mode():
+            session = RemoteSparkSession.getActiveSession()
+            return proto_ml.invoke_remote_method(
+                self._java_obj,
+                "fit",
+                [dataset],
+                session
+            )
+
         return self._java_obj.fit(dataset._jdf)
 
     def _fit(self, dataset: DataFrame) -> JM:
@@ -395,6 +437,12 @@ class JavaTransformer(JavaParams, Transformer, metaclass=ABCMeta):
         assert self._java_obj is not None
 
         self._transfer_params_to_java()
+
+        if proto_ml.is_spark_client_mode():
+            session = RemoteSparkSession.getActiveSession()
+            remote_obj = proto_ml.invoke_remote_method(self._java_obj, "transform", [dataset], session)
+            return proto_ml._create_remote_dataframe(remote_obj, session)
+
         return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sparkSession)
 
 
@@ -422,6 +470,10 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         """
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
+            if proto_ml.is_spark_client_mode():
+                # TODO: transfer model param from remote to python side.
+                #  and resetUID to be the same with remote model UID
+                return
 
             # SPARK-10931: This is a temporary fix to allow models to own params
             # from estimators. Eventually, these params should be in models through
@@ -431,6 +483,9 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
             self._resetUid(java_model.uid())
 
     def __repr__(self) -> str:
+        if proto_ml.is_spark_client_mode():
+            return f"LogisticRegressionModel: uid=${self.uid}"
+
         return self._call_java("toString")
 
 
