@@ -117,6 +117,7 @@ trait RemoteSparkSession
   override def beforeAll(): Unit = {
     super.beforeAll()
     SparkConnectServerUtils.start()
+    System.setProperty("arrow.memory.debug.allocator", false.toString)
     spark = SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
 
     // Retry and wait for the server to start
@@ -155,7 +156,9 @@ trait RemoteSparkSession
     try {
       if (spark != null) spark.close()
     } catch {
-      case e: Throwable => debug(e)
+      case e: Throwable =>
+        assert(!e.getMessage.contains("Memory was leaked by query. Memory leaked"))
+        debug(e)
     }
     spark = null
     super.afterAll()
