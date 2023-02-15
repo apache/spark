@@ -1257,8 +1257,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         if (isAll) {
           union
         } else {
-          val analyzed = new QueryExecution(session, union).analyzed
-          Deduplicate(analyzed.output, analyzed)
+          logical.Distinct(union)
         }
 
       case _ =>
