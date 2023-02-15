@@ -885,256 +885,6 @@ object functions {
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
-  // Window functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * Window function: returns the cumulative distribution of values within a window partition,
-   * i.e. the fraction of rows that are below the current row.
-   *
-   * {{{
-   *   N = total number of rows in the partition
-   *   cumeDist(x) = number of values before (and including) x / N
-   * }}}
-   *
-   * @group window_funcs
-   * @since 1.6.0
-   */
-  def cume_dist(): Column = withExpr { new CumeDist }
-
-  /**
-   * Window function: returns the rank of rows within a window partition, without any gaps.
-   *
-   * The difference between rank and dense_rank is that denseRank leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
-   * and had three people tie for second place, you would say that all three were in second
-   * place and that the next person came in third. Rank would give me sequential numbers, making
-   * the person that came in third place (after the ties) would register as coming in fifth.
-   *
-   * This is equivalent to the DENSE_RANK function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.6.0
-   */
-  def dense_rank(): Column = withExpr { new DenseRank }
-
-  /**
-   * Window function: returns the value that is `offset` rows before the current row, and
-   * `null` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
-   *
-   * This is equivalent to the LAG function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lag(e: Column, offset: Int): Column = lag(e, offset, null)
-
-  /**
-   * Window function: returns the value that is `offset` rows before the current row, and
-   * `null` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
-   *
-   * This is equivalent to the LAG function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lag(columnName: String, offset: Int): Column = lag(columnName, offset, null)
-
-  /**
-   * Window function: returns the value that is `offset` rows before the current row, and
-   * `defaultValue` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
-   *
-   * This is equivalent to the LAG function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lag(columnName: String, offset: Int, defaultValue: Any): Column = {
-    lag(Column(columnName), offset, defaultValue)
-  }
-
-  /**
-   * Window function: returns the value that is `offset` rows before the current row, and
-   * `defaultValue` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
-   *
-   * This is equivalent to the LAG function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lag(e: Column, offset: Int, defaultValue: Any): Column = {
-    lag(e, offset, defaultValue, false)
-  }
-
-  /**
-   * Window function: returns the value that is `offset` rows before the current row, and
-   * `defaultValue` if there is less than `offset` rows before the current row. `ignoreNulls`
-   * determines whether null values of row are included in or eliminated from the calculation.
-   * For example, an `offset` of one will return the previous row at any given point in the
-   * window partition.
-   *
-   * This is equivalent to the LAG function in SQL.
-   *
-   * @group window_funcs
-   * @since 3.2.0
-   */
-  def lag(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = withExpr {
-    Lag(e.expr, Literal(offset), Literal(defaultValue), ignoreNulls)
-  }
-
-  /**
-   * Window function: returns the value that is `offset` rows after the current row, and
-   * `null` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
-   *
-   * This is equivalent to the LEAD function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lead(columnName: String, offset: Int): Column = { lead(columnName, offset, null) }
-
-  /**
-   * Window function: returns the value that is `offset` rows after the current row, and
-   * `null` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
-   *
-   * This is equivalent to the LEAD function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lead(e: Column, offset: Int): Column = { lead(e, offset, null) }
-
-  /**
-   * Window function: returns the value that is `offset` rows after the current row, and
-   * `defaultValue` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
-   *
-   * This is equivalent to the LEAD function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lead(columnName: String, offset: Int, defaultValue: Any): Column = {
-    lead(Column(columnName), offset, defaultValue)
-  }
-
-  /**
-   * Window function: returns the value that is `offset` rows after the current row, and
-   * `defaultValue` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
-   *
-   * This is equivalent to the LEAD function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lead(e: Column, offset: Int, defaultValue: Any): Column = {
-    lead(e, offset, defaultValue, false)
-  }
-
-  /**
-   * Window function: returns the value that is `offset` rows after the current row, and
-   * `defaultValue` if there is less than `offset` rows after the current row. `ignoreNulls`
-   * determines whether null values of row are included in or eliminated from the calculation.
-   * The default value of `ignoreNulls` is false. For example, an `offset` of one will return
-   * the next row at any given point in the window partition.
-   *
-   * This is equivalent to the LEAD function in SQL.
-   *
-   * @group window_funcs
-   * @since 3.2.0
-   */
-  def lead(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = withExpr {
-    Lead(e.expr, Literal(offset), Literal(defaultValue), ignoreNulls)
-  }
-
-  /**
-   * Window function: returns the value that is the `offset`th row of the window frame
-   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
-   *
-   * It will return the `offset`th non-null value it sees when ignoreNulls is set to true.
-   * If all values are null, then null is returned.
-   *
-   * This is equivalent to the nth_value function in SQL.
-   *
-   * @group window_funcs
-   * @since 3.1.0
-   */
-  def nth_value(e: Column, offset: Int, ignoreNulls: Boolean): Column = withExpr {
-    NthValue(e.expr, Literal(offset), ignoreNulls)
-  }
-
-  /**
-   * Window function: returns the value that is the `offset`th row of the window frame
-   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
-   *
-   * This is equivalent to the nth_value function in SQL.
-   *
-   * @group window_funcs
-   * @since 3.1.0
-   */
-  def nth_value(e: Column, offset: Int): Column = withExpr {
-    NthValue(e.expr, Literal(offset), false)
-  }
-
-  /**
-   * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
-   * partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
-   * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
-   *
-   * This is equivalent to the NTILE function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def ntile(n: Int): Column = withExpr { new NTile(Literal(n)) }
-
-  /**
-   * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
-   *
-   * This is computed by:
-   * {{{
-   *   (rank of row in its partition - 1) / (number of rows in the partition - 1)
-   * }}}
-   *
-   * This is equivalent to the PERCENT_RANK function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.6.0
-   */
-  def percent_rank(): Column = withExpr { new PercentRank }
-
-  /**
-   * Window function: returns the rank of rows within a window partition.
-   *
-   * The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
-   * and had three people tie for second place, you would say that all three were in second
-   * place and that the next person came in third. Rank would give me sequential numbers, making
-   * the person that came in third place (after the ties) would register as coming in fifth.
-   *
-   * This is equivalent to the RANK function in SQL.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def rank(): Column = withExpr { new Rank }
-
-  /**
-   * Window function: returns a sequential number starting at 1 within a window partition.
-   *
-   * @group window_funcs
-   * @since 1.6.0
-   */
-  def row_number(): Column = withExpr { RowNumber() }
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1142,16 +892,16 @@ object functions {
    * Creates a new array column. The input columns must all have the same data type.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
-  def array(cols: Column*): Column = withExpr { CreateArray(cols.map(_.expr)) }
+  def array(cols: Column*): Column = Column.fn("array", cols: _*)
 
   /**
    * Creates a new array column. The input columns must all have the same data type.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
@@ -1164,38 +914,20 @@ object functions {
    * be null. The value columns must all have the same data type.
    *
    * @group normal_funcs
-   * @since 2.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
-  def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
+  def map(cols: Column*): Column = Column.fn("map", cols: _*)
 
   /**
    * Creates a new map column. The array in the first column is used for keys. The array in the
    * second column is used for values. All elements in the array for key should not be null.
    *
    * @group normal_funcs
-   * @since 2.4
+   * @since 3.4.0
    */
-  def map_from_arrays(keys: Column, values: Column): Column = withExpr {
-    MapFromArrays(keys.expr, values.expr)
-  }
-
-  /**
-   * Marks a DataFrame as small enough for use in broadcast joins.
-   *
-   * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
-   * {{{
-   *   // left and right are DataFrames
-   *   left.join(broadcast(right), "joinKey")
-   * }}}
-   *
-   * @group normal_funcs
-   * @since 1.5.0
-   */
-  def broadcast[T](df: Dataset[T]): Dataset[T] = {
-    Dataset[T](df.sparkSession,
-      ResolvedHint(df.logicalPlan, HintInfo(strategy = Some(BROADCAST))))(df.exprEnc)
-  }
+  def map_from_arrays(keys: Column, values: Column): Column =
+    Column.fn("map_from_arrays", keys, values)
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
@@ -1204,24 +936,24 @@ object functions {
    * or b if a is null and b is not null, or c if both a and b are null but c is not null.
    *
    * @group normal_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
-  def coalesce(e: Column*): Column = withExpr { Coalesce(e.map(_.expr)) }
+  def coalesce(e: Column*): Column = Column.fn("coalesce", e: _*)
 
   /**
    * Creates a string column for the file name of the current Spark task.
    *
    * @group normal_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def input_file_name(): Column = withExpr { InputFileName() }
+  def input_file_name(): Column = Column.fn("input_file_name")
 
   /**
    * Return true iff the column is NaN.
    *
    * @group normal_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
 
@@ -1229,7 +961,7 @@ object functions {
    * Return true iff the column is null.
    *
    * @group normal_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
 
@@ -1249,7 +981,7 @@ object functions {
    * }}}
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   @deprecated("Use monotonically_increasing_id()", "2.0.0")
   def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
@@ -1272,7 +1004,7 @@ object functions {
    * @group normal_funcs
    * @since 1.6.0
    */
-  def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
+  def monotonically_increasing_id(): Column = Column.fn("monotonically_increasing_id")
 
   /**
    * Returns col1 if it is not NaN, or col2 if col1 is NaN.
