@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIden
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -45,7 +44,6 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
-import org.apache.spark.sql.functions.{col, expr}
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -1232,37 +1230,36 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
-    assert(u.hasLeftInput && u.hasRightInput, "Union must have 2 inputs")
+    if (!u.hasLeftInput || !u.hasRightInput) {
+      throw InvalidPlanInput("Set operation must have 2 inputs")
+    }
+    val leftPlan = transformRelation(u.getLeftInput)
+    val rightPlan = transformRelation(u.getRightInput)
+    val isAll = if (u.hasIsAll) u.getIsAll else false
 
     u.getSetOpType match {
       case proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT =>
         if (u.getByName) {
           throw InvalidPlanInput("Except does not support union_by_name")
         }
-        Except(transformRelation(u.getLeftInput), transformRelation(u.getRightInput), u.getIsAll)
+        Except(leftPlan, rightPlan, isAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT =>
         if (u.getByName) {
           throw InvalidPlanInput("Intersect does not support union_by_name")
         }
-        Intersect(
-          transformRelation(u.getLeftInput),
-          transformRelation(u.getRightInput),
-          u.getIsAll)
+        Intersect(leftPlan, rightPlan, isAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_UNION =>
         if (!u.getByName && u.getAllowMissingColumns) {
           throw InvalidPlanInput(
             "UnionByName `allowMissingCol` can be true only if `byName` is true.")
         }
-        val combinedUnion = CombineUnions(
-          Union(
-            Seq(transformRelation(u.getLeftInput), transformRelation(u.getRightInput)),
-            byName = u.getByName,
-            allowMissingCol = u.getAllowMissingColumns))
-        if (u.getIsAll) {
-          combinedUnion
+        val union = Union(Seq(leftPlan, rightPlan), u.getByName, u.getAllowMissingColumns)
+        if (isAll) {
+          union
         } else {
-          logical.Deduplicate(combinedUnion.output, combinedUnion)
+          logical.Distinct(union)
         }
+
       case _ =>
         throw InvalidPlanInput(s"Unsupported set operation ${u.getSetOpTypeValue}")
     }
@@ -1534,7 +1531,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       w.partitionBy(names.toSeq: _*)
     }
 
-    if (writeOperation.getSource != null) {
+    if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
 

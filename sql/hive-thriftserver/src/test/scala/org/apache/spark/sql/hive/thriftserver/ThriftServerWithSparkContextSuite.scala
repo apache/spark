@@ -69,7 +69,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
       assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
       assert(!e.getMessage.contains(
-        "SparkException: Malformed records are detected in record parsing"))
+        "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
     }
 
     withJdbcStatement { statement =>
@@ -78,7 +78,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
       assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
       assert(e.getMessage.contains(
-        "SparkException: Malformed records are detected in record parsing"))
+        "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
     }
   }
 

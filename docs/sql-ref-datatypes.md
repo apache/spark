@@ -44,11 +44,15 @@ Spark SQL and DataFrames support the following data types:
 * Boolean type
   - `BooleanType`: Represents boolean values.
 * Datetime type
-  - `TimestampType`: Represents values comprising values of fields year, month, day,
-  hour, minute, and second, with the session local time-zone. The timestamp value represents an
-  absolute point in time.
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
+  - `TimestampType`: Timestamp with local time zone(TIMESTAMP_LTZ). It represents values comprising values of fields year, month, day,
+  hour, minute, and second, with the session local time-zone. The timestamp value represents an
+  absolute point in time.
+  - `TimestampNTZType`: Timestamp without time zone(TIMESTAMP_NTZ). It represents values comprising values of fields year, month, day,
+  hour, minute, and second. All operations are performed without taking any time zone into account.
+    - Note: TIMESTAMP in Spark is a user-specified alias associated with one of the TIMESTAMP_LTZ and TIMESTAMP_NTZ variations.  Users can set the default timestamp type as `TIMESTAMP_LTZ`(default value) or `TIMESTAMP_NTZ` via the configuration `spark.sql.timestampType`.
+
 * Interval types
   - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:
     - MONTH, months within years `[0..11]`,
@@ -124,6 +128,7 @@ You can access them by doing
 |**BinaryType**|Array[Byte]|BinaryType|
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.sql.Timestamp|TimestampType|
+|**TimestampNTZType**|java.time.LocalDateTime| TimestampNTZType|
 |**DateType**|java.sql.Date|DateType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
@@ -154,6 +159,7 @@ please use factory methods provided in
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
+|**TimestampNTZType**|java.time.LocalDateTime| TimestampNTZType|
 |**DateType**|java.sql.Date|DataTypes.DateType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
@@ -185,6 +191,7 @@ from pyspark.sql.types import *
 |**BinaryType**|bytearray|BinaryType()|
 |**BooleanType**|bool|BooleanType()|
 |**TimestampType**|datetime.datetime|TimestampType()|
+|**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
 |**DateType**|datetime.date|DateType()|
 |**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
 |**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
@@ -231,7 +238,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**FloatType**|FLOAT, REAL|
 |**DoubleType**|DOUBLE|
 |**DateType**|DATE|
-|**TimestampType**|TIMESTAMP|
+|**TimestampType**|TIMESTAMP, TIMESTAMP_LTZ|
+|**TimestampNTZType**|TIMESTAMP_NTZ|
 |**StringType**|STRING|
 |**BinaryType**|BINARY|
 |**DecimalType**|DECIMAL, DEC, NUMERIC|

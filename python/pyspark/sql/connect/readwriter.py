@@ -421,7 +421,7 @@ class DataFrameWriter(OptionUtils):
             raise TypeError("all names should be `str`")
 
         self._write.num_buckets = numBuckets
-        self._write.bucket_cols = cast(List[str], cols)
+        self._write.bucket_cols = cast(List[str], [col, *cols])
         return self
 
     bucketBy.__doc__ = PySparkDataFrameWriter.bucketBy.__doc__
@@ -446,7 +446,7 @@ class DataFrameWriter(OptionUtils):
         if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
-        self._write.sort_cols = cast(List[str], cols)
+        self._write.sort_cols = cast(List[str], [col, *cols])
         return self
 
     sortBy.__doc__ = PySparkDataFrameWriter.sortBy.__doc__
@@ -472,6 +472,8 @@ class DataFrameWriter(OptionUtils):
     def insertInto(self, tableName: str, overwrite: Optional[bool] = None) -> None:
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
+        elif self._write.mode is None or self._write.mode != "overwrite":
+            self.mode("append")
         self.saveAsTable(tableName)
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
@@ -692,12 +694,9 @@ def _test() -> None:
     # TODO(SPARK-41817): Support reading with schema
     del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
     del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
 
-    # TODO(SPARK-41818): Support saveAsTable
+    # TODO(SPARK-42426): insertInto fails when the column names are different from the table columns
     del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")

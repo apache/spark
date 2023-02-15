@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.TimestampNTZType
 
 /**
  * Options for the JDBC data source.
@@ -237,7 +238,7 @@ class JDBCOptions(
     parameters
       .get(JDBC_INFER_TIMESTAMP_NTZ)
       .map(_.toBoolean)
-      .getOrElse(SQLConf.get.inferTimestampNTZInDataSources)
+      .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 }
 
 class JdbcOptionsInWrite(

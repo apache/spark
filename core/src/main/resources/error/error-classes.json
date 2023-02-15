@@ -1063,6 +1063,12 @@
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
+  "MALFORMED_RECORD_IN_PARSING" : {
+    "message" : [
+      "Malformed records are detected in record parsing: <badRecord>.",
+      "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -1554,6 +1560,12 @@
       "Cannot resolve function <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
+  },
+  "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
+    "message" : [
+      "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<suggestion>]."
+    ],
+    "sqlState" : "42703"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
@@ -2167,11 +2179,6 @@
   "_LEGACY_ERROR_TEMP_1000" : {
     "message" : [
       "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1001" : {
-    "message" : [
-      "USING column `<colName>` cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_1002" : {
@@ -4412,11 +4419,6 @@
   "_LEGACY_ERROR_TEMP_2176" : {
     "message" : [
       "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2177" : {
-    "message" : [
-      "Malformed records are detected in record parsing. Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2178" : {

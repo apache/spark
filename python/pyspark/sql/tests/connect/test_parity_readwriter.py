@@ -21,16 +21,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ReadwriterParityTests(ReadwriterTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41999): NPE for bucketed write
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_bucketed_write(self):
-        super().test_bucketed_write()
-
-    # TODO(SPARK-42000): saveAsTable fail to find the default source
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_insert_into(self):
-        super().test_insert_into()
-
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_save_and_load(self):
