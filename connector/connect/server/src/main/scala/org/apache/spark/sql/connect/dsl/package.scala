@@ -210,7 +210,7 @@ package object dsl {
 
         mode
           .map(SaveMode.valueOf(_))
-          .map(SaveModeConverter.toSaveModeProto(_))
+          .map(SaveModeConverter.toSaveModeProto)
           .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
