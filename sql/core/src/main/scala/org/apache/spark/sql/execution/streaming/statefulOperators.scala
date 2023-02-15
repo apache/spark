@@ -109,8 +109,13 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
    *
    * The state eviction happens when event time exceeds a "certain threshold of timestamp", which
    * denotes a lower bound of event time values for output (output watermark).
+   *
+   * The default implementation provides the input watermark as it is. Most built-in operators
+   * will evict based on min input watermark and ensure it will be minimum of the event time value
+   * for the output so far (including output from eviction). Operators which behave differently
+   * (e.g. different criteria on eviction) must override this method.
    */
-  def produceWatermark(inputWatermarkMs: Long): Long
+  def produceOutputWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 
   override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -345,6 +350,14 @@ object WatermarkSupport {
     Some(evictionExpression)
   }
 
+  /**
+   * Find the column which is marked as "event time" column.
+   *
+   * If there are multiple event time columns in given column list, the behavior depends on the
+   * parameter `useFirstOccurrence`. If it's set to true, the first occurred column will be
+   * returned. If not, this method will throw an AnalysisException as it is not allowed to have
+   * multiple event time columns.
+   */
   def findEventTimeColumn(
       attrs: Seq[Attribute],
       useFirstOccurrence: Boolean): Option[Attribute] = {
@@ -361,7 +374,7 @@ object WatermarkSupport {
       }
 
       // With above check, even there are multiple columns in eventTimeCols, all columns must be
-      // same.
+      // the same.
     } else {
       // This is for compatibility with previous behavior - we allow multiple distinct event time
       // columns and pick up the first occurrence. This is incorrect if non-first occurrence is
@@ -600,10 +613,6 @@ case class StateStoreSaveExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =
     copy(child = newChild)
-
-  // This operator will evict based on min input watermark and ensure it will be minimum of
-  // the event time value for the output so far (including output from eviction).
-  override def produceWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 }
 
 /**
@@ -860,10 +869,6 @@ case class SessionWindowStateStoreSaveExec(
       newNumRowsUpdated = stateOpProgress.numRowsUpdated,
       newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
   }
-
-  // This operator will evict based on min input watermark and ensure it will be minimum of
-  // the event time value for the output so far (including output from eviction).
-  override def produceWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 }
 
 
@@ -955,10 +960,6 @@ case class StreamingDeduplicateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
-
-  // This operator will evict based on min input watermark and ensure it will be minimum of
-  // the event time value for the output so far (including output from eviction).
-  override def produceWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 }
 
 object StreamingDeduplicateExec {

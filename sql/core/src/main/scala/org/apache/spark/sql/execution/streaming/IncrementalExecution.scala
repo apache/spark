@@ -330,8 +330,10 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] = Seq(
-    shufflePartitionsRule, convertLocalLimitRule, stateOpIdRule, watermarkPropagationRule
-  ) ++ super.preparations
+    shufflePartitionsRule,
+    convertLocalLimitRule,
+    stateOpIdRule,
+    watermarkPropagationRule) ++ super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }

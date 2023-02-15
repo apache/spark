@@ -106,7 +106,7 @@ trait FlatMapGroupsWithStateExecBase
   // There is no guarantee that any of the column in the output is bound to the watermark. The
   // user function is quite flexible. Hence Spark does not support the stateful operator(s) after
   // (flat)MapGroupsWithState.
-  override def produceWatermark(inputWatermarkMs: Long): Long =
+  override def produceOutputWatermark(inputWatermarkMs: Long): Long =
     WatermarkPropagator.DEFAULT_WATERMARK_MS
 
   /**

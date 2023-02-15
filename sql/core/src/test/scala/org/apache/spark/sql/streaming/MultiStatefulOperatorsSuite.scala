@@ -824,7 +824,7 @@ class MultiStatefulOperatorsSuite
             case j: StreamingSymmetricHashJoinExec => j
           }.head
 
-          val outputWatermark = joinOperator.produceWatermark(0)
+          val outputWatermark = joinOperator.produceOutputWatermark(0)
           assert(outputWatermark === expectedOutputWatermark)
         }
       )

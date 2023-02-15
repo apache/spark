@@ -28,8 +28,13 @@ import org.apache.spark.sql.execution.streaming.WatermarkPropagator.DEFAULT_WATE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
-/** Interface for propagating watermark. */
-trait WatermarkPropagator {
+/**
+ * Interface for propagating watermark. The implementation is not required to be thread-safe,
+ * as all methods are expected to be called from the query execution thread.
+ * (The guarantee may change on further improvements on Structured Streaming - update
+ * implementations if we change the guarantee.)
+ */
+sealed trait WatermarkPropagator {
   /**
    * Request to propagate watermark among operators based on origin watermark value. The result
    * should be input watermark per stateful operator, which Spark will request the value by calling
@@ -56,7 +61,7 @@ trait WatermarkPropagator {
 /**
  * Do nothing. This is dummy implementation to help creating a dummy IncrementalExecution instance.
  */
-class NoOpWatermarkPropagator extends WatermarkPropagator {
+object NoOpWatermarkPropagator extends WatermarkPropagator {
   def propagate(batchId: Long, plan: SparkPlan, originWatermark: Long): Unit = {}
   def getInputWatermarkForLateEvents(batchId: Long, stateOpId: Long): Long = Long.MinValue
   def getInputWatermarkForEviction(batchId: Long, stateOpId: Long): Long = Long.MinValue
@@ -133,7 +138,8 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
  *      to keep the watermark model be simple.
  *   -- stateless nodes: same as input watermark
  *   -- stateful nodes: the return value of `op.produceWatermark(input watermark)`.
- *      @see [[StateStoreWriter.produceWatermark]]
+ *
+ *      @see [[StateStoreWriter.produceOutputWatermark]]
  *
  * Note that this implementation will throw an exception if watermark node sees a valid input
  * watermark from children, meaning that we do not support re-definition of watermark.
@@ -144,11 +150,18 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
  */
 class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
   private val batchIdToWatermark: jutil.TreeMap[Long, Long] = new jutil.TreeMap[Long, Long]()
+
+  // contains the association for batchId -> (stateful operator ID -> input watermark)
   private val inputWatermarks: mutable.Map[Long, Map[Long, Long]] =
     mutable.Map[Long, Map[Long, Long]]()
 
   private def isInitialized(batchId: Long): Boolean = batchIdToWatermark.containsKey(batchId)
 
+  /**
+   * Retrieve the available input watermarks for specific node in the plan. Every child will
+   * produce an output watermark, which we capture as input watermark. If the child provides
+   * default watermark value (no watermark info), it is excluded.
+   */
   private def getInputWatermarks(
       node: SparkPlan,
       nodeToOutputWatermark: mutable.Map[Int, Long]): Seq[Long] = {
@@ -195,7 +208,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
           DEFAULT_WATERMARK_MS
         }
 
-        val outputWatermarkMs = node.produceWatermark(finalInputWatermarkMs)
+        val outputWatermarkMs = node.produceOutputWatermark(finalInputWatermarkMs)
         nodeToOutputWatermark.put(node.id, outputWatermarkMs)
         nextStatefulOperatorToWatermark.put(stOpId, finalInputWatermarkMs)
         node
@@ -243,10 +256,11 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       assert(isInitialized(batchId), s"Watermark for batch ID $batchId is not yet set!")
       // In current Spark's logic, event time watermark cannot go down to negative. So even there is
       // no input watermark for operator, the final input watermark for operator should be 0L.
-      val opWatermark = inputWatermarks(batchId).get(stateOpId)
-      assert(opWatermark.isDefined, s"Watermark for batch ID $batchId and stateOpId $stateOpId " +
-        "is not yet set!")
-      Math.max(opWatermark.get, 0L)
+      inputWatermarks(batchId).get(stateOpId) match {
+        case Some(wm) => Math.max(0L, wm)
+        case None => throw new IllegalStateException(s"Watermark for batch ID $batchId and " +
+          s"stateOpId $stateOpId is not yet set!")
+      }
     }
   }
 
@@ -282,5 +296,5 @@ object WatermarkPropagator {
     }
   }
 
-  def noop(): WatermarkPropagator = new NoOpWatermarkPropagator
+  def noop(): WatermarkPropagator = NoOpWatermarkPropagator
 }

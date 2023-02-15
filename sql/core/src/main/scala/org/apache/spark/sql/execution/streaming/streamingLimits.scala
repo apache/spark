@@ -101,10 +101,6 @@ case class StreamingGlobalLimitExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingGlobalLimitExec =
     copy(child = newChild)
-
-  // This operator will evict based on min input watermark and ensure it will be minimum of
-  // the event time value for the output so far (including output from eviction).
-  override def produceWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
 }
 
 
