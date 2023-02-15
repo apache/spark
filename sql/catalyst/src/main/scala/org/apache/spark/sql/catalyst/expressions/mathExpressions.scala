@@ -434,18 +434,8 @@ case class Acosh(child: Expression)
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Conv(
-    numExpr: Expression,
-    fromBaseExpr: Expression,
-    toBaseExpr: Expression,
-    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
-  extends TernaryExpression
-    with ImplicitCastInputTypes
-    with NullIntolerant
-    with SupportQueryContext {
-
-  def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
-    this(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = SQLConf.get.ansiEnabled)
+case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def first: Expression = numExpr
   override def second: Expression = fromBaseExpr
@@ -456,19 +446,16 @@ case class Conv(
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
     NumberConverter.convert(
-      num.asInstanceOf[UTF8String].trim().getBytes,
+      num.asInstanceOf[UTF8String],
       fromBase.asInstanceOf[Int],
-      toBase.asInstanceOf[Int],
-      ansiEnabled,
-      getContextOrNull())
+      toBase.asInstanceOf[Int])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
-    val context = getContextOrNullCode(ctx, ansiEnabled)
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to, $ansiEnabled, $context);
+       ${ev.value} = $numconv.convert($num.trim(), $from, $to);
        if (${ev.value} == null) {
          ${ev.isNull} = true;
        }
@@ -479,12 +466,6 @@ case class Conv(
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
-
-  override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
-    Some(origin.context)
-  } else {
-    None
-  }
 }
 
 @ExpressionDescription(

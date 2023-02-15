@@ -25,21 +25,12 @@ import org.apache.spark.sql.catalyst.util.NumberConverter.{convert, toBinary}
 import org.apache.spark.unsafe.types.UTF8String
 
 class NumberConverterSuite extends SparkFunSuite {
-
-  private[this] def checkConv(n: String, fromBase: Int, toBase: Int, expected: String): Unit = {
-    Seq(true, false).foreach { ansiEnabled =>
-      checkConv(n, fromBase, toBase, expected, ansiEnabled)
-    }
-  }
-
   private[this] def checkConv(
       n: String,
       fromBase: Int,
       toBase: Int,
-      expected: String,
-      ansiEnabled: Boolean): Unit = {
-    assert(convert(UTF8String.fromString(n).getBytes, fromBase, toBase, ansiEnabled, null) ===
-      UTF8String.fromString(expected))
+      expected: String): Unit = {
+    assert(convert(UTF8String.fromString(n), fromBase, toBase) === UTF8String.fromString(expected))
   }
 
   test("convert") {
@@ -47,8 +38,7 @@ class NumberConverterSuite extends SparkFunSuite {
     checkConv("-15", 10, -16, "-F")
     checkConv("-15", 10, 16, "FFFFFFFFFFFFFFF1")
     checkConv("big", 36, 16, "3A48")
-    checkConv("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF", ansiEnabled = false)
-    checkConv("11abc", 10, 16, "B")
+    checkConv("9223372036854775807", 36, 16, "12DDAC15F246BAF8C0D551AC7")
   }
 
   test("SPARK-34909: convert negative to unsigned") {

@@ -299,10 +299,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
-  def overflowInConvError(context: SQLQueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in function conv()", context = context)
-  }
-
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2003",
