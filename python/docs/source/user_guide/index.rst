@@ -35,5 +35,3 @@ There are also basic programming guides covering multiple languages available in
 - `Spark SQL, DataFrames and Datasets Guide <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
 - `Structured Streaming Programming Guide <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
 - `Machine Learning Library (MLlib) Guide <https://spark.apache.org/docs/latest/ml-guide.html>`_
-- `RDD Programming Guide (Legacy) <https://spark.apache.org/docs/latest/rdd-programming-guide.html>`_
-- `Spark Streaming Programming Guide (Legacy) <https://spark.apache.org/docs/latest/streaming-programming-guide.html>`_
