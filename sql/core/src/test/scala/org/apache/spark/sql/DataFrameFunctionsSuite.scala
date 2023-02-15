@@ -5442,7 +5442,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-42401: array_insert - implicitly insert null") {
     checkAnswer(
       sql("select array_insert(array('b', 'a', 'c'), 5, 'q')"),
-      Seq(Row(Seq("b", "a", "c", null, 'q')))
+      Seq(Row(Seq("b", "a", "c", null, "q")))
     )
   }
 
