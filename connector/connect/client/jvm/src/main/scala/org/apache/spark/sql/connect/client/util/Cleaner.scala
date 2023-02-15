@@ -73,6 +73,7 @@ private[sql] class Cleaner {
   def stop(): Unit = {
     stopped = true
     cleanerThread.interrupt()
+    referenceBuffer.forEach((r: Ref) => r.close())
   }
 
   private def cleanUp(): Unit = {
