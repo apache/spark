@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{MapType, MetadataBuilder, StringType, StructType}
 
 // scalastyle:off
 /**
@@ -153,25 +153,38 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     }
   }
 
-  private def createLocalRelation(schema: StructType): DataFrame = session.newDataset { builder =>
-    // TODO API is not consistent. Now we have two different ways of working with schemas!
-    builder.getLocalRelationBuilder.setSchema(schema.catalogString)
-  }
-
   private val simpleSchema = new StructType()
     .add("id", "long")
     .add("a", "int")
     .add("b", "double")
+
+  private val simpleSchemaString = simpleSchema.catalogString
 
   private val otherSchema = new StructType()
     .add("a", "int")
     .add("id", "long")
     .add("payload", "binary")
 
+  private val otherSchemaString = otherSchema.catalogString
+
+  private val complexSchema = simpleSchema
+    .add("d", simpleSchema)
+    .add("e", "array<int>")
+    .add("f", MapType(StringType, simpleSchema))
+    .add("g", "string")
+
+  private val complexSchemaString = complexSchema.catalogString
+
+  private def createLocalRelation(schema: String): DataFrame = session.newDataset { builder =>
+    // TODO API is not consistent. Now we have two different ways of working with schemas!
+    builder.getLocalRelationBuilder.setSchema(schema)
+  }
+
   // A few helper dataframes.
-  private def simple: DataFrame = createLocalRelation(simpleSchema)
+  private def simple: DataFrame = createLocalRelation(simpleSchemaString)
   private def left: DataFrame = simple
-  private def right: DataFrame = createLocalRelation(otherSchema)
+  private def right: DataFrame = createLocalRelation(otherSchemaString)
+  private def complex = createLocalRelation(complexSchemaString)
 
   private def select(cs: Column*): DataFrame = simple.select(cs: _*)
 
@@ -502,20 +515,215 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   /* Column API */
-  test("column by name") {
-    select(fn.col("b"))
+  private def columnTest(name: String)(f: => Column): Unit = {
+    test("column " + name) {
+      complex.select(f)
+    }
   }
 
-  test("column add") {
-    select(fn.col("a") + fn.col("b"))
+  private def orderColumnTest(name: String)(f: => Column): Unit = {
+    test("column " + name) {
+      complex.orderBy(f)
+    }
   }
 
-  test("column alias") {
-    select(fn.col("a").name("b"))
+  columnTest("apply") {
+    fn.col("f").apply("super_duper_key")
   }
 
-  test("column equals") {
-    select(fn.col("a") === fn.col("b"))
+  columnTest("unary minus") {
+    -fn.lit(1)
+  }
+
+  columnTest("not") {
+    !fn.lit(true)
+  }
+
+  columnTest("equals") {
+    fn.col("a") === fn.col("b")
+  }
+
+  columnTest("not equals") {
+    fn.col("a") =!= fn.col("b")
+  }
+
+  columnTest("gt") {
+    fn.col("a") > fn.col("b")
+  }
+
+  columnTest("lt") {
+    fn.col("a") < fn.col("b")
+  }
+
+  columnTest("geq") {
+    fn.col("a") >= fn.col("b")
+  }
+
+  columnTest("leq") {
+    fn.col("a") <= fn.col("b")
+  }
+
+  columnTest("eqNullSafe") {
+    fn.col("a") <=> fn.col("b")
+  }
+
+  columnTest("when otherwise") {
+    val a = fn.col("a")
+    fn.when(a < 10, "low").when(a < 20, "medium").otherwise("high")
+  }
+
+  columnTest("between") {
+    fn.col("a").between(10, 20)
+  }
+
+  columnTest("isNaN") {
+    fn.col("b").isNaN
+  }
+
+  columnTest("isNull") {
+    fn.col("g").isNull
+  }
+
+  columnTest("isNotNull") {
+    fn.col("g").isNotNull
+  }
+
+  columnTest("and") {
+    fn.col("a") > 10 && fn.col("b") < 0.5d
+  }
+
+  columnTest("or") {
+    fn.col("a") > 10 || fn.col("b") < 0.5d
+  }
+
+  columnTest("add") {
+    fn.col("a") + fn.col("b")
+  }
+
+  columnTest("subtract") {
+    fn.col("a") - fn.col("b")
+  }
+
+  columnTest("multiply") {
+    fn.col("a") * fn.col("b")
+  }
+
+  columnTest("divide") {
+    fn.col("a") / fn.col("b")
+  }
+
+  columnTest("modulo") {
+    fn.col("a") % 10
+  }
+
+  columnTest("isin") {
+    fn.col("g").isin("hello", "world", "foo")
+  }
+
+  columnTest("like") {
+    fn.col("g").like("%bob%")
+  }
+
+  columnTest("rlike") {
+    fn.col("g").like("^[0-9]*$")
+  }
+
+  columnTest("ilike") {
+    fn.col("g").like("%fOb%")
+  }
+
+  columnTest("getItem") {
+    fn.col("e").getItem(3)
+  }
+
+  columnTest("withField") {
+    fn.col("d").withField("x", fn.lit("xq"))
+  }
+
+  columnTest("dropFields") {
+    fn.col("d").dropFields("a", "c")
+  }
+
+  columnTest("getField") {
+    fn.col("d").getItem("b")
+  }
+
+  columnTest("substr") {
+    fn.col("g").substr(8, 3)
+  }
+
+  columnTest("contains") {
+    fn.col("g").contains("baz")
+  }
+
+  columnTest("startsWith") {
+    fn.col("g").startsWith("prefix_")
+  }
+
+  columnTest("endsWith") {
+    fn.col("g").endsWith("suffix_")
+  }
+
+  columnTest("alias") {
+    fn.col("a").name("b")
+  }
+
+  columnTest("as multi") {
+    fn.col("d").as(Array("v1", "v2", "v3"))
+  }
+
+  columnTest("as with metadata") {
+    val builder = new MetadataBuilder
+    builder.putString("comment", "modified C field")
+    fn.col("c").as("c_mod", builder.build())
+  }
+
+  columnTest("cast") {
+    fn.col("a").cast("long")
+  }
+
+  orderColumnTest("desc") {
+    fn.col("b").desc
+  }
+
+  orderColumnTest("desc_nulls_first") {
+    fn.col("b").desc_nulls_first
+  }
+
+  orderColumnTest("desc_nulls_last") {
+    fn.col("b").desc_nulls_last
+  }
+
+  orderColumnTest("asc") {
+    fn.col("a").asc
+  }
+
+  orderColumnTest("asc_nulls_first") {
+    fn.col("a").asc_nulls_first
+  }
+
+  orderColumnTest("asc_nulls_last") {
+    fn.col("a").asc_nulls_last
+  }
+
+  columnTest("bitwiseOR") {
+    fn.col("a").bitwiseOR(7)
+  }
+
+  columnTest("bitwiseAND") {
+    fn.col("a").bitwiseAND(255)
+  }
+
+  columnTest("bitwiseXOR") {
+    fn.col("a").bitwiseXOR(78)
+  }
+
+  columnTest("star") {
+    fn.col("*")
+  }
+
+  columnTest("star with target") {
+    fn.col("str.*")
   }
 
   /* Function API */
