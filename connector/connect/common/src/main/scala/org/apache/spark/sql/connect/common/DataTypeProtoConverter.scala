@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
- * This object offers methods to convert to/from connect proto to catalyst types.
+ * Helper class for conversions between [[DataType]] and [[proto.DataType]].
  */
 object DataTypeProtoConverter {
   def toCatalystType(t: proto.DataType): DataType = {

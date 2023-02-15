@@ -1,0 +1,3 @@
+"9
+$Z" struct<id:bigint,a:int,b:double>"
+exp(a) < 10.0

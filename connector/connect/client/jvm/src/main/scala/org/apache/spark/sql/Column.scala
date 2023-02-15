@@ -1167,13 +1167,23 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def asc_nulls_last: Column =
     buildSortOrder(SortDirection.SORT_DIRECTION_ASCENDING, NullOrdering.SORT_NULLS_LAST)
 
-  private def buildSortOrder(sortDirection: SortDirection, nullOrdering: NullOrdering): Column =
+  private def buildSortOrder(sortDirection: SortDirection, nullOrdering: NullOrdering): Column = {
     Column { builder =>
       builder.getSortOrderBuilder
         .setChild(expr)
         .setDirection(sortDirection)
         .setNullOrdering(nullOrdering)
     }
+  }
+
+  private[sql] def sortOrder: proto.Expression.SortOrder = {
+    val base = if (expr.hasSortOrder) {
+      expr
+    } else {
+      asc.expr
+    }
+    base.getSortOrder
+  }
 
   /**
    * Prints the expression to the console for debugging purposes.
