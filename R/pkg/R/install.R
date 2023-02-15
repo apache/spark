@@ -251,7 +251,7 @@ defaultMirrorUrl <- function() {
 hadoopVersionName <- function(hadoopVersion) {
   if (hadoopVersion == "without") {
     "without-hadoop"
-  } else if (grepl("^[0-9]+\\.[0-9]+$", hadoopVersion, perl = TRUE)) {
+  } else if (grepl("^[0-9]+$", hadoopVersion, perl = TRUE)) {
     paste0("hadoop", hadoopVersion)
   } else {
     hadoopVersion
