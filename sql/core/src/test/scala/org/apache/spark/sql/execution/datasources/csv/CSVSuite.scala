@@ -1047,7 +1047,7 @@ abstract class CSVSuite
         .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .save(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
         val res = spark.read
           .format("csv")
           .option("inferSchema", "true")
@@ -1070,7 +1070,7 @@ abstract class CSVSuite
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .save(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "false") {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
         val res = spark.read
           .format("csv")
           .option("inferSchema", "true")
@@ -1117,15 +1117,15 @@ abstract class CSVSuite
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
         SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
 
-      Seq(true, false).foreach { inferTimestampNTZ =>
-        withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+      timestampTypes.foreach { timestampType =>
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
           val res = spark.read
             .format("csv")
             .option("inferSchema", "true")
             .option("header", "true")
             .load(path.getAbsolutePath)
 
-          if (inferTimestampNTZ) {
+          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
             checkAnswer(res, exp)
           } else {
             checkAnswer(
