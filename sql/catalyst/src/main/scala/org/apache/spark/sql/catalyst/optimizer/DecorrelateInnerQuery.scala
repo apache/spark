@@ -327,7 +327,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * over tables t0(x, y), t1(a), t2(b).
    *
    * Step 1 (this is the same as the Union case described above):
-   * Step 1: After DecorrelateInnerQuery runs to introduce DomainJoins,
+   * After DecorrelateInnerQuery runs to introduce DomainJoins,
    * we have outer table t0 with attributes [x#1, y#2] and the subquery is a Intersect where
    * - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
    * - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8]
