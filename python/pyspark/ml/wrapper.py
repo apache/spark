@@ -323,7 +323,11 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
             m = __import__(module, fromlist=[parts[-1]])
             return getattr(m, parts[-1])
 
-        stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
+        if proto_ml.is_spark_client_mode():
+            java_class_name = java_stage.class_name
+        else:
+            java_class_name = java_stage.getClass().getName()
+        stage_name = java_class_name.replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
         py_type = __get_class(stage_name)
         if issubclass(py_type, JavaParams):

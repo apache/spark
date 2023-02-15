@@ -19,8 +19,9 @@ def is_spark_client_mode():
 
 class RemoteObject:
 
-    def __init__(self, object_id):
+    def __init__(self, object_id, class_name=None):
         self.object_id = object_id
+        self.class_name = class_name
 
     def __del__(self):
         # TODO:
@@ -100,7 +101,10 @@ def _deserialize_return_value(resp: "proto.ExecutePlanResponse", session):
         return proto_return_value.string_value
 
     if proto_return_value.HasField("remote_object"):
-        remote_obj = RemoteObject(proto_return_value.remote_object.id)
+        remote_obj = RemoteObject(
+            proto_return_value.remote_object.id,
+            proto_return_value.remote_object.class_name,
+        )
         if proto_return_value.remote_object.class_name == "org.apache.spark.sql.Dataset":
             return _create_remote_dataframe(remote_obj, session)
         return remote_obj
