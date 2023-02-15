@@ -1,2 +1,2 @@
-IG
-orc"@connector/connect/common/src/test/resources/query-test/users.orc
+EC
+orc"<../common/src/test/resources/query-tests/test-data/users.orc

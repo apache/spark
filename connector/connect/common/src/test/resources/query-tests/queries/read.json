@@ -1,13 +1,13 @@
 {
   "read": {
     "dataSource": {
-      "format": "text",
-      "schema": "name STRING,age INT",
+      "format": "csv",
+      "schema": "name STRING,age INT,job STRING",
       "options": {
-        "op1": "op1",
-        "op2": "op2"
+        "header": "true",
+        "delimiter": ";"
       },
-      "paths": ["connector/connect/common/src/test/resources/query-test/people.txt"]
+      "paths": ["../common/src/test/resources/query-tests/test-data/people.csv"]
     }
   }
 }

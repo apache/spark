@@ -1,2 +1,2 @@
-QO
-parquet"Dconnector/connect/common/src/test/resources/query-test/users.parquet
+MK
+parquet"@../common/src/test/resources/query-tests/test-data/users.parquet

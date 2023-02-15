@@ -2,7 +2,7 @@
   "read": {
     "dataSource": {
       "format": "text",
-      "paths": ["connector/connect/common/src/test/resources/query-test/people.txt"]
+      "paths": ["../common/src/test/resources/query-tests/test-data/people.txt"]
     }
   }
 }

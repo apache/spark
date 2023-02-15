@@ -82,15 +82,16 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   protected val queryFilePath: Path = baseResourcePath.resolve("queries")
 
-  // A relative path to spark home
+  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // with the datasource.
   protected val testDataPath: Path = Path.of(
-    "connector",
-    "connect",
+    "../",
     "common",
     "src",
     "test",
     "resources",
-    "query-test")
+    "query-tests",
+    "test-data")
 
   private val printer = JsonFormat.printer()
 
@@ -208,11 +209,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("read") {
-    session.read.format("text")
-      .schema(StructType(StructField("name", StringType) :: StructField("age", IntegerType) :: Nil))
-      .option("op1", "op1")
-      .options(Map("op2" -> "op2"))
-      .load(testDataPath.resolve("people.txt").toString)
+    session.read.format("csv")
+      .schema(StructType(
+        StructField("name", StringType) ::
+          StructField("age", IntegerType) ::
+          StructField("job", StringType) :: Nil))
+      .option("header", "true")
+      .options(Map("delimiter" -> ";"))
+      .load(testDataPath.resolve("people.csv").toString)
   }
 
   test("read json") {
@@ -233,6 +237,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   test("read table") {
     session.read.table("myTable")
+  }
+
+  test("table") {
+    session.table("myTable")
   }
 
   test("read text") {

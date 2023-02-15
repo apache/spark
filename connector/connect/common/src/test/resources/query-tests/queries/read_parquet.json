@@ -2,7 +2,7 @@
   "read": {
     "dataSource": {
       "format": "parquet",
-      "paths": ["connector/connect/common/src/test/resources/query-test/users.parquet"]
+      "paths": ["../common/src/test/resources/query-tests/test-data/users.parquet"]
     }
   }
 }

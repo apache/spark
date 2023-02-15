@@ -1,6 +1,4 @@
-xv
-textname STRING,age INT
-
-op1op1
-
-op2op2"Aconnector/connect/common/src/test/resources/query-test/people.txt
+‡„
+csvname STRING,age INT,job STRING
+headertrue
+	delimiter;"=../common/src/test/resources/query-tests/test-data/people.csv
