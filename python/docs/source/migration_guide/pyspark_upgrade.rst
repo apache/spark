@@ -19,7 +19,8 @@
 Upgrading PySpark
 ==================
 
-**Upgrading from PySpark 3.3 to 3.4**
+Upgrading from PySpark 3.3 to 3.4
+---------------------------------
 
 * In Spark 3.4, the schema of an array column is inferred by merging the schemas of all elements in the array. To restore the previous behavior where the schema is only inferred from the first element, you can set ``spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled`` to ``true``.
 * In Spark 3.4, if Pandas on Spark API ``Groupby.apply``'s ``func`` parameter return type is not specified and ``compute.shortcut_limit`` is set to 0, the sampling rows will be set to 2 (ensure sampling rows always >= 2) to make sure infer schema is accurate.
@@ -34,7 +35,8 @@ Upgrading PySpark
 * In Spark 3.4, the ``SparkSession.sql`` and the Pandas on Spark API ``sql`` have got new parameter ``args`` which provides binding of named parameters to their SQL literals.
 
 
-**Upgrading from PySpark 3.2 to 3.3**
+Upgrading from PySpark 3.2 to 3.3
+---------------------------------
 
 * In Spark 3.3, the ``pyspark.pandas.sql`` method follows [the standard Python string formatter](https://docs.python.org/3/library/string.html#format-string-syntax). To restore the previous behavior, set ``PYSPARK_PANDAS_SQL_LEGACY`` environment variable to ``1``.
 * In Spark 3.3, the ``drop`` method of pandas API on Spark DataFrame supports dropping rows by ``index``, and sets dropping by index instead of column by default.
@@ -42,7 +44,8 @@ Upgrading PySpark
 * In Spark 3.3, the ``repr`` return values of SQL DataTypes have been changed to yield an object with the same value when passed to ``eval``.
 
 
-**Upgrading from PySpark 3.1 to 3.2**
+Upgrading from PySpark 3.1 to 3.2
+---------------------------------
 
 * In Spark 3.2, the PySpark methods from sql, ml, spark_on_pandas modules raise the ``TypeError`` instead of ``ValueError`` when are applied to an param of inappropriate type.
 * In Spark 3.2, the traceback from Python UDFs, pandas UDFs and pandas function APIs are simplified by default without the traceback from the internal Python workers. In Spark 3.1 or earlier, the traceback from Python workers was printed out. To restore the behavior before Spark 3.2, you can set ``spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled`` to ``false``.
@@ -53,7 +56,8 @@ Upgrading PySpark
   To restore the behavior before Spark 3.2, you can set ``PYSPARK_PIN_THREAD`` environment variable to ``false``.
 
 
-**Upgrading from PySpark 2.4 to 3.0**
+Upgrading from PySpark 2.4 to 3.0
+---------------------------------
 
 * In Spark 3.0, PySpark requires a pandas version of 0.23.2 or higher to use pandas related functionality, such as ``toPandas``, ``createDataFrame`` from pandas DataFrame, and so on.
 * In Spark 3.0, PySpark requires a PyArrow version of 0.12.1 or higher to use PyArrow related functionality, such as ``pandas_udf``, ``toPandas`` and ``createDataFrame`` with "spark.sql.execution.arrow.enabled=true", etc.
@@ -73,17 +77,20 @@ Upgrading PySpark
 * In Spark 3.0, ``pyspark.ml.param.shared.Has*`` mixins do not provide any ``set*(self, value)`` setter methods anymore, use the respective ``self.set(self.*, value)`` instead. See `SPARK-29093 <https://issues.apache.org/jira/browse/SPARK-29093>`_ for details.
 
 
-**Upgrading from PySpark 2.3 to 2.4**
+Upgrading from PySpark 2.3 to 2.4
+---------------------------------
 
 * In PySpark, when Arrow optimization is enabled, previously ``toPandas`` just failed when Arrow optimization is unable to be used whereas ``createDataFrame`` from Pandas DataFrame allowed the fallback to non-optimization. Now, both ``toPandas`` and ``createDataFrame`` from Pandas DataFrame allow the fallback by default, which can be switched off by ``spark.sql.execution.arrow.fallback.enabled``.
 
 
-**Upgrading from PySpark 2.3.0 to 2.3.1 and above**
+Upgrading from PySpark 2.3.0 to 2.3.1 and above
+-----------------------------------------------
 
 * As of version 2.3.1 Arrow functionality, including ``pandas_udf`` and ``toPandas()``/``createDataFrame()`` with ``spark.sql.execution.arrow.enabled`` set to ``True``, has been marked as experimental. These are still evolving and not currently recommended for use in production.
 
 
-**Upgrading from PySpark 2.2 to 2.3**
+Upgrading from PySpark 2.2 to 2.3
+---------------------------------
 
 * In PySpark, now we need Pandas 0.19.2 or upper if you want to use Pandas related functionalities, such as ``toPandas``, ``createDataFrame`` from Pandas DataFrame, etc.
 * In PySpark, the behavior of timestamp values for Pandas related functionalities was changed to respect session timezone. If you want to use the old behavior, you need to set a configuration ``spark.sql.execution.pandas.respectSessionTimeZone`` to False. See `SPARK-22395 <https://issues.apache.org/jira/browse/SPARK-22395>`_ for details.
@@ -91,12 +98,14 @@ Upgrading PySpark
 * In PySpark, ``df.replace`` does not allow to omit value when ``to_replace`` is not a dictionary. Previously, value could be omitted in the other cases and had None by default, which is counterintuitive and error-prone.
 
 
-**Upgrading from PySpark 1.4 to 1.5**
+Upgrading from PySpark 1.4 to 1.5
+---------------------------------
 
 * Resolution of strings to columns in Python now supports using dots (.) to qualify the column or access nested values. For example ``df['table.column.nestedField']``. However, this means that if your column name contains any dots you must now escape them using backticks (e.g., ``table.`column.with.dots`.nested``).
 * DataFrame.withColumn method in PySpark supports adding a new column or replacing existing columns of the same name.
 
 
-**Upgrading from PySpark 1.0-1.2 to 1.3**
+Upgrading from PySpark 1.0-1.2 to 1.3
+-------------------------------------
 
 * When using DataTypes in Python you will need to construct them (i.e. ``StringType()``) instead of referencing a singleton.
