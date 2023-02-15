@@ -22,6 +22,6 @@
       "direction": "SORT_DIRECTION_ASCENDING",
       "nullOrdering": "SORT_NULLS_FIRST"
     }],
-    "isGlobal": false
+    "isGlobal": true
   }
 }
