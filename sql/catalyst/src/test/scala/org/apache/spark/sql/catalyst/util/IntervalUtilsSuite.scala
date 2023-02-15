@@ -682,6 +682,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       ("40:60.999999999", 60, MINUTE, SECOND),
       ("40:99.999999999", 99, MINUTE, SECOND)
     ).foreach { case(input, second, from, to) =>
+
       failFuncWithInvalidInput(
         input, s"second $second outside range [0, 59]", s => fromDayTimeString(s, from, to))
     }
