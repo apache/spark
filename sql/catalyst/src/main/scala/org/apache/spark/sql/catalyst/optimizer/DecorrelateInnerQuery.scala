@@ -264,8 +264,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
    *
    * over tables t0(x, y), t1(a), t2(b).
    *
-   * We have outer table t0 with attributes [x#1, y#2] and after introducing DomainJoins the
-   * subquery is a Union where
+   * Step 1: After DecorrelateInnerQuery runs to introduce DomainJoins,
+   * we have outer table t0 with attributes [x#1, y#2] and the subquery is a Union where
    * - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
    * - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8]
    * Here all the x and y attributes are from t0, but they are different instances from
@@ -275,6 +275,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * the original outer table with the attributes coming out of the DomainJoin of the left side,
    * because the output of a set op uses the attribute names from the left side.
    *
+   * Step 2: rewriteDomainJoins runs, in which we arrive at this function.
    * In this function, we construct the domain join conditions for the children of the Union.
    * For the left side, those remain unchanged, while for the right side they are remapped to
    * use the attribute names of the right-side DomainJoin: x#7 <=> x#1 and y#8 <=> y#2.
@@ -317,10 +318,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * based on the semi/anti join cond which contains equi-joins between the left and right
    * outputs.
    *
-   * The domain conds will be like leftInner <=> outer, and the semi/anti join cond will be like
-   * leftInner <=> rightInner. We add additional domain conds rightInner <=> outer which are used
-   * to rewrite the right-side DomainJoin.
-   *
    * Example: Take a query like:
    * select * from t0 join lateral (
    *   select a from t1 where b < t0.x
@@ -330,8 +327,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * over tables t0(x, y), t1(a), t2(b).
    *
    * Step 1 (this is the same as the Union case described above):
-   * We have outer table t0 with attributes [x#1, y#2] and after introducing DomainJoins the
-   * subquery is a Intersect where
+   * Step 1: After DecorrelateInnerQuery runs to introduce DomainJoins,
+   * we have outer table t0 with attributes [x#1, y#2] and the subquery is a Intersect where
    * - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
    * - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8]
    * Here all the x and y attributes are from t0, but they are different instances from
@@ -348,9 +345,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * For EXCEPT DISTINCT the same thing happens but with anti join in ReplaceExceptWithAntiJoin.
    *
    * Step 3:
-   * We arrive at this function, which uses the semijoin condition to construct the domain join
-   * cond remapping for the right side: x#7 <=> x#1 and y#8 <=> y#2. These are appended to the
-   * original domain join cond.
+   * rewriteDomainJoins runs, in which we arrive at this function, which uses the
+   * semijoin condition to construct the domain join cond remapping for the right side:
+   * x#7 <=> x#1 and y#8 <=> y#2. These new conds together with the original domain join cond are
+   * used to rewrite the DomainJoins.
    *
    * Note: This logic only applies to INTERSECT/EXCEPT DISTINCT. For INTERSECT/EXCEPT ALL,
    * step 1 is the same but instead of step 2, RewriteIntersectAll or RewriteExceptAll
@@ -362,9 +360,11 @@ object DecorrelateInnerQuery extends PredicateHelper {
       domainJoinConditions: Seq[Expression],
       join: Join
   ) : Seq[Expression] = {
-
     if (join.condition.isDefined
       && SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED)) {
+      // The domain conds will be like leftInner <=> outer, and the semi/anti join cond will be like
+      // leftInner <=> rightInner. We add additional domain conds rightInner <=> outer which are
+      // used to rewrite the right-side DomainJoin.
       val transitiveConds = splitConjunctivePredicates(join.condition.get).collect {
         case EqualNullSafe(joinLeft: Attribute, joinRight: Attribute) =>
           domainJoinConditions.collect {
