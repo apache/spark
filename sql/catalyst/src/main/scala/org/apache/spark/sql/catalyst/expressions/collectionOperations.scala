@@ -4840,7 +4840,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override def third: Expression = itemExpr
 
   override def prettyName: String = "array_insert"
-  override def dataType: DataType = if (third.nullable) first.dataType.asNullable else first.dataType
+  override def dataType: DataType = first.dataType.asNullable // out of range pos will add nulls
   override def nullable: Boolean = first.nullable | second.nullable
 
   @transient private lazy val elementType: DataType =
