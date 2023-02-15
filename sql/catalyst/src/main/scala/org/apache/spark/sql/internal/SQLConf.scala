@@ -4033,6 +4033,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val CLI_PRINT_CURRENT_DB =
+    buildConf("spark.sql.cli.print.currentDb")
+      .doc("When set to true, spark-sql CLI prints the the current database in prompt")
+      .version("3.44.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA =
     buildConf("spark.sql.legacy.keepCommandOutputSchema")
       .internal()
@@ -4955,6 +4962,8 @@ class SQLConf extends Serializable with Logging {
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
+
+  def cliPrintCurrentDb: Boolean = getConf(SQLConf.CLI_PRINT_CURRENT_DB)
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
 

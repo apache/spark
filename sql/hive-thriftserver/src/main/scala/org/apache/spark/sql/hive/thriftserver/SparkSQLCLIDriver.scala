@@ -278,8 +278,16 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     var ret = 0
     var prefix = ""
-    val currentDB = ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
-      classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
+
+    def currentDB: String = {
+      val printCurrentDb = conf.getBoolVar(HiveConf.ConfVars.CLIPRINTCURRENTDB) ||
+        SparkSQLEnv.sqlContext.conf.cliPrintCurrentDb
+      if (printCurrentDb) {
+        s" (${SparkSQLEnv.sqlContext.sparkSession.catalog.currentDatabase})"
+      } else {
+        ""
+      }
+    }
 
     def promptWithCurrentDB: String = s"$prompt$currentDB"
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
