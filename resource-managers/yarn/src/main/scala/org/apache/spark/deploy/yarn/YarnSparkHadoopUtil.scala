@@ -65,19 +65,6 @@ object YarnSparkHadoopUtil {
    */
   private val envVarNameRegex: String = "[A-Za-z_][A-Za-z0-9_]*"
 
-  /**
-   * Note that this regex only supports the `$VAR_NAME` and `%VAR_NAME%` syntax, for Unix and
-   * Windows respectively, and does not perform any handling of escapes. The Unix `${VAR_NAME}`
-   * syntax is not supported.
-   */
-  private val environmentVariableRegex: String = {
-    if (Utils.isWindows) {
-      s"%($envVarNameRegex)%"
-    } else {
-      s"\\$$($envVarNameRegex)"
-    }
-  }
-
   // scalastyle:off line.size.limit
   /**
    * Replace environment variables in a string according to the same rules as
