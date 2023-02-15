@@ -23,7 +23,6 @@ import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types.{DataType, Metadata}
@@ -93,7 +92,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def unary_- : Column = fn("negative")
 
@@ -109,7 +108,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def unary_! : Column = fn("!")
 
@@ -141,7 +140,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def equalTo(other: Any): Column = this === other
 
@@ -158,7 +157,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def =!=(other: Any): Column = !(this === other)
 
@@ -175,7 +174,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
   def !==(other: Any): Column = this =!= other
@@ -193,7 +192,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def notEqual(other: Any): Column = this =!= other
 
@@ -209,7 +208,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def >(other: Any): Column = fn(">", other)
 
@@ -225,7 +224,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def gt(other: Any): Column = this > other
 
@@ -240,7 +239,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def <(other: Any): Column = fn("<", other)
 
@@ -255,7 +254,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def lt(other: Any): Column = this < other
 
@@ -270,7 +269,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def <=(other: Any): Column = fn("<=", other)
 
@@ -285,7 +284,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def leq(other: Any): Column = this <= other
 
@@ -300,7 +299,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def >=(other: Any): Column = fn(">=", other)
 
@@ -315,7 +314,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def geq(other: Any): Column = this >= other
 
@@ -323,7 +322,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * Equality test that is safe for null values.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def <=>(other: Any): Column = fn("<=>", other)
 
@@ -331,7 +330,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * Equality test that is safe for null values.
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def eqNullSafe(other: Any): Column = this <=> other
 
@@ -369,7 +368,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def when(condition: Column, value: Any): Column = {
     val expressions = extractWhen("when")
@@ -378,6 +377,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
     }
     Column { builder =>
       builder.getUnresolvedFunctionBuilder
+        .setFunctionName("when")
         .addAllArguments(expressions)
         .addArguments(condition.expr)
         .addArguments(lit(value).expr)
@@ -403,7 +403,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def otherwise(value: Any): Column = {
     val expressions = extractWhen("otherwise")
@@ -413,6 +413,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
     }
     Column { builder =>
       builder.getUnresolvedFunctionBuilder
+        .setFunctionName("when")
         .addAllArguments(expressions)
         .addArguments(lit(value).expr)
     }
@@ -422,7 +423,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * True if the current column is between the lower bound and upper bound, inclusive.
    *
    * @group java_expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def between(lowerBound: Any, upperBound: Any): Column = {
     (this >= lowerBound) && (this <= upperBound)
@@ -432,25 +433,25 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * True if the current expression is NaN.
    *
    * @group expr_ops
-   * @since 1.5.0
+   * @since 3.4.0
    */
-  def isNaN: Column = fn("isNaN", this)
+  def isNaN: Column = fn("isNaN")
 
   /**
    * True if the current expression is null.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
-  def isNull: Column = fn("isNull", this)
+  def isNull: Column = fn("isNull")
 
   /**
    * True if the current expression is NOT null.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
-  def isNotNull: Column = fn("isNotNull", this)
+  def isNotNull: Column = fn("isNotNull")
 
   /**
    * Boolean OR.
@@ -463,7 +464,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def ||(other: Any): Column = fn("or", other)
 
@@ -478,7 +479,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def or(other: Column): Column = this || other
 
@@ -493,7 +494,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def &&(other: Any): Column = fn("and", other)
 
@@ -508,7 +509,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def and(other: Column): Column = this && other
 
@@ -538,7 +539,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def plus(other: Any): Column = this + other
 
@@ -553,7 +554,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def -(other: Any): Column = fn("-", other)
 
@@ -568,7 +569,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def minus(other: Any): Column = this - other
 
@@ -583,7 +584,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def *(other: Any): Column = fn("*", other)
 
@@ -598,7 +599,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def multiply(other: Any): Column = this * other
 
@@ -613,7 +614,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def /(other: Any): Column = fn("/", other)
 
@@ -628,7 +629,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def divide(other: Any): Column = this / other
 
@@ -636,7 +637,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * Modulo (a.k.a. remainder) expression.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def %(other: Any): Column = fn("%", other)
 
@@ -644,7 +645,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * Modulo (a.k.a. remainder) expression.
    *
    * @group java_expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def mod(other: Any): Column = this % other
 
@@ -659,7 +660,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * "Double" and the comparison will look like "Double vs Double"
    *
    * @group expr_ops
-   * @since 1.5.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def isin(list: Any*): Column = Column.fn("in", this +: list.map(lit): _*)
@@ -675,7 +676,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * to "Double" and the comparison will look like "Double vs Double"
    *
    * @group expr_ops
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
 
@@ -690,7 +691,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * to "Double" and the comparison will look like "Double vs Double"
    *
    * @group java_expr_ops
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
@@ -698,7 +699,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def like(literal: String): Column = fn("like", literal)
 
@@ -706,7 +707,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex match.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def rlike(literal: String): Column = fn("rlike", literal)
 
@@ -714,7 +715,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * SQL ILIKE expression (case insensitive LIKE).
    *
    * @group expr_ops
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def ilike(literal: String): Column = fn("ilike", literal)
 
@@ -723,7 +724,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * `key` in a `MapType`.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def getItem(key: Any): Column = apply(key)
 
@@ -775,7 +776,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 3.1.0
+   * @since 3.4.0
    */
   // scalastyle:on line.size.limit
   def withField(fieldName: String, col: Column): Column = {
@@ -846,7 +847,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 3.1.0
+   * @since 3.4.0
    */
   // scalastyle:on line.size.limit
   def dropFields(fieldNames: String*): Column = {
@@ -863,7 +864,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * An expression that gets a field by name in a `StructType`.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def getField(fieldName: String): Column = apply(fieldName)
 
@@ -875,7 +876,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    *   expression for the length of the substring.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def substr(startPos: Column, len: Column): Column = Column.fn("substr", this, startPos, len)
 
@@ -887,7 +888,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    *   length of the substring.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def substr(startPos: Int, len: Int): Column = substr(lit(startPos), lit(len))
 
@@ -895,7 +896,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * Contains the other element. Returns a boolean column based on a string match.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def contains(other: Any): Column = fn("contains", other)
 
@@ -903,7 +904,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * String starts with. Returns a boolean column based on a string match.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def startsWith(other: Column): Column = fn("startswith", other)
 
@@ -911,7 +912,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * String starts with another string literal. Returns a boolean column based on a string match.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def startsWith(literal: String): Column = startsWith(lit(literal))
 
@@ -919,7 +920,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * String ends with. Returns a boolean column based on a string match.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def endsWith(other: Column): Column = fn("endswith", other)
 
@@ -927,7 +928,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * String ends with another string literal. Returns a boolean column based on a string match.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def endsWith(literal: String): Column = endsWith(lit(literal))
 
@@ -939,7 +940,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def alias(alias: String): Column = name(alias)
 
@@ -955,7 +956,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * explicit metadata.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def as(alias: String): Column = name(alias)
 
@@ -967,7 +968,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def as(aliases: Seq[String]): Column = Column { builder =>
     builder.getAliasBuilder.setExpr(expr).addAllName(aliases.asJava)
@@ -981,7 +982,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def as(aliases: Array[String]): Column = as(aliases.toSeq)
 
@@ -997,7 +998,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * explicit metadata.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def as(alias: Symbol): Column = name(alias.name)
 
@@ -1009,7 +1010,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def as(alias: String, metadata: Metadata): Column = Column { builder =>
     builder.getAliasBuilder
@@ -1046,7 +1047,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def cast(to: DataType): Column = Column { builder =>
     builder.getCastBuilder
@@ -1064,7 +1065,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
 
@@ -1079,7 +1080,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def desc: Column = desc_nulls_last
 
@@ -1095,7 +1096,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 2.1.0
+   * @since 3.4.0
    */
   def desc_nulls_first: Column =
     buildSortOrder(SortDirection.SORT_DIRECTION_DESCENDING, NullOrdering.SORT_NULLS_FIRST)
@@ -1112,7 +1113,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 2.1.0
+   * @since 3.4.0
    */
   def desc_nulls_last: Column =
     buildSortOrder(SortDirection.SORT_DIRECTION_DESCENDING, NullOrdering.SORT_NULLS_LAST)
@@ -1128,7 +1129,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def asc: Column = asc_nulls_first
 
@@ -1144,7 +1145,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 2.1.0
+   * @since 3.4.0
    */
   def asc_nulls_first: Column =
     buildSortOrder(SortDirection.SORT_DIRECTION_ASCENDING, NullOrdering.SORT_NULLS_FIRST)
@@ -1161,7 +1162,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 2.1.0
+   * @since 3.4.0
    */
   def asc_nulls_last: Column =
     buildSortOrder(SortDirection.SORT_DIRECTION_ASCENDING, NullOrdering.SORT_NULLS_LAST)
@@ -1178,7 +1179,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * Prints the expression to the console for debugging purposes.
    *
    * @group df_ops
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def explain(extended: Boolean): Unit = {
     // scalastyle:off println
@@ -1197,7 +1198,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def bitwiseOR(other: Any): Column = fn("|", other)
 
@@ -1208,7 +1209,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def bitwiseAND(other: Any): Column = fn("&", other)
 
@@ -1219,7 +1220,7 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * }}}
    *
    * @group expr_ops
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def bitwiseXOR(other: Any): Column = fn("^", other)
 }

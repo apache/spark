@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.types.{MapType, StringType, StructType}
+import org.apache.spark.sql.types.{MapType, MetadataBuilder, StringType, StructType}
 
 // scalastyle:off
 /**
@@ -160,17 +160,23 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   private val simpleSchemaString = simpleSchema.catalogString
 
-  private val complexString = simpleSchema
+  private val complexSchema = simpleSchema
     .add("d", simpleSchema)
     .add("e", "array<int>")
     .add("f", MapType(StringType, simpleSchema))
     .add("g", "string")
 
-  // We manually construct a simple empty data frame.
-  private def simple = session.newDataset { builder =>
+  private val complexSchemaString = complexSchema.catalogString
+
+  private def createLocalRelation(schema: String): DataFrame = session.newDataset { builder =>
     // TODO API is not consistent. Now we have two different ways of working with schemas!
-    builder.getLocalRelationBuilder.setSchema(simpleSchemaString)
+    builder.getLocalRelationBuilder.setSchema(schema)
   }
+
+  // We manually construct a simple empty data frame.
+  private def simple = createLocalRelation(simpleSchemaString)
+
+  private def complex = createLocalRelation(complexSchemaString)
 
   private def select(cs: Column*): DataFrame = simple.select(cs: _*)
 
@@ -199,20 +205,33 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   /* Column API */
   private def columnTest(name: String)(f: => Column): Unit = {
     test("column " + name) {
-      simple.select(f)
+      complex.select(f)
+    }
+  }
+
+  private def orderColumnTest(name: String)(f: => Column): Unit = {
+    test("column " + name) {
+      val col = f
+      assert(col.expr.hasSortOrder)
+      session.newDataset { builder =>
+        builder.getSortBuilder
+          .setInput(complex.plan.getRoot)
+          .setIsGlobal(true)
+          .addOrder(col.expr.getSortOrder)
+      }
     }
   }
 
   columnTest("apply") {
-    fn.lit(1)
+    fn.col("f").apply("super_duper_key")
   }
 
   columnTest("unary minus") {
-    fn.lit(1)
+    -fn.lit(1)
   }
 
   columnTest("not") {
-    fn.lit(1)
+    !fn.lit(true)
   }
 
   columnTest("equals") {
@@ -220,51 +239,56 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   columnTest("not equals") {
-    fn.lit(1)
+    fn.col("a") =!= fn.col("b")
   }
 
   columnTest("gt") {
-    fn.lit(1)
+    fn.col("a") > fn.col("b")
   }
 
   columnTest("lt") {
-    fn.lit(1)
+    fn.col("a") < fn.col("b")
   }
 
   columnTest("geq") {
-    fn.lit(1)
+    fn.col("a") >= fn.col("b")
   }
 
   columnTest("leq") {
-    fn.lit(1)
+    fn.col("a") <= fn.col("b")
   }
 
   columnTest("eqNullSafe") {
-    fn.lit(1)
+    fn.col("a") <=> fn.col("b")
   }
 
   columnTest("when otherwise") {
-    fn.lit(1)
+    val a = fn.col("a")
+    fn.when(a < 10, "low").when(a < 20, "medium").otherwise("high")
   }
 
   columnTest("between") {
-    fn.lit(1)
+    fn.col("a").between(10, 20)
   }
 
   columnTest("isNaN") {
-    fn.lit(1)
+    fn.col("b").isNaN
   }
 
   columnTest("isNull") {
-    fn.lit(1)
+    fn.col("g").isNull
   }
 
   columnTest("isNotNull") {
-    fn.lit(1)
+    fn.col("g").isNotNull
+  }
+
+  columnTest("and") {
+    fn.col("a") > 10 && fn.col("b") < 0.5d
   }
 
   columnTest("or") {
-    fn.lit(1)
+    fn.col("a") > 10 || fn.col("b") < 0.5d
   }
 
   columnTest("add") {
@@ -272,67 +296,67 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   columnTest("subtract") {
-    fn.lit(1)
+    fn.col("a") - fn.col("b")
   }
 
   columnTest("multiply") {
-    fn.lit(1)
+    fn.col("a") * fn.col("b")
   }
 
   columnTest("divide") {
-    fn.lit(1)
+    fn.col("a") / fn.col("b")
   }
 
   columnTest("modulo") {
-    fn.lit(1)
+    fn.col("a") % 10
   }
 
   columnTest("isin") {
-    fn.lit(1)
+    fn.col("g").isin("hello", "world", "foo")
   }
 
   columnTest("like") {
-    fn.lit(1)
+    fn.col("g").like("%bob%")
   }
 
   columnTest("rlike") {
-    fn.lit(1)
+    fn.col("g").like("^[0-9]*$")
   }
 
   columnTest("ilike") {
-    fn.lit(1)
+    fn.col("g").like("%fOb%")
   }
 
   columnTest("getItem") {
-    fn.lit(1)
+    fn.col("e").getItem(3)
   }
 
   columnTest("withField") {
-    fn.lit(1)
+    fn.col("d").withField("x", fn.lit("xq"))
   }
 
   columnTest("dropFields") {
-    fn.lit(1)
+    fn.col("d").dropFields("a", "c")
   }
 
   columnTest("getField") {
-    fn.lit(1)
+    fn.col("d").getItem("b")
   }
 
   columnTest("substr") {
-    fn.lit(1)
+    fn.col("g").substr(8, 3)
   }
 
   columnTest("contains") {
-    fn.lit(1)
+    fn.col("g").contains("baz")
   }
 
   columnTest("startsWith") {
-    fn.lit(1)
+    fn.col("g").startsWith("prefix_")
   }
 
   columnTest("endsWith") {
-    fn.lit(1)
+    fn.col("g").endsWith("suffix_")
   }
 
   columnTest("alias") {
@@ -340,59 +364,61 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   columnTest("as multi") {
-    fn.lit(1)
+    fn.col("d").as(Array("v1", "v2", "v3"))
   }
 
   columnTest("as with metadata") {
-    fn.lit(1)
+    val builder = new MetadataBuilder
+    builder.putString("comment", "modified C field")
+    fn.col("c").as("c_mod", builder.build())
   }
 
   columnTest("cast") {
-    fn.lit(1)
+    fn.col("a").cast("long")
   }
 
-  columnTest("desc") {
-    fn.lit(1)
+  orderColumnTest("desc") {
+    fn.col("b").desc
   }
 
-  columnTest("desc_nulls_first") {
-    fn.lit(1)
+  orderColumnTest("desc_nulls_first") {
+    fn.col("b").desc_nulls_first
   }
 
-  columnTest("desc_nulls_last") {
-    fn.lit(1)
+  orderColumnTest("desc_nulls_last") {
+    fn.col("b").desc_nulls_last
   }
 
-  columnTest("asc") {
-    fn.lit(1)
+  orderColumnTest("asc") {
+    fn.col("a").asc
   }
 
-  columnTest("asc_nulls_first") {
-    fn.lit(1)
+  orderColumnTest("asc_nulls_first") {
+    fn.col("a").asc_nulls_first
   }
 
-  columnTest("asc_nulls_last") {
-    fn.lit(1)
+  orderColumnTest("asc_nulls_last") {
+    fn.col("a").asc_nulls_last
   }
 
   columnTest("bitwiseOR") {
-    fn.lit(1)
+    fn.col("a").bitwiseOR(7)
   }
 
   columnTest("bitwiseAND") {
-    fn.lit(1)
+    fn.col("a").bitwiseAND(255)
   }
 
   columnTest("bitwiseXOR") {
-    fn.lit(1)
+    fn.col("a").bitwiseXOR(78)
   }
 
   columnTest("star") {
-    Column("*")
+    fn.col("*")
   }
 
   columnTest("star with target") {
-    Column("str.*")
+    fn.col("str.*")
   }
 
   /* Function API */
