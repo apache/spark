@@ -30,8 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
@@ -370,7 +369,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan5, sparkPlan5)
 
     val connectPlan6 = connectTestRelation.union(connectTestRelation, isAll = false)
-    val sparkPlan6 = sparkTestRelation.union(sparkTestRelation).distinct()
+    val sparkPlan6 = Distinct(sparkTestRelation.union(sparkTestRelation).logicalPlan)
     comparePlans(connectPlan6, sparkPlan6)
 
     val connectPlan7 =
@@ -380,7 +379,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     val connectPlan8 =
       connectTestRelation.union(connectTestRelation2, isAll = false, byName = true)
-    val sparkPlan8 = sparkTestRelation.unionByName(sparkTestRelation2).distinct()
+    val sparkPlan8 = Distinct(sparkTestRelation.unionByName(sparkTestRelation2).logicalPlan)
     comparePlans(connectPlan8, sparkPlan8)
   }
 
@@ -963,7 +962,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with DataFrame.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: DataFrame): Unit = {
+    comparePlans(connectPlan, sparkPlan.queryExecution.analyzed)
+  }
+
+  // Compares proto plan with LogicalPlan.
+  private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
     val connectAnalyzed = analyzePlan(transform(connectPlan))
-    comparePlans(connectAnalyzed, sparkPlan.queryExecution.analyzed, false)
+    comparePlans(connectAnalyzed, sparkPlan, false)
   }
 }
