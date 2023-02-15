@@ -262,13 +262,22 @@ object DecorrelateInnerQuery extends PredicateHelper {
    *   union all
    *   select b from t2 where c < t0.y)
    *
-   * We have outer table with attributes [x#1, y#2] and after introducing DomainJoins the subquery
-   * is a Union where the left side has output [a#3, x#4, y#5] with DomainJoin [x#4, y#5]
-   * and the right side has output [b#6, x#7, y#8] with DomainJoin [x#7, y#8].
-   * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, because the output of a set op
-   * uses the attribute names from the left side. For the left side,
-   * those remain unchanged, while for the right side they are remapped to
-   * x#7 <=> x#1 and y#8 <=> y#2.
+   * over tables t0(x, y), t1(a), t2(b).
+   *
+   * We have outer table t0 with attributes [x#1, y#2] and after introducing DomainJoins the
+   * subquery is a Union where
+   * - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
+   * - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8]
+   * Here all the x and y attributes are from t0, but they are different instances from
+   * different joins of t0.
+   *
+   * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, i.e. it joins the attributes from
+   * the original outer table with the attributes coming out of the DomainJoin of the left side,
+   * because the output of a set op uses the attribute names from the left side.
+   *
+   * In this function, we construct the domain join conditions for the children of the Union.
+   * For the left side, those remain unchanged, while for the right side they are remapped to
+   * use the attribute names of the right-side DomainJoin: x#7 <=> x#1 and y#8 <=> y#2.
    */
   def pushDomainConditionsThroughSetOperation(
       conditions: Seq[Expression],
@@ -314,26 +323,40 @@ object DecorrelateInnerQuery extends PredicateHelper {
    *
    * Example: Take a query like:
    * select * from t0 join lateral (
-   *   select a from t1 where b < x
+   *   select a from t1 where b < t0.x
    *   intersect distinct
-   *   select b from t2 where c < y)
+   *   select b from t2 where c < t0.y)
    *
-   * Step 1:
-   * We have outer table with attributes [x#1, y#2] and after introducing DomainJoins the subquery
-   * is a Intersect where the left side has output [a#3, x#4, y#5] with DomainJoin [x#4, y#5]
-   * and the right side has output [b#6, x#7, y#8] with DomainJoin [x#7, y#8].
-   * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, because the output of a set op
-   * uses the attribute names from the left side.
+   * over tables t0(x, y), t1(a), t2(b).
+   *
+   * Step 1 (this is the same as the Union case described above):
+   * We have outer table t0 with attributes [x#1, y#2] and after introducing DomainJoins the
+   * subquery is a Intersect where
+   * - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
+   * - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8]
+   * Here all the x and y attributes are from t0, but they are different instances from
+   * different joins of t0.
+   *
+   * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, i.e. it joins the attributes from
+   * the original outer table with the attributes coming out of the DomainJoin of the left side,
+   * because the output of a set op uses the attribute names from the left side.
    *
    * Step 2:
    * ReplaceIntersectWithSemiJoin runs and transforms the Intersect to
    * Join LeftSemi, (((a#3 <=> b#6) AND (x#4 <=> x#7)) AND (y#5 <=> y#8))
    * with equi-joins between the left and right outputs.
+   * For EXCEPT DISTINCT the same thing happens but with anti join in ReplaceExceptWithAntiJoin.
    *
    * Step 3:
    * We arrive at this function, which uses the semijoin condition to construct the domain join
    * cond remapping for the right side: x#7 <=> x#1 and y#8 <=> y#2. These are appended to the
    * original domain join cond.
+   *
+   * Note: This logic only applies to INTERSECT/EXCEPT DISTINCT. For INTERSECT/EXCEPT ALL,
+   * step 1 is the same but instead of step 2, RewriteIntersectAll or RewriteExceptAll
+   * replace the logical Intersect/Except operator with a combination of
+   * Union, Aggregate, and Generate. Then the DomainJoin conds will go through
+   * pushDomainConditionsThroughSetOperation, not this function.
    */
   def pushDomainConditionsThroughSemiAntiJoin(
       domainJoinConditions: Seq[Expression],
