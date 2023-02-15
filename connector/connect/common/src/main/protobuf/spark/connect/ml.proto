@@ -45,6 +45,8 @@ message RemoteCall {
       Map map = 8;
       Relation relation = 9;
       RemoteObject remote_object = 10;
+      Vector vector = 11;
+      Matrix matrix = 12;
     }
   }
 
@@ -56,6 +58,19 @@ message RemoteCall {
   }
   message RemoteObject {
     int64 id = 1;
+    // optional field: class_name, used for attaching class information
+    // when server side returning object
+    string class_name = 2;
+  }
+  message Vector {
+    // TODO: support sparse Vector
+    repeated double element = 1;
+  }
+  message Matrix {
+    // TODO: support sparse Maxtrix
+    int32 num_rows = 1;
+    int32 num_cols = 2;
+    repeated double element = 3;
   }
 
   message ConstructObject {
@@ -77,90 +92,5 @@ message RemoteCall {
     string module_name = 1;
     string function_name = 2;
     repeated ArgValue arg_values = 3;
-  }
-}
-
-
-message MlCommand {
-  oneof op_type {
-    ConstructStage construct_stage = 1;
-    DestructObject destruct_object = 2;
-    Fit fit = 3;
-    Transform transform = 4;
-    TransferParamsToServer transfer_params_to_server = 5;
-    TransferParamsFromServer transfer_params_from_server = 6;
-  }
-
-  message ParamValue {
-    oneof value {
-      int64 long_val = 1;
-      int32 int_val = 2;
-      double double_val = 3;
-      float float_val = 4;
-      bool bool_val = 5;
-      string str_val = 6;
-      DoubleArray double_array = 7;
-      FloatArray float_array = 8;
-      LongArray long_array = 9;
-      IntArray int_array = 10;
-      StringArray str_array = 11;
-      BoolArray bool_array = 12;
-    }
-    message DoubleArray {
-      repeated double element = 1;
-    }
-    message FloatArray {
-      repeated float element = 1;
-    }
-    message LongArray {
-      repeated int64 element = 1;
-    }
-    message IntArray {
-      repeated int32 element = 1;
-    }
-    message StringArray {
-      repeated string element = 1;
-    }
-    message BoolArray {
-      repeated bool element = 1;
-    }
-  }
-
-  message Params {
-    map<string, ParamValue> params = 1;
-    map<string, ParamValue> default_params = 2;
-  }
-
-  message ConstructStage {
-    // stage (estimator / transformer) uid.
-    string uid = 1;
-    string class_name = 2;
-  }
-
-  message DestructObject {
-    // unique id of java object in server side
-    int64 id = 1;
-  }
-
-  message Fit {
-    // id of server side estimator java object
-    int64 id = 1;
-    Relation input = 2;
-  }
-
-  message Transform {
-    // id of server side transformer / model java object
-    int64 id = 1;
-    Relation input = 2;
-  }
-
-  message TransferParamsToServer {
-    // id of server side estimator / transformer / model java object
-    int64 id = 1;
-    Params params = 2;
-  }
-
-  message TransferParamsFromServer {
-    int64 id = 1;
   }
 }

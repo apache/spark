@@ -23,6 +23,7 @@ import scala.reflect.runtime.universe
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse, RemoteCall}
+import org.apache.spark.ml.linalg.{Matrix, Vector}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.Utils
@@ -119,11 +120,29 @@ object SparkMLPlanner {
       case v: Map[_, _] =>
         // TODO
         throw new UnsupportedOperationException()
+      case v: Vector =>
+        val protoVectorBuilder = RemoteCall.Vector.newBuilder()
+        val data = v.toArray
+        for (i <- 0 until data.length) {
+          protoVectorBuilder.setElement(i, data(i))
+        }
+        protoBuilder.setVector(protoVectorBuilder.build())
+      case v: Matrix =>
+        val protoMatrixBuilder = RemoteCall.Matrix.newBuilder()
+        protoMatrixBuilder.setNumRows(v.numRows)
+        protoMatrixBuilder.setNumCols(v.numCols)
+        val data = v.toArray
+        for (i <- 0 until data.length) {
+          protoMatrixBuilder.setElement(i, data(i))
+        }
+        protoBuilder.setMatrix(protoMatrixBuilder.build())
       case v: Object =>
         val instanceId = sessionHolder.serverSideObjectManager.registerObject(v)
+        val className = v.getClass.getName
         protoBuilder.setRemoteObject(
           RemoteCall.RemoteObject.newBuilder()
             .setId(instanceId)
+            .setClassName(className)
             .build()
         )
     }

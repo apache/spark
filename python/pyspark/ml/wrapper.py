@@ -69,6 +69,12 @@ class JavaWrapper:
         return cls(java_obj)
 
     def _call_java(self, name: str, *args: Any) -> Any:
+        if proto_ml.is_spark_client_mode():
+            session = RemoteSparkSession.getActiveSession()
+            return proto_ml.invoke_remote_method(
+                self._java_obj, name, list(args), session
+            )
+
         m = getattr(self._java_obj, name)
         sc = SparkContext._active_spark_context
         assert sc is not None
@@ -440,8 +446,7 @@ class JavaTransformer(JavaParams, Transformer, metaclass=ABCMeta):
 
         if proto_ml.is_spark_client_mode():
             session = RemoteSparkSession.getActiveSession()
-            remote_obj = proto_ml.invoke_remote_method(self._java_obj, "transform", [dataset], session)
-            return proto_ml._create_remote_dataframe(remote_obj, session)
+            return proto_ml.invoke_remote_method(self._java_obj, "transform", [dataset], session)
 
         return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sparkSession)
 

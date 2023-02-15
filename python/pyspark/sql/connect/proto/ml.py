@@ -2,6 +2,8 @@ from typing import Type
 import pyspark.sql.connect.proto as proto
 from collections import namedtuple
 from pyspark.sql.connect.dataframe import DataFrame
+import numpy as np
+from pyspark.ml.linalg import Vectors, Matrices
 
 
 _spark_client_mode_enabled = True
@@ -78,8 +80,40 @@ def _deserialize_return_value(resp: "proto.ExecutePlanResponse", session):
         return None
 
     proto_return_value = resp.remote_call_return_value
+
+    if proto_return_value.HasField("int32_value"):
+        return proto_return_value.int32_value
+
+    if proto_return_value.HasField("int64_value"):
+        return proto_return_value.int64_value
+
+    if proto_return_value.HasField("float_value"):
+        return proto_return_value.float_value
+
+    if proto_return_value.HasField("double_value"):
+        return proto_return_value.double_value
+
+    if proto_return_value.HasField("bool_value"):
+        return proto_return_value.bool_value
+
+    if proto_return_value.HasField("string_value"):
+        return proto_return_value.string_value
+
     if proto_return_value.HasField("remote_object"):
-        return RemoteObject(proto_return_value.remote_object.id)
+        remote_obj = RemoteObject(proto_return_value.remote_object.id)
+        if proto_return_value.remote_object.class_name == "org.apache.spark.sql.Dataset":
+            return _create_remote_dataframe(remote_obj, session)
+        return remote_obj
+
+    if proto_return_value.HasField("vector"):
+        return Vectors.dense(proto_return_value.vector.element)
+
+    if proto_return_value.HasField("matrix"):
+        return Matrices.dense(
+            proto_return_value.matrix.num_rows,
+            proto_return_value.matrix.num_cols,
+            proto_return_value.matrix.values
+        )
 
     # TODO: support other return value types
     raise RuntimeError()
@@ -132,25 +166,3 @@ def construct_remote_object(class_name, arg_value_list, session):
 def _create_remote_dataframe(remote_java_object, spark_session):
     plan = RemoteDataFramePlan(remote_java_object)
     return DataFrame.withPlan(plan, spark_session)
-
-"""
-def _parse_ml_response(ml_command_response: Type[proto.ExecutePlanResponse.MlCommandResponse]):
-    if ml_command_response.HasField("server_side_object_id"):
-        return RemoteObject(ml_command_response.server_side_object_id)
-    if ml_command_response.HasField("params"):
-        # TODO.
-        return
-
-
-def _create_stage(spark_session, class_name, uid):
-    client = spark_session.client
-    req = client._execute_plan_request_with_metadata()
-    ml_command = proto.MlCommand()
-    ml_command.construct_stage.CopyFrom(proto.MlCommand.ConstructStage(
-        uid=uid,
-        class_name=class_name
-    ))
-    req.plan.ml_command.CopyFrom(ml_command)
-    ml_resp = spark_session.client._execute_ml(req)
-    return _parse_ml_response(ml_resp)
-"""
