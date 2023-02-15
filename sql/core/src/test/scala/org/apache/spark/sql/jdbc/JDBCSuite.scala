@@ -1940,7 +1940,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName)
 
-    Seq(true, false).foreach { inferTimestampNTZ =>
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      val inferTimestampNTZ = timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
       val tsType = if (inferTimestampNTZ) {
         TimestampNTZType
       } else {
@@ -1949,13 +1954,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       val res = readDf.option("inferTimestampNTZType", inferTimestampNTZ).load()
       checkAnswer(res, Seq(Row(null)))
       assert(res.schema.fields.head.dataType == tsType)
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
         val res2 = readDf.load()
         checkAnswer(res2, Seq(Row(null)))
         assert(res2.schema.fields.head.dataType == tsType)
       }
     }
-
   }
 
   test("SPARK-39339: TimestampNTZType with different local time zones") {
@@ -1986,7 +1990,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
               .load()
             checkAnswer(res, df)
 
-            withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
+            withSQLConf(
+              SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
               val res2 = spark.read.format("jdbc")
                 .option("url", urlWithUserAndPass)
                 .option("dbtable", tableName)

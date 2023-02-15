@@ -25,7 +25,8 @@ import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -210,14 +211,14 @@ package object dsl {
 
         mode
           .map(SaveMode.valueOf(_))
-          .map(DataTypeProtoConverter.toSaveModeProto(_))
+          .map(SaveModeConverter.toSaveModeProto)
           .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
           tableName.foreach { tn =>
             val saveTable = WriteOperation.SaveTable.newBuilder().setTableName(tn)
             tableSaveMethod
-              .map(DataTypeProtoConverter.toTableSaveMethodProto(_))
+              .map(TableSaveMethodConverter.toTableSaveMethodProto(_))
               .foreach(saveTable.setSaveMethod(_))
             writeOp.setTable(saveTable.build())
           }

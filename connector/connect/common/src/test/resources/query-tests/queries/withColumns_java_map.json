@@ -1,0 +1,24 @@
+{
+  "withColumns": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "aliases": [{
+      "expr": {
+        "literal": {
+          "string": "123"
+        }
+      },
+      "name": ["a"]
+    }, {
+      "expr": {
+        "unresolvedAttribute": {
+          "unparsedIdentifier": "id"
+        }
+      },
+      "name": ["g"]
+    }]
+  }
+}
