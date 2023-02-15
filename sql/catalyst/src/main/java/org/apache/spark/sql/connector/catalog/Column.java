@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Map;
 import javax.annotation.Nullable;
 
+import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.internal.connector.ColumnImpl;
 import org.apache.spark.sql.types.DataType;
 
@@ -27,8 +29,9 @@ import org.apache.spark.sql.types.DataType;
  * such as name and data type, as well as some advanced ones like default column value.
  * <p>
  * Data Sources do not need to implement it. They should consume it in APIs like
- * @{@link TableCatalog#createTable(Identifier, Column[], Transform[], Map)}, and report it in
- * {@link Table#columns()} by calling the static `create` functions of this interface to create it.
+ * {@link TableCatalog#createTable(Identifier, Column[], Transform[], Map)}, and report it in
+ * {@link Table#columns()} by calling the static {@code create} functions of this interface to
+ * create it.
  */
 public interface Column {
 

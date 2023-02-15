@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.expressions.Literal;
 /**
  * A class representing the default value of a column. It contains both the SQL string and literal
  * value of the user-specified default value expression. The SQL string should be re-evaluated for
- * each table writing, which may produce different values if the default value expression is
+ * each table writing command, which may produce different values if the default value expression is
  * something like {@code CURRENT_DATE()}. The literal value is used to back-fill existing data if
  * new columns with default value are added. Note: the back-fill can be lazy. The data sources can
  * remember the column default value and let the reader fill the column value when reading existing
