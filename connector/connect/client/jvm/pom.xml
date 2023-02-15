@@ -129,7 +129,8 @@
   <build>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
-      <!-- Shade all Guava / Protobuf dependencies of this build -->
+      <!-- Shade all Guava / Protobuf / Netty dependencies of this build -->
+      <!-- TODO (SPARK-42449): Ensure shading rules are handled correctly in `native-image.properties` and support GraalVM   -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
