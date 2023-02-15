@@ -124,7 +124,7 @@ object SparkMLPlanner {
         val protoVectorBuilder = RemoteCall.Vector.newBuilder()
         val data = v.toArray
         for (i <- 0 until data.length) {
-          protoVectorBuilder.setElement(i, data(i))
+          protoVectorBuilder.addElement(data(i))
         }
         protoBuilder.setVector(protoVectorBuilder.build())
       case v: Matrix =>
@@ -133,7 +133,7 @@ object SparkMLPlanner {
         protoMatrixBuilder.setNumCols(v.numCols)
         val data = v.toArray
         for (i <- 0 until data.length) {
-          protoMatrixBuilder.setElement(i, data(i))
+          protoMatrixBuilder.addElement(data(i))
         }
         protoBuilder.setMatrix(protoMatrixBuilder.build())
       case v: Object =>

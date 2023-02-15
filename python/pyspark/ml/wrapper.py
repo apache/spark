@@ -331,12 +331,14 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
             py_stage = py_type()
             py_stage._java_obj = java_stage
 
-            # SPARK-10931: Temporary fix so that persisted models would own params from Estimator
-            if issubclass(py_type, JavaModel):
-                py_stage._create_params_from_java()
+            # TODO: for Spark Connect client case, set model params/uid correctly.
+            if not proto_ml.is_spark_client_mode():
+                # SPARK-10931: Temporary fix so that persisted models would own params from Estimator
+                if issubclass(py_type, JavaModel):
+                    py_stage._create_params_from_java()
 
-            py_stage._resetUid(java_stage.uid())
-            py_stage._transfer_params_from_java()
+                py_stage._resetUid(java_stage.uid())
+                py_stage._transfer_params_from_java()
         elif hasattr(py_type, "_from_java"):
             py_stage = py_type._from_java(java_stage)
         else:

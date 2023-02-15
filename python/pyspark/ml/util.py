@@ -28,6 +28,11 @@ from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.util import VersionUtils
 
+from pyspark.sql.connect import proto
+from pyspark.sql.connect.proto import ml as proto_ml
+from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
     from pyspark.ml._typing import PipelineStage
@@ -188,21 +193,46 @@ class JavaMLWriter(MLWriter):
     def __init__(self, instance: "JavaMLWritable"):
         super(JavaMLWriter, self).__init__()
         _java_obj = instance._to_java()  # type: ignore[attr-defined]
-        self._jwrite = _java_obj.write()
+        if proto_ml.is_spark_client_mode():
+            self._jwrite = proto_ml.invoke_remote_method(
+                _java_obj, "write", [],
+                RemoteSparkSession.getActiveSession()
+            )
+        else:
+            self._jwrite = _java_obj.write()
 
     def save(self, path: str) -> None:
         """Save the ML instance to the input path."""
         if not isinstance(path, str):
             raise TypeError("path should be a string, got type %s" % type(path))
-        self._jwrite.save(path)
+
+        if proto_ml.is_spark_client_mode():
+            proto_ml.invoke_remote_method(
+                self._jwrite, "save", [path],
+                RemoteSparkSession.getActiveSession()
+            )
+        else:
+            self._jwrite.save(path)
 
     def overwrite(self) -> "JavaMLWriter":
         """Overwrites if the output path already exists."""
-        self._jwrite.overwrite()
+        if proto_ml.is_spark_client_mode():
+            proto_ml.invoke_remote_method(
+                self._jwrite, "overwrite", [],
+                RemoteSparkSession.getActiveSession()
+            )
+        else:
+            self._jwrite.overwrite()
         return self
 
     def option(self, key: str, value: str) -> "JavaMLWriter":
-        self._jwrite.option(key, value)
+        if proto_ml.is_spark_client_mode():
+            proto_ml.invoke_remote_method(
+                self._jwrite, "option", [key, value],
+                RemoteSparkSession.getActiveSession()
+            )
+        else:
+            self._jwrite.option(key, value)
         return self
 
     def session(self, sparkSession: SparkSession) -> "JavaMLWriter":
@@ -293,13 +323,27 @@ class JavaMLReader(MLReader[RL]):
     def __init__(self, clazz: Type["JavaMLReadable[RL]"]) -> None:
         super(JavaMLReader, self).__init__()
         self._clazz = clazz
-        self._jread = self._load_java_obj(clazz).read()
+        if proto_ml.is_spark_client_mode():
+            loader_class_name = self._java_loader_class(clazz)
+            self._jread = proto_ml.invoke_remote_function(
+                loader_class_name, "read", [],
+                RemoteSparkSession.getActiveSession(),
+            )
+        else:
+            self._jread = self._load_java_obj(clazz).read()
 
     def load(self, path: str) -> RL:
         """Load the ML instance from the input path."""
         if not isinstance(path, str):
             raise TypeError("path should be a string, got type %s" % type(path))
-        java_obj = self._jread.load(path)
+
+        if proto_ml.is_spark_client_mode():
+            java_obj = proto_ml.invoke_remote_method(
+                self._jread, "load", [path],
+                RemoteSparkSession.getActiveSession(),
+            )
+        else:
+            java_obj = self._jread.load(path)
         if not hasattr(self._clazz, "_from_java"):
             raise NotImplementedError(
                 "This Java ML type cannot be loaded into Python currently: %r" % self._clazz
@@ -328,6 +372,7 @@ class JavaMLReader(MLReader[RL]):
     def _load_java_obj(cls, clazz: Type["JavaMLReadable[RL]"]) -> "JavaObject":
         """Load the peer Java object of the ML instance."""
         java_class = cls._java_loader_class(clazz)
+
         java_obj = _jvm()
         for name in java_class.split("."):
             java_obj = getattr(java_obj, name)

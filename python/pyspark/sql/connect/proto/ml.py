@@ -112,7 +112,7 @@ def _deserialize_return_value(resp: "proto.ExecutePlanResponse", session):
         return Matrices.dense(
             proto_return_value.matrix.num_rows,
             proto_return_value.matrix.num_cols,
-            proto_return_value.matrix.values
+            proto_return_value.matrix.element
         )
 
     # TODO: support other return value types
