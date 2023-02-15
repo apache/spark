@@ -249,7 +249,9 @@ class WriteOperation(google.protobuf.message.Message):
         TABLE_NAME_FIELD_NUMBER: builtins.int
         SAVE_METHOD_FIELD_NUMBER: builtins.int
         table_name: builtins.str
+        """(Required) The table name."""
         save_method: global___WriteOperation.SaveTable.TableSaveMethod.ValueType
+        """(Required) The method to be called to write to the table."""
         def __init__(
             self,
             *,
