@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.types.{MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types._
 
 // scalastyle:off
 /**
@@ -195,6 +195,17 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   test("range") {
     session.range(1, 10, 1, 2)
+  }
+
+  test("read") {
+    session.read.format("text")
+      .schema(StructType(
+        StructField("a", IntegerType, true) ::
+          StructField("b", LongType, false) ::
+          StructField("c", BooleanType, false) :: Nil))
+      .option("op1", "op1")
+      .options(Map("op2" -> "op2"))
+      .load("test_path")
   }
 
   /* Dataset API */

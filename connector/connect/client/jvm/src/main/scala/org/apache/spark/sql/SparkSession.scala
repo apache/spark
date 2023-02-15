@@ -63,6 +63,18 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   }
 
   /**
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * `DataFrame`.
+   * {{{
+   *   sparkSession.read.parquet("/path/to/file.parquet")
+   *   sparkSession.read.schema(schema).json("/path/to/file.json")
+   * }}}
+   *
+   * @since 3.4.0
+   */
+  def read: DataFrameReader = new DataFrameReader(this)
+
+  /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
    * range from 0 to `end` (exclusive) with step value 1.
    *

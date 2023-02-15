@@ -1,0 +1,13 @@
+{
+  "read": {
+    "dataSource": {
+      "format": "text",
+      "schema": "a INT,b BIGINT NOT NULL,c BOOLEAN NOT NULL",
+      "options": {
+        "op1": "op1",
+        "op2": "op2"
+      },
+      "paths": ["test_path"]
+    }
+  }
+}

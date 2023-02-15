@@ -75,6 +75,7 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       // TODO(SPARK-42175) Add the Dataset object definition
       // IncludeByName("org.apache.spark.sql.Dataset$"),
       IncludeByName("org.apache.spark.sql.DataFrame"),
+      IncludeByName("org.apache.spark.sql.DataFrameReader"),
       IncludeByName("org.apache.spark.sql.SparkSession"),
       IncludeByName("org.apache.spark.sql.SparkSession$")) ++ includeImplementedMethods(clientJar)
     val excludeRules = Seq(
@@ -130,7 +131,8 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       // TODO(SPARK-42175) Add all overloading methods. Temporarily mute compatibility check for \
       //  the Dataset methods, as too many overload methods are missing.
       // "org.apache.spark.sql.Dataset",
-      "org.apache.spark.sql.SparkSession")
+      "org.apache.spark.sql.SparkSession",
+      "org.apache.spark.sql.DataFrameReader")
 
     val clientClassLoader: URLClassLoader = new URLClassLoader(Seq(clientJar.toURI.toURL).toArray)
     clsNames
