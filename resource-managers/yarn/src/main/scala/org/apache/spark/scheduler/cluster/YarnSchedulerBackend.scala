@@ -147,7 +147,7 @@ private[spark] abstract class YarnSchedulerBackend(
     val excludedNodes: Set[String] = scheduler.excludedNodes()
     // For locality preferences, ignore preferences for nodes that are excluded
     val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
-      (rpid, v.filter { case (host, _) => !excludedNodes.contains(host) })
+      (rpid, v.filter { case (host, count) => !excludedNodes.contains(host) })
     }
     RequestExecutors(resourceProfileToTotalExecs, numLocalityAwareTasksPerResourceProfileId,
       filteredRPHostToLocalTaskCount, excludedNodes)

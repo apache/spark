@@ -157,7 +157,7 @@ private[yarn] class ExecutorRunnable(
     // uses RPC to connect to the scheduler, the RPC settings are needed as well as the
     // authentication settings.
     sparkConf.getAll
-      .filter { case (k, _) => SparkConf.isExecutorStartupConf(k) }
+      .filter { case (k, v) => SparkConf.isExecutorStartupConf(k) }
       .foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
 
     // For log4j configuration to reference

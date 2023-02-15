@@ -460,7 +460,7 @@ private[spark] class Client(
         FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
       } catch {
         // HADOOP-16878 changes the behavior to throw exceptions when src equals to dest
-        case _: PathOperationException
+        case e: PathOperationException
             if srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
       }
       replication.foreach(repl => destFs.setReplication(destPath, repl))
@@ -917,7 +917,7 @@ private[spark] class Client(
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
     val amEnvPrefix = "spark.yarn.appMasterEnv."
     sparkConf.getAll
-      .filter { case (k, _) => k.startsWith(amEnvPrefix) }
+      .filter { case (k, v) => k.startsWith(amEnvPrefix) }
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
       .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
 
@@ -1148,7 +1148,7 @@ private[spark] class Client(
         try {
           getApplicationReport
         } catch {
-          case _: ApplicationNotFoundException =>
+          case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
@@ -1651,7 +1651,7 @@ private[spark] object Client extends Logging {
         srcHost = InetAddress.getByName(srcHost).getCanonicalHostName()
         dstHost = InetAddress.getByName(dstHost).getCanonicalHostName()
       } catch {
-        case _: UnknownHostException =>
+        case e: UnknownHostException =>
           return false
       }
     }
