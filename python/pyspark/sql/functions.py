@@ -7680,9 +7680,9 @@ def array_distinct(col: "ColumnOrName") -> Column:
 def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
     """
     Collection function: adds an item into a given array at a specified array index.
-    Array indices start at 1 (or from the end if the index is negative).
-    Index specified beyond the size of the current array (plus additional element)
-    is extended with 'null' elements.
+    Array indices start at 1, or start from the end if index is negative.
+    Index above array size appends the array, or prepends the array if index is negative,
+    with 'null' elements.
 
     .. versionadded:: 3.4.0
 
