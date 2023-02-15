@@ -1384,20 +1384,20 @@ class WriteOperation(LogicalPlan):
 
         if self.table_name is not None:
             plan.write_operation.table.table_name = self.table_name
-            assert self.table_save_method is not None
-            tsm = self.table_save_method.lower()
-            if tsm == "save_as_table":
-                plan.write_operation.table.save_method = (
-                    proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE
-                )
-            elif tsm == "insert_into":
-                plan.write_operation.table.save_method = (
-                    proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
-                )
-            else:
-                raise ValueError(
-                    f"Unknown TestSaveMethod value for DataFrame: {self.table_save_method}"
-                )
+            if self.table_save_method is not None:
+                tsm = self.table_save_method.lower()
+                if tsm == "save_as_table":
+                    plan.write_operation.table.save_method = (
+                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE  # noqa: E501
+                    )
+                elif tsm == "insert_into":
+                    plan.write_operation.table.save_method = (
+                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
+                    )
+                else:
+                    raise ValueError(
+                        f"Unknown TestSaveMethod value for DataFrame: {self.table_save_method}"
+                    )
         elif self.path is not None:
             plan.write_operation.path = self.path
         else:
