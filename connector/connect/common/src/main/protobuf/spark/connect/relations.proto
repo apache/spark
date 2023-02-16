@@ -93,6 +93,9 @@ message Unknown {}
 message RelationCommon {
   // (Required) Shared relation metadata.
   string source_info = 1;
+
+  // (Optional) A per-client globally unique id for a given connect plan.
+  optional int64 plan_id = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
@@ -732,13 +735,17 @@ message Unpivot {
   repeated Expression ids = 2;
 
   // (Optional) Value columns to unpivot.
-  repeated Expression values = 3;
+  optional Values values = 3;
 
   // (Required) Name of the variable column.
   string variable_column_name = 4;
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+
+  message Values {
+    repeated Expression values = 1;
+  }
 }
 
 message ToSchema {

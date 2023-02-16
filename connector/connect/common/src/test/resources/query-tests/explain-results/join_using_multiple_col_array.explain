@@ -1,0 +1,3 @@
+'Join UsingJoin(FullOuter,Buffer(id, a))
+:- LocalRelation <empty>, [none#0L, none#1, none#2]
++- LocalRelation <empty>, [none#0, none#1L, none#2]

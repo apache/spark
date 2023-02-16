@@ -356,6 +356,68 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
         self.assert_eq(joined_plan3.toPandas(), joined_plan4.toPandas())
 
+    def test_join_ambiguous_cols(self):
+        # SPARK-41812: test join with ambiguous columns
+        data1 = [Row(id=1, value="foo"), Row(id=2, value=None)]
+        cdf1 = self.connect.createDataFrame(data1)
+        sdf1 = self.spark.createDataFrame(data1)
+
+        data2 = [Row(value="bar"), Row(value=None), Row(value="foo")]
+        cdf2 = self.connect.createDataFrame(data2)
+        sdf2 = self.spark.createDataFrame(data2)
+
+        cdf3 = cdf1.join(cdf2, cdf1["value"] == cdf2["value"])
+        sdf3 = sdf1.join(sdf2, sdf1["value"] == sdf2["value"])
+
+        self.assertEqual(cdf3.schema, sdf3.schema)
+        self.assertEqual(cdf3.collect(), sdf3.collect())
+
+        cdf4 = cdf1.join(cdf2, cdf1["value"].eqNullSafe(cdf2["value"]))
+        sdf4 = sdf1.join(sdf2, sdf1["value"].eqNullSafe(sdf2["value"]))
+
+        self.assertEqual(cdf4.schema, sdf4.schema)
+        self.assertEqual(cdf4.collect(), sdf4.collect())
+
+        cdf5 = cdf1.join(
+            cdf2, (cdf1["value"] == cdf2["value"]) & (cdf1["value"].eqNullSafe(cdf2["value"]))
+        )
+        sdf5 = sdf1.join(
+            sdf2, (sdf1["value"] == sdf2["value"]) & (sdf1["value"].eqNullSafe(sdf2["value"]))
+        )
+
+        self.assertEqual(cdf5.schema, sdf5.schema)
+        self.assertEqual(cdf5.collect(), sdf5.collect())
+
+        cdf6 = cdf1.join(cdf2, cdf1["value"] == cdf2["value"]).select(cdf1.value)
+        sdf6 = sdf1.join(sdf2, sdf1["value"] == sdf2["value"]).select(sdf1.value)
+
+        self.assertEqual(cdf6.schema, sdf6.schema)
+        self.assertEqual(cdf6.collect(), sdf6.collect())
+
+        cdf7 = cdf1.join(cdf2, cdf1["value"] == cdf2["value"]).select(cdf2.value)
+        sdf7 = sdf1.join(sdf2, sdf1["value"] == sdf2["value"]).select(sdf2.value)
+
+        self.assertEqual(cdf7.schema, sdf7.schema)
+        self.assertEqual(cdf7.collect(), sdf7.collect())
+
+    def test_invalid_column(self):
+        # SPARK-41812: fail df1.select(df2.col)
+        data1 = [Row(a=1, b=2, c=3)]
+        cdf1 = self.connect.createDataFrame(data1)
+
+        data2 = [Row(a=2, b=0)]
+        cdf2 = self.connect.createDataFrame(data2)
+
+        with self.assertRaises(AnalysisException):
+            cdf1.select(cdf2.a).schema
+
+        with self.assertRaises(AnalysisException):
+            cdf2.withColumn("x", cdf1.a + 1).schema
+
+        with self.assertRaisesRegex(AnalysisException, "attribute.*missing"):
+            cdf3 = cdf1.select(cdf1.a)
+            cdf3.select(cdf1.b).schema
+
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)
         sdf = self.spark.read.table(self.tbl_name)
@@ -2742,13 +2804,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
-
-    def test_unsupported_catalog_functions(self):
-        # SPARK-41939: Disable unsupported functions.
-
-        for f in ("registerFunction",):
-            with self.assertRaises(NotImplementedError):
-                getattr(self.connect.catalog, f)()
 
     def test_unsupported_io_functions(self):
         # SPARK-41964: Disable unsupported functions.

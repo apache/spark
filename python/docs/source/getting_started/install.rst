@@ -27,8 +27,8 @@ This page includes instructions for installing PySpark by using pip, Conda, down
 and building from the source.
 
 
-Python Version Supported
-------------------------
+Python Versions Supported
+-------------------------
 
 Python 3.7 and above.
 

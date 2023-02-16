@@ -1,0 +1,2 @@
+'RepartitionByExpression ['b ASC NULLS FIRST, 'id DESC NULLS FIRST], 33
++- LocalRelation <empty>, [none#0L, none#1, none#2]

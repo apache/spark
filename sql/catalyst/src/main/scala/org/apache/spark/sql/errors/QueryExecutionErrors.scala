@@ -311,6 +311,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
+  def overflowInConvError(context: SQLQueryContext): ArithmeticException = {
+    arithmeticOverflowError("Overflow in function conv()", context = context)
+  }
+
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2003",
@@ -1750,10 +1754,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "additionalErrorMessage" -> additionalErrorMessage))
   }
 
-  def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
+  def malformedRecordsDetectedInRecordParsingError(
+      badRecord: String, e: BadRecordException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2177",
+      errorClass = "MALFORMED_RECORD_IN_PARSING",
       messageParameters = Map(
+        "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
   }

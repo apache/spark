@@ -200,8 +200,6 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("grouping/grouping_id inside window function") {
-
-    val w = Window.orderBy(sum("earnings"))
     checkAnswer(
       courseSales.cube("course", "year")
         .agg(sum("earnings"),

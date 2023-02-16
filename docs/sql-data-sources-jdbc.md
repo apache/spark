@@ -365,7 +365,7 @@ logging into the data sources.
     <td>read/write</td>
   </tr>
   <tr>
-    <td><code>inferTimestampNTZType</code></td>
+    <td><code>preferTimestampNTZ</code></td>
     <td>false</td>
     <td>
       When the option is set to <code>true</code>, all timestamps are inferred as TIMESTAMP WITHOUT TIME ZONE.
