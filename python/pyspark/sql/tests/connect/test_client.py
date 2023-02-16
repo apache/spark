@@ -16,6 +16,17 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
         self.assertEqual(mock.req.client_type, "bar")
 
+    def test_user_agent_default(self):
+        client = SparkConnectClient('sc://foo/')
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        command = proto.Command()
+        client.execute_command(command)
+
+        self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
+        self.assertEqual(mock.req.client_type, "_SPARK_CONNECT_PYTHON")
+
 
 class MockService:
     """
