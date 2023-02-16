@@ -75,8 +75,8 @@ case class DescribeColumnExec(
         rows += toCatalystRow("avg_col_len", "NULL")
       }
 
-      if (colStats.get.avgLen().isPresent) {
-        rows += toCatalystRow("max_col_len", colStats.get.avgLen().getAsLong.toString)
+      if (colStats.get.maxLen().isPresent) {
+        rows += toCatalystRow("max_col_len", colStats.get.maxLen().getAsLong.toString)
       } else {
         rows += toCatalystRow("max_col_len", "NULL")
       }
