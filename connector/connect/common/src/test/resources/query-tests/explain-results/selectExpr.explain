@@ -1,0 +1,2 @@
+'Project [('a + 10) AS #0, ('id % 10) AS #1]
++- LocalRelation <empty>, [none#0L, none#1, none#2]

@@ -1,0 +1,4 @@
+K
+$Z" struct<id:bigint,a:int,b:double>"
+a + 10 as x"
+id % 10 as grp

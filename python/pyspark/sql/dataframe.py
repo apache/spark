@@ -4598,7 +4598,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
-        >>> df.freqItems(["c1", "c2"]).show()
+        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKIP
         +------------+------------+
         |c1_freqItems|c2_freqItems|
         +------------+------------+

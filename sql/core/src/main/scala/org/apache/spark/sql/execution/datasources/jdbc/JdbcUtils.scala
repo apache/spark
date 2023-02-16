@@ -251,7 +251,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       try {
         statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect,
-          isTimestampNTZ = options.inferTimestampNTZType))
+          isTimestampNTZ = options.preferTimestampNTZ))
       } catch {
         case _: SQLException => None
       } finally {

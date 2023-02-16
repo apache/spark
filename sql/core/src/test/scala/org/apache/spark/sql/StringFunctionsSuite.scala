@@ -702,4 +702,16 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("SPARK-42384: mask with null input") {
+    val df = Seq(
+      ("AbCD123-@$#"),
+      (null)
+    ).toDF("a")
+
+    checkAnswer(
+      df.selectExpr("mask(a,'Q','q','d','o')"),
+      Row("QqQQdddoooo") :: Row(null) :: Nil
+    )
+  }
 }

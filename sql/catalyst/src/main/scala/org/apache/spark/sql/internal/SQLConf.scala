@@ -1425,16 +1425,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
-    buildConf("spark.sql.sources.timestampNTZTypeInference.enabled")
-      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
-        "this config determines whether to choose the TimestampNTZ type if a column can be " +
-        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
-        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val BUCKETING_ENABLED = buildConf("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
     .version("2.0.0")
@@ -3538,8 +3528,9 @@ object SQLConf {
 
   val TIMESTAMP_TYPE =
     buildConf("spark.sql.timestampType")
-      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause " +
-        s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
+      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause, " +
+        "type literal and the schema inference of data sources. " +
+        s"Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
         "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
         s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
         "Before the 3.4.0 release, Spark only supports the TIMESTAMP WITH " +
@@ -4846,18 +4837,6 @@ class SQLConf extends Serializable with Logging {
 
     case "TIMESTAMP_NTZ" =>
       TimestampNTZType
-  }
-
-  def inferTimestampNTZInDataSources: Boolean = getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)
-
-  // Preferred timestamp type in schema reference when a column can be either Timestamp type or
-  // TimestampNTZ type.
-  def timestampTypeInSchemaInference: AtomicType = {
-    if (getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)) {
-      TimestampNTZType
-    } else {
-      TimestampType
-    }
   }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)

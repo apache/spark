@@ -1,0 +1,4 @@
+¨
+ŽZ‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>2
+
+dv1v2v3

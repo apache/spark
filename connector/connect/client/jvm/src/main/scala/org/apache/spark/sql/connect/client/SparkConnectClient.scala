@@ -70,10 +70,11 @@ class SparkConnectClient(
    * @return
    *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
    */
-  def analyze(plan: proto.Plan): proto.AnalyzePlanResponse = {
+  def analyze(plan: proto.Plan, mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse = {
     val request = proto.AnalyzePlanRequest
       .newBuilder()
       .setPlan(plan)
+      .setExplain(proto.Explain.newBuilder().setExplainMode(mode))
       .setUserContext(userContext)
       .setClientId(sessionId)
       .build()

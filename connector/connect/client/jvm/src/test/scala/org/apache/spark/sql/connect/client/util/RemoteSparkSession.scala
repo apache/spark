@@ -130,8 +130,7 @@ trait RemoteSparkSession
         // Run a simple query to verify the server is really up and ready
         val result = spark
           .sql("select val from (values ('Hello'), ('World')) as t(val)")
-          .collectResult()
-          .toArray
+          .collect()
         assert(result.length == 2)
         success = true
         debug("Spark Connect Server is up.")
