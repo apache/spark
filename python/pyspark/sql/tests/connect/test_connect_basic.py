@@ -2953,6 +2953,27 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
+    def test_invalid_user_agent_charset(self):
+        invalid_user_agents = [
+            "agent»", # non standard symbol
+            "age nt", # whitespace
+            "ägent"
+        ]
+        for user_agent in invalid_user_agents:
+            with self.subTest(user_agent=user_agent):
+                chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+                with self.assertRaises(SparkConnectException) as err:
+                    chan.userAgent
+
+                self.assertRegex(err.exception.message, "alphanumeric and common punctuations")
+
+    def test_invalid_user_agent_len(self):
+        user_agent = "x" * 201
+        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        with self.assertRaises(SparkConnectException) as err:
+            chan.userAgent
+        self.assertRegex(err.exception.message, "characters in length")
+
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)

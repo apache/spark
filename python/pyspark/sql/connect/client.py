@@ -19,6 +19,8 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+import string
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
@@ -255,7 +257,13 @@ class ChannelBuilder:
             The user_agent parameter specified in the connection string,
             or "_SPARK_CONNECT_PYTHON" when not specified.
         """
-        return self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
+        user_agent = self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
+        allowed_chars = string.ascii_letters + string.punctuation
+        if (len(user_agent) > 200):
+            raise SparkConnectException("'user_agent' parameter cannot exceed 200 characters in length")
+        if (set(user_agent).difference(allowed_chars)):
+            raise SparkConnectException("Only alphanumeric and common punctuations are allowed for 'user_agent'")
+        return user_agent
 
     def get(self, key: str) -> Any:
         """
