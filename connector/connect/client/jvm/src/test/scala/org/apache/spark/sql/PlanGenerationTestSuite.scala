@@ -826,8 +826,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.mode(fn.col("a"))
   }
 
-  functionTest("max") {
-    fn.max("a")
+  test("function max") {
+    select(fn.max("id"))
   }
 
   functionTest("max_by") {

@@ -570,6 +570,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   test("Write with partitions") {
     val cmd = localRelation.write(
       tableName = Some("testtable"),
+      tableSaveMethod = Some("save_as_table"),
       format = Some("parquet"),
       partitionByCols = Seq("noid"))
     assertThrows[AnalysisException] {
@@ -614,6 +615,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(
         localRelation.write(
           tableName = Some("testtable"),
+          tableSaveMethod = Some("save_as_table"),
           format = Some("parquet"),
           sortByColumns = Seq("id"),
           bucketByCols = Seq("id"),
@@ -626,6 +628,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         localRelation
           .write(
             tableName = Some("testtable"),
+            tableSaveMethod = Some("save_as_table"),
             format = Some("parquet"),
             sortByColumns = Seq("noid"),
             bucketByCols = Seq("id"),
@@ -634,7 +637,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Write to Table") {
     withTable("testtable") {
-      val cmd = localRelation.write(format = Some("parquet"), tableName = Some("testtable"))
+      val cmd = localRelation.write(
+        format = Some("parquet"),
+        tableName = Some("testtable"),
+        tableSaveMethod = Some("save_as_table"))
       transform(cmd)
       // Check that we can find and drop the table.
       spark.sql(s"select count(*) from testtable").collect()
@@ -653,6 +659,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     combinations.foreach { a =>
       assert(SaveModeConverter.toSaveModeProto(a._1) == a._2)
       assert(SaveModeConverter.toSaveMode(a._2) == a._1)
+    }
+  }
+
+  test("TableSaveMethod conversion tests") {
+    assertThrows[IllegalArgumentException](
+      TableSaveMethodConverter.toTableSaveMethodProto("unknown"))
+
+    val combinations = Seq(
+      (
+        "save_as_table",
+        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE),
+      (
+        "insert_into",
+        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO))
+    combinations.foreach { a =>
+      assert(TableSaveMethodConverter.toTableSaveMethodProto(a._1) == a._2)
     }
   }
 

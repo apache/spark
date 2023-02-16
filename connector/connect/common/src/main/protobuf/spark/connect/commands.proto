@@ -72,7 +72,7 @@ message WriteOperation {
   // The destination of the write operation must be either a path or a table.
   oneof save_type {
     string path = 3;
-    string table_name = 4;
+    SaveTable table = 4;
   }
 
   // (Required) the save mode.
@@ -90,6 +90,19 @@ message WriteOperation {
 
   // (Optional) A list of configuration options.
   map<string, string> options = 9;
+
+  message SaveTable {
+    // (Required) The table name.
+    string table_name = 1;
+    // (Required) The method to be called to write to the table.
+    TableSaveMethod save_method = 2;
+
+    enum TableSaveMethod {
+      TABLE_SAVE_METHOD_UNSPECIFIED = 0;
+      TABLE_SAVE_METHOD_SAVE_AS_TABLE = 1;
+      TABLE_SAVE_METHOD_INSERT_INTO = 2;
+    }
+  }
 
   message BucketBy {
     repeated string bucket_column_names = 1;

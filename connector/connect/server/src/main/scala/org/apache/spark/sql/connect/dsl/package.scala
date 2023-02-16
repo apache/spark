@@ -26,8 +26,8 @@ import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
-import org.apache.spark.sql.connect.planner.SaveModeConverter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -200,6 +200,7 @@ package object dsl {
           format: Option[String] = None,
           path: Option[String] = None,
           tableName: Option[String] = None,
+          tableSaveMethod: Option[String] = None,
           mode: Option[String] = None,
           sortByColumns: Seq[String] = Seq.empty,
           partitionByCols: Seq[String] = Seq.empty,
@@ -214,7 +215,13 @@ package object dsl {
           .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
-          tableName.foreach(writeOp.setTableName(_))
+          tableName.foreach { tn =>
+            val saveTable = WriteOperation.SaveTable.newBuilder().setTableName(tn)
+            tableSaveMethod
+              .map(TableSaveMethodConverter.toTableSaveMethodProto(_))
+              .foreach(saveTable.setSaveMethod(_))
+            writeOp.setTable(saveTable.build())
+          }
         } else {
           path.foreach(writeOp.setPath(_))
         }
