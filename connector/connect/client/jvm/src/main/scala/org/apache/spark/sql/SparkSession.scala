@@ -162,6 +162,11 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     result
   }
 
+  private[sql] def execute(command: proto.Command): Unit = {
+    val plan = proto.Plan.newBuilder().setCommand(command).build()
+    client.execute(plan)
+  }
+
   override def close(): Unit = {
     client.shutdown()
     allocator.close()

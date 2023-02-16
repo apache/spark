@@ -128,6 +128,15 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
+  test("write table") {
+    val df = spark.range(10).limit(3)
+    df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
+    val list = spark.sql("select * from myTable").collectAsList()
+    assert(list.size() == 3)
+
+    spark.sql("drop table if exists myTable")
+  }
+
   // TODO test large result when we can create table or view
   // test("test spark large result")
   private def captureStdOut(block: => Unit): String = {

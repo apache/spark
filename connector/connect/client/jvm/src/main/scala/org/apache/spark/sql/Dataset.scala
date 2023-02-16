@@ -2237,6 +2237,18 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   def inputFiles: Array[String] = analyze.getInputFilesList.asScala.toArray
 
+
+  /**
+   * Interface for saving the content of the non-streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def write: DataFrameWriter[T] = {
+    // if (isStreaming) {} TODO: support client local check?
+    new DataFrameWriter[T](this)
+  }
+
   private[sql] def analyze: proto.AnalyzePlanResponse = {
     session.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
   }
