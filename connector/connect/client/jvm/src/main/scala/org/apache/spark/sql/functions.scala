@@ -44,6 +44,14 @@ object functions {
    */
   def col(colName: String): Column = Column(colName)
 
+  /**
+   * Aggregate function: returns the maximum value of the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def max(e: Column): Column = Column.fn("max", e)
+
   private def createLiteral(f: proto.Expression.Literal.Builder => Unit): Column = Column {
     builder =>
       val literalBuilder = proto.Expression.Literal.newBuilder()
