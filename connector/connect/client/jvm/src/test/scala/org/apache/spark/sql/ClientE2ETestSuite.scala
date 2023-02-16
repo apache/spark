@@ -40,36 +40,30 @@ class ClientE2ETestSuite extends RemoteSparkSession {
 
   test("spark result array") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
-    df.withResult { result =>
-      assert(result.length == 2)
-      val array = result.toArray
-      assert(array.length == 2)
-      assert(array(0).getString(0) == "Hello")
-      assert(array(1).getString(0) == "World")
-    }
+    val result = df.collect()
+    assert(result.length == 2)
+    assert(result.length == 2)
+    assert(result(0).getString(0) == "Hello")
+    assert(result(1).getString(0) == "World")
   }
 
   test("simple dataset") {
     val df = spark.range(10).limit(3)
-    df.withResult { result =>
-      assert(result.length == 3)
-      val array = result.toArray
-      assert(array(0).getLong(0) == 0)
-      assert(array(1).getLong(0) == 1)
-      assert(array(2).getLong(0) == 2)
-    }
+    val result = df.collect()
+    assert(result.length == 3)
+    assert(result(0).getLong(0) == 0)
+    assert(result(1).getLong(0) == 1)
+    assert(result(2).getLong(0) == 2)
   }
 
   test("simple udf") {
-
     def dummyUdf(x: Int): Int = x + 5
     val myUdf = udf(dummyUdf _)
     val df = spark.range(5).select(myUdf(Column("id")))
-    df.withResult { result =>
-      assert(result.length == 5)
-      result.toArray.zipWithIndex.foreach { case (v, idx) =>
-        assert(v.getInt(0) == idx + 5)
-      }
+    val result = df.collect()
+    assert(result.length == 5)
+    result.zipWithIndex.foreach { case (v, idx) =>
+      assert(v.getInt(0) == idx + 5)
     }
   }
 
