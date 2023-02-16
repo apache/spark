@@ -35,7 +35,7 @@ class MsckRepairTableParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("REPAIR TABLE a.b.c"),
       RepairTable(
-        UnresolvedTable(Seq("a", "b", "c"), "REPAIR TABLE", None),
+        UnresolvedTable(Seq("a", "b", "c"), "MSCK REPAIR TABLE", None),
         enableAddPartitions = true,
         enableDropPartitions = false))
   }
