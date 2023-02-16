@@ -118,8 +118,6 @@ kafka-source-initial-offset-version-2.1.0.bin
 kafka-source-initial-offset-future-version.bin
 announce.tmpl
 vote.tmpl
-SessionManager.java
-SessionHandler.java
 GangliaReporter.java
 application_1578436911597_0052
 config.properties

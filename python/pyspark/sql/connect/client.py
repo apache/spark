@@ -19,7 +19,7 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
