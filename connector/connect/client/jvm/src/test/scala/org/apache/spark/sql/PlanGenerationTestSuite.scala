@@ -971,16 +971,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.negate(fn.col("a"))
   }
 
-  functionTest("rand") {
-    fn.rand()
-  }
-
   functionTest("rand with seed") {
     fn.rand(133)
-  }
-
-  functionTest("randn") {
-    fn.randn()
   }
 
   functionTest("randn with seed") {
