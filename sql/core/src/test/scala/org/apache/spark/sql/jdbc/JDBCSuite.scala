@@ -1951,7 +1951,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       } else {
         TimestampType
       }
-      val res = readDf.option("inferTimestampNTZType", inferTimestampNTZ).load()
+      val res = readDf.option("preferTimestampNTZ", inferTimestampNTZ).load()
       checkAnswer(res, Seq(Row(null)))
       assert(res.schema.fields.head.dataType == tsType)
       withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
@@ -1984,7 +1984,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
           DateTimeTestUtils.withDefaultTimeZone(zoneId) {
             // Infer TimestmapNTZ column with data source option
             val res = spark.read.format("jdbc")
-              .option("inferTimestampNTZType", "true")
+              .option("preferTimestampNTZ", "true")
               .option("url", urlWithUserAndPass)
               .option("dbtable", tableName)
               .load()

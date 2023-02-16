@@ -68,7 +68,7 @@ object JDBCRDD extends Logging {
         val rs = statement.executeQuery()
         try {
           JdbcUtils.getSchema(rs, dialect, alwaysNullable = true,
-            isTimestampNTZ = options.inferTimestampNTZType)
+            isTimestampNTZ = options.preferTimestampNTZ)
         } finally {
           rs.close()
         }
