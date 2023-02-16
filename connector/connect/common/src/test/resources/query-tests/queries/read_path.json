@@ -1,0 +1,11 @@
+{
+  "read": {
+    "dataSource": {
+      "format": "csv",
+      "schema": "name STRING,age INT",
+      "options": {
+        "path": "../common/src/test/resources/query-tests/test-data/people.csv"
+      }
+    }
+  }
+}

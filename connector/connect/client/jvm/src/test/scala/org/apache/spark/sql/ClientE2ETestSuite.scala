@@ -20,52 +20,111 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 
 import scala.collection.JavaConverters._
 
+import io.grpc.StatusRuntimeException
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
 
   // Spark Result
   test("spark result schema") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
-    val schema = df.collectResult().schema
-    assert(schema == StructType(StructField("val", StringType, false) :: Nil))
+    df.withResult { result =>
+      val schema = result.schema
+      assert(schema == StructType(StructField("val", StringType, nullable = false) :: Nil))
+    }
   }
 
   test("spark result array") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
-    val result = df.collectResult()
+    val result = df.collect()
     assert(result.length == 2)
-    val array = result.toArray
-    assert(array.length == 2)
-    assert(array(0).getString(0) == "Hello")
-    assert(array(1).getString(0) == "World")
+    assert(result(0).getString(0) == "Hello")
+    assert(result(1).getString(0) == "World")
   }
 
   test("simple dataset") {
     val df = spark.range(10).limit(3)
-    val result = df.collectResult()
+    val result = df.collect()
     assert(result.length == 3)
-    val array = result.toArray
-    assert(array(0).getLong(0) == 0)
-    assert(array(1).getLong(0) == 1)
-    assert(array(2).getLong(0) == 2)
+    assert(result(0).getLong(0) == 0)
+    assert(result(1).getLong(0) == 1)
+    assert(result(2).getLong(0) == 2)
   }
 
   test("simple udf") {
-
     def dummyUdf(x: Int): Int = x + 5
     val myUdf = udf(dummyUdf _)
     val df = spark.range(5).select(myUdf(Column("id")))
-
-    val result = df.collectResult()
+    val result = df.collect()
     assert(result.length == 5)
-    result.toArray.zipWithIndex.foreach { case (v, idx) =>
+    result.zipWithIndex.foreach { case (v, idx) =>
       assert(v.getInt(0) == idx + 5)
+    }
+  }
+
+  test("read") {
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.csv")
+      .toAbsolutePath
+    val df = spark.read
+      .format("csv")
+      .option("path", testDataPath.toString)
+      .options(Map("header" -> "true", "delimiter" -> ";"))
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
+      .load()
+    val array = df.collectResult().toArray
+    assert(array.length == 2)
+    assert(array(0).getString(0) == "Jorge")
+    assert(array(0).getInt(1) == 30)
+    assert(array(0).getString(2) == "Developer")
+  }
+
+  test("read path collision") {
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.csv")
+      .toAbsolutePath
+    val df = spark.read
+      .format("csv")
+      .option("path", testDataPath.toString)
+      .options(Map("header" -> "true", "delimiter" -> ";"))
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
+      .csv(testDataPath.toString)
+    // Failed because the path cannot be provided both via option and load method (csv).
+    assertThrows[StatusRuntimeException] {
+      df.collectResult().toArray
     }
   }
 

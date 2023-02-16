@@ -30,7 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.types.{MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types._
 
 // scalastyle:off
 /**
@@ -78,6 +78,17 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   protected val queryFilePath: Path = baseResourcePath.resolve("queries")
+
+  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // with the datasource.
+  protected val testDataPath: Path = java.nio.file.Paths.get(
+    "../",
+    "common",
+    "src",
+    "test",
+    "resources",
+    "query-tests",
+    "test-data")
 
   private val printer = JsonFormat.printer()
 
@@ -192,6 +203,47 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   test("range") {
     session.range(1, 10, 1, 2)
+  }
+
+  test("read") {
+    session.read
+      .format("csv")
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
+      .option("header", "true")
+      .options(Map("delimiter" -> ";"))
+      .load(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("read json") {
+    session.read.json(testDataPath.resolve("people.json").toString)
+  }
+
+  test("read csv") {
+    session.read.csv(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("read parquet") {
+    session.read.parquet(testDataPath.resolve("users.parquet").toString)
+  }
+
+  test("read orc") {
+    session.read.orc(testDataPath.resolve("users.orc").toString)
+  }
+
+  test("read table") {
+    session.read.table("myTable")
+  }
+
+  test("table") {
+    session.table("myTable")
+  }
+
+  test("read text") {
+    session.read.text(testDataPath.resolve("people.txt").toString)
   }
 
   /* Dataset API */
