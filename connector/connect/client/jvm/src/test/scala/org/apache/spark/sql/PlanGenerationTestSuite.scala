@@ -84,7 +84,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
-  protected val testDataPath: Path = Path.of(
+  protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
     "common",
     "src",
