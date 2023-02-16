@@ -115,7 +115,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       val planner = new SparkConnectPlanner(spark)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual = catalystPlan.canonicalized.treeString
+      val actual = normalizeExprIds(catalystPlan).treeString
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.

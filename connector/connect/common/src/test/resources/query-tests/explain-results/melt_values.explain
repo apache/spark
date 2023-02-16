@@ -1,2 +1,2 @@
-Expand [[none#1, id, none#0L]], [none#1, none#0, none#1L]
-+- LocalRelation <empty>, [none#0L, none#1, none#2]
+Expand [[a#0, id, id#0L]], [a#0, #0, value#0L]
++- LocalRelation <empty>, [id#0L, a#0, b#0]
