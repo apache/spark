@@ -183,7 +183,7 @@ private object MsSqlServerDialect extends JdbcDialect {
   }
 
   override def getLimitClause(limit: Integer): String = {
-    if (limit > 0) s"TOP $limit" else ""
+    if (limit > 0) s"TOP ($limit)" else ""
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {
