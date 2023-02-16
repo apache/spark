@@ -32,28 +32,32 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   // Spark Result
   test("spark result schema") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
-    val schema = df.collectResult().schema
-    assert(schema == StructType(StructField("val", StringType, false) :: Nil))
+    df.withResult { result =>
+      val schema = result.schema
+      assert(schema == StructType(StructField("val", StringType, nullable = false) :: Nil))
+    }
   }
 
   test("spark result array") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
-    val result = df.collectResult()
-    assert(result.length == 2)
-    val array = result.toArray
-    assert(array.length == 2)
-    assert(array(0).getString(0) == "Hello")
-    assert(array(1).getString(0) == "World")
+    df.withResult { result =>
+      assert(result.length == 2)
+      val array = result.toArray
+      assert(array.length == 2)
+      assert(array(0).getString(0) == "Hello")
+      assert(array(1).getString(0) == "World")
+    }
   }
 
   test("simple dataset") {
     val df = spark.range(10).limit(3)
-    val result = df.collectResult()
-    assert(result.length == 3)
-    val array = result.toArray
-    assert(array(0).getLong(0) == 0)
-    assert(array(1).getLong(0) == 1)
-    assert(array(2).getLong(0) == 2)
+    df.withResult { result =>
+      assert(result.length == 3)
+      val array = result.toArray
+      assert(array(0).getLong(0) == 0)
+      assert(array(1).getLong(0) == 1)
+      assert(array(2).getLong(0) == 2)
+    }
   }
 
   test("simple udf") {
@@ -61,11 +65,11 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     def dummyUdf(x: Int): Int = x + 5
     val myUdf = udf(dummyUdf _)
     val df = spark.range(5).select(myUdf(Column("id")))
-
-    val result = df.collectResult()
-    assert(result.length == 5)
-    result.toArray.zipWithIndex.foreach { case (v, idx) =>
-      assert(v.getInt(0) == idx + 5)
+    df.withResult { result =>
+      assert(result.length == 5)
+      result.toArray.zipWithIndex.foreach { case (v, idx) =>
+        assert(v.getInt(0) == idx + 5)
+      }
     }
   }
 
