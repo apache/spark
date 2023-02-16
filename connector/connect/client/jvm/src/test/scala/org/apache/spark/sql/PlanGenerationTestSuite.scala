@@ -251,10 +251,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("join condition") {
-    left.as("l").join(
-      right.as("r"),
-      fn.col("l.id") === fn.col("r.id"),
-      "left_anti")
+    left.as("l").join(right.as("r"), fn.col("l.id") === fn.col("r.id"), "left_anti")
   }
 
   test("crossJoin") {
