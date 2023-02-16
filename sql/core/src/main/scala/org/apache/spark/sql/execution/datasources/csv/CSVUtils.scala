@@ -43,9 +43,9 @@ object CSVUtils {
         nonEmptyLines.as[String]
       }
     }
-    commentFilteredLines.rdd.zipWithIndex().toDF("value", "order")
-      .filter($"order" >= options.skipLines)
-      .drop("order")
+    commentFilteredLines.rdd
+      .mapPartitions(_.drop(options.skipLines))
+      .toDF("value")
       .as[String]
   }
 
