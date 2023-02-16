@@ -632,7 +632,7 @@ class SparkConnectClient(object):
             Proto representation of the plan.
 
         """
-        logger.info("Execute")
+        logger.debug(f"Execute request: » {os.linesep}{req}{os.linesep} «")
         try:
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
@@ -650,7 +650,7 @@ class SparkConnectClient(object):
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
     ) -> Tuple["pa.Table", List[PlanMetrics]]:
-        logger.info("ExecuteAndFetch")
+        logger.debug(f"ExecuteAndFetch request: » {os.linesep}{req}{os.linesep} «")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
         batches: List[pa.RecordBatch] = []
