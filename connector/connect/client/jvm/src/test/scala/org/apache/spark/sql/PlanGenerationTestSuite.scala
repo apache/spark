@@ -735,24 +735,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     select(fn.max(Column("id")))
   }
 
-  test("function udf " + scala) {
-    // This test might be a bit tricky if different JVM
-    // versions are used to generate the golden files.
-    val functions = Seq(
-      fn.udf(TestUDFs.udf0)
-        .asNonNullable()
-        .asNondeterministic(),
-      fn.udf(TestUDFs.udf1).withName("foo"),
-      fn.udf(TestUDFs.udf2).withName("f3"),
-      fn.udf(TestUDFs.udf3).withName("bar"),
-      fn.udf(TestUDFs.udf4).withName("f_four"))
-    val id = fn.col("id")
-    val columns = functions.zipWithIndex.map { case (udf, i) =>
-      udf(Seq.fill(i)(id): _*)
-    }
-    select(columns: _*)
-  }
-
   test("function lit") {
     select(
       fn.lit(fn.col("id")),
