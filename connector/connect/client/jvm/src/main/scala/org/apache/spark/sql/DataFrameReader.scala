@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
  * @since 3.4.0
  */
 @Stable
-class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
+class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging {
 
   /**
    * Specifies the input data source format.
@@ -45,8 +45,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
-   * automatically from data. By specifying the schema here, the underlying data source can
-   * skip the schema inference step, and thus speed up data loading.
+   * automatically from data. By specifying the schema here, the underlying data source can skip
+   * the schema inference step, and thus speed up data loading.
    *
    * @since 3.4.0
    */
@@ -59,9 +59,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON) can
-   * infer the input schema automatically from data. By specifying the schema here, the underlying
-   * data source can skip the schema inference step, and thus speed up data loading.
+   * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON)
+   * can infer the input schema automatically from data. By specifying the schema here, the
+   * underlying data source can skip the schema inference step, and thus speed up data loading.
    *
    * {{{
    *   spark.read.schema("a INT, b STRING, c DOUBLE").csv("test.csv")
@@ -76,8 +76,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -89,8 +89,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -99,8 +99,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -109,8 +109,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -119,8 +119,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -132,8 +132,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds input options for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -153,8 +153,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads input in as a `DataFrame`, for data sources that require a path (e.g. data backed by
-   * a local or distributed file system).
+   * Loads input in as a `DataFrame`, for data sources that require a path (e.g. data backed by a
+   * local or distributed file system).
    *
    * @since 3.4.0
    */
@@ -164,8 +164,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads input in as a `DataFrame`, for data sources that support multiple paths.
-   * Only works if the source is a HadoopFsRelationProvider.
+   * Loads input in as a `DataFrame`, for data sources that support multiple paths. Only works if
+   * the source is a HadoopFsRelationProvider.
    *
    * @since 3.4.0
    */
@@ -176,8 +176,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       assertSourceFormatSpecified()
       dataSourceBuilder.setFormat(source)
       userSpecifiedSchema.foreach(schema => dataSourceBuilder.setSchema(schema.toDDL))
-      extraOptions.foreach {
-        case (k, v) => dataSourceBuilder.putOptions(k, v)
+      extraOptions.foreach { case (k, v) =>
+        dataSourceBuilder.putOptions(k, v)
       }
       paths.foreach(path => dataSourceBuilder.addPaths(path))
       builder.build()
@@ -205,20 +205,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
-   * You can find the JSON-specific options for reading JSON files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the JSON-specific options for reading JSON files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
   @scala.annotation.varargs
   def json(paths: String*): DataFrame = {
-    format("json").load(paths : _*)
+    format("json").load(paths: _*)
   }
 
   /**
-   * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the
-   * other overloaded `csv()` method for more details.
+   * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the other
+   * overloaded `csv()` method for more details.
    *
    * @since 3.4.0
    */
@@ -234,18 +234,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
    * specify the schema explicitly using `schema`.
    *
-   * You can find the CSV-specific options for reading CSV files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the CSV-specific options for reading CSV files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+  def csv(paths: String*): DataFrame = format("csv").load(paths: _*)
 
   /**
-   * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation
-   * on the other overloaded `parquet()` method for more details.
+   * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the
+   * other overloaded `parquet()` method for more details.
    *
    * @since 3.4.0
    */
@@ -257,10 +257,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`.
    *
-   * Parquet-specific option(s) for reading Parquet files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * Parquet-specific option(s) for reading Parquet files can be found in <a href=
+   * "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option"> Data
+   * Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
@@ -272,7 +271,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads an ORC file and returns the result as a `DataFrame`.
    *
-   * @param path input path
+   * @param path
+   *   input path
    * @since 3.4.0
    */
   def orc(path: String): DataFrame = {
@@ -283,12 +283,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads ORC files and returns the result as a `DataFrame`.
    *
-   * ORC-specific option(s) for reading ORC files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * ORC-specific option(s) for reading ORC files can be found in <a href=
+   * "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option"> Data
+   * Source Option</a> in the version you use.
    *
-   * @param paths input paths
+   * @param paths
+   *   input paths
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -296,15 +296,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
-   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
-   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
-   * streaming query plan.
+   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a
+   * view, the returned DataFrame is simply the query plan of the view, which can either be a
+   * batch or streaming query plan.
    *
-   * @param tableName is either a qualified or unqualified name that designates a table or view.
-   *                  If a database is specified, it identifies the table/view from the database.
-   *                  Otherwise, it first attempts to find a temporary view with the given name
-   *                  and then match the table/view from the current database.
-   *                  Note that, the global temporary view database is also valid here.
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table or view. If a database is
+   *   specified, it identifies the table/view from the database. Otherwise, it first attempts to
+   *   find a temporary view with the given name and then match the table/view from the current
+   *   database. Note that, the global temporary view database is also valid here.
    * @since 3.4.0
    */
   def table(tableName: String): DataFrame = {
@@ -315,8 +315,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
-   * "value", and followed by partitioned columns if there are any. See the documentation on
-   * the other overloaded `text()` method for more details.
+   * "value", and followed by partitioned columns if there are any. See the documentation on the
+   * other overloaded `text()` method for more details.
    *
    * @since 3.4.0
    */
@@ -327,8 +327,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
-   * "value", and followed by partitioned columns if there are any.
-   * The text files must be encoded as UTF-8.
+   * "value", and followed by partitioned columns if there are any. The text files must be encoded
+   * as UTF-8.
    *
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
@@ -339,19 +339,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   spark.read().text("/path/to/spark/README.md")
    * }}}
    *
-   * You can find the text-specific options for reading text files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the text-specific options for reading text files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
-   * @param paths input paths
+   * @param paths
+   *   input paths
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): DataFrame = format("text").load(paths: _*)
 
   /**
-   * Loads text files and returns a [[Dataset]] of String. See the documentation on the
-   * other overloaded `textFile()` method for more details.
+   * Loads text files and returns a [[Dataset]] of String. See the documentation on the other
+   * overloaded `textFile()` method for more details.
    * @since 3.4.0
    */
   def textFile(path: String): Dataset[String] = {
@@ -361,8 +362,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
-   * The text files must be encoded as UTF-8.
+   * contains a single string column named "value". The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
@@ -378,7 +378,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the text-specific options as specified in `DataFrameReader.text`.
    *
-   * @param paths input path
+   * @param paths
+   *   input path
    * @since 3.4.0
    */
   @scala.annotation.varargs

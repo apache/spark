@@ -71,24 +71,28 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("read") {
-    val testDataPath = java.nio.file.Paths.get(
-      IntegrationTestUtils.sparkHome,
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources",
-      "query-tests",
-      "test-data",
-    "people.csv").toAbsolutePath
-    val df = spark.read.format("csv")
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.csv")
+      .toAbsolutePath
+    val df = spark.read
+      .format("csv")
       .option("path", testDataPath.toString)
       .options(Map("header" -> "true", "delimiter" -> ";"))
-      .schema(StructType(
-        StructField("name", StringType) ::
-          StructField("age", IntegerType) ::
-          StructField("job", StringType) :: Nil))
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
       .load()
     val array = df.collectResult().toArray
     assert(array.length == 2)
@@ -98,24 +102,28 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("read path collision") {
-    val testDataPath = java.nio.file.Paths.get(
-      IntegrationTestUtils.sparkHome,
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources",
-      "query-tests",
-      "test-data",
-      "people.csv").toAbsolutePath
-    val df = spark.read.format("csv")
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.csv")
+      .toAbsolutePath
+    val df = spark.read
+      .format("csv")
       .option("path", testDataPath.toString)
       .options(Map("header" -> "true", "delimiter" -> ";"))
-      .schema(StructType(
-        StructField("name", StringType) ::
-          StructField("age", IntegerType) ::
-          StructField("job", StringType) :: Nil))
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
       .csv(testDataPath.toString)
     // Failed because the path cannot be provided both via option and load method (csv).
     assertThrows[StatusRuntimeException] {

@@ -209,11 +209,13 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("read") {
-    session.read.format("csv")
-      .schema(StructType(
-        StructField("name", StringType) ::
-          StructField("age", IntegerType) ::
-          StructField("job", StringType) :: Nil))
+    session.read
+      .format("csv")
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
       .option("header", "true")
       .options(Map("delimiter" -> ";"))
       .load(testDataPath.resolve("people.csv").toString)
