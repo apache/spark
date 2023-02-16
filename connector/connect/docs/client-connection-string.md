@@ -88,7 +88,7 @@ sc://hostname:port/;param1=value;param2=value
     <td>The user agent acting on behalf of the user, typically applications
     that use Spark Connect to implement its functionality and execute Spark
     requests on behalf of the user.<br/>
-    <i>Default: </i>TBD</td>
+    <i>Default: </i>_SPARK_CONNECT_PYTHON</td>
     <td><pre>user_agent=my_data_query_app</pre></td>
   </tr>
 </table>
