@@ -2949,7 +2949,7 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = ChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
-
+        self.assertEqual(chan.userAgent, "_SPARK_CONNECT_PYTHON")
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
@@ -2965,8 +2965,9 @@ class ChannelBuilderTests(unittest.TestCase):
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021")
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
         self.assertEqual("host:15002", chan.endpoint)
+        self.assertEqual("foo", chan.userAgent)
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
