@@ -18,7 +18,7 @@
           }
         }, {
           "literal": {
-            "string": "20"
+            "integer": 20
           }
         }]
       }

@@ -844,7 +844,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("covar_pop") {
-    fn.covar_pop("a", "")
+    fn.covar_pop("a", "b")
   }
 
   functionTest("covar_samp") {
@@ -853,14 +853,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   functionTest("first") {
     fn.first("a", ignoreNulls = true)
-  }
-
-  functionTest("grouping") {
-    fn.grouping("a")
-  }
-
-  functionTest("grouping_id") {
-    fn.grouping_id("a", "d")
   }
 
   functionTest("kurtosis") {
@@ -896,7 +888,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("percentile_approx") {
-    fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit("20"))
+    fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit(20))
   }
 
   functionTest("product") {

@@ -1,2 +1,2 @@
-'Project [unresolvedalias('log2('a), None)]
-+- LocalRelation <empty>, [none#0L, none#1, none#2, none#3, none#4, none#5, none#6]
+Project [LOG2(cast(a#0 as double)) AS LOG2(a)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]
