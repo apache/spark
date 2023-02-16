@@ -187,11 +187,9 @@ class Distributor:
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
                 key = "spark.driver.resource.gpu.amount"
-                if "gpu" not in self.sc.resources:
-                    raise RuntimeError("GPUs were unable to be found on the driver.")
                 num_available_gpus = int(self.sc.getConf().get(key, "0"))
-                if num_available_gpus == 0:
-                    raise RuntimeError("GPU resources were not configured properly on the driver.")
+                if num_available_gpus < 1:
+                    raise RuntimeError("GPU resources were not found on the driver.")
                 if self.num_processes > num_available_gpus:
                     self.logger.warning(
                         "'num_processes' cannot be set to a value greater than the number of "
