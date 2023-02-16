@@ -59,10 +59,10 @@ case class JoinEstimation(join: Join) extends Logging {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
       val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
-      val leftUniqueness = left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys)))
-      val rightUniqueness = right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys)))
+      val leftSideUniqueness = left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys)))
+      val rightSideUniqueness = right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys)))
       val (numInnerJoinedRows, keyStatsAfterJoin) =
-        computeCardinalityAndStats(joinKeyPairs, leftUniqueness, rightUniqueness)
+        computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
 
       // 2. Estimate the number of output rows
       val leftRows = leftStats.rowCount.get
@@ -180,10 +180,10 @@ case class JoinEstimation(join: Join) extends Logging {
   // scalastyle:on
   private def computeCardinalityAndStats(
       keyPairs: Seq[(AttributeReference, AttributeReference)],
-      leftUniqueness: Boolean,
-      rightUniqueness: Boolean): (BigInt, AttributeMap[ColumnStat]) = {
+      leftSideUniqueness: Boolean,
+      rightSideUniqueness: Boolean): (BigInt, AttributeMap[ColumnStat]) = {
     // If there's no column stats available for join keys, estimate as cartesian product.
-    var joinCard: BigInt = (leftUniqueness, rightUniqueness) match {
+    var joinCard: BigInt = (leftSideUniqueness, rightSideUniqueness) match {
       case (true, true) => leftStats.rowCount.get.min(rightStats.rowCount.get)
       case (true, false) => rightStats.rowCount.get
       case (false, true) => leftStats.rowCount.get
