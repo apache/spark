@@ -1,3 +1,4 @@
-0
-$Z" struct<id:bigint,a:int,b:double>B
-a|id
+2
+$Z" struct<id:bigint,a:int,b:double>
+B
+`a|id`

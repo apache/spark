@@ -1,1 +1,2 @@
-LocalRelation <empty>, [none#0L, none#1, none#2]
+SubqueryAlias fooz
++- LocalRelation <empty>, [id#0L, a#0, b#0]

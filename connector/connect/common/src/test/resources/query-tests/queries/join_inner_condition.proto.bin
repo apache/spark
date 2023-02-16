@@ -1,5 +1,7 @@
-*i
-$Z" struct<id:bigint,a:int,b:double>*Z(&struct<a:int,id:bigint,payload:binary>
-=
-a
-a 
+*}
+,‚)
+$Z" struct<id:bigint,a:int,b:double>l2‚/
+*Z(&struct<a:int,id:bigint,payload:binary>r
+=
+l.a
+r.a 

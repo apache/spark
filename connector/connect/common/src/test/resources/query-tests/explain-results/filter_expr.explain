@@ -1,2 +1,2 @@
-'Filter (10.0 > 'exp('a))
-+- LocalRelation <empty>, [none#0L, none#1, none#2]
+Filter (EXP(cast(a#0 as double)) < cast(10.0 as double))
++- LocalRelation <empty>, [id#0L, a#0, b#0]
