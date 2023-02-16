@@ -25,6 +25,7 @@ import java.time.temporal.ChronoField
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
@@ -1124,10 +1125,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("cost" -> cost))
   }
 
-  def unsupportedDataTypeError(dt: String): SparkUnsupportedOperationException = {
+  def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2099",
-      messageParameters = Map("dt" -> dt))
+      errorClass = "UNSUPPORTED_ARROWTYPE",
+      messageParameters = Map("typeName" -> typeName.toString))
+  }
+
+  def unsupportedDataTypeError(typeName: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> toSQLType(typeName)))
   }
 
   def notSupportTypeError(dataType: DataType): Throwable = {

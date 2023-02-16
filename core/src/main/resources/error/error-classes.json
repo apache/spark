@@ -1567,6 +1567,12 @@
     ],
     "sqlState" : "42703"
   },
+  "UNSUPPORTED_ARROWTYPE" : {
+    "message" : [
+      "Unsupported arrow type <typeName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."
@@ -4092,11 +4098,6 @@
   "_LEGACY_ERROR_TEMP_2098" : {
     "message" : [
       "Could not compare cost with <cost>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2099" : {
-    "message" : [
-      "Unsupported data type: <dt>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2100" : {
