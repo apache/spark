@@ -1537,8 +1537,18 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     writeOperation.getSaveTypeCase match {
       case proto.WriteOperation.SaveTypeCase.PATH => w.save(writeOperation.getPath)
-      case proto.WriteOperation.SaveTypeCase.TABLE_NAME =>
-        w.saveAsTable(writeOperation.getTableName)
+      case proto.WriteOperation.SaveTypeCase.TABLE =>
+        val tableName = writeOperation.getTable.getTableName
+        writeOperation.getTable.getSaveMethod match {
+          case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE =>
+            w.saveAsTable(tableName)
+          case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
+            w.insertInto(tableName)
+          case _ =>
+            throw new UnsupportedOperationException(
+              "WriteOperation:SaveTable:TableSaveMethod not supported "
+                + s"${writeOperation.getTable.getSaveMethodValue}")
+        }
       case _ =>
         throw new UnsupportedOperationException(
           "WriteOperation:SaveTypeCase not supported "
@@ -1609,7 +1619,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
       case _ =>
         throw new UnsupportedOperationException(
-          "WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
+          s"WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
     }
   }
 
