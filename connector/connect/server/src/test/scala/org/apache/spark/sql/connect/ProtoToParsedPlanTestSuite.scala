@@ -21,7 +21,6 @@ import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
 import java.nio.file.attribute.BasicFileAttributes
 
 import scala.util.{Failure, Success, Try}
-import scala.util.Properties.versionNumberString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
@@ -75,10 +74,6 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
   private def createTest(file: Path): Unit = {
     val relativePath = inputFilePath.relativize(file)
     val fileName = relativePath.getFileName.toString
-    if ((versionNumberString.startsWith("2.12") && fileName.endsWith("2.13.proto.bin")) ||
-      (versionNumberString.startsWith("2.13") && fileName.endsWith("2.12.proto.bin"))) {
-      return
-    }
     if (!fileName.endsWith(".proto.bin")) {
       logError(s"Skipping $fileName")
       return

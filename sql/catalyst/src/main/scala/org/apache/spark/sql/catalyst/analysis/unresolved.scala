@@ -459,7 +459,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     }
   }
 
-  override def toString: String = target.map(_ + ".").getOrElse("") + "*"
+  override def toString: String = target.map(_.mkString("", ".", ".")).getOrElse("") + "*"
 }
 
 /**
@@ -516,7 +516,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override lazy val resolved = false
 
-  override def toString: String = s"$child AS $names"
+  override def toString: String = s"$child AS ${names.mkString("(", ", ", ")")}"
 
   override protected def withNewChildInternal(newChild: Expression): MultiAlias =
     copy(child = newChild)
