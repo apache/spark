@@ -1,3 +1,5 @@
-'Join LeftAnti, '`=`('id, 'id)
-:- LocalRelation <empty>, [none#0L, none#1, none#2]
-+- LocalRelation <empty>, [none#0, none#1L, none#2]
+'Join LeftAnti, (id#0L = id#0L)
+:- SubqueryAlias l
+:  +- LocalRelation <empty>, [id#0L, a#0, b#0]
++- SubqueryAlias r
+   +- LocalRelation <empty>, [a#0, id#0L, payload#0]

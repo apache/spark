@@ -299,11 +299,11 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("join inner_condition") {
-    left.join(right, fn.col("a") === fn.col("a"))
+    left.alias("l").join(right.alias("r"), fn.col("l.a") === fn.col("r.a"))
   }
 
   test("join condition") {
-    left.join(right, fn.col("id") === fn.col("id"), "left_anti")
+    left.as("l").join(right.as("r"), fn.col("l.id") === fn.col("r.id"), "left_anti")
   }
 
   test("crossJoin") {
@@ -347,7 +347,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("colRegex") {
-    simple.select(simple.colRegex("a|id"))
+    simple.select(simple.colRegex("`a|id`"))
   }
 
   test("as string") {
@@ -428,7 +428,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("unionByName") {
-    simple.unionByName(right)
+    simple.drop("b").unionByName(right.drop("payload"))
   }
 
   test("unionByName allowMissingColumns") {
@@ -718,13 +718,13 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   columnTest("as multi") {
-    fn.col("d").as(Array("v1", "v2", "v3"))
+    fn.expr("inline(map_values(f))").as(Array("v1", "v2", "v3"))
   }
 
   columnTest("as with metadata") {
     val builder = new MetadataBuilder
-    builder.putString("comment", "modified C field")
-    fn.col("c").as("c_mod", builder.build())
+    builder.putString("comment", "modified E field")
+    fn.col("e").as("e_mod", builder.build())
   }
 
   columnTest("cast") {
@@ -772,7 +772,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   columnTest("star with target") {
-    fn.col("str.*")
+    fn.col("d.*")
   }
 
   /* Function API */

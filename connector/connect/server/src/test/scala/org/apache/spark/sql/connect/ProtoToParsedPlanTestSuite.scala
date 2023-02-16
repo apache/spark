@@ -19,13 +19,20 @@ package org.apache.spark.sql.connect
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
 import java.nio.file.attribute.BasicFileAttributes
+import java.util
 
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 // scalastyle:off
 /**
@@ -61,6 +68,30 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
   protected val inputFilePath: Path = baseResourcePath.resolve("queries")
   protected val goldenFilePath: Path = baseResourcePath.resolve("explain-results")
 
+  private val analyzer = {
+    val inMemoryCatalog = new InMemoryCatalog
+    inMemoryCatalog.initialize("primary", CaseInsensitiveStringMap.empty())
+    inMemoryCatalog.createNamespace(Array("tempdb"), util.Collections.emptyMap())
+    inMemoryCatalog.createTable(
+      Identifier.of(Array("tempdb"), "myTable"),
+      new StructType().add("id", "long"),
+      Array.empty,
+      util.Collections.emptyMap())
+
+    val catalogManager = new CatalogManager(
+      inMemoryCatalog,
+      new SessionCatalog(
+        new catalog.InMemoryCatalog(),
+        FunctionRegistry.builtin,
+        TableFunctionRegistry.builtin))
+    catalogManager.setCurrentCatalog("primary")
+    catalogManager.setCurrentNamespace(Array("tempdb"))
+
+    new Analyzer(catalogManager) {
+      override def resolver: Resolver = caseSensitiveResolution
+    }
+  }
+
   // Create the tests.
   Files.walkFileTree(
     inputFilePath,
@@ -82,8 +113,9 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     test(name) {
       val relation = readRelation(file)
       val planner = new SparkConnectPlanner(spark)
-      val catalystPlan = planner.transformRelation(relation)
-      val actual = catalystPlan.canonicalized.treeString
+      val catalystPlan =
+        analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
+      val actual = normalizeExprIds(catalystPlan).treeString
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.
