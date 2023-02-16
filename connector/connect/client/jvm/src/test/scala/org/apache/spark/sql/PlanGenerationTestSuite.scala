@@ -784,6 +784,20 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     select(fn.max(Column("id")))
   }
 
+  test("groupby agg") {
+    simple
+      .groupBy(Column("id"))
+      .agg(
+        "a" -> "max",
+        "b" -> "stddev",
+        "b" -> "std",
+        "b" -> "mean",
+        "b" -> "average",
+        "b" -> "avg",
+        "*" -> "size",
+        "a" -> "count")
+  }
+
   test("function lit") {
     select(
       fn.lit(fn.col("id")),

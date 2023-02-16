@@ -1,0 +1,2 @@
+'Aggregate ['id], ['id, unresolvedalias('max('a), None), unresolvedalias('stddev('b), None), unresolvedalias('stddev('b), None), unresolvedalias('avg('b), None), unresolvedalias('avg('b), None), unresolvedalias('avg('b), None), unresolvedalias('count(1), None), unresolvedalias('count('a), None)]
++- LocalRelation <empty>, [none#0L, none#1, none#2]
