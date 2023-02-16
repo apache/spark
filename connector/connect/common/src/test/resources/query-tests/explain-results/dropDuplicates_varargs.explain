@@ -1,2 +1,2 @@
-Deduplicate [none#1, none#2, none#0L]
-+- LocalRelation <empty>, [none#0L, none#1, none#2]
+Deduplicate [a#0, b#0, id#0L]
++- LocalRelation <empty>, [id#0L, a#0, b#0]

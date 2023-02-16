@@ -20,12 +20,13 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 
 import scala.collection.JavaConverters._
 
+import io.grpc.StatusRuntimeException
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
 
@@ -63,6 +64,67 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(result.length == 5)
     result.zipWithIndex.foreach { case (v, idx) =>
       assert(v.getInt(0) == idx + 5)
+    }
+  }
+
+  test("read") {
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.csv")
+      .toAbsolutePath
+    val df = spark.read
+      .format("csv")
+      .option("path", testDataPath.toString)
+      .options(Map("header" -> "true", "delimiter" -> ";"))
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
+      .load()
+    val array = df.collectResult().toArray
+    assert(array.length == 2)
+    assert(array(0).getString(0) == "Jorge")
+    assert(array(0).getInt(1) == 30)
+    assert(array(0).getString(2) == "Developer")
+  }
+
+  test("read path collision") {
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.csv")
+      .toAbsolutePath
+    val df = spark.read
+      .format("csv")
+      .option("path", testDataPath.toString)
+      .options(Map("header" -> "true", "delimiter" -> ";"))
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
+      .csv(testDataPath.toString)
+    // Failed because the path cannot be provided both via option and load method (csv).
+    assertThrows[StatusRuntimeException] {
+      df.collectResult().toArray
     }
   }
 
