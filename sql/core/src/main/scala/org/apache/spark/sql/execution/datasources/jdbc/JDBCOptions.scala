@@ -234,9 +234,9 @@ class JDBCOptions(
   val prepareQuery = parameters.get(JDBC_PREPARE_QUERY).map(_ + " ").getOrElse("")
 
   // Infers timestamp values as TimestampNTZ type when reading data.
-  val inferTimestampNTZType =
+  val preferTimestampNTZ =
     parameters
-      .get(JDBC_INFER_TIMESTAMP_NTZ)
+      .get(JDBC_PREFER_TIMESTAMP_NTZ)
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 }
@@ -301,5 +301,5 @@ object JDBCOptions {
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
-  val JDBC_INFER_TIMESTAMP_NTZ = newOption("inferTimestampNTZType")
+  val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
 }
