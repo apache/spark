@@ -1,3 +1,4 @@
-'Join UsingJoin(RightOuter, [id, a])
-:- LocalRelation <empty>, [none#0L, none#1, none#2]
-+- LocalRelation <empty>, [none#0, none#1L, none#2]
+'Project [none#4L, none#3, none#2, none#5]
++- 'Join RightOuter, ((none#1 = none#3) AND (none#0L = none#4L))
+   :- LocalRelation <empty>, [none#0L, none#1, none#2]
+   +- LocalRelation <empty>, [none#0, none#1L, none#2]

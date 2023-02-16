@@ -1,2 +1,2 @@
-'Unpivot ArraySeq('a), ArraySeq(List('id)), , [value]
+Expand [[none#1, id, none#0L]], [none#1, none#0, none#1L]
 +- LocalRelation <empty>, [none#0L, none#1, none#2]

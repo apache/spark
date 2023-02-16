@@ -9,11 +9,11 @@
       "alias": {
         "expr": {
           "unresolvedAttribute": {
-            "unparsedIdentifier": "c"
+            "unparsedIdentifier": "e"
           }
         },
-        "name": ["c_mod"],
-        "metadata": "{\"comment\":\"modified C field\"}"
+        "name": ["e_mod"],
+        "metadata": "{\"comment\":\"modified E field\"}"
       }
     }]
   }

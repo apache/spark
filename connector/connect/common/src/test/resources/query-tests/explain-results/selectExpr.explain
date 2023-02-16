@@ -1,2 +1,2 @@
-'Project [('a + 10) AS #0, ('id % 10) AS #1]
+Project [(10 + none#1) AS #0, (none#0L % cast(10 as bigint)) AS #1L]
 +- LocalRelation <empty>, [none#0L, none#1, none#2]

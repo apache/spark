@@ -1,2 +1,3 @@
-'Project ['d AS (v1, v2, v3)]
-+- LocalRelation <empty>, [none#0L, none#1, none#2, none#3, none#4, none#5, none#6]
+!Project [none#7L, none#8, none#9]
++- Generate inline(map_values(none#5)), false, [none#0L, none#1, none#2]
+   +- LocalRelation <empty>, [none#0L, none#1, none#2, none#3, none#4, none#5, none#6]

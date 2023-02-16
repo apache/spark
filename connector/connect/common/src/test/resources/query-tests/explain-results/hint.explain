@@ -1,2 +1,2 @@
-UnresolvedHint coalesce, [100]
+Repartition 100, false
 +- LocalRelation <empty>, [none#0L, none#1, none#2]

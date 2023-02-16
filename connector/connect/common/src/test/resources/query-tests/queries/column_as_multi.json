@@ -8,8 +8,8 @@
     "expressions": [{
       "alias": {
         "expr": {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "d"
+          "expressionString": {
+            "expression": "inline(map_values(f))"
           }
         },
         "name": ["v1", "v2", "v3"]

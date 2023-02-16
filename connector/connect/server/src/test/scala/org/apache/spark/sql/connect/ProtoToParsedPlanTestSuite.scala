@@ -24,6 +24,8 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -82,7 +84,9 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     test(name) {
       val relation = readRelation(file)
       val planner = new SparkConnectPlanner(spark)
-      val catalystPlan = planner.transformRelation(relation)
+      val catalystPlan = SimpleAnalyzer.executeAndCheck(
+        planner.transformRelation(relation),
+        new QueryPlanningTracker)
       val actual = catalystPlan.canonicalized.treeString
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {

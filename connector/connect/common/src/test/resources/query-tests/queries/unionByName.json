@@ -1,13 +1,31 @@
 {
   "setOp": {
     "leftInput": {
-      "localRelation": {
-        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      "drop": {
+        "input": {
+          "localRelation": {
+            "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+          }
+        },
+        "cols": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
       }
     },
     "rightInput": {
-      "localRelation": {
-        "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
+      "drop": {
+        "input": {
+          "localRelation": {
+            "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
+          }
+        },
+        "cols": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "payload"
+          }
+        }]
       }
     },
     "setOpType": "SET_OP_TYPE_UNION",

@@ -1,3 +1,4 @@
-'Join UsingJoin(Inner, [id, a])
-:- LocalRelation <empty>, [none#0L, none#1, none#2]
-+- LocalRelation <empty>, [none#0, none#1L, none#2]
+'Project [none#0L, none#1, none#2, none#5]
++- 'Join Inner, ((none#1 = none#3) AND (none#0L = none#4L))
+   :- LocalRelation <empty>, [none#0L, none#1, none#2]
+   +- LocalRelation <empty>, [none#0, none#1L, none#2]

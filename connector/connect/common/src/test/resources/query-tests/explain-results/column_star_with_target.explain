@@ -1,2 +1,2 @@
-'Project [str.*]
+Project [none#3.id AS #0L, none#3.a AS #1, none#3.b AS #2]
 +- LocalRelation <empty>, [none#0L, none#1, none#2, none#3, none#4, none#5, none#6]
