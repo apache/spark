@@ -1043,9 +1043,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
     object Errors {
-      val COMMON_SUBSTRING = "has an invalid DEFAULT value"
+      val COMMON_SUBSTRING = " has a DEFAULT value"
       val COLUMN_DEFAULT_NOT_FOUND = "`default` cannot be resolved."
-      val BAD_SUBQUERY = "Subquery expressions are not allowed in the default value"
+      val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     // The default value fails to analyze.
     withTable("t") {
@@ -1424,8 +1424,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Negative tests") {
     object Errors {
-      val COMMON_SUBSTRING = "has an invalid DEFAULT value"
-      val BAD_SUBQUERY = "Subquery expressions are not allowed in the default value"
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+      val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     // The default value fails to analyze.
     withTable("t") {
@@ -1454,7 +1454,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean) using parquet")
       assert(intercept[AnalysisException] {
         sql("alter table t add column s bigint default false")
-      }.getMessage.contains("The default value has an incompatible data type"))
+      }.getMessage.contains("provided a value of incompatible type"))
     }
     // The default value is disabled per configuration.
     withTable("t") {
@@ -1502,8 +1502,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
     object Errors {
-      val COMMON_SUBSTRING = "has an invalid DEFAULT value"
-      val BAD_SUBQUERY = "Subquery expressions are not allowed in the default value"
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+      val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     val createTable = "create table t(i boolean, s bigint) using parquet"
     withTable("t") {
@@ -1524,7 +1524,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       // The default value parses but the type is not coercible.
       assert(intercept[AnalysisException] {
         sql("alter table t alter column s set default false")
-      }.getMessage.contains("The default value has an incompatible data type"))
+      }.getMessage.contains("provided a value of incompatible type"))
       // The default value is disabled per configuration.
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         val sqlText = "alter table t alter column s set default 41 + 1"
@@ -1737,7 +1737,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,json,orc") {
-      val unsupported = "does not support column default value"
+      val unsupported = "DEFAULT values are not supported for target data source"
       assert(intercept[AnalysisException] {
         sql(s"create table t(a string default 'abc') using parquet")
       }.getMessage.contains(unsupported))
@@ -1779,6 +1779,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // Negative tests: provided array element types must match their corresponding DEFAULT
     // declarations, if applicable.
+    val incompatibleDefault =
+    "Failed to execute ALTER TABLE ADD COLUMNS command because the destination table column s " +
+      "has a DEFAULT value with type"
     Seq(
       Config(
         "parquet"),
@@ -1794,7 +1797,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
         assert(intercept[AnalysisException] {
           sql("alter table t add column s array<int> default array('abc', 'def')")
-        }.getMessage.contains("The default value has an incompatible data type"))
+        }.getMessage.contains(incompatibleDefault))
       }
     }
   }
@@ -1829,6 +1832,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
     // Negative tests: provided map element types must match their corresponding DEFAULT
     // declarations, if applicable.
+    val incompatibleDefault =
+    "Failed to execute ALTER TABLE ADD COLUMNS command because the destination table column s " +
+      "has a DEFAULT value with type"
     Seq(
       Config(
         "parquet"),
@@ -1844,7 +1850,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
         assert(intercept[AnalysisException] {
           sql("alter table t add column s struct<x boolean, y string> default struct(42, 56)")
-        }.getMessage.contains("The default value has an incompatible data type"))
+        }.getMessage.contains(incompatibleDefault))
       }
     }
   }
@@ -1945,6 +1951,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // Negative tests: provided map element types must match their corresponding DEFAULT
     // declarations, if applicable.
+    val incompatibleDefault =
+    "Failed to execute ALTER TABLE ADD COLUMNS command because the destination table column s " +
+      "has a DEFAULT value with type"
     Seq(
       Config(
         "parquet"),
@@ -1960,7 +1969,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
         assert(intercept[AnalysisException] {
           sql("alter table t add column s map<boolean, string> default map(42, 56)")
-        }.getMessage.contains("The default value has an incompatible data type"))
+        }.getMessage.contains(incompatibleDefault))
       }
     }
   }
@@ -1973,7 +1982,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     ).foreach { query =>
       assert(intercept[AnalysisException] {
         sql(query)
-      }.getMessage.contains("Subquery expressions are not allowed in the default value"))
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions().getMessage))
     }
   }
 
@@ -2002,7 +2012,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             sql(s"alter table t1 add column (b string default 'abc')")
           }.getMessage.contains(
             QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(
-              provider).getMessage))
+              "ALTER TABLE ADD COLUMNS", provider).getMessage))
           withTable("t2") {
             // It is still OK to create a new table with a column DEFAULT value assigned, even if
             // the table provider is in the above denylist.

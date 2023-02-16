@@ -3148,58 +3148,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "defaultValue" -> defaultValue))
   }
 
-  def defaultReferencesNotAllowedInDataSource(tableName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      messageParameters = Map(
-        "tableName" -> tableName,
-        "operation" -> "column default value"))
-  }
-
-  def addNewDefaultColumnToExistingTableNotAllowed(dataSource: String): Throwable = {
+  def defaultReferencesNotAllowedInDataSource(
+      statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1345",
-      messageParameters = Map("dataSource" -> dataSource))
+      messageParameters = Map(
+        "statementType" -> statementType,
+        "dataSource" -> dataSource))
   }
 
-  def hasSubqueryDefaultValueError(
-      tableName: String,
-      colName: Seq[String],
-      defaultValue: String): Throwable = {
+  def addNewDefaultColumnToExistingTableNotAllowed(
+      statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_COLUMN_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      errorClass = "_LEGACY_ERROR_TEMP_1346",
       messageParameters = Map(
-        "tableName" -> tableName,
-        "colName" -> toSQLId(colName),
-        "defaultValue" -> defaultValue))
+        "statementType" -> statementType,
+        "dataSource" -> dataSource))
   }
 
-  def notConstantDefaultValueError(
-      tableName: String,
-      colName: Seq[String],
-      defaultValue: String): Throwable = {
+  def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_COLUMN_DEFAULT_VALUE.NOT_CONSTANT",
-      messageParameters = Map(
-        "tableName" -> tableName,
-        "colName" -> toSQLId(colName),
-        "defaultValue" -> defaultValue))
-  }
-
-  def incompatibleTypeDefaultValueError(
-      tableName: String,
-      colName: Seq[String],
-      colType: DataType,
-      defaultExpression: Expression,
-      defaultValue: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_COLUMN_DEFAULT_VALUE.INCOMPATIBLE_DATA_TYPE",
-      messageParameters = Map(
-        "tableName" -> tableName,
-        "colName" -> toSQLId(colName),
-        "defaultValue" -> defaultValue,
-        "defaultValueType" -> toSQLType(defaultExpression.dataType),
-        "colType" -> toSQLType(colType)))
+      errorClass = "_LEGACY_ERROR_TEMP_1347",
+      messageParameters = Map.empty)
   }
 
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {

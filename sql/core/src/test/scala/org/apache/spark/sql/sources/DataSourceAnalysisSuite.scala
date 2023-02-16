@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -68,7 +69,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with SQLHelper {
           Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
       }
     }
-    val rule = DataSourceAnalysis
+    val rule = DataSourceAnalysis(SimpleAnalyzer)
     testRule(
       "convertStaticPartitions only handle INSERT having at least static partitions",
         caseSensitive) {

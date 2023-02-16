@@ -471,22 +471,34 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(source1.existenceDefaultValues(1) == UTF8String.fromString("abc"))
     assert(source1.existenceDefaultValues(2) == null)
 
+    // Positive test: StructType.defaultValues works because the existence default value parses and
+    // resolves successfully, then evaluates to a non-literal expression: this is constant-folded at
+    // reference time.
+    val source2 = StructType(
+      Array(StructField("c1", IntegerType, true,
+        new MetadataBuilder()
+        .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
+          .build())))
+    val error = "fails to parse as a valid literal value"
+    assert(source2.existenceDefaultValues.size == 1)
+    assert(source2.existenceDefaultValues(0) == 2)
+
     // Negative test: StructType.defaultValues fails because the existence default value fails to
     // parse.
-    val error = "fails to parse as a valid literal value"
-    val source2 = StructType(Array(
+    val source3 = StructType(Array(
       StructField("c1", IntegerType, true,
         new MetadataBuilder()
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .build())))
     assert(intercept[AnalysisException] {
-      source2.existenceDefaultValues
+      source3.existenceDefaultValues
     }.getMessage.contains(error))
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
     // resolve.
-    val source3 = StructType(Array(
+    val source4 = StructType(Array(
       StructField("c1", IntegerType, true,
         new MetadataBuilder()
           .putString(
@@ -497,7 +509,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             "(SELECT 'abc' FROM missingtable)")
           .build())))
     assert(intercept[AnalysisException] {
-      source3.existenceDefaultValues
+      source4.existenceDefaultValues
     }.getMessage.contains(error))
   }
 }

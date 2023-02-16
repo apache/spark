@@ -25,10 +25,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -133,7 +135,9 @@ private[sql] object CatalogV2Util {
    */
   def applySchemaChanges(
       schema: StructType,
-      changes: Seq[TableChange]): StructType = {
+      changes: Seq[TableChange],
+      tableProvider: Option[String],
+      statementType: String): StructType = {
     changes.foldLeft(schema) { (schema, change) =>
       change match {
         case add: AddColumn =>
@@ -143,7 +147,7 @@ private[sql] object CatalogV2Util {
               val fieldWithDefault: StructField = encodeDefaultValue(add.defaultValue(), field)
               val fieldWithComment: StructField =
                 Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
-              addField(schema, fieldWithComment, add.position())
+              addField(schema, fieldWithComment, add.position(), tableProvider, statementType, true)
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
@@ -153,7 +157,8 @@ private[sql] object CatalogV2Util {
                     Option(add.comment).map(fieldWithDefault.withComment)
                       .getOrElse(fieldWithDefault)
                   Some(parent.copy(dataType =
-                    addField(parentType, fieldWithComment, add.position())))
+                    addField(parentType, fieldWithComment, add.position(), tableProvider,
+                      statementType, true)))
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
@@ -183,7 +188,8 @@ private[sql] object CatalogV2Util {
               throw new IllegalArgumentException("Field not found: " + name)
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
-            addField(withFieldRemoved, oldField, update.position())
+            addField(withFieldRemoved, oldField, update.position(), tableProvider, statementType,
+              false)
           }
 
           update.fieldNames() match {
@@ -203,10 +209,8 @@ private[sql] object CatalogV2Util {
             // The new DEFAULT value string will be non-empty for any DDL commands that set the
             // default value, such as "ALTER TABLE t ALTER COLUMN c SET DEFAULT ..." (this is
             // enforced by the parser). On the other hand, commands that drop the default value such
-            // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to null.
-            // Note: we should only update the "current default", as the previous "exist default"
-            //       should still be applied when reading existing data files without the column.
-            if (update.newDefaultValue() != null) {
+            // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to empty.
+            if (update.newDefaultValue().nonEmpty) {
               Some(field.withCurrentDefaultValue(update.newDefaultValue()))
             } else {
               Some(field.clearCurrentDefaultValue)
@@ -225,8 +229,11 @@ private[sql] object CatalogV2Util {
   private def addField(
       schema: StructType,
       field: StructField,
-      position: ColumnPosition): StructType = {
-    if (position == null) {
+      position: ColumnPosition,
+      tableProvider: Option[String],
+      statementType: String,
+      addNewColumnToExistingTable: Boolean): StructType = {
+    val newSchema: StructType = if (position == null) {
       schema.add(field)
     } else if (position.isInstanceOf[First]) {
       StructType(field +: schema.fields)
@@ -239,6 +246,8 @@ private[sql] object CatalogV2Util {
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
+    constantFoldCurrentDefaultsToExistDefaults(
+      newSchema, tableProvider, statementType, addNewColumnToExistingTable)
   }
 
   private def replace(
@@ -427,7 +436,7 @@ private[sql] object CatalogV2Util {
     StructType(columns.map(v2ColumnToStructField))
   }
 
-  def v2ColumnToStructField(col: Column): StructField = {
+  private def v2ColumnToStructField(col: Column): StructField = {
     val metadata = Option(col.metadataInJSON()).map(Metadata.fromJson).getOrElse(Metadata.empty)
     var f = StructField(col.name(), col.dataType(), col.nullable(), metadata)
     Option(col.comment()).foreach { comment =>
@@ -456,6 +465,39 @@ private[sql] object CatalogV2Util {
   }
 
   def structTypeToV2Columns(schema: StructType): Array[Column] = {
-    schema.toColumns.map(_.toV2Column)
+    schema.fields.map(structFieldToV2Column)
+  }
+
+  private def structFieldToV2Column(f: StructField): Column = {
+    def createV2Column(defaultValue: ColumnDefaultValue, metadata: Metadata): Column = {
+      val metadataJSON = if (metadata == Metadata.empty) {
+        null
+      } else {
+        metadata.json
+      }
+      Column.create(
+        f.name, f.dataType, f.nullable, f.getComment().orNull, defaultValue, metadataJSON)
+    }
+    if (f.getCurrentDefaultValue().isDefined && f.getExistenceDefaultValue().isDefined) {
+      val e = analyze(f, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      assert(e.resolved && e.foldable,
+        "exist default must be simple SQL string that is resolved and foldable, " +
+          "but got: " + f.getExistenceDefaultValue().get)
+      val defaultValue = new ColumnDefaultValue(
+        f.getCurrentDefaultValue().get, LiteralValue(e.eval(), f.dataType))
+      val cleanedMetadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .remove("comment")
+        .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+        .remove(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+        .build()
+      createV2Column(defaultValue, cleanedMetadata)
+    } else {
+      val cleanedMetadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .remove("comment")
+        .build()
+      createV2Column(null, cleanedMetadata)
+    }
   }
 }

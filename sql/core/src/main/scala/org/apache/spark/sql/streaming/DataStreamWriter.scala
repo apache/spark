@@ -299,7 +299,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         false)
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
-        df.schema.asNullable.toColumns,
+        df.schema.asNullable,
         partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
         tableSpec,
         ignoreIfExists = false)

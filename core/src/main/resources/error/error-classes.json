@@ -786,30 +786,6 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
-  "INVALID_COLUMN_DEFAULT_VALUE" : {
-    "message" : [
-      "Cannot CREATE/REPLACE/ALTER TABLE <tableName> because column <colName> has an invalid DEFAULT value: <defaultValue>."
-    ],
-    "subClass" : {
-      "SUBQUERY_EXPRESSION" : {
-        "message" : [
-          "Subquery expressions are not allowed in the default value."
-        ]
-      },
-      "INCOMPATIBLE_DATA_TYPE" : {
-        "message" : [
-          "The default value has an incompatible data type with the column:",
-          "Default value: <defaultValueType>",
-          "Column: <colType>"
-        ]
-      },
-      "NOT_CONSTANT" : {
-        "message" : [
-          "The default value must be a constant, or can be folded to a constant."
-        ]
-      }
-    }
-  },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
       "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
@@ -3643,12 +3619,17 @@
   },
   "_LEGACY_ERROR_TEMP_1345" : {
     "message" : [
-      "Failed to execute ALTER TABLE ADD COLUMNS command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
     ]
   },
   "_LEGACY_ERROR_TEMP_1346" : {
     "message" : [
       "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1347" : {
+    "message" : [
+      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {

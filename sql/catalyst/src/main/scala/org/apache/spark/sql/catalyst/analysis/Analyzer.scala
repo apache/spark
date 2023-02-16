@@ -3677,6 +3677,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val columnsToDrop = a.columnsToDrop
         a.copy(columnsToDrop = columnsToDrop.flatMap(c => resolveFieldNamesOpt(table, c.name, c)))
 
+      case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
+        val table = a.table.asInstanceOf[ResolvedTable]
+        a.transformExpressions {
+          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
+        }
+
       case a @ AddColumns(r: ResolvedTable, cols) if !a.resolved =>
         // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
         // normalized parent name of fields to field names that belong to the parent.
@@ -3697,43 +3703,40 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                     ResolvedFieldPosition(ColumnPosition.after(colName))
                   case None =>
                     throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(
-                      col.column.name, allFields)
+                      col.colName, allFields)
                 }
               case _ => ResolvedFieldPosition(u.position)
             }
             case resolved => resolved
           }
-          colsToAdd(resolvedParentName) = fieldsAdded :+ col.column.name
+          colsToAdd(resolvedParentName) = fieldsAdded :+ col.colName
           resolvedPosition
         }
         val schema = r.table.columns.asSchema
         val resolvedCols = cols.map { col =>
-          val path = col.path.transform {
-            case u: UnresolvedFieldName => resolveFieldNames(r, u.name, u)
-          }.asInstanceOf[FieldName]
-          path match {
-            case RootTableSchema =>
-              // Adding to the root. Just need to resolve position.
-              val resolvedPosition = resolvePosition(col, schema, Nil)
-              col.copy(path = path, position = resolvedPosition)
-            case parent: ResolvedFieldName =>
-              val parentSchema = parent.field.dataType match {
+          col.path match {
+            case Some(parent: UnresolvedFieldName) =>
+              // Adding a nested field, need to resolve the parent column and position.
+              val resolvedParent = resolveFieldNames(r, parent.name, parent)
+              val parentSchema = resolvedParent.field.dataType match {
                 case s: StructType => s
                 case _ => throw QueryCompilationErrors.invalidFieldName(
                   col.name, parent.name, parent.origin)
               }
-              val resolvedPosition = resolvePosition(col, parentSchema, parent.name)
-              col.copy(path = path, position = resolvedPosition)
-            // This should not happen. All `UnresolvedFieldName` should have been resolved.
-            case _ => col
+              val resolvedPosition = resolvePosition(col, parentSchema, resolvedParent.name)
+              col.copy(path = Some(resolvedParent), position = resolvedPosition)
+            case _ =>
+              // Adding to the root. Just need to resolve position.
+              val resolvedPosition = resolvePosition(col, schema, Nil)
+              col.copy(position = resolvedPosition)
           }
         }
         val resolved = a.copy(columnsToAdd = resolvedCols)
         resolved.copyTagsFrom(a)
         resolved
 
-      case a @ AlterColumn(table: ResolvedTable,
-          ResolvedFieldName(path, field), dataType, _, _, position, _) =>
+      case a @ AlterColumn(
+          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position, _) =>
         val newDataType = dataType.flatMap { dt =>
           // Hive style syntax provides the column type, even if it may not have changed.
           val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
@@ -3752,12 +3755,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val resolved = a.copy(dataType = newDataType, position = newPosition)
         resolved.copyTagsFrom(a)
         resolved
-
-      case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
-        val table = a.table.asInstanceOf[ResolvedTable]
-        a.transformExpressions {
-          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
-        }
     }
 
     /**

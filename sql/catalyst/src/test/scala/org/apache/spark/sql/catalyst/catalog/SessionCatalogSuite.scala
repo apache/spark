@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafCommand, LogicalPlan, Project, Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -119,6 +120,72 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       func(name)
     }.getMessage
     assert(e.contains(s"`$name` is not a valid name for tables/databases."))
+  }
+
+  test("create table with default columns") {
+    def test: Unit = withBasicCatalog { catalog =>
+      assert(catalog.externalCatalog.listTables("db1").isEmpty)
+      assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
+      catalog.createTable(newTable(
+        "tbl3", Some("db1"), defaultColumns = true), ignoreIfExists = false)
+      catalog.createTable(newTable(
+        "tbl3", Some("db2"), defaultColumns = true), ignoreIfExists = false)
+      assert(catalog.externalCatalog.listTables("db1").toSet == Set("tbl3"))
+      assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
+      // Inspect the default column values.
+      val db1tbl3 = catalog.externalCatalog.getTable("db1", "tbl3")
+      val currentDefault = ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+
+      def findField(name: String, schema: StructType): StructField =
+        schema.fields.filter(_.name == name).head
+      val columnA: StructField = findField("a", db1tbl3.schema)
+      val columnB: StructField = findField("b", db1tbl3.schema)
+      val columnC: StructField = findField("c", db1tbl3.schema)
+      val columnD: StructField = findField("d", db1tbl3.schema)
+      val columnE: StructField = findField("e", db1tbl3.schema)
+
+      val defaultValueColumnA: String = columnA.metadata.getString(currentDefault)
+      val defaultValueColumnB: String = columnB.metadata.getString(currentDefault)
+      val defaultValueColumnC: String = columnC.metadata.getString(currentDefault)
+      val defaultValueColumnD: String = columnD.metadata.getString(currentDefault)
+      val defaultValueColumnE: String = columnE.metadata.getString(currentDefault)
+
+      assert(defaultValueColumnA == "42")
+      assert(defaultValueColumnB == "\"abc\"")
+      assert(defaultValueColumnC == "_@#$%")
+      assert(defaultValueColumnD == "(select min(x) from badtable)")
+      assert(defaultValueColumnE == "41 + 1")
+
+      // Analyze the default column values.
+      val statementType = "CREATE TABLE"
+      assert(ResolveDefaultColumns.analyze(columnA, statementType).sql == "42")
+      assert(ResolveDefaultColumns
+        .analyze(columnA, statementType, ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+        .sql == "41")
+      assert(ResolveDefaultColumns.analyze(columnB, statementType).sql == "'abc'")
+      assert(intercept[AnalysisException] {
+        ResolveDefaultColumns.analyze(columnC, statementType)
+      }.getMessage.contains("fails to parse as a valid expression"))
+      assert(intercept[AnalysisException] {
+        ResolveDefaultColumns.analyze(columnD, statementType)
+      }.getMessage.contains("subquery expressions are not allowed in DEFAULT values"))
+      assert(intercept[AnalysisException] {
+        ResolveDefaultColumns.analyze(columnE, statementType)
+      }.getMessage.contains("statement provided a value of incompatible type"))
+
+      // Make sure that constant-folding default values does not take place when the feature is
+      // disabled.
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        val result: StructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
+          db1tbl3.schema, db1tbl3.provider, "CREATE TABLE", false)
+        val columnEWithFeatureDisabled: StructField = findField("e", result)
+        // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
+        assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
+      }
+    }
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,hive,json,orc,parquet") {
+      test
+    }
   }
 
   test("create databases using invalid names") {

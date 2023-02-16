@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, RootTableSchema, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, ColumnDefinition, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, TableSpec}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -152,8 +152,7 @@ class V2CommandsCaseSensitivitySuite
         AddColumns(
           table,
           Seq(QualifiedColType(
-            UnresolvedFieldName(field.init),
-            ColumnDefinition(field.last, LongType, true)))),
+            Some(UnresolvedFieldName(field.init)), field.last, LongType, true, None, None, None))),
         Seq("Missing field " + field.head)
       )
     }
@@ -162,11 +161,15 @@ class V2CommandsCaseSensitivitySuite
   test("AlterTable: add column resolution - positional") {
     Seq("ID", "iD").foreach { ref =>
       val alter = AddColumns(
-        table,
-        Seq(QualifiedColType(
-          RootTableSchema,
-          ColumnDefinition("f", LongType, true),
-          Some(UnresolvedFieldPosition(ColumnPosition.after(ref))))))
+          table,
+          Seq(QualifiedColType(
+            None,
+            "f",
+            LongType,
+            true,
+            None,
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
+            None)))
       Seq(true, false).foreach { caseSensitive =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           assertAnalysisErrorClass(
@@ -181,17 +184,23 @@ class V2CommandsCaseSensitivitySuite
 
   test("AlterTable: add column resolution - column position referencing new column") {
     val alter = AddColumns(
-      table,
-      Seq(
+        table,
+        Seq(QualifiedColType(
+          None,
+          "x",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
+          None),
         QualifiedColType(
-          RootTableSchema,
-          ColumnDefinition("x", LongType, true),
-          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
-        QualifiedColType(
-          RootTableSchema,
-          ColumnDefinition("y", LongType, true),
-          Some(UnresolvedFieldPosition(ColumnPosition.after("X"))))
-      ))
+          None,
+          "y",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("X"))),
+          None)))
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisErrorClass(
@@ -206,11 +215,15 @@ class V2CommandsCaseSensitivitySuite
   test("AlterTable: add column resolution - nested positional") {
     Seq("X", "Y").foreach { ref =>
       val alter = AddColumns(
-        table,
-        Seq(QualifiedColType(
-          UnresolvedFieldName(Seq("point")),
-          ColumnDefinition("z", LongType, true),
-          Some(UnresolvedFieldPosition(ColumnPosition.after(ref))))))
+          table,
+          Seq(QualifiedColType(
+            Some(UnresolvedFieldName(Seq("point"))),
+            "z",
+            LongType,
+            true,
+            None,
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
+            None)))
       Seq(true, false).foreach { caseSensitive =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           assertAnalysisErrorClass(
@@ -225,16 +238,23 @@ class V2CommandsCaseSensitivitySuite
 
   test("AlterTable: add column resolution - column position referencing new nested column") {
     val alter = AddColumns(
-      table,
-      Seq(
+        table,
+        Seq(QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "z",
+          LongType,
+          true,
+          None,
+          None,
+          None),
         QualifiedColType(
-          UnresolvedFieldName(Seq("point")),
-          ColumnDefinition("z", LongType, true)),
-        QualifiedColType(
-          UnresolvedFieldName(Seq("point")),
-          ColumnDefinition("zz", LongType, true),
-          Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))))
-      ))
+          Some(UnresolvedFieldName(Seq("point"))),
+          "zz",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))),
+          None)))
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisErrorClass(
@@ -250,14 +270,22 @@ class V2CommandsCaseSensitivitySuite
     assertAnalysisErrorClass(
       AddColumns(
         table,
-        Seq(
-          QualifiedColType(
-            UnresolvedFieldName(Seq("point")),
-            ColumnDefinition("z", LongType, true)),
-          QualifiedColType(
-            UnresolvedFieldName(Seq("point")),
-            ColumnDefinition("Z", LongType, true))
-        )),
+        Seq(QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "z",
+          LongType,
+          true,
+          None,
+          None,
+          None),
+        QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "Z",
+          LongType,
+          true,
+          None,
+          None,
+          None))),
       "COLUMN_ALREADY_EXISTS",
       Map("columnName" -> toSQLId("point.z")),
       caseSensitive = false)
@@ -268,9 +296,13 @@ class V2CommandsCaseSensitivitySuite
       AddColumns(
         table,
         Seq(QualifiedColType(
-          RootTableSchema,
-          ColumnDefinition("ID", LongType, true),
-          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
+          None,
+          "ID",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
+          None))),
       Seq("Cannot add column, because ID already exists in root"),
       expectErrorOnCaseSensitive = false)
   }
@@ -342,9 +374,8 @@ class V2CommandsCaseSensitivitySuite
     assertAnalysisErrorClass(
       ReplaceColumns(
         table,
-        Seq(
-          QualifiedColType(RootTableSchema, ColumnDefinition("f", LongType, true)),
-          QualifiedColType(RootTableSchema, ColumnDefinition("F", LongType, true)))),
+        Seq(QualifiedColType(None, "f", LongType, true, None, None, None),
+          QualifiedColType(None, "F", LongType, true, None, None, None))),
       "COLUMN_ALREADY_EXISTS",
       Map("columnName" -> toSQLId("f")),
       caseSensitive = false)
