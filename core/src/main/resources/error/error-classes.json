@@ -1543,6 +1543,12 @@
     ],
     "sqlState" : "42883"
   },
+  "UNSUPPORTED_ARROWTYPE" : {
+    "message" : [
+      "Unsupported arrow type <typeName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."

@@ -79,7 +79,7 @@ private[sql] object ArrowUtils {
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType()
     case di: ArrowType.Duration if di.getUnit == TimeUnit.MICROSECOND => DayTimeIntervalType()
-    case _ => throw QueryExecutionErrors.unsupportedDataTypeError(dt.asInstanceOf[DataType])
+    case _ => throw QueryExecutionErrors.unsupportedArrowTypeError(dt)
   }
 
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
