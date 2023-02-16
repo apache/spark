@@ -42,7 +42,6 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
     val result = df.collect()
     assert(result.length == 2)
-    assert(result.length == 2)
     assert(result(0).getString(0) == "Hello")
     assert(result(1).getString(0) == "World")
   }
