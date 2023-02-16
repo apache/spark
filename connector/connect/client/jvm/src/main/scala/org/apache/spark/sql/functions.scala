@@ -28,19 +28,20 @@ import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 
 /**
- * Commonly used functions available for DataFrame operations. Using functions defined here provides
- * a little bit more compile-time safety to make sure the function exists.
+ * Commonly used functions available for DataFrame operations. Using functions defined here
+ * provides a little bit more compile-time safety to make sure the function exists.
  *
- * Spark also includes more built-in functions that are less common and are not defined here.
- * You can still access them (and all the functions defined here) using the `functions.expr()` API
- * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation of your Spark version, see also
- * <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
+ * Spark also includes more built-in functions that are less common and are not defined here. You
+ * can still access them (and all the functions defined here) using the `functions.expr()` API and
+ * calling them through a SQL expression string. You can find the entire list of functions at SQL
+ * API documentation of your Spark version, see also <a
+ * href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
  *
- * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
- * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
- * exists and is of the proper form. You can also use `expr("isnan(myCol)")` function to invoke the
- * same function. In this case, Spark itself will ensure `isnan` exists when it analyzes the query.
+ * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))` to
+ * invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
+ * exists and is of the proper form. You can also use `expr("isnan(myCol)")` function to invoke
+ * the same function. In this case, Spark itself will ensure `isnan` exists when it analyzes the
+ * query.
  *
  * `regr_count` is an example of a function that is built-in but not defined here, because it is
  * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
@@ -148,8 +149,8 @@ object functions {
   def asc(columnName: String): Column = Column(columnName).asc
 
   /**
-   * Returns a sort expression based on ascending order of the column,
-   * and null values return before non-null values.
+   * Returns a sort expression based on ascending order of the column, and null values return
+   * before non-null values.
    * {{{
    *   df.sort(asc_nulls_first("dept"), desc("age"))
    * }}}
@@ -160,8 +161,8 @@ object functions {
   def asc_nulls_first(columnName: String): Column = Column(columnName).asc_nulls_first
 
   /**
-   * Returns a sort expression based on ascending order of the column,
-   * and null values appear after non-null values.
+   * Returns a sort expression based on ascending order of the column, and null values appear
+   * after non-null values.
    * {{{
    *   df.sort(asc_nulls_last("dept"), desc("age"))
    * }}}
@@ -183,8 +184,8 @@ object functions {
   def desc(columnName: String): Column = Column(columnName).desc
 
   /**
-   * Returns a sort expression based on the descending order of the column,
-   * and null values appear before non-null values.
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * before non-null values.
    * {{{
    *   df.sort(asc("dept"), desc_nulls_first("age"))
    * }}}
@@ -195,8 +196,8 @@ object functions {
   def desc_nulls_first(columnName: String): Column = Column(columnName).desc_nulls_first
 
   /**
-   * Returns a sort expression based on the descending order of the column,
-   * and null values appear after non-null values.
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * after non-null values.
    * {{{
    *   df.sort(asc("dept"), desc_nulls_last("age"))
    * }}}
@@ -254,12 +255,14 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def approx_count_distinct(columnName: String): Column = approx_count_distinct(column(columnName))
+  def approx_count_distinct(columnName: String): Column = approx_count_distinct(
+    column(columnName))
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
-   * @param rsd maximum relative standard deviation allowed (default = 0.05)
+   * @param rsd
+   *   maximum relative standard deviation allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -271,7 +274,8 @@ object functions {
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
-   * @param rsd maximum relative standard deviation allowed (default = 0.05)
+   * @param rsd
+   *   maximum relative standard deviation allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -299,8 +303,9 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -310,8 +315,9 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -321,8 +327,9 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -332,8 +339,9 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -387,7 +395,7 @@ object functions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    count_distinct(Column(columnName), columnNames.map(Column.apply) : _*)
+    count_distinct(Column(columnName), columnNames.map(Column.apply): _*)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -442,8 +450,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -457,8 +466,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -473,8 +483,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -487,8 +498,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -496,8 +508,8 @@ object functions {
   def first(columnName: String): Column = first(Column(columnName))
 
   /**
-   * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
-   * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+   * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated or
+   * not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -505,8 +517,8 @@ object functions {
   def grouping(e: Column): Column = Column.fn("grouping", e)
 
   /**
-   * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
-   * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+   * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated or
+   * not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -520,8 +532,9 @@ object functions {
    *   (grouping(c1) <<; (n-1)) + (grouping(c2) <<; (n-2)) + ... + grouping(cn)
    * }}}
    *
-   * @note The list of columns should match with grouping columns exactly, or empty (means all the
-   * grouping columns).
+   * @note
+   *   The list of columns should match with grouping columns exactly, or empty (means all the
+   *   grouping columns).
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -535,13 +548,14 @@ object functions {
    *   (grouping(c1) <<; (n-1)) + (grouping(c2) <<; (n-2)) + ... + grouping(cn)
    * }}}
    *
-   * @note The list of columns should match with grouping columns exactly.
+   * @note
+   *   The list of columns should match with grouping columns exactly.
    *
    * @group agg_funcs
    * @since 3.4.0
    */
   def grouping_id(colName: String, colNames: String*): Column =
-    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
+    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)): _*)
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
@@ -565,8 +579,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -580,8 +595,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -595,8 +611,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -609,8 +626,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on the order of the rows
-   * which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -650,8 +668,7 @@ object functions {
   def max_by(e: Column, ord: Column): Column = Column.fn("max_by", e, ord)
 
   /**
-   * Aggregate function: returns the average of the values in a group.
-   * Alias for avg.
+   * Aggregate function: returns the average of the values in a group. Alias for avg.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -659,8 +676,7 @@ object functions {
   def mean(e: Column): Column = avg(e)
 
   /**
-   * Aggregate function: returns the average of the values in a group.
-   * Alias for avg.
+   * Aggregate function: returns the average of the values in a group. Alias for avg.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -700,17 +716,16 @@ object functions {
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
   /**
-   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
-   * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
-   * no more than `percentage` of `col` values is less than the value or equal to that value.
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
+   * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
+   * more than `percentage` of `col` values is less than the value or equal to that value.
    *
-   * If percentage is an array, each value must be between 0.0 and 1.0.
-   * If it is a single floating point value, it must be between 0.0 and 1.0.
+   * If percentage is an array, each value must be between 0.0 and 1.0. If it is a single floating
+   * point value, it must be between 0.0 and 1.0.
    *
-   * The accuracy parameter is a positive numeric literal
-   * which controls approximation accuracy at the cost of memory.
-   * Higher value of accuracy yields better accuracy, 1.0/accuracy
-   * is the relative error of the approximation.
+   * The accuracy parameter is a positive numeric literal which controls approximation accuracy at
+   * the cost of memory. Higher value of accuracy yields better accuracy, 1.0/accuracy is the
+   * relative error of the approximation.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -759,8 +774,7 @@ object functions {
   def stddev(columnName: String): Column = stddev(Column(columnName))
 
   /**
-   * Aggregate function: returns the sample standard deviation of
-   * the expression in a group.
+   * Aggregate function: returns the sample standard deviation of the expression in a group.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -768,8 +782,7 @@ object functions {
   def stddev_samp(e: Column): Column = Column.fn("stddev_samp", e)
 
   /**
-   * Aggregate function: returns the sample standard deviation of
-   * the expression in a group.
+   * Aggregate function: returns the sample standard deviation of the expression in a group.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -777,8 +790,7 @@ object functions {
   def stddev_samp(columnName: String): Column = stddev_samp(Column(columnName))
 
   /**
-   * Aggregate function: returns the population standard deviation of
-   * the expression in a group.
+   * Aggregate function: returns the population standard deviation of the expression in a group.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -786,8 +798,7 @@ object functions {
   def stddev_pop(e: Column): Column = Column.fn("stddev_pop", e)
 
   /**
-   * Aggregate function: returns the population standard deviation of
-   * the expression in a group.
+   * Aggregate function: returns the population standard deviation of the expression in a group.
    *
    * @group agg_funcs
    * @since 3.4.0
@@ -905,13 +916,13 @@ object functions {
    */
   @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
-    array((colName +: colNames).map(col) : _*)
+    array((colName +: colNames).map(col): _*)
   }
 
   /**
-   * Creates a new map column. The input columns must be grouped as key-value pairs, e.g.
-   * (key1, value1, key2, value2, ...). The key columns must all have the same data type, and can't
-   * be null. The value columns must all have the same data type.
+   * Creates a new map column. The input columns must be grouped as key-value pairs, e.g. (key1,
+   * value1, key2, value2, ...). The key columns must all have the same data type, and can't be
+   * null. The value columns must all have the same data type.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -932,8 +943,8 @@ object functions {
   /**
    * Returns the first column that is not null, or null if all inputs are null.
    *
-   * For example, `coalesce(a, b, c)` will return a if a is not null,
-   * or b if a is null and b is not null, or c if both a and b are null but c is not null.
+   * For example, `coalesce(a, b, c)` will return a if a is not null, or b if a is null and b is
+   * not null, or c if both a and b are null but c is not null.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -968,13 +979,13 @@ object functions {
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
    *
-   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
-   * The current implementation puts the partition ID in the upper 31 bits, and the record number
-   * within each partition in the lower 33 bits. The assumption is that the data frame has
-   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not
+   * consecutive. The current implementation puts the partition ID in the upper 31 bits, and the
+   * record number within each partition in the lower 33 bits. The assumption is that the data
+   * frame has less than 1 billion partitions, and each partition has less than 8 billion records.
    *
-   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
-   * This expression would return the following IDs:
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records. This
+   * expression would return the following IDs:
    *
    * {{{
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
@@ -989,13 +1000,13 @@ object functions {
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
    *
-   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
-   * The current implementation puts the partition ID in the upper 31 bits, and the record number
-   * within each partition in the lower 33 bits. The assumption is that the data frame has
-   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not
+   * consecutive. The current implementation puts the partition ID in the upper 31 bits, and the
+   * record number within each partition in the lower 33 bits. The assumption is that the data
+   * frame has less than 1 billion partitions, and each partition has less than 8 billion records.
    *
-   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
-   * This expression would return the following IDs:
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records. This
+   * expression would return the following IDs:
    *
    * {{{
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
@@ -1015,6 +1026,7 @@ object functions {
    * @since 3.4.0
    */
   def nanvl(col1: Column, col2: Column): Column = Column.fn("nanvl", col1, col2)
+
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
@@ -1050,7 +1062,8 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * uniformly distributed in [0.0, 1.0).
    *
-   * @note The function is non-deterministic in general case.
+   * @note
+   *   The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1061,7 +1074,8 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * uniformly distributed in [0.0, 1.0).
    *
-   * @note The function is non-deterministic in general case.
+   * @note
+   *   The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1069,10 +1083,11 @@ object functions {
   def rand(): Column = Column.fn("rand")
 
   /**
-   * Generate a column with independent and identically distributed (i.i.d.) samples from
-   * the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from the
+   * standard normal distribution.
    *
-   * @note The function is non-deterministic in general case.
+   * @note
+   *   The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1080,10 +1095,11 @@ object functions {
   def randn(seed: Long): Column = Column.fn("randn", lit(seed))
 
   /**
-   * Generate a column with independent and identically distributed (i.i.d.) samples from
-   * the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from the
+   * standard normal distribution.
    *
-   * @note The function is non-deterministic in general case.
+   * @note
+   *   The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1093,7 +1109,8 @@ object functions {
   /**
    * Partition ID.
    *
-   * @note This is non-deterministic because it depends on data partitioning and task scheduling.
+   * @note
+   *   This is non-deterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1117,11 +1134,10 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
-   * Creates a new struct column.
-   * If the input column is a column in a `DataFrame`, or a derived column expression
-   * that is named (i.e. aliased), its name would be retained as the StructField's name,
-   * otherwise, the newly generated StructField's name would be auto generated as
-   * `col` with a suffix `index + 1`, i.e. col1, col2, col3, ...
+   * Creates a new struct column. If the input column is a column in a `DataFrame`, or a derived
+   * column expression that is named (i.e. aliased), its name would be retained as the
+   * StructField's name, otherwise, the newly generated StructField's name would be auto generated
+   * as `col` with a suffix `index + 1`, i.e. col1, col2, col3, ...
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1137,7 +1153,7 @@ object functions {
    */
   @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
-    struct((colName +: colNames).map(col) : _*)
+    struct((colName +: colNames).map(col): _*)
   }
 
   /**
@@ -1212,7 +1228,8 @@ object functions {
   def abs(e: Column): Column = Column.fn("abs", e)
 
   /**
-   * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
+   * @return
+   *   inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1220,7 +1237,8 @@ object functions {
   def acos(e: Column): Column = Column.fn("acos", e)
 
   /**
-   * @return inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`
+   * @return
+   *   inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1228,7 +1246,8 @@ object functions {
   def acos(columnName: String): Column = acos(Column(columnName))
 
   /**
-   * @return inverse hyperbolic cosine of `e`
+   * @return
+   *   inverse hyperbolic cosine of `e`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1236,7 +1255,8 @@ object functions {
   def acosh(e: Column): Column = Column.fn("acosh", e)
 
   /**
-   * @return inverse hyperbolic cosine of `columnName`
+   * @return
+   *   inverse hyperbolic cosine of `columnName`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1244,7 +1264,8 @@ object functions {
   def acosh(columnName: String): Column = acosh(Column(columnName))
 
   /**
-   * @return inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
+   * @return
+   *   inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1252,7 +1273,8 @@ object functions {
   def asin(e: Column): Column = Column.fn("asin", e)
 
   /**
-   * @return inverse sine of `columnName`, as if computed by `java.lang.Math.asin`
+   * @return
+   *   inverse sine of `columnName`, as if computed by `java.lang.Math.asin`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1260,7 +1282,8 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * @return inverse hyperbolic sine of `e`
+   * @return
+   *   inverse hyperbolic sine of `e`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1268,7 +1291,8 @@ object functions {
   def asinh(e: Column): Column = Column.fn("asinh", e)
 
   /**
-   * @return inverse hyperbolic sine of `columnName`
+   * @return
+   *   inverse hyperbolic sine of `columnName`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1276,7 +1300,8 @@ object functions {
   def asinh(columnName: String): Column = asinh(Column(columnName))
 
   /**
-   * @return inverse tangent of `e` as if computed by `java.lang.Math.atan`
+   * @return
+   *   inverse tangent of `e` as if computed by `java.lang.Math.atan`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1284,7 +1309,8 @@ object functions {
   def atan(e: Column): Column = Column.fn("atan", e)
 
   /**
-   * @return inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`
+   * @return
+   *   inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1292,13 +1318,14 @@ object functions {
   def atan(columnName: String): Column = atan(Column(columnName))
 
   /**
-   * @param y coordinate on y-axis
-   * @param x coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param y
+   *   coordinate on y-axis
+   * @param x
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1306,13 +1333,14 @@ object functions {
   def atan2(y: Column, x: Column): Column = Column.fn("atan2", y, x)
 
   /**
-   * @param y coordinate on y-axis
-   * @param xName coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param y
+   *   coordinate on y-axis
+   * @param xName
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1320,13 +1348,14 @@ object functions {
   def atan2(y: Column, xName: String): Column = atan2(y, Column(xName))
 
   /**
-   * @param yName coordinate on y-axis
-   * @param x coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param yName
+   *   coordinate on y-axis
+   * @param x
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1334,13 +1363,14 @@ object functions {
   def atan2(yName: String, x: Column): Column = atan2(Column(yName), x)
 
   /**
-   * @param yName coordinate on y-axis
-   * @param xName coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param yName
+   *   coordinate on y-axis
+   * @param xName
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1349,13 +1379,14 @@ object functions {
     atan2(Column(yName), Column(xName))
 
   /**
-   * @param y coordinate on y-axis
-   * @param xValue coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param y
+   *   coordinate on y-axis
+   * @param xValue
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1363,13 +1394,14 @@ object functions {
   def atan2(y: Column, xValue: Double): Column = atan2(y, lit(xValue))
 
   /**
-   * @param yName coordinate on y-axis
-   * @param xValue coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param yName
+   *   coordinate on y-axis
+   * @param xValue
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1377,13 +1409,14 @@ object functions {
   def atan2(yName: String, xValue: Double): Column = atan2(Column(yName), xValue)
 
   /**
-   * @param yValue coordinate on y-axis
-   * @param x coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param yValue
+   *   coordinate on y-axis
+   * @param x
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1391,13 +1424,14 @@ object functions {
   def atan2(yValue: Double, x: Column): Column = atan2(lit(yValue), x)
 
   /**
-   * @param yValue coordinate on y-axis
-   * @param xName coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * @param yValue
+   *   coordinate on y-axis
+   * @param xName
+   *   coordinate on x-axis
+   * @return
+   *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
+   *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
+   *   `java.lang.Math.atan2`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1405,7 +1439,8 @@ object functions {
   def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
 
   /**
-   * @return inverse hyperbolic tangent of `e`
+   * @return
+   *   inverse hyperbolic tangent of `e`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1413,7 +1448,8 @@ object functions {
   def atanh(e: Column): Column = Column.fn("atanh", e)
 
   /**
-   * @return inverse hyperbolic tangent of `columnName`
+   * @return
+   *   inverse hyperbolic tangent of `columnName`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1488,8 +1524,10 @@ object functions {
     Column.fn("conv", num, lit(fromBase), lit(toBase))
 
   /**
-   * @param e angle in radians
-   * @return cosine of the angle, as if computed by `java.lang.Math.cos`
+   * @param e
+   *   angle in radians
+   * @return
+   *   cosine of the angle, as if computed by `java.lang.Math.cos`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1497,8 +1535,10 @@ object functions {
   def cos(e: Column): Column = Column.fn("cos", e)
 
   /**
-   * @param columnName angle in radians
-   * @return cosine of the angle, as if computed by `java.lang.Math.cos`
+   * @param columnName
+   *   angle in radians
+   * @return
+   *   cosine of the angle, as if computed by `java.lang.Math.cos`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1506,8 +1546,10 @@ object functions {
   def cos(columnName: String): Column = cos(Column(columnName))
 
   /**
-   * @param e hyperbolic angle
-   * @return hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
+   * @param e
+   *   hyperbolic angle
+   * @return
+   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1515,8 +1557,10 @@ object functions {
   def cosh(e: Column): Column = Column.fn("cosh", e)
 
   /**
-   * @param columnName hyperbolic angle
-   * @return hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
+   * @param columnName
+   *   hyperbolic angle
+   * @return
+   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1524,8 +1568,10 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * @param e angle in radians
-   * @return cotangent of the angle
+   * @param e
+   *   angle in radians
+   * @return
+   *   cotangent of the angle
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1533,8 +1579,10 @@ object functions {
   def cot(e: Column): Column = Column.fn("cot", e)
 
   /**
-   * @param e angle in radians
-   * @return cosecant of the angle
+   * @param e
+   *   angle in radians
+   * @return
+   *   cosecant of the angle
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1606,8 +1654,8 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
-   * Returns the greatest value of the list of values, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * Returns the greatest value of the list of values, skipping null values. This function takes
+   * at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1616,8 +1664,8 @@ object functions {
   def greatest(exprs: Column*): Column = Column.fn("greatest", exprs: _*)
 
   /**
-   * Returns the greatest value of the list of column names, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * Returns the greatest value of the list of column names, skipping null values. This function
+   * takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1635,8 +1683,8 @@ object functions {
   def hex(column: Column): Column = Column.fn("hex", column)
 
   /**
-   * Inverse of hex. Interprets each pair of characters as a hexadecimal number
-   * and converts to the byte representation of number.
+   * Inverse of hex. Interprets each pair of characters as a hexadecimal number and converts to
+   * the byte representation of number.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1709,8 +1757,8 @@ object functions {
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
 
   /**
-   * Returns the least value of the list of values, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * Returns the least value of the list of values, skipping null values. This function takes at
+   * least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1719,8 +1767,8 @@ object functions {
   def least(exprs: Column*): Column = Column.fn("least", exprs: _*)
 
   /**
-   * Returns the least value of the list of column names, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * Returns the least value of the list of column names, skipping null values. This function
+   * takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 3.4.0
@@ -1882,8 +1930,8 @@ object functions {
   def pmod(dividend: Column, divisor: Column): Column = Column.fn("pmod", dividend, divisor)
 
   /**
-   * Returns the double value that is closest in value to the argument and
-   * is equal to a mathematical integer.
+   * Returns the double value that is closest in value to the argument and is equal to a
+   * mathematical integer.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1891,8 +1939,8 @@ object functions {
   def rint(e: Column): Column = Column.fn("rint", e)
 
   /**
-   * Returns the double value that is closest in value to the argument and
-   * is equal to a mathematical integer.
+   * Returns the double value that is closest in value to the argument and is equal to a
+   * mathematical integer.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1908,8 +1956,8 @@ object functions {
   def round(e: Column): Column = round(e, 0)
 
   /**
-   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
-   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1925,8 +1973,8 @@ object functions {
   def bround(e: Column): Column = bround(e, 0)
 
   /**
-   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
-   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1934,8 +1982,10 @@ object functions {
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
 
   /**
-   * @param e angle in radians
-   * @return secant of the angle
+   * @param e
+   *   angle in radians
+   * @return
+   *   secant of the angle
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1943,8 +1993,8 @@ object functions {
   def sec(e: Column): Column = Column.fn("sec", e)
 
   /**
-   * Shift the given value numBits left. If the given value is a long value, this function
-   * will return a long value else it will return an integer value.
+   * Shift the given value numBits left. If the given value is a long value, this function will
+   * return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1953,8 +2003,8 @@ object functions {
   def shiftLeft(e: Column, numBits: Int): Column = shiftleft(e, numBits)
 
   /**
-   * Shift the given value numBits left. If the given value is a long value, this function
-   * will return a long value else it will return an integer value.
+   * Shift the given value numBits left. If the given value is a long value, this function will
+   * return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1981,8 +2031,8 @@ object functions {
   def shiftright(e: Column, numBits: Int): Column = Column.fn("shiftright", e, lit(numBits))
 
   /**
-   * Unsigned shift the given value numBits right. If the given value is a long value,
-   * it will return a long value else it will return an integer value.
+   * Unsigned shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -1991,8 +2041,8 @@ object functions {
   def shiftRightUnsigned(e: Column, numBits: Int): Column = shiftrightunsigned(e, numBits)
 
   /**
-   * Unsigned shift the given value numBits right. If the given value is a long value,
-   * it will return a long value else it will return an integer value.
+   * Unsigned shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2017,8 +2067,10 @@ object functions {
   def signum(columnName: String): Column = signum(Column(columnName))
 
   /**
-   * @param e angle in radians
-   * @return sine of the angle, as if computed by `java.lang.Math.sin`
+   * @param e
+   *   angle in radians
+   * @return
+   *   sine of the angle, as if computed by `java.lang.Math.sin`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2026,8 +2078,10 @@ object functions {
   def sin(e: Column): Column = Column.fn("sin", e)
 
   /**
-   * @param columnName angle in radians
-   * @return sine of the angle, as if computed by `java.lang.Math.sin`
+   * @param columnName
+   *   angle in radians
+   * @return
+   *   sine of the angle, as if computed by `java.lang.Math.sin`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2035,8 +2089,10 @@ object functions {
   def sin(columnName: String): Column = sin(Column(columnName))
 
   /**
-   * @param e hyperbolic angle
-   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   * @param e
+   *   hyperbolic angle
+   * @return
+   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2044,8 +2100,10 @@ object functions {
   def sinh(e: Column): Column = Column.fn("sinh", e)
 
   /**
-   * @param columnName hyperbolic angle
-   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   * @param columnName
+   *   hyperbolic angle
+   * @return
+   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2053,8 +2111,10 @@ object functions {
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
-   * @param e angle in radians
-   * @return tangent of the given value, as if computed by `java.lang.Math.tan`
+   * @param e
+   *   angle in radians
+   * @return
+   *   tangent of the given value, as if computed by `java.lang.Math.tan`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2062,8 +2122,10 @@ object functions {
   def tan(e: Column): Column = Column.fn("tan", e)
 
   /**
-   * @param columnName angle in radians
-   * @return tangent of the given value, as if computed by `java.lang.Math.tan`
+   * @param columnName
+   *   angle in radians
+   * @return
+   *   tangent of the given value, as if computed by `java.lang.Math.tan`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2071,8 +2133,10 @@ object functions {
   def tan(columnName: String): Column = tan(Column(columnName))
 
   /**
-   * @param e hyperbolic angle
-   * @return hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
+   * @param e
+   *   hyperbolic angle
+   * @return
+   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2080,8 +2144,10 @@ object functions {
   def tanh(e: Column): Column = Column.fn("tanh", e)
 
   /**
-   * @param columnName hyperbolic angle
-   * @return hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
+   * @param columnName
+   *   hyperbolic angle
+   * @return
+   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2103,10 +2169,13 @@ object functions {
   def toDegrees(columnName: String): Column = degrees(Column(columnName))
 
   /**
-   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
+   * Converts an angle measured in radians to an approximately equivalent angle measured in
+   * degrees.
    *
-   * @param e angle in radians
-   * @return angle in degrees, as if computed by `java.lang.Math.toDegrees`
+   * @param e
+   *   angle in radians
+   * @return
+   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2114,10 +2183,13 @@ object functions {
   def degrees(e: Column): Column = Column.fn("degrees", e)
 
   /**
-   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
+   * Converts an angle measured in radians to an approximately equivalent angle measured in
+   * degrees.
    *
-   * @param columnName angle in radians
-   * @return angle in degrees, as if computed by `java.lang.Math.toDegrees`
+   * @param columnName
+   *   angle in radians
+   * @return
+   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2139,10 +2211,13 @@ object functions {
   def toRadians(columnName: String): Column = radians(Column(columnName))
 
   /**
-   * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
+   * Converts an angle measured in degrees to an approximately equivalent angle measured in
+   * radians.
    *
-   * @param e angle in degrees
-   * @return angle in radians, as if computed by `java.lang.Math.toRadians`
+   * @param e
+   *   angle in degrees
+   * @return
+   *   angle in radians, as if computed by `java.lang.Math.toRadians`
    *
    * @group math_funcs
    * @since 3.4.0
@@ -2150,10 +2225,13 @@ object functions {
   def radians(e: Column): Column = Column.fn("radians", e)
 
   /**
-   * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
+   * Converts an angle measured in degrees to an approximately equivalent angle measured in
+   * radians.
    *
-   * @param columnName angle in degrees
-   * @return angle in radians, as if computed by `java.lang.Math.toRadians`
+   * @param columnName
+   *   angle in degrees
+   * @return
+   *   angle in radians, as if computed by `java.lang.Math.toRadians`
    *
    * @group math_funcs
    * @since 3.4.0

@@ -1067,8 +1067,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("least") {
-    fn.least(fn.col("a"), fn.col("d").getItem("a"))  }
-
+    fn.least(fn.col("a"), fn.col("d").getItem("a"))
+  }
 
   functionTest("log") {
     fn.log("b")
