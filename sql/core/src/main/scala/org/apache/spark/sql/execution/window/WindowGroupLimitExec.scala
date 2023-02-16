@@ -69,17 +69,17 @@ case class WindowGroupLimitExec(
 
   protected override def doExecute(): RDD[InternalRow] = rankLikeFunction match {
     case _: RowNumber if partitionSpec.isEmpty =>
-      child.execute().mapPartitionsInternal(new SimpleLimitIterator(output, _, limit))
+      child.execute().mapPartitionsInternal(SimpleLimitIterator(_, limit))
     case _: RowNumber =>
       child.execute().mapPartitionsInternal(
         SimpleGroupLimitIterator(partitionSpec, output, _, limit))
     case _: Rank if partitionSpec.isEmpty =>
-      child.execute().mapPartitionsInternal(new RankLimitIterator(output, _, orderSpec, limit))
+      child.execute().mapPartitionsInternal(RankLimitIterator(output, _, orderSpec, limit))
     case _: Rank =>
       child.execute().mapPartitionsInternal(
         RankGroupLimitIterator(partitionSpec, output, _, orderSpec, limit))
     case _: DenseRank if partitionSpec.isEmpty =>
-      child.execute().mapPartitionsInternal(new DenseRankLimitIterator(output, _, orderSpec, limit))
+   child.execute().mapPartitionsInternal(DenseRankLimitIterator(output, _, orderSpec, limit))
     case _: DenseRank =>
       child.execute().mapPartitionsInternal(
         DenseRankGroupLimitIterator(partitionSpec, output, _, orderSpec, limit))
@@ -90,8 +90,6 @@ case class WindowGroupLimitExec(
 }
 
 abstract class BaseLimitIterator extends Iterator[InternalRow] {
-
-  def output: Seq[Attribute]
 
   def input: Iterator[InternalRow]
 
@@ -113,10 +111,9 @@ abstract class BaseLimitIterator extends Iterator[InternalRow] {
   }
 }
 
-class SimpleLimitIterator(
-    val output: Seq[Attribute],
-    val input: Iterator[InternalRow],
-    val limit: Int) extends BaseLimitIterator {
+case class SimpleLimitIterator(
+    input: Iterator[InternalRow],
+    limit: Int) extends BaseLimitIterator {
 
   override def increaseRank(): Unit = {
     rank += 1
@@ -131,11 +128,11 @@ trait OrderSpecProvider {
   var currentRankRow: UnsafeRow = null
 }
 
-class RankLimitIterator(
-    val output: Seq[Attribute],
-    val input: Iterator[InternalRow],
-    val orderSpec: Seq[SortOrder],
-    val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
+case class RankLimitIterator(
+    output: Seq[Attribute],
+    input: Iterator[InternalRow],
+    orderSpec: Seq[SortOrder],
+    limit: Int) extends BaseLimitIterator with OrderSpecProvider {
 
   var count = 0
 
@@ -152,11 +149,11 @@ class RankLimitIterator(
   }
 }
 
-class DenseRankLimitIterator(
-    val output: Seq[Attribute],
-    val input: Iterator[InternalRow],
-    val orderSpec: Seq[SortOrder],
-    val limit: Int) extends BaseLimitIterator with OrderSpecProvider {
+case class DenseRankLimitIterator(
+    output: Seq[Attribute],
+    input: Iterator[InternalRow],
+    orderSpec: Seq[SortOrder],
+    limit: Int) extends BaseLimitIterator with OrderSpecProvider {
 
   override def increaseRank(): Unit = {
     if (currentRankRow == null) {
@@ -170,13 +167,18 @@ class DenseRankLimitIterator(
   }
 }
 
-trait WindowIterator extends BaseLimitIterator {
+trait WindowIterator extends Iterator[InternalRow] {
 
   def partitionSpec: Seq[Expression]
+
+  def output: Seq[Attribute]
+
+  def input: Iterator[InternalRow]
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
   // Manage the stream and the grouping.
+  var nextRow: UnsafeRow = null
   var nextGroup: UnsafeRow = null
   var nextRowAvailable: Boolean = false
   protected[this] def fetchNextRow(): Unit = {
@@ -188,28 +190,20 @@ trait WindowIterator extends BaseLimitIterator {
   }
   fetchNextRow()
 
-  // Clear the rank value.
-  def clearRank(): Unit
-
-  var bufferIterator: GroupIterator = _
-
-  private[this] def fetchNextGroup(): Unit = {
-    clearRank()
-    bufferIterator = createGroupIterator()
-  }
+  var limitIterator: BaseLimitIterator = _
 
   override final def hasNext: Boolean =
-    (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+    (limitIterator != null && limitIterator.hasNext) || nextRowAvailable
 
   override final def next(): InternalRow = {
     // Load the next partition if we need to.
-    if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
-      if (bufferIterator != null) {
-        bufferIterator.skipRemainingRows()
+    if ((limitIterator == null || !limitIterator.hasNext) && nextRowAvailable) {
+      if (limitIterator != null) {
+        limitIterator.input.asInstanceOf[GroupIterator].skipRemainingRows()
       }
 
       if (nextRowAvailable) {
-        fetchNextGroup()
+        limitIterator = createLimitIterator(new GroupIterator())
       } else {
         // After skip remaining row in previous partition, all the input rows have been processed,
         // so returns the last row directly.
@@ -217,8 +211,8 @@ trait WindowIterator extends BaseLimitIterator {
       }
     }
 
-    if (bufferIterator != null && bufferIterator.hasNext) {
-      bufferIterator.next()
+    if (limitIterator != null && limitIterator.hasNext) {
+      limitIterator.next()
     } else {
       throw new NoSuchElementException
     }
@@ -228,33 +222,18 @@ trait WindowIterator extends BaseLimitIterator {
     // Before we start to fetch new input rows, make a copy of nextGroup.
     val currentGroup = nextGroup.copy()
 
-    def hasNext: Boolean = nextRowAvailable && nextGroup == currentGroup && rank < limit
+    def hasNext: Boolean = nextRowAvailable && nextGroup == currentGroup
 
-    def next(): InternalRow = {
-      if (nextRowAvailable) {
-        if (rank >= limit && nextGroup == currentGroup) {
-          // Skip all the remaining rows in this group
-          do {
-            fetchNextRow()
-          } while (nextRowAvailable && nextGroup == currentGroup)
-          throw new NoSuchElementException
-        } else {
-          if (nextGroup != currentGroup) {
-            throw new NoSuchElementException
-          }
-        }
-      } else {
-        throw new NoSuchElementException
-      }
-
+    def next(): InternalRow = if (nextRowAvailable && nextGroup == currentGroup) {
       val currentRow = nextRow.copy()
-      increaseRank()
       fetchNextRow()
       currentRow
+    } else {
+      throw new NoSuchElementException
     }
 
     def skipRemainingRows(): Unit = {
-      if (nextRowAvailable && rank >= limit && nextGroup == currentGroup) {
+      if (nextRowAvailable && nextGroup == currentGroup) {
         // Skip all the remaining rows in this group
         do {
           fetchNextRow()
@@ -263,48 +242,40 @@ trait WindowIterator extends BaseLimitIterator {
     }
   }
 
-  private def createGroupIterator(): GroupIterator = {
-    new GroupIterator()
-  }
+  protected def createLimitIterator(groupIterator: GroupIterator): BaseLimitIterator
 }
 
 case class SimpleGroupLimitIterator(
     partitionSpec: Seq[Expression],
-    override val output: Seq[Attribute],
-    override val input: Iterator[InternalRow],
-    override val limit: Int)
-  extends SimpleLimitIterator(output, input, limit) with WindowIterator {
+    output: Seq[Attribute],
+    input: Iterator[InternalRow],
+    limit: Int) extends WindowIterator {
 
-  override def clearRank(): Unit = {
-    rank = 0
+  override def createLimitIterator(groupIterator: GroupIterator): BaseLimitIterator = {
+    SimpleLimitIterator(groupIterator, limit)
   }
 }
 
 case class RankGroupLimitIterator(
     partitionSpec: Seq[Expression],
-    override val output: Seq[Attribute],
-    override val input: Iterator[InternalRow],
-    override val orderSpec: Seq[SortOrder],
-    override val limit: Int)
-  extends RankLimitIterator(output, input, orderSpec, limit) with WindowIterator {
+    output: Seq[Attribute],
+    input: Iterator[InternalRow],
+    orderSpec: Seq[SortOrder],
+    limit: Int) extends WindowIterator {
 
-  override def clearRank(): Unit = {
-    count = 0
-    rank = 0
-    currentRankRow = null
+  override def createLimitIterator(groupIterator: GroupIterator): BaseLimitIterator = {
+    RankLimitIterator(output, groupIterator, orderSpec, limit)
   }
 }
 
 case class DenseRankGroupLimitIterator(
     partitionSpec: Seq[Expression],
-    override val output: Seq[Attribute],
-    override val input: Iterator[InternalRow],
-    override val orderSpec: Seq[SortOrder],
-    override val limit: Int)
-  extends DenseRankLimitIterator(output, input, orderSpec, limit) with WindowIterator {
+    output: Seq[Attribute],
+    input: Iterator[InternalRow],
+    orderSpec: Seq[SortOrder],
+    limit: Int) extends WindowIterator {
 
-  override def clearRank(): Unit = {
-    rank = 0
-    currentRankRow = null
+  override def createLimitIterator(groupIterator: GroupIterator): BaseLimitIterator = {
+    DenseRankLimitIterator(output, groupIterator, orderSpec, limit)
   }
 }
