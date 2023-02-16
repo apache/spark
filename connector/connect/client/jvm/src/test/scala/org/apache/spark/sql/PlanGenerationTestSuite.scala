@@ -731,6 +731,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     select(fn.col("id"))
   }
 
+  test("function max") {
+    select(fn.max(Column("id")))
+  }
+
   test("function udf " + scala) {
     // This test might be a bit tricky if different JVM
     // versions are used to generate the golden files.
