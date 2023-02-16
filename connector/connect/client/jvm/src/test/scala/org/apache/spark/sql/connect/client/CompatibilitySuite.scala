@@ -75,12 +75,16 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       // TODO(SPARK-42175) Add the Dataset object definition
       // IncludeByName("org.apache.spark.sql.Dataset$"),
       IncludeByName("org.apache.spark.sql.DataFrame"),
+      IncludeByName("org.apache.spark.sql.DataFrameReader"),
       IncludeByName("org.apache.spark.sql.SparkSession"),
       IncludeByName("org.apache.spark.sql.SparkSession$")) ++ includeImplementedMethods(clientJar)
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Two sql overloading methods are marked experimental in the API and skipped in the client.
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
+      // Deprecated json methods and RDD related methods are skipped in the client.
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.csv"),
       // Skip all shaded dependencies in the client.
       ProblemFilters.exclude[Problem]("org.sparkproject.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
@@ -130,7 +134,8 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       // TODO(SPARK-42175) Add all overloading methods. Temporarily mute compatibility check for \
       //  the Dataset methods, as too many overload methods are missing.
       // "org.apache.spark.sql.Dataset",
-      "org.apache.spark.sql.SparkSession")
+      "org.apache.spark.sql.SparkSession",
+      "org.apache.spark.sql.DataFrameReader")
 
     val clientClassLoader: URLClassLoader = new URLClassLoader(Seq(clientJar.toURI.toURL).toArray)
     clsNames
