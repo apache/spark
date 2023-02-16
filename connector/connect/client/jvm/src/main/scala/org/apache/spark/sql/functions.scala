@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.LocalDate
 
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import com.google.protobuf.ByteString
 
@@ -955,7 +955,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
+  def isnan(e: Column): Column = e.isNaN
 
   /**
    * Return true iff the column is null.
@@ -963,7 +963,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
+  def isnull(e: Column): Column = e.isNull
 
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
@@ -1002,7 +1002,7 @@ object functions {
    * }}}
    *
    * @group normal_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def monotonically_increasing_id(): Column = Column.fn("monotonically_increasing_id")
 
@@ -1012,10 +1012,9 @@ object functions {
    * Both inputs should be floating point columns (DoubleType or FloatType).
    *
    * @group normal_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
-  def nanvl(col1: Column, col2: Column): Column = withExpr { NaNvl(col1.expr, col2.expr) }
-
+  def nanvl(col1: Column, col2: Column): Column = Column.fn("nanvl", col1, col2)
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
@@ -1028,7 +1027,7 @@ object functions {
    * }}}
    *
    * @group normal_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def negate(e: Column): Column = -e
 
@@ -1043,7 +1042,7 @@ object functions {
    * }}}
    *
    * @group normal_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def not(e: Column): Column = !e
 
@@ -1054,9 +1053,9 @@ object functions {
    * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
-  def rand(seed: Long): Column = withExpr { Rand(seed) }
+  def rand(seed: Long): Column = Column.fn("rand", lit(seed))
 
   /**
    * Generate a random column with independent and identically distributed (i.i.d.) samples
@@ -1065,9 +1064,9 @@ object functions {
    * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
-  def rand(): Column = rand(Utils.random.nextLong)
+  def rand(): Column = Column.fn("rand")
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from
@@ -1076,9 +1075,9 @@ object functions {
    * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
-  def randn(seed: Long): Column = withExpr { Randn(seed) }
+  def randn(seed: Long): Column = Column.fn("randn", lit(seed))
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from
@@ -1087,9 +1086,9 @@ object functions {
    * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
-  def randn(): Column = randn(Utils.random.nextLong)
+  def randn(): Column = Column.fn("randn")
 
   /**
    * Partition ID.
@@ -1097,23 +1096,23 @@ object functions {
    * @note This is non-deterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
-   * @since 1.6.0
+   * @since 3.4.0
    */
-  def spark_partition_id(): Column = withExpr { SparkPartitionID() }
+  def spark_partition_id(): Column = Column.fn("spark_partition_id")
 
   /**
    * Computes the square root of the specified float value.
    *
    * @group math_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
-  def sqrt(e: Column): Column = withExpr { Sqrt(e.expr) }
+  def sqrt(e: Column): Column = Column.fn("sqrt", e)
 
   /**
    * Computes the square root of the specified float value.
    *
    * @group math_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
@@ -1125,63 +1124,21 @@ object functions {
    * `col` with a suffix `index + 1`, i.e. col1, col2, col3, ...
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
-  def struct(cols: Column*): Column = withExpr { CreateStruct.create(cols.map(_.expr)) }
+  def struct(cols: Column*): Column = Column.fn("struct", cols: _*)
 
   /**
    * Creates a new struct column that composes multiple input columns.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
     struct((colName +: colNames).map(col) : _*)
   }
-
-  /**
-   * Evaluates a list of conditions and returns one of multiple possible result expressions.
-   * If otherwise is not defined at the end, null is returned for unmatched conditions.
-   *
-   * {{{
-   *   // Example: encoding gender string column into integer.
-   *
-   *   // Scala:
-   *   people.select(when(people("gender") === "male", 0)
-   *     .when(people("gender") === "female", 1)
-   *     .otherwise(2))
-   *
-   *   // Java:
-   *   people.select(when(col("gender").equalTo("male"), 0)
-   *     .when(col("gender").equalTo("female"), 1)
-   *     .otherwise(2))
-   * }}}
-   *
-   * @group normal_funcs
-   * @since 1.4.0
-   */
-  def when(condition: Column, value: Any): Column = withExpr {
-    CaseWhen(Seq((condition.expr, lit(value).expr)))
-  }
-
-  /**
-   * Computes bitwise NOT (~) of a number.
-   *
-   * @group normal_funcs
-   * @since 1.4.0
-   */
-  @deprecated("Use bitwise_not", "3.2.0")
-  def bitwiseNOT(e: Column): Column = bitwise_not(e)
-
-  /**
-   * Computes bitwise NOT (~) of a number.
-   *
-   * @group normal_funcs
-   * @since 3.2.0
-   */
-  def bitwise_not(e: Column): Column = withExpr { BitwiseNot(e.expr) }
 
   /**
    * Evaluates a list of conditions and returns one of multiple possible result expressions. If
@@ -1212,6 +1169,23 @@ object functions {
   }
 
   /**
+   * Computes bitwise NOT (~) of a number.
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use bitwise_not", "3.2.0")
+  def bitwiseNOT(e: Column): Column = bitwise_not(e)
+
+  /**
+   * Computes bitwise NOT (~) of a number.
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  def bitwise_not(e: Column): Column = Column.fn("~", e)
+
+  /**
    * Parses the expression string into the column that it represents, similar to
    * [[Dataset#selectExpr]].
    * {{{
@@ -1224,6 +1198,971 @@ object functions {
   def expr(expr: String): Column = Column { builder =>
     builder.getExpressionStringBuilder.setExpression(expr)
   }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Math Functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Computes the absolute value of a numeric value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def abs(e: Column): Column = Column.fn("abs", e)
+
+  /**
+   * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def acos(e: Column): Column = Column.fn("acos", e)
+
+  /**
+   * @return inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def acos(columnName: String): Column = acos(Column(columnName))
+
+  /**
+   * @return inverse hyperbolic cosine of `e`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def acosh(e: Column): Column = Column.fn("acosh", e)
+
+  /**
+   * @return inverse hyperbolic cosine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def acosh(columnName: String): Column = acosh(Column(columnName))
+
+  /**
+   * @return inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def asin(e: Column): Column = Column.fn("asin", e)
+
+  /**
+   * @return inverse sine of `columnName`, as if computed by `java.lang.Math.asin`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def asin(columnName: String): Column = asin(Column(columnName))
+
+  /**
+   * @return inverse hyperbolic sine of `e`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def asinh(e: Column): Column = Column.fn("asinh", e)
+
+  /**
+   * @return inverse hyperbolic sine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def asinh(columnName: String): Column = asinh(Column(columnName))
+
+  /**
+   * @return inverse tangent of `e` as if computed by `java.lang.Math.atan`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan(e: Column): Column = Column.fn("atan", e)
+
+  /**
+   * @return inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan(columnName: String): Column = atan(Column(columnName))
+
+  /**
+   * @param y coordinate on y-axis
+   * @param x coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(y: Column, x: Column): Column = Column.fn("atan2", y, x)
+
+  /**
+   * @param y coordinate on y-axis
+   * @param xName coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(y: Column, xName: String): Column = atan2(y, Column(xName))
+
+  /**
+   * @param yName coordinate on y-axis
+   * @param x coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(yName: String, x: Column): Column = atan2(Column(yName), x)
+
+  /**
+   * @param yName coordinate on y-axis
+   * @param xName coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(yName: String, xName: String): Column =
+    atan2(Column(yName), Column(xName))
+
+  /**
+   * @param y coordinate on y-axis
+   * @param xValue coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(y: Column, xValue: Double): Column = atan2(y, lit(xValue))
+
+  /**
+   * @param yName coordinate on y-axis
+   * @param xValue coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(yName: String, xValue: Double): Column = atan2(Column(yName), xValue)
+
+  /**
+   * @param yValue coordinate on y-axis
+   * @param x coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(yValue: Double, x: Column): Column = atan2(lit(yValue), x)
+
+  /**
+   * @param yValue coordinate on y-axis
+   * @param xName coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
+
+  /**
+   * @return inverse hyperbolic tangent of `e`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atanh(e: Column): Column = Column.fn("atanh", e)
+
+  /**
+   * @return inverse hyperbolic tangent of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atanh(columnName: String): Column = atanh(Column(columnName))
+
+  /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def bin(e: Column): Column = Column.fn("bin", e)
+
+  /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def bin(columnName: String): Column = bin(Column(columnName))
+
+  /**
+   * Computes the cube-root of the given value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def cbrt(e: Column): Column = Column.fn("cbrt", e)
+
+  /**
+   * Computes the cube-root of the given column.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def cbrt(columnName: String): Column = cbrt(Column(columnName))
+
+  /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def ceil(e: Column, scale: Column): Column = Column.fn("ceil", e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def ceil(e: Column): Column = Column.fn("ceil", e)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def ceil(columnName: String): Column = ceil(Column(columnName))
+
+  /**
+   * Convert a number in a string column from one base to another.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def conv(num: Column, fromBase: Int, toBase: Int): Column =
+    Column.fn("conv", num, lit(fromBase), lit(toBase))
+
+  /**
+   * @param e angle in radians
+   * @return cosine of the angle, as if computed by `java.lang.Math.cos`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def cos(e: Column): Column = Column.fn("cos", e)
+
+  /**
+   * @param columnName angle in radians
+   * @return cosine of the angle, as if computed by `java.lang.Math.cos`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def cos(columnName: String): Column = cos(Column(columnName))
+
+  /**
+   * @param e hyperbolic angle
+   * @return hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def cosh(e: Column): Column = Column.fn("cosh", e)
+
+  /**
+   * @param columnName hyperbolic angle
+   * @return hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def cosh(columnName: String): Column = cosh(Column(columnName))
+
+  /**
+   * @param e angle in radians
+   * @return cotangent of the angle
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def cot(e: Column): Column = Column.fn("cot", e)
+
+  /**
+   * @param e angle in radians
+   * @return cosecant of the angle
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def csc(e: Column): Column = Column.fn("csc", e)
+
+  /**
+   * Computes the exponential of the given value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def exp(e: Column): Column = Column.fn("exp", e)
+
+  /**
+   * Computes the exponential of the given column.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def exp(columnName: String): Column = exp(Column(columnName))
+
+  /**
+   * Computes the exponential of the given value minus one.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def expm1(e: Column): Column = Column.fn("expm1", e)
+
+  /**
+   * Computes the exponential of the given column minus one.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def expm1(columnName: String): Column = expm1(Column(columnName))
+
+  /**
+   * Computes the factorial of the given value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def factorial(e: Column): Column = Column.fn("factorial", e)
+
+  /**
+   * Computes the floor of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def floor(e: Column, scale: Column): Column = Column.fn("floor", e, scale)
+
+  /**
+   * Computes the floor of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def floor(e: Column): Column = Column.fn("floor", e)
+
+  /**
+   * Computes the floor of the given column value to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def floor(columnName: String): Column = floor(Column(columnName))
+
+  /**
+   * Returns the greatest value of the list of values, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def greatest(exprs: Column*): Column = Column.fn("greatest", exprs: _*)
+
+  /**
+   * Returns the greatest value of the list of column names, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def greatest(columnName: String, columnNames: String*): Column =
+    greatest((columnName +: columnNames).map(Column.apply): _*)
+
+  /**
+   * Computes hex value of the given column.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hex(column: Column): Column = Column.fn("hex", column)
+
+  /**
+   * Inverse of hex. Interprets each pair of characters as a hexadecimal number
+   * and converts to the byte representation of number.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def unhex(column: Column): Column = Column.fn("unhex", column)
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(l: Column, r: Column): Column = Column.fn("hypot", l, r)
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(l: Column, rightName: String): Column = hypot(l, Column(rightName))
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(leftName: String, r: Column): Column = hypot(Column(leftName), r)
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(leftName: String, rightName: String): Column =
+    hypot(Column(leftName), Column(rightName))
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(l: Column, r: Double): Column = hypot(l, lit(r))
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(leftName: String, r: Double): Column = hypot(Column(leftName), r)
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(l: Double, r: Column): Column = hypot(lit(l), r)
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
+
+  /**
+   * Returns the least value of the list of values, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def least(exprs: Column*): Column = Column.fn("least", exprs: _*)
+
+  /**
+   * Returns the least value of the list of column names, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def least(columnName: String, columnNames: String*): Column =
+    least((columnName +: columnNames).map(Column.apply): _*)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log(e: Column): Column = Column.fn("log", e)
+
+  /**
+   * Computes the natural logarithm of the given column.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log(columnName: String): Column = log(Column(columnName))
+
+  /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log(base: Double, a: Column): Column = Column.fn("log", lit(base), a)
+
+  /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log(base: Double, columnName: String): Column = log(base, Column(columnName))
+
+  /**
+   * Computes the logarithm of the given value in base 10.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log10(e: Column): Column = Column.fn("log10", e)
+
+  /**
+   * Computes the logarithm of the given value in base 10.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log10(columnName: String): Column = log10(Column(columnName))
+
+  /**
+   * Computes the natural logarithm of the given value plus one.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log1p(e: Column): Column = Column.fn("log1p", e)
+
+  /**
+   * Computes the natural logarithm of the given column plus one.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log1p(columnName: String): Column = log1p(Column(columnName))
+
+  /**
+   * Computes the logarithm of the given column in base 2.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log2(expr: Column): Column = Column.fn("log2", expr)
+
+  /**
+   * Computes the logarithm of the given value in base 2.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def log2(columnName: String): Column = log2(Column(columnName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(l: Column, r: Column): Column = Column.fn("power", l, r)
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(l: Column, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(leftName: String, r: Column): Column = pow(Column(leftName), r)
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(leftName: String, rightName: String): Column = pow(Column(leftName), Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(l: Column, r: Double): Column = pow(l, lit(r))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(leftName: String, r: Double): Column = pow(Column(leftName), r)
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(l: Double, r: Column): Column = pow(lit(l), r)
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: Column, divisor: Column): Column = Column.fn("pmod", dividend, divisor)
+
+  /**
+   * Returns the double value that is closest in value to the argument and
+   * is equal to a mathematical integer.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def rint(e: Column): Column = Column.fn("rint", e)
+
+  /**
+   * Returns the double value that is closest in value to the argument and
+   * is equal to a mathematical integer.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def rint(columnName: String): Column = rint(Column(columnName))
+
+  /**
+   * Returns the value of the column `e` rounded to 0 decimal places with HALF_UP round mode.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def round(e: Column): Column = round(e, 0)
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
+
+  /**
+   * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def bround(e: Column): Column = bround(e, 0)
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
+
+  /**
+   * @param e angle in radians
+   * @return secant of the angle
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def sec(e: Column): Column = Column.fn("sec", e)
+
+  /**
+   * Shift the given value numBits left. If the given value is a long value, this function
+   * will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use shiftleft", "3.2.0")
+  def shiftLeft(e: Column, numBits: Int): Column = shiftleft(e, numBits)
+
+  /**
+   * Shift the given value numBits left. If the given value is a long value, this function
+   * will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def shiftleft(e: Column, numBits: Int): Column = Column.fn("shiftleft", e, lit(numBits))
+
+  /**
+   * (Signed) shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use shiftright", "3.2.0")
+  def shiftRight(e: Column, numBits: Int): Column = shiftright(e, numBits)
+
+  /**
+   * (Signed) shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def shiftright(e: Column, numBits: Int): Column = Column.fn("shiftright", e, lit(numBits))
+
+  /**
+   * Unsigned shift the given value numBits right. If the given value is a long value,
+   * it will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use shiftrightunsigned", "3.2.0")
+  def shiftRightUnsigned(e: Column, numBits: Int): Column = shiftrightunsigned(e, numBits)
+
+  /**
+   * Unsigned shift the given value numBits right. If the given value is a long value,
+   * it will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def shiftrightunsigned(e: Column, numBits: Int): Column =
+    Column.fn("shiftrightunsigned", e, lit(numBits))
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def signum(e: Column): Column = Column.fn("signum", e)
+
+  /**
+   * Computes the signum of the given column.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def signum(columnName: String): Column = signum(Column(columnName))
+
+  /**
+   * @param e angle in radians
+   * @return sine of the angle, as if computed by `java.lang.Math.sin`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def sin(e: Column): Column = Column.fn("sin", e)
+
+  /**
+   * @param columnName angle in radians
+   * @return sine of the angle, as if computed by `java.lang.Math.sin`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def sin(columnName: String): Column = sin(Column(columnName))
+
+  /**
+   * @param e hyperbolic angle
+   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def sinh(e: Column): Column = Column.fn("sinh", e)
+
+  /**
+   * @param columnName hyperbolic angle
+   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def sinh(columnName: String): Column = sinh(Column(columnName))
+
+  /**
+   * @param e angle in radians
+   * @return tangent of the given value, as if computed by `java.lang.Math.tan`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def tan(e: Column): Column = Column.fn("tan", e)
+
+  /**
+   * @param columnName angle in radians
+   * @return tangent of the given value, as if computed by `java.lang.Math.tan`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def tan(columnName: String): Column = tan(Column(columnName))
+
+  /**
+   * @param e hyperbolic angle
+   * @return hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def tanh(e: Column): Column = Column.fn("tanh", e)
+
+  /**
+   * @param columnName hyperbolic angle
+   * @return hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def tanh(columnName: String): Column = tanh(Column(columnName))
+
+  /**
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(e: Column): Column = degrees(e)
+
+  /**
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(columnName: String): Column = degrees(Column(columnName))
+
+  /**
+   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
+   *
+   * @param e angle in radians
+   * @return angle in degrees, as if computed by `java.lang.Math.toDegrees`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def degrees(e: Column): Column = Column.fn("degrees", e)
+
+  /**
+   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
+   *
+   * @param columnName angle in radians
+   * @return angle in degrees, as if computed by `java.lang.Math.toDegrees`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def degrees(columnName: String): Column = degrees(Column(columnName))
+
+  /**
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(e: Column): Column = radians(e)
+
+  /**
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(columnName: String): Column = radians(Column(columnName))
+
+  /**
+   * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
+   *
+   * @param e angle in degrees
+   * @return angle in radians, as if computed by `java.lang.Math.toRadians`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def radians(e: Column): Column = Column.fn("radians", e)
+
+  /**
+   * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
+   *
+   * @param columnName angle in degrees
+   * @return angle in radians, as if computed by `java.lang.Math.toRadians`
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def radians(columnName: String): Column = radians(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Scala UDF functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
 
   // scalastyle:off line.size.limit
 
