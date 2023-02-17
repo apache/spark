@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.{CharType, DataType, StringType, StructField, 
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object PartitioningUtils {
+  private val PATTERN_FOR_KEY_EQ_VAL = "(.+)=(.+)".r
 
   def castPartitionSpec(value: String, dt: DataType, conf: SQLConf): Expression = {
     conf.storeAssignmentPolicy match {
@@ -134,6 +135,16 @@ private[sql] object PartitioningUtils {
     if (spec.keys.toSeq.sorted != defined) {
       throw QueryCompilationErrors.invalidPartitionSpecError(spec.keys.mkString(", "),
         partitionColumnNames, tableName)
+    }
+  }
+
+  /**
+   * Extract the partition values from a partition name, e.g., if a partition name is
+   * "region=US/dt=2023-02-18", then we will return an array of values ("US", "2023-02-18").
+   */
+  def partitionNameToValues(name: String): Array[String] = {
+    name.split("/").map {
+      case PATTERN_FOR_KEY_EQ_VAL(_, v) => v
     }
   }
 }
