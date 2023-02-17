@@ -154,9 +154,3 @@ class RelationalGroupedDataset protected[sql] (
     (inputExpr: proto.Expression) => exprToFunc(inputExpr)
   }
 }
-
-private[sql] object RelationalGroupedDataset {
-  def apply(df: DataFrame, groupingExprs: Seq[proto.Expression]): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(df, groupingExprs)
-  }
-}

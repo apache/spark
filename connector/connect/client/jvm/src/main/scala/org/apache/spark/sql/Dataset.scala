@@ -1055,7 +1055,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr))
+    new RelationalGroupedDataset(toDF(), cols.map(_.expr))
   }
 
   /**
