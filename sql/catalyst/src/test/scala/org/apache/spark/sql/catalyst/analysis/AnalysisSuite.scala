@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util._
@@ -1415,5 +1415,22 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(cg.rightOrder.flatMap(_.references).forall(cg.right.output.contains))
       assert(!cg.rightOrder.flatMap(_.references).exists(cg.left.output.contains))
     }
+  }
+
+  test("SPARK-40149: add metadata column with no extra project") {
+    val t1 = LocalRelation($"key".int, $"value".string).as("t1")
+    val t2 = LocalRelation($"key".int, $"value".string).as("t2")
+    val query =
+      Project(Seq($"t1.key", $"t2.key"),
+        Join(t1, t2, UsingJoin(FullOuter, Seq("key")), None, JoinHint.NONE))
+    checkAnalysis(
+      query,
+      Project(Seq($"t1.key", $"t2.key"),
+        Project(Seq(coalesce($"t1.key", $"t2.key").as("key"),
+          $"t1.value", $"t2.value", $"t1.key", $"t2.key"),
+          Join(t1, t2, FullOuter, Some($"t1.key" === $"t2.key"), JoinHint.NONE)
+        )
+      ).analyze
+    )
   }
 }

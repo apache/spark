@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
@@ -51,6 +51,20 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     supportedFunctions.contains(funcName)
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
+    override def visitSortOrder(
+        sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
+      (sortDirection, nullOrdering) match {
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) =>
+          s"$sortKey $sortDirection"
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_LAST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 1 ELSE 0 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_FIRST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 0 ELSE 1 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) =>
+          s"$sortKey $sortDirection"
+      }
+    }
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {

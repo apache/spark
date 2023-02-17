@@ -78,7 +78,7 @@ object ArrowWriter {
       case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (dt, _) =>
-        throw QueryExecutionErrors.unsupportedDataTypeError(dt.catalogString)
+        throw QueryExecutionErrors.unsupportedDataTypeError(dt)
     }
   }
 }

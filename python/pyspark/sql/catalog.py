@@ -387,7 +387,7 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.getTable("tbl1")  # doctest: +SKIP
+        >>> spark.catalog.getTable("tbl1")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -548,7 +548,7 @@ class Catalog:
 
         Throw an analysis exception when the function does not exists.
 
-        >>> spark.catalog.getFunction("my_func2")  # doctest: +SKIP
+        >>> spark.catalog.getFunction("my_func2")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -867,7 +867,7 @@ class Catalog:
 
         Throw an exception if the temporary view does not exists.
 
-        >>> spark.table("my_table")  # doctest: +SKIP
+        >>> spark.table("my_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -907,7 +907,7 @@ class Catalog:
 
         Throw an exception if the global view does not exists.
 
-        >>> spark.table("global_temp.my_table")  # doctest: +SKIP
+        >>> spark.table("global_temp.my_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...
@@ -924,6 +924,9 @@ class Catalog:
 
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
         """
         warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self._sparkSession.udf.register(name, f, returnType)
@@ -933,6 +936,9 @@ class Catalog:
         Returns true if the table is currently cached in-memory.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -975,6 +981,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -1009,6 +1018,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -1028,7 +1040,7 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.uncacheTable("not_existing_table")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> spark.catalog.uncacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
         AnalysisException: ...

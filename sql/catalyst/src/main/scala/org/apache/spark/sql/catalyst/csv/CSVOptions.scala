@@ -159,19 +159,19 @@ class CSVOptions(
    * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
    * extra trailing characters. Thus, disabled when legacyTimeParserPolicy == LEGACY
    */
-  val prefersDate = {
+  val preferDate = {
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       false
     } else {
-      getBool(PREFERS_DATE, true)
+      getBool(PREFER_DATE, true)
     }
   }
 
   val dateFormatOption: Option[String] = parameters.get(DATE_FORMAT)
-  // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
+  // Provide a default value for dateFormatInRead when preferDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
-    if (prefersDate) {
+    if (preferDate) {
       Option(dateFormatOption.getOrElse(DateFormatter.defaultPattern))
     } else {
       dateFormatOption
@@ -222,7 +222,10 @@ class CSVOptions(
    */
   val maxErrorContentLength = 1000
 
-  val isCommentSet = this.comment != '\u0000'
+  val isCommentSet = parameters.get(COMMENT) match {
+    case Some(value) if value.length == 1 => true
+    case _ => false
+  }
 
   val samplingRatio =
     parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
@@ -335,7 +338,7 @@ object CSVOptions extends DataSourceOptions {
   val INFER_SCHEMA = newOption("inferSchema")
   val IGNORE_LEADING_WHITESPACE = newOption("ignoreLeadingWhiteSpace")
   val IGNORE_TRAILING_WHITESPACE = newOption("ignoreTrailingWhiteSpace")
-  val PREFERS_DATE = newOption("prefersDate")
+  val PREFER_DATE = newOption("preferDate")
   val ESCAPE_QUOTES = newOption("escapeQuotes")
   val QUOTE_ALL = newOption("quoteAll")
   val ENFORCE_SCHEMA = newOption("enforceSchema")

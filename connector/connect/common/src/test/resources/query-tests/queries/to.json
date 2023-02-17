@@ -1,0 +1,28 @@
+{
+  "toSchema": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "schema": {
+      "struct": {
+        "fields": [{
+          "name": "b",
+          "dataType": {
+            "double": {
+            }
+          },
+          "nullable": true
+        }, {
+          "name": "id",
+          "dataType": {
+            "integer": {
+            }
+          },
+          "nullable": true
+        }]
+      }
+    }
+  }
+}

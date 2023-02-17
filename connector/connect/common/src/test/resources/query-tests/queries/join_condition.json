@@ -1,0 +1,39 @@
+{
+  "join": {
+    "left": {
+      "subqueryAlias": {
+        "input": {
+          "localRelation": {
+            "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+          }
+        },
+        "alias": "l"
+      }
+    },
+    "right": {
+      "subqueryAlias": {
+        "input": {
+          "localRelation": {
+            "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
+          }
+        },
+        "alias": "r"
+      }
+    },
+    "joinCondition": {
+      "unresolvedFunction": {
+        "functionName": "\u003d",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "l.id"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "r.id"
+          }
+        }]
+      }
+    },
+    "joinType": "JOIN_TYPE_LEFT_ANTI"
+  }
+}

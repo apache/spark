@@ -25,7 +25,7 @@ object IntegrationTestUtils {
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
 
-  private[connect] lazy val sparkHome: String = {
+  private[sql] lazy val sparkHome: String = {
     if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
       fail("spark.test.home or SPARK_HOME is not set.")
     }

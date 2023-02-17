@@ -157,11 +157,9 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         left.merge(right)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2123",
-      parameters = Map(
-        "leftName" -> "b",
-        "rightName" -> "b",
-        "message" -> "Failed to merge incompatible data types float and bigint.")
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      parameters = Map("left" -> "\"FLOAT\"", "right" -> "\"BIGINT\""
+      )
     )
   }
 

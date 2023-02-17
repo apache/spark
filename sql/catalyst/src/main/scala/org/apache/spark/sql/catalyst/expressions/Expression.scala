@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, Tre
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -615,7 +616,7 @@ trait SupportQueryContext extends Expression with Serializable {
 
   def initQueryContext(): Option[SQLQueryContext]
 
-  def getContextOrNull(): SQLQueryContext = queryContext.getOrElse(null)
+  def getContextOrNull(): SQLQueryContext = queryContext.orNull
 
   def getContextOrNullCode(ctx: CodegenContext, withErrorContext: Boolean = true): String = {
     if (withErrorContext && queryContext.isDefined) {
@@ -1335,4 +1336,77 @@ trait CommutativeExpression extends Expression {
   protected def orderCommutative(
       f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] =
     gatherCommutative(this, f).sortBy(_.hashCode())
+
+  /**
+   * Helper method to generated a canonicalized plan. If the number of operands are
+   * greater than the MULTI_COMMUTATIVE_OP_OPT_THRESHOLD, this method creates a
+   * [[MultiCommutativeOp]] as the canonicalized plan.
+   */
+  protected def buildCanonicalizedPlan(
+      collectOperands: PartialFunction[Expression, Seq[Expression]],
+      buildBinaryOp: (Expression, Expression) => Expression,
+      evalMode: Option[EvalMode.Value] = None): Expression = {
+    val operands = orderCommutative(collectOperands)
+    val reorderResult =
+      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
+        operands.reduce(buildBinaryOp)
+      } else {
+        MultiCommutativeOp(operands, this.getClass, evalMode)(this)
+      }
+    reorderResult
+  }
+}
+
+/**
+ * A helper class used by the Commutative expressions during canonicalization. During
+ * canonicalization, when we have a long tree of commutative operations, we use the MultiCommutative
+ * expression to represent that tree instead of creating new commutative objects.
+ * This class is added as a memory optimization for processing large commutative operation trees
+ * without creating a large number of new intermediate objects.
+ * The MultiCommutativeOp memory optimization is applied to the following commutative
+ * expressions:
+ *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
+ * @param operands A sequence of operands that produces a commutative expression tree.
+ * @param opCls The class of the root operator of the expression tree.
+ * @param evalMode The optional expression evaluation mode.
+ * @param originalRoot Root operator of the commutative expression tree before canonicalization.
+ *                     This object reference is used to deduce the return dataType of Add and
+ *                     Multiply operations when the input datatype is decimal.
+ */
+case class MultiCommutativeOp(
+    operands: Seq[Expression],
+    opCls: Class[_],
+    evalMode: Option[EvalMode.Value])(originalRoot: Expression) extends Unevaluable {
+  // Helper method to deduce the data type of a single operation.
+  private def singleOpDataType(lType: DataType, rType: DataType): DataType = {
+    originalRoot match {
+      case add: Add =>
+        (lType, rType) match {
+          case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+            add.resultDecimalType(p1, s1, p2, s2)
+          case _ => lType
+        }
+      case multiply: Multiply =>
+        (lType, rType) match {
+          case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+            multiply.resultDecimalType(p1, s1, p2, s2)
+          case _ => lType
+        }
+    }
+  }
+
+  override def dataType: DataType = {
+    originalRoot match {
+      case _: Add | _: Multiply =>
+        operands.map(_.dataType).reduce((l, r) => singleOpDataType(l, r))
+      case other => other.dataType
+    }
+  }
+
+  override def nullable: Boolean = operands.exists(_.nullable)
+
+  override def children: Seq[Expression] = operands
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    this.copy(operands = newChildren)(originalRoot)
 }

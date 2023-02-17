@@ -65,7 +65,7 @@ class SparkSessionSuite
           .build())
       .build()
     val plan = proto.Plan.newBuilder().build()
-    ss.analyze(plan)
+    ss.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
     assert(plan.equals(service.getAndClearLatestInputPlan()))
   }
 

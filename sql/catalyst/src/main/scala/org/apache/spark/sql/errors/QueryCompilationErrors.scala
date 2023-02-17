@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -194,13 +194,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unresolvedUsingColForJoinError(
-      colName: String, plan: LogicalPlan, side: String): Throwable = {
+      colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1001",
+      errorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       messageParameters = Map(
-        "colName" -> colName,
+        "colName" -> toSQLId(colName),
         "side" -> side,
-        "plan" -> plan.output.map(_.name).mkString(", ")))
+        "suggestion" -> suggestion))
   }
 
   def unresolvedAttributeError(
@@ -677,7 +677,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         messageParameters = Map(
           "functionName" -> toSQLId(name),
           "expectedNum" -> expectedNumberOfParameters,
-          "actualNum" -> actualNumber.toString))
+          "actualNum" -> actualNumber.toString,
+          "docroot" -> SPARK_DOC_ROOT))
     } else {
       new AnalysisException(
         errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
@@ -1239,12 +1240,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new TableAlreadyExistsException(ident.asMultipartIdentifier)
   }
 
-  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+  def requiresSinglePartNamespaceError(namespace: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1117",
+      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(
         "sessionCatalog" -> CatalogManager.SESSION_CATALOG_NAME,
-        "ns" -> ns.mkString("[", ", ", "]")))
+        "namespace" -> toSQLId(namespace)))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -1393,7 +1394,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataSchemaNotSpecifiedError(format: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1129",
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
       messageParameters = Map("format" -> format))
   }
 
@@ -1565,7 +1566,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def outputPathAlreadyExistsError(outputPath: Path): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1152",
+      errorClass = "PATH_ALREADY_EXISTS",
       messageParameters = Map("outputPath" -> outputPath.toString))
   }
 
@@ -2252,14 +2253,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "precision" -> precision.toString))
   }
 
-  def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1229",
-      messageParameters = Map(
-        "decimalType" -> decimalType,
-        "precision" -> precision.toString))
-  }
-
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
       s" Set the config ${toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)}" +
@@ -2744,10 +2737,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("name" -> name))
   }
 
-  def columnNameContainsInvalidCharactersError(name: String): Throwable = {
+  def invalidColumnNameAsPathError(datasource: String, columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1289",
-      messageParameters = Map("name" -> name))
+      errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+      messageParameters = Map(
+        "datasource" -> datasource,
+        "columnName" -> toSQLId(columnName)
+      )
+    )
   }
 
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {
@@ -2915,14 +2912,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("expr" -> expr.sql))
   }
 
-  def cannotResolveColumnNameAmongFieldsError(
-      colName: String, fieldsStr: String, extraMsg: String): AnalysisException = {
+  def unresolvedColumnWithSuggestionError(
+      objectName: String, suggestion: String): AnalysisException = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1317",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       messageParameters = Map(
-        "colName" -> colName,
-        "fieldsStr" -> fieldsStr,
-        "extraMsg" -> extraMsg))
+        "objectName" -> toSQLId(objectName),
+        "proposal" -> suggestion
+      )
+    )
   }
 
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
@@ -2985,10 +2983,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("key" -> key))
   }
 
-  def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
+  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1326",
-      messageParameters = Map("key" -> key))
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
