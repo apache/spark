@@ -17,6 +17,9 @@
 
 package org.apache.spark.scheduler
 
+private[spark]
+sealed abstract class DecommissionInfo
+
 /**
  * Message providing more detail when an executor is being decommissioned.
  * @param message Human readable reason for why the decommissioning is happening.
@@ -25,14 +28,19 @@ package org.apache.spark.scheduler
  *                shuffle data might be lost even if the external shuffle service is enabled.
  */
 private[spark]
-abstract class DecommissionInfo
-
-private[spark]
 case class ExecutorDecommissionInfo(
     message: String,
     workerHost: Option[String] = None)
     extends DecommissionInfo
 
+/**
+ * Message different from [[ExecutorDecommissionInfo]],
+ * this case class triggers the decommission through the executor.
+ * @param message Human readable reason for why the decommissioning is happening.
+ * @param workerHost When workerHost is defined, it means the host (aka the `node` or `worker`
+ *                in other places) has been decommissioned too. Used to infer if the
+ *                shuffle data might be lost even if the external shuffle service is enabled.
+ */
 private[spark]
 case class TriggeredByExecutorDecommissionInfo(
     message: String,
