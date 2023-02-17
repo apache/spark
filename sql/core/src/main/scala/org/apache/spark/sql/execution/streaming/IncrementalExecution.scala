@@ -341,6 +341,10 @@ class IncrementalExecution(
   /**
    * Should the MicroBatchExecution run another batch based on this execution and the current
    * updated metadata.
+   *
+   * This method performs simulation of watermark propagation against new batch (which is not
+   * planned yet), which is required for asking the needs of another batch to each stateful
+   * operator.
    */
   def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     val tentativeBatchId = currentBatchId + 1

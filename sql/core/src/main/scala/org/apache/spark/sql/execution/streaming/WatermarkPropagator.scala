@@ -75,6 +75,7 @@ object NoOpWatermarkPropagator extends WatermarkPropagator {
  * operators. (prior to SPARK-40925) This is only used for compatibility mode.
  */
 class UseSingleWatermarkPropagator extends WatermarkPropagator {
+  // We use treemap to sort the key (batchID) and evict old batch IDs efficiently.
   private val batchIdToWatermark: jutil.TreeMap[Long, Long] = new jutil.TreeMap[Long, Long]()
 
   private def isInitialized(batchId: Long): Boolean = batchIdToWatermark.containsKey(batchId)
@@ -149,6 +150,7 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
  * stateful operator, which this implementation will give the value from the association.
  */
 class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
+  // We use treemap to sort the key (batchID) and evict old batch IDs efficiently.
   private val batchIdToWatermark: jutil.TreeMap[Long, Long] = new jutil.TreeMap[Long, Long]()
 
   // contains the association for batchId -> (stateful operator ID -> input watermark)
