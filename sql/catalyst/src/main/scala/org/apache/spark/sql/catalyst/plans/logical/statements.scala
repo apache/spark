@@ -143,7 +143,7 @@ case class QualifiedColType(
     default.map { sql =>
       val e = ResolveDefaultColumns.analyze(colName, dataType, sql, "ALTER TABLE")
       assert(e.resolved && e.foldable,
-        "exist default must be simple SQL string that is resolved and foldable, " +
+        "The existence default value must be a simple SQL string that is resolved and foldable, " +
           "but got: " + sql)
       new ColumnDefaultValue(sql, LiteralValue(e.eval(), dataType))
     }.orNull
