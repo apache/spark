@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
 // scalastyle:off
@@ -776,12 +777,414 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   /* Function API */
-  test("function col") {
-    select(fn.col("id"))
+  private def functionTest(name: String)(f: => Column): Unit = {
+    test("function " + name) {
+      complex.select(f)
+    }
+  }
+
+  functionTest("col") {
+    fn.col("id")
+  }
+
+  functionTest("asc") {
+    fn.asc("a")
+  }
+
+  functionTest("asc_nulls_first") {
+    fn.asc_nulls_first("a")
+  }
+
+  functionTest("asc_nulls_last") {
+    fn.asc_nulls_last("a")
+  }
+
+  functionTest("desc") {
+    fn.desc("a")
+  }
+
+  functionTest("desc_nulls_first") {
+    fn.desc_nulls_first("a")
+  }
+
+  functionTest("desc_nulls_last") {
+    fn.desc_nulls_last("a")
+  }
+
+  functionTest("approx_count_distinct") {
+    fn.approx_count_distinct("a")
+  }
+
+  functionTest("approx_count_distinct rsd") {
+    fn.approx_count_distinct("a", 0.1)
+  }
+
+  functionTest("avg") {
+    fn.avg("a")
+  }
+
+  functionTest("collect_list") {
+    fn.collect_list("a")
+  }
+
+  functionTest("collect_set") {
+    fn.collect_set("a")
+  }
+
+  functionTest("corr") {
+    fn.corr("a", "b")
+  }
+
+  functionTest("count") {
+    fn.count(fn.col("a"))
+  }
+
+  functionTest("countDistinct") {
+    fn.countDistinct("a", "g")
+  }
+
+  functionTest("covar_pop") {
+    fn.covar_pop("a", "b")
+  }
+
+  functionTest("covar_samp") {
+    fn.covar_samp("a", "b")
+  }
+
+  functionTest("first") {
+    fn.first("a", ignoreNulls = true)
+  }
+
+  functionTest("kurtosis") {
+    fn.kurtosis("a")
+  }
+
+  functionTest("last") {
+    fn.last("a", ignoreNulls = false)
+  }
+
+  functionTest("mode") {
+    fn.mode(fn.col("a"))
   }
 
   test("function max") {
-    select(fn.max(Column("id")))
+    select(fn.max("id"))
+  }
+
+  functionTest("max_by") {
+    fn.max_by(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("median") {
+    fn.median(fn.col("a"))
+  }
+
+  functionTest("min") {
+    fn.min("a")
+  }
+
+  functionTest("min_by") {
+    fn.min_by(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("percentile_approx") {
+    fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit(20))
+  }
+
+  functionTest("product") {
+    fn.product(fn.col("a"))
+  }
+
+  functionTest("skewness") {
+    fn.skewness("a")
+  }
+
+  functionTest("stddev") {
+    fn.stddev("a")
+  }
+
+  functionTest("stddev_samp") {
+    fn.stddev_samp("a")
+  }
+
+  functionTest("stddev_pop") {
+    fn.stddev_pop("a")
+  }
+
+  functionTest("sum") {
+    fn.sum("a")
+  }
+
+  functionTest("sum_distinct") {
+    fn.sum_distinct(fn.col("a"))
+  }
+
+  functionTest("variance") {
+    fn.variance("a")
+  }
+
+  functionTest("var_samp") {
+    fn.var_samp("a")
+  }
+
+  functionTest("var_pop") {
+    fn.var_pop("a")
+  }
+
+  functionTest("array") {
+    fn.array("a", "a")
+  }
+
+  functionTest("map") {
+    fn.map(fn.col("a"), fn.col("g"), lit(22), lit("dummy"))
+  }
+
+  functionTest("map_from_arrays") {
+    fn.map_from_arrays(fn.array(lit(1), lit(2)), fn.array(lit("one"), lit("two")))
+  }
+
+  functionTest("coalesce") {
+    fn.coalesce(fn.col("a"), lit(3))
+  }
+
+  functionTest("input_file_name") {
+    fn.input_file_name()
+  }
+
+  functionTest("isnan") {
+    fn.isnan(fn.col("b"))
+  }
+
+  functionTest("isnull") {
+    fn.isnull(fn.col("a"))
+  }
+
+  functionTest("monotonically_increasing_id") {
+    fn.monotonically_increasing_id()
+  }
+
+  functionTest("nanvl") {
+    fn.nanvl(lit(Double.NaN), fn.col("a"))
+  }
+
+  functionTest("negate") {
+    fn.negate(fn.col("a"))
+  }
+
+  functionTest("rand with seed") {
+    fn.rand(133)
+  }
+
+  functionTest("randn with seed") {
+    fn.randn(133)
+  }
+
+  functionTest("spark_partition_id") {
+    fn.spark_partition_id()
+  }
+
+  functionTest("sqrt") {
+    fn.sqrt("b")
+  }
+
+  functionTest("struct") {
+    fn.struct("a", "d")
+  }
+
+  functionTest("bitwise_not") {
+    fn.bitwise_not(fn.col("a"))
+  }
+
+  functionTest("expr") {
+    fn.expr("a + 1")
+  }
+
+  functionTest("abs") {
+    fn.abs(fn.col("a"))
+  }
+
+  functionTest("acos") {
+    fn.acos("b")
+  }
+
+  functionTest("acosh") {
+    fn.acosh("b")
+  }
+
+  functionTest("asin") {
+    fn.asin("b")
+  }
+
+  functionTest("asinh") {
+    fn.asinh("b")
+  }
+
+  functionTest("atan") {
+    fn.atan("b")
+  }
+
+  functionTest("atan2") {
+    fn.atan2(fn.col("a").cast("double"), "b")
+  }
+
+  functionTest("atanh") {
+    fn.atanh("b")
+  }
+
+  functionTest("bin") {
+    fn.bin("b")
+  }
+
+  functionTest("ceil") {
+    fn.ceil("b")
+  }
+
+  functionTest("ceil scale") {
+    fn.ceil(fn.col("b"), lit(2))
+  }
+
+  functionTest("conv") {
+    fn.conv(fn.col("b"), 10, 16)
+  }
+
+  functionTest("cos") {
+    fn.cos("b")
+  }
+
+  functionTest("cosh") {
+    fn.cosh("b")
+  }
+
+  functionTest("cot") {
+    fn.cot(fn.col("b"))
+  }
+
+  functionTest("csc") {
+    fn.csc(fn.col("b"))
+  }
+
+  functionTest("exp") {
+    fn.exp("b")
+  }
+
+  functionTest("expm1") {
+    fn.expm1("b")
+  }
+
+  functionTest("factorial") {
+    fn.factorial(fn.col("a") % 10)
+  }
+
+  functionTest("floor") {
+    fn.floor("b")
+  }
+
+  functionTest("floor scale") {
+    fn.floor(fn.col("b"), lit(2))
+  }
+
+  functionTest("greatest") {
+    fn.greatest(fn.col("a"), fn.col("d").getItem("a"))
+  }
+
+  functionTest("hex") {
+    fn.hex(fn.col("a"))
+  }
+
+  functionTest("unhex") {
+    fn.unhex(fn.col("a"))
+  }
+
+  functionTest("hypot") {
+    fn.hypot(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("least") {
+    fn.least(fn.col("a"), fn.col("d").getItem("a"))
+  }
+
+  functionTest("log") {
+    fn.log("b")
+  }
+
+  functionTest("log with base") {
+    fn.log(2, "b")
+  }
+
+  functionTest("log10") {
+    fn.log10("b")
+  }
+
+  functionTest("log1p") {
+    fn.log1p("a")
+  }
+
+  functionTest("log2") {
+    fn.log2("a")
+  }
+
+  functionTest("pow") {
+    fn.pow("a", "b")
+  }
+
+  functionTest("pmod") {
+    fn.pmod(fn.col("a"), fn.lit(10))
+  }
+
+  functionTest("rint") {
+    fn.rint("b")
+  }
+
+  functionTest("round") {
+    fn.round(fn.col("b"), 2)
+  }
+
+  functionTest("bround") {
+    fn.round(fn.col("b"), 2)
+  }
+
+  functionTest("sec") {
+    fn.sec(fn.col("b"))
+  }
+
+  functionTest("shiftleft") {
+    fn.shiftleft(fn.col("b"), 2)
+  }
+
+  functionTest("shiftright") {
+    fn.shiftright(fn.col("b"), 2)
+  }
+
+  functionTest("shiftrightunsigned") {
+    fn.shiftrightunsigned(fn.col("b"), 2)
+  }
+
+  functionTest("signum") {
+    fn.signum("b")
+  }
+
+  functionTest("sin") {
+    fn.sin("b")
+  }
+
+  functionTest("sinh") {
+    fn.sinh("b")
+  }
+
+  functionTest("tan") {
+    fn.tan("b")
+  }
+
+  functionTest("tanh") {
+    fn.tanh("b")
+  }
+
+  functionTest("degrees") {
+    fn.degrees("b")
+  }
+
+  functionTest("radians") {
+    fn.radians("b")
   }
 
   test("groupby agg") {
