@@ -135,7 +135,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
-  test("Run extraJVMOptions JVM GC option check - G1GC", k8sTestTag) {
+  test("SPARK-42474: Run extraJVMOptions JVM GC option check - G1GC", k8sTestTag) {
     sparkAppConf
       .set("spark.driver.extraJavaOptions", "-XX:+UseG1GC")
       .set("spark.executor.extraJavaOptions", "-XX:+UseG1GC")
@@ -143,7 +143,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("JVM G1GC Flag: true"))
   }
 
-  test("Run extraJVMOptions JVM GC option check - Other GC", k8sTestTag) {
+  test("SPARK-42474: Run extraJVMOptions JVM GC option check - Other GC", k8sTestTag) {
     sparkAppConf
       .set("spark.driver.extraJavaOptions", "-XX:+UseParallelGC")
       .set("spark.executor.extraJavaOptions", "-XX:+UseParallelGC")
