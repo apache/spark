@@ -141,6 +141,7 @@
 | org.apache.spark.sql.catalyst.expressions.Expm1 | expm1 | SELECT expm1(0) | struct<EXPM1(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Extract | extract | SELECT extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456') | struct<extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456'):int> |
 | org.apache.spark.sql.catalyst.expressions.Factorial | factorial | SELECT factorial(5) | struct<factorial(5):bigint> |
+| org.apache.spark.sql.catalyst.expressions.FilterValue | filter_value | SELECT filter_value(1, x -> x > 0) | struct<filter_value(1, lambdafunction((namedlambdavariable() > 0), namedlambdavariable())):int> |
 | org.apache.spark.sql.catalyst.expressions.FindInSet | find_in_set | SELECT find_in_set('ab','abc,b,ab,c,def') | struct<find_in_set(ab, abc,b,ab,c,def):int> |
 | org.apache.spark.sql.catalyst.expressions.Flatten | flatten | SELECT flatten(array(array(1, 2), array(3, 4))) | struct<flatten(array(array(1, 2), array(3, 4))):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.FloorExpressionBuilder | floor | SELECT floor(-0.1) | struct<FLOOR(-0.1):decimal(1,0)> |
