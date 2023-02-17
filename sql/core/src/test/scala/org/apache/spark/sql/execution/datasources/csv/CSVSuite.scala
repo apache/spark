@@ -2843,7 +2843,7 @@ abstract class CSVSuite
         .load(path.getAbsolutePath)
 
       val expected = if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-        // When legacy parser is enabled, `prefersDate` will be disabled
+        // When legacy parser is enabled, `preferDate` will be disabled
         Seq(
           Row("2001-09-08"),
           Row("1941-01-02"),
@@ -2940,7 +2940,7 @@ abstract class CSVSuite
         .csv(path.getAbsolutePath)
 
       if (SQLConf.get.legacyTimeParserPolicy != LegacyBehaviorPolicy.LEGACY) {
-        // When legacy parser is enabled, `prefersDate` will be disabled
+        // When legacy parser is enabled, `preferDate` will be disabled
         checkAnswer(
           output,
           Seq(
@@ -3155,7 +3155,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("inferSchema"))
     assert(CSVOptions.isValidOption("ignoreLeadingWhiteSpace"))
     assert(CSVOptions.isValidOption("ignoreTrailingWhiteSpace"))
-    assert(CSVOptions.isValidOption("prefersDate"))
+    assert(CSVOptions.isValidOption("preferDate"))
     assert(CSVOptions.isValidOption("escapeQuotes"))
     assert(CSVOptions.isValidOption("quoteAll"))
     assert(CSVOptions.isValidOption("enforceSchema"))
@@ -3196,7 +3196,7 @@ abstract class CSVSuite
     assert(CSVOptions.getAlternativeOption("charset").contains("encoding"))
     assert(CSVOptions.getAlternativeOption("compression").contains("codec"))
     assert(CSVOptions.getAlternativeOption("codec").contains("compression"))
-    assert(CSVOptions.getAlternativeOption("prefersDate").isEmpty)
+    assert(CSVOptions.getAlternativeOption("preferDate").isEmpty)
   }
 }
 
