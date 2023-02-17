@@ -206,7 +206,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    toDF(colNames.map(colName => functions.mean(colName)).toSeq)
+    toDF(colNames.map(colName => functions.mean(colName)))
   }
 
   /**
@@ -218,7 +218,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
-    toDF(colNames.map(colName => functions.max(colName)).toSeq)
+    toDF(colNames.map(colName => functions.max(colName)))
   }
 
   /**
@@ -230,7 +230,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    toDF(colNames.map(colName => functions.avg(colName)).toSeq)
+    toDF(colNames.map(colName => functions.avg(colName)))
   }
 
   /**
@@ -242,7 +242,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
-    toDF(colNames.map(colName => functions.min(colName)).toSeq)
+    toDF(colNames.map(colName => functions.min(colName)))
   }
 
   /**
