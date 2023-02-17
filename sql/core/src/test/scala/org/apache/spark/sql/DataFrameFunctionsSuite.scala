@@ -3454,6 +3454,74 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+
+  test("filter_value function - primitive type") {
+    val df = Seq[Integer](1, 9, 8, 7, 2, null).toDF("i")
+
+    def testPrimitive(): Unit = {
+      checkAnswer(df.selectExpr("filter_value(i, x -> x % 2 == 0)"),
+        Seq(Row(null), Row(null), Row(8), Row(null), Row(2), Row(null)))
+      checkAnswer(df.select(filter_value(col("i"), _ % 2 === 0)),
+        Seq(Row(null), Row(null), Row(8), Row(null), Row(2), Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testPrimitive()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testPrimitive()
+  }
+
+  test("filter_value function - array type") {
+    val df = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayType(): Unit = {
+      checkAnswer(df.selectExpr("filter_value(i, x -> size(x) > 0)"),
+        Seq(
+          Row(Seq(1, 9, 8, 7)),
+          Row(Seq(5, 8, 9, 7, 2)),
+          Row(null),
+          Row(null)))
+      checkAnswer(df.select(filter_value(col("i"), size(_) > 0)),
+        Seq(
+          Row(Seq(1, 9, 8, 7)),
+          Row(Seq(5, 8, 9, 7, 2)),
+          Row(null),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayType()
+  }
+
+  test("filter_value function - struct type") {
+    val df = Seq(
+      (1, "a"),
+      (2, "b")
+    ).toDF("a", "b").select(struct("a", "b").alias("s"))
+
+    def testStructType(): Unit = {
+      checkAnswer(df.selectExpr("filter_value(s, x -> x.a > 1)"),
+        Seq(Row(null), Row(Row(2, "b"))))
+      checkAnswer(df.select(filter_value(col("s"), _.getField("a") > 1)),
+        Seq(Row(null), Row(Row(2, "b"))))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testStructType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testStructType()
+  }
+
   test("transform function - array for primitive type not containing null") {
     val df = Seq(
       Seq(1, 9, 8, 7),

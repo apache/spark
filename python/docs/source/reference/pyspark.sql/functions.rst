@@ -45,6 +45,7 @@ Conditional Functions
     :toctree: api/
 
     coalesce
+    filter_value
     ifnull
     nanvl
     nullif

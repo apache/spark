@@ -2285,6 +2285,16 @@ def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
 to_xml.__doc__ = pysparkfuncs.to_xml.__doc__
 
 
+def filter_value(
+    col: "ColumnOrName",
+    f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
+) -> Column:
+    return _invoke_higher_order_function("filter_value", [col], [f])
+
+
+filter_value.__doc__ = pysparkfuncs.filter_value.__doc__
+
+
 def transform(
     col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],

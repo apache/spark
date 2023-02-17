@@ -301,10 +301,10 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   usage = "_FUNC_(expr, func) - Return the value if func returns true, otherwise return null.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
-       [2,3,4]
-      > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
-       [1,3,5]
+      > SELECT _FUNC_(1, x -> x > 0);
+       1
+      > SELECT _FUNC_(1, x -> x > 1);
+       NULL
   """,
   since = "3.5.0",
   group = "lambda_funcs")
