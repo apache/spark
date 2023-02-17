@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Map;
 import javax.annotation.Nullable;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.internal.connector.ColumnImpl;
 import org.apache.spark.sql.types.DataType;
@@ -33,6 +34,7 @@ import org.apache.spark.sql.types.DataType;
  * {@link Table#columns()} by calling the static {@code create} functions of this interface to
  * create it.
  */
+@Evolving
 public interface Column {
 
   static Column create(String name, DataType dataType) {

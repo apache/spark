@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Literal;
 
 /**
@@ -31,6 +32,7 @@ import org.apache.spark.sql.connector.expressions.Literal;
  * remember the column default value and let the reader fill the column value when reading existing
  * data that do not have these new columns.
  */
+@Evolving
 public class ColumnDefaultValue {
   private String sql;
   private Literal<?> value;

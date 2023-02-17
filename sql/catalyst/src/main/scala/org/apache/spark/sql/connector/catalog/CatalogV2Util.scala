@@ -432,6 +432,11 @@ private[sql] object CatalogV2Util {
       .asTableCatalog
   }
 
+  /**
+   * Converts DS v2 columns to StructType, which encodes column comment and default value to
+   * StructField metadata. This is mainly used to define the schema of v2 scan, w.r.t. the columns
+   * of the v2 table.
+   */
   def v2ColumnsToStructType(columns: Array[Column]): StructType = {
     StructType(columns.map(v2ColumnToStructField))
   }
@@ -464,6 +469,11 @@ private[sql] object CatalogV2Util {
     }.getOrElse(f)
   }
 
+  /**
+   * Converts a StructType to DS v2 columns, which decodes the StructField metadata to v2 column
+   * comment and default value. This is mainly used to generate DS v2 columns from table schema in
+   * DDL commands, so that Spark can pass DS v2 columns to DS v2 createTable and related APIs.
+   */
   def structTypeToV2Columns(schema: StructType): Array[Column] = {
     schema.fields.map(structFieldToV2Column)
   }
