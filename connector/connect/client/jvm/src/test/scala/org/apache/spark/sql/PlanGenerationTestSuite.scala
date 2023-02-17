@@ -1199,6 +1199,34 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
         "b" -> "avg",
         "*" -> "size",
         "a" -> "count")
+
+    simple
+      .groupBy(Column("id"))
+      .agg(functions.max("a"), functions.sum("b"))
+
+    simple
+      .groupBy(Column("id"))
+      .max("a", "b")
+
+    simple
+      .groupBy(Column("id"))
+      .min("a", "b")
+
+    simple
+      .groupBy(Column("id"))
+      .mean("a", "b")
+
+    simple
+      .groupBy(Column("id"))
+      .avg("a", "b")
+
+    simple
+      .groupBy(Column("id"))
+      .sum("a", "b")
+
+    simple
+      .groupBy(Column("id"))
+      .count()
   }
 
   test("function lit") {
