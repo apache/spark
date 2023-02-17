@@ -67,7 +67,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
     toDF((aggExpr +: aggExprs).map { case (colName, expr) =>
-      new Column(strToExpr(expr, df(colName).expr))
+      strToColumn(expr, df(colName).expr)
     })
   }
 
@@ -88,7 +88,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   def agg(exprs: Map[String, String]): DataFrame = {
     toDF(exprs.map { case (colName, expr) =>
-      new Column(strToExpr(expr, df(colName).expr))
+      strToColumn(expr, df(colName).expr)
     }.toSeq)
   }
 
@@ -109,7 +109,7 @@ class RelationalGroupedDataset protected[sql] (
     agg(exprs.asScala.toMap)
   }
 
-  private[this] def strToExpr(expr: String, inputExpr: proto.Expression): proto.Expression = {
+  private[this] def strToColumn(expr: String, inputExpr: proto.Expression): Column = {
     val builder = proto.Expression.newBuilder()
 
     expr.toLowerCase(Locale.ROOT) match {
@@ -147,7 +147,7 @@ class RelationalGroupedDataset protected[sql] (
           .addArguments(inputExpr)
           .setIsDistinct(false)
     }
-    builder.build()
+    new Column(builder.build())
   }
 
   /**
