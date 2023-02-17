@@ -34,8 +34,6 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 @Stable
 final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
-  private val df = ds.toDF()
-
   /**
    * Specifies the behavior when data or table already exists. Options include:
    * <ul>
@@ -192,6 +190,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @scala.annotation.varargs
   def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter[T] = {
+    require(numBuckets > 0, "The numBuckets should be > 0.")
     this.numBuckets = Option(numBuckets)
     this.bucketColumnNames = Option(colName +: colNames)
     this
@@ -234,11 +233,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def executeWriteOperation(f: proto.WriteOperation.Builder => Unit): Unit = {
     val builder = proto.WriteOperation.newBuilder()
 
-    builder.setInput(df.plan.getRoot)
+    builder.setInput(ds.plan.getRoot)
 
     // Set path or table
     f(builder)
-    require(builder.hasPath ^ builder.hasTable) // Only one can be set
+    require(builder.hasPath != builder.hasTable) // Only one can be set
 
     builder.setMode(mode match {
       case SaveMode.Append => proto.WriteOperation.SaveMode.SAVE_MODE_APPEND
@@ -262,7 +261,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       builder.putOptions(k, v)
     }
 
-    df.session.execute(proto.Command.newBuilder().setWriteOperation(builder).build())
+    ds.session.execute(proto.Command.newBuilder().setWriteOperation(builder).build())
   }
 
   /**
@@ -399,7 +398,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
    *
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def orc(path: String): Unit = {
     format("orc").save(path)
@@ -422,7 +421,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
    *   Data Source Option</a> in the version you use.
    *
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def text(path: String): Unit = {
     format("text").save(path)

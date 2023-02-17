@@ -2245,7 +2245,6 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   def write: DataFrameWriter[T] = {
-    // if (isStreaming) {} TODO: support client local check?
     new DataFrameWriter[T](this)
   }
 
