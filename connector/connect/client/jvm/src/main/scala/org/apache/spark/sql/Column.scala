@@ -1254,9 +1254,15 @@ private[sql] object Column {
     new Column(builder.build())
   }
 
-  private[sql] def fn(name: String, inputs: Column*): Column = Column { builder =>
-    builder.getUnresolvedFunctionBuilder
-      .setFunctionName(name)
-      .addAllArguments(inputs.map(_.expr).asJava)
+  private[sql] def fn(name: String, inputs: Column*): Column = {
+    fn(name, isDistinct = false, inputs: _*)
+  }
+
+  private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = Column {
+    builder =>
+      builder.getUnresolvedFunctionBuilder
+        .setFunctionName(name)
+        .setIsDistinct(isDistinct)
+        .addAllArguments(inputs.map(_.expr).asJava)
   }
 }
