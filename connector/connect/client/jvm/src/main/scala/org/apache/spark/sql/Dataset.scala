@@ -2237,7 +2237,6 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   def inputFiles: Array[String] = analyze.getInputFilesList.asScala.toArray
 
-
   /**
    * Interface for saving the content of the non-streaming Dataset out into external storage.
    *

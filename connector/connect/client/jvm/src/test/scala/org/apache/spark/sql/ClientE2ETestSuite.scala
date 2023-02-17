@@ -21,6 +21,8 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import scala.collection.JavaConverters._
 
 import io.grpc.StatusRuntimeException
+import java.nio.file.Files
+import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
@@ -67,7 +69,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
-  test("read") {
+  test("read and write") {
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
@@ -91,11 +93,20 @@ class ClientE2ETestSuite extends RemoteSparkSession {
             StructField("age", IntegerType) ::
             StructField("job", StringType) :: Nil))
       .load()
-    val array = df.collectResult().toArray
-    assert(array.length == 2)
-    assert(array(0).getString(0) == "Jorge")
-    assert(array(0).getInt(1) == 30)
-    assert(array(0).getString(2) == "Developer")
+    val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
+
+    df.write
+      .format("csv")
+      .mode("overwrite")
+      .options(Map("header" -> "true", "delimiter" -> ";"))
+      .save(outputFolderPath.toString)
+
+    // We expect only one csv file saved.
+    val outputFile = outputFolderPath.toFile
+      .listFiles()
+      .filter(file => file.getPath.endsWith(".csv"))(0)
+
+    assert(FileUtils.contentEquals(testDataPath.toFile, outputFile))
   }
 
   test("read path collision") {
@@ -124,19 +135,34 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       .csv(testDataPath.toString)
     // Failed because the path cannot be provided both via option and load method (csv).
     assertThrows[StatusRuntimeException] {
-      df.collectResult().toArray
+      df.collect()
     }
   }
 
   test("write table") {
-    spark.sql("drop table if exists myTable").collect()
+    try {
+      val df = spark.range(10).limit(3)
+      df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
+      spark.range(2).write.insertInto("myTable")
+      val result = spark.sql("select * from myTable").collect()
+      assert(result.length == 5)
+      assert(result(0).getLong(0) == 0)
+      assert(result(1).getLong(0) == 1)
+      assert(result(2).getLong(0) == 2)
+      assert(result(3).getLong(0) == 0)
+      assert(result(4).getLong(0) == 1)
+    } finally {
+      spark.sql("drop table if exists myTable").collect()
+    }
+  }
 
-    val df = spark.range(10).limit(3)
-    df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
-    val list = spark.sql("select * from myTable").collectAsList()
-    assert(list.size() == 3)
-
-    spark.sql("drop table if exists myTable").collect()
+  test("write path collision") {
+    val df = spark.range(10)
+    val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
+    // Failed because the path cannot be provided both via option and save method.
+    assertThrows[StatusRuntimeException] {
+      df.write.option("path", outputFolderPath.toString).save(outputFolderPath.toString)
+    }
   }
 
   // TODO test large result when we can create table or view

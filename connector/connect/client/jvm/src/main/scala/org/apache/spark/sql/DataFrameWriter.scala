@@ -26,24 +26,20 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
- * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
- * key-value stores, etc). Use `Dataset.write` to access this.
+ * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems, key-value
+ * stores, etc). Use `Dataset.write` to access this.
  *
  * @since 3.4.0
  */
 @Stable
-final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
+final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
 
   /**
-   * Specifies the behavior when data or table already exists. Options include:
-   * <ul>
-   * <li>`SaveMode.Overwrite`: overwrite the existing data.</li>
-   * <li>`SaveMode.Append`: append the data.</li>
-   * <li>`SaveMode.Ignore`: ignore the operation (i.e. no-op).</li>
-   * <li>`SaveMode.ErrorIfExists`: throw an exception at runtime.</li>
-   * </ul>
-   * <p>
-   * The default option is `ErrorIfExists`.
+   * Specifies the behavior when data or table already exists. Options include: <ul>
+   * <li>`SaveMode.Overwrite`: overwrite the existing data.</li> <li>`SaveMode.Append`: append the
+   * data.</li> <li>`SaveMode.Ignore`: ignore the operation (i.e. no-op).</li>
+   * <li>`SaveMode.ErrorIfExists`: throw an exception at runtime.</li> </ul> <p> The default
+   * option is `ErrorIfExists`.
    *
    * @since 3.4.0
    */
@@ -53,13 +49,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Specifies the behavior when data or table already exists. Options include:
-   * <ul>
-   * <li>`overwrite`: overwrite the existing data.</li>
-   * <li>`append`: append the data.</li>
-   * <li>`ignore`: ignore the operation (i.e. no-op).</li>
-   * <li>`error` or `errorifexists`: default option, throw an exception at runtime.</li>
-   * </ul>
+   * Specifies the behavior when data or table already exists. Options include: <ul>
+   * <li>`overwrite`: overwrite the existing data.</li> <li>`append`: append the data.</li>
+   * <li>`ignore`: ignore the operation (i.e. no-op).</li> <li>`error` or `errorifexists`: default
+   * option, throw an exception at runtime.</li> </ul>
    *
    * @since 3.4.0
    */
@@ -69,8 +62,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "append" => mode(SaveMode.Append)
       case "ignore" => mode(SaveMode.Ignore)
       case "error" | "errorifexists" | "default" => mode(SaveMode.ErrorIfExists)
-      case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. Accepted " +
-        "save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists', 'default'.")
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown save mode: $saveMode. Accepted " +
+          "save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists', 'default'.")
     }
   }
 
@@ -87,8 +81,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -100,8 +94,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -110,8 +104,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -120,8 +114,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -130,8 +124,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -143,8 +137,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds output options for the underlying data source.
    *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
+   * All options are maintained in a case-insensitive way in terms of key names. If a new option
+   * has the same key case-insensitively, it will override the existing option.
    *
    * @since 3.4.0
    */
@@ -156,16 +150,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
-   * partition a dataset by year and then month, the directory layout would look like:
-   * <ul>
-   * <li>year=2016/month=01/</li>
-   * <li>year=2016/month=02/</li>
-   * </ul>
+   * partition a dataset by year and then month, the directory layout would look like: <ul>
+   * <li>year=2016/month=01/</li> <li>year=2016/month=02/</li> </ul>
    *
-   * Partitioning is one of the most widely used techniques to optimize physical data layout.
-   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
-   * predicates on the partitioned columns. In order for partitioning to work well, the number
-   * of distinct values in each column should typically be less than tens of thousands.
+   * Partitioning is one of the most widely used techniques to optimize physical data layout. It
+   * provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number of
+   * distinct values in each column should typically be less than tens of thousands.
    *
    * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
    * 2.1.0.
@@ -180,8 +171,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Buckets the output by the given columns. If specified, the output is laid out on the file
-   * system similar to Hive's bucketing scheme, but with a different bucket hash function
-   * and is not compatible with Hive's bucketing.
+   * system similar to Hive's bucketing scheme, but with a different bucket hash function and is
+   * not compatible with Hive's bucketing.
    *
    * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
    * 2.1.0.
@@ -265,14 +256,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Inserts the content of the `DataFrame` to the specified table. It requires that
-   * the schema of the `DataFrame` is the same as the schema of the table.
+   * Inserts the content of the `DataFrame` to the specified table. It requires that the schema of
+   * the `DataFrame` is the same as the schema of the table.
    *
-   * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
-   * resolution. For example:
+   * @note
+   *   Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
+   *   resolution. For example:
    *
-   * @note SaveMode.ErrorIfExists and SaveMode.Ignore behave as SaveMode.Append in `insertInto` as
-   *       `insertInto` is not a table creating operation.
+   * @note
+   *   SaveMode.ErrorIfExists and SaveMode.Ignore behave as SaveMode.Append in `insertInto` as
+   *   `insertInto` is not a table creating operation.
    *
    * {{{
    *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
@@ -294,25 +287,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def insertInto(tableName: String): Unit = {
     executeWriteOperation(builder => {
-      builder.setTable(proto.WriteOperation.SaveTable.newBuilder()
-        .setTableName(tableName)
-        .setSaveMethod(proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO)
-      )
+      builder.setTable(
+        proto.WriteOperation.SaveTable
+          .newBuilder()
+          .setTableName(tableName)
+          .setSaveMethod(
+            proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO))
     })
   }
 
   /**
    * Saves the content of the `DataFrame` as the specified table.
    *
-   * In the case the table already exists, behavior of this function depends on the
-   * save mode, specified by the `mode` function (default to throwing an exception).
-   * When `mode` is `Overwrite`, the schema of the `DataFrame` does not need to be
-   * the same as that of the existing table.
+   * In the case the table already exists, behavior of this function depends on the save mode,
+   * specified by the `mode` function (default to throwing an exception). When `mode` is
+   * `Overwrite`, the schema of the `DataFrame` does not need to be the same as that of the
+   * existing table.
    *
    * When `mode` is `Append`, if there is an existing table, we will use the format and options of
    * the existing table. The column order in the schema of the `DataFrame` doesn't need to be same
-   * as that of the existing table. Unlike `insertInto`, `saveAsTable` will use the column names to
-   * find the correct column positions. For example:
+   * as that of the existing table. Unlike `insertInto`, `saveAsTable` will use the column names
+   * to find the correct column positions. For example:
    *
    * {{{
    *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
@@ -326,10 +321,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
-   * In this method, save mode is used to determine the behavior if the data source table exists in
-   * Spark catalog. We will always overwrite the underlying data of data source (e.g. a table in
-   * JDBC data source) if the table doesn't exist in Spark catalog, and will always append to the
-   * underlying data of data source if the table already exists.
+   * In this method, save mode is used to determine the behavior if the data source table exists
+   * in Spark catalog. We will always overwrite the underlying data of data source (e.g. a table
+   * in JDBC data source) if the table doesn't exist in Spark catalog, and will always append to
+   * the underlying data of data source if the table already exists.
    *
    * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
@@ -341,26 +336,26 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def saveAsTable(tableName: String): Unit = {
     executeWriteOperation(builder => {
-      builder.setTable(proto.WriteOperation.SaveTable.newBuilder()
-        .setTableName(tableName)
-        .setSaveMethod(
-          proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE
-        )
-      )
+      builder.setTable(
+        proto.WriteOperation.SaveTable
+          .newBuilder()
+          .setTableName(tableName)
+          .setSaveMethod(
+            proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE))
     })
   }
 
   /**
-   * Saves the content of the `DataFrame` in JSON format (<a href="http://jsonlines.org/">
-   * JSON Lines text format or newline-delimited JSON</a>) at the specified path.
-   * This is equivalent to:
+   * Saves the content of the `DataFrame` in JSON format (<a href="http://jsonlines.org/"> JSON
+   * Lines text format or newline-delimited JSON</a>) at the specified path. This is equivalent
+   * to:
    * {{{
    *   format("json").save(path)
    * }}}
    *
-   * You can find the JSON-specific options for writing JSON files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the JSON-specific options for writing JSON files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
@@ -369,16 +364,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the `DataFrame` in Parquet format at the specified path.
-   * This is equivalent to:
+   * Saves the content of the `DataFrame` in Parquet format at the specified path. This is
+   * equivalent to:
    * {{{
    *   format("parquet").save(path)
    * }}}
    *
-   * Parquet-specific option(s) for writing Parquet files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * Parquet-specific option(s) for writing Parquet files can be found in <a href=
+   * "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option"> Data
+   * Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
@@ -387,16 +381,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the `DataFrame` in ORC format at the specified path.
-   * This is equivalent to:
+   * Saves the content of the `DataFrame` in ORC format at the specified path. This is equivalent
+   * to:
    * {{{
    *   format("orc").save(path)
    * }}}
    *
-   * ORC-specific option(s) for writing ORC files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * ORC-specific option(s) for writing ORC files can be found in <a href=
+   * "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option"> Data
+   * Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
@@ -405,9 +398,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the `DataFrame` in a text file at the specified path.
-   * The DataFrame must have only one column that is of string type.
-   * Each row becomes a new line in the output file. For example:
+   * Saves the content of the `DataFrame` in a text file at the specified path. The DataFrame must
+   * have only one column that is of string type. Each row becomes a new line in the output file.
+   * For example:
    * {{{
    *   // Scala:
    *   df.write.text("/path/to/output")
@@ -417,9 +410,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    * The text files will be encoded as UTF-8.
    *
-   * You can find the text-specific options for writing text files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the text-specific options for writing text files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
@@ -428,15 +421,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the `DataFrame` in CSV format at the specified path.
-   * This is equivalent to:
+   * Saves the content of the `DataFrame` in CSV format at the specified path. This is equivalent
+   * to:
    * {{{
    *   format("csv").save(path)
    * }}}
    *
-   * You can find the CSV-specific options for writing CSV files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the CSV-specific options for writing CSV files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.4.0
    */
