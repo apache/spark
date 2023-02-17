@@ -29,7 +29,7 @@ try:
     exec(open("pyspark/version.py").read())
 except IOError:
     print(
-        "Failed to load Databricks Connect version file for packaging. You must be in Spark's python dir.",
+        "Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
         file=sys.stderr,
     )
     sys.exit(-1)
@@ -223,7 +223,7 @@ try:
         long_description = f.read()
 
     setup(
-        name="databricks-connect",
+        name="pyspark",
         version=VERSION,
         description="Apache Spark Python API",
         long_description=long_description,
