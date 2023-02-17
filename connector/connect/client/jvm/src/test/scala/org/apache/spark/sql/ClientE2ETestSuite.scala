@@ -144,13 +144,13 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       val df = spark.range(10).limit(3)
       df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
       spark.range(2).write.insertInto("myTable")
-      val result = spark.sql("select * from myTable").collect()
+      val result = spark.sql("select * from myTable").sort("id").collect()
       assert(result.length == 5)
       assert(result(0).getLong(0) == 0)
-      assert(result(1).getLong(0) == 1)
-      assert(result(2).getLong(0) == 2)
-      assert(result(3).getLong(0) == 0)
-      assert(result(4).getLong(0) == 1)
+      assert(result(1).getLong(0) == 0)
+      assert(result(2).getLong(0) == 1)
+      assert(result(3).getLong(0) == 1)
+      assert(result(4).getLong(0) == 2)
     } finally {
       spark.sql("drop table if exists myTable").collect()
     }
