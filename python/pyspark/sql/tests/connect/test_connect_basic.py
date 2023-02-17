@@ -2954,11 +2954,13 @@ class ChannelBuilderTests(unittest.TestCase):
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_invalid_user_agent_charset(self):
+        # fmt: off
         invalid_user_agents = [
             "agent»", # non standard symbol
             "age nt", # whitespace
-            "ägent"
+            "ägent",  # non-ascii alphabet
         ]
+        # fmt: on
         for user_agent in invalid_user_agents:
             with self.subTest(user_agent=user_agent):
                 chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")

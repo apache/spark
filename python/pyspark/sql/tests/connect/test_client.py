@@ -24,7 +24,7 @@ import pyspark.sql.connect.proto as proto
 
 class SparkConnectClientTestCase(unittest.TestCase):
     def test_user_agent_passthrough(self):
-        client = SparkConnectClient('sc://foo/;user_agent=bar')
+        client = SparkConnectClient("sc://foo/;user_agent=bar")
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -35,7 +35,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(mock.req.client_type, "bar")
 
     def test_user_agent_default(self):
-        client = SparkConnectClient('sc://foo/')
+        client = SparkConnectClient("sc://foo/")
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -63,5 +63,5 @@ class MockService:
         return [resp]
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
