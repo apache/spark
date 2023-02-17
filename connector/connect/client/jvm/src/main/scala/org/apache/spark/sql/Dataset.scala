@@ -1036,6 +1036,29 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   }
 
   /**
+   * Groups the Dataset using the specified columns, so we can run aggregation on them. See
+   * [[RelationalGroupedDataset]] for all the available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns grouped by department.
+   *   ds.groupBy($"department").avg()
+   *
+   *   // Compute the max age and average salary, grouped by department and gender.
+   *   ds.groupBy($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def groupBy(cols: Column*): RelationalGroupedDataset = {
+    new RelationalGroupedDataset(toDF(), cols.map(_.expr))
+  }
+
+  /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
    * set. This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
    * which cannot be reversed.
