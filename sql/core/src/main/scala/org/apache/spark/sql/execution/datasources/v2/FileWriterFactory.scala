@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Date
 
-import org.apache.hadoop.mapreduce.{TaskAttemptID, TaskID, TaskType}
+import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
@@ -30,7 +30,8 @@ case class FileWriterFactory (
     description: WriteJobDescription,
     committer: FileCommitProtocol) extends DataWriterFactory {
 
-  private val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
+  private[this] val jobTrackerID = SparkHadoopWriterUtils.createJobTrackerID(new Date)
+  @transient private lazy val jobId = new JobID(jobTrackerID, 0)
 
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
     val taskAttemptContext = createTaskAttemptContext(partitionId)
