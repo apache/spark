@@ -16,24 +16,19 @@
     under the License.
 
 
-=============
-API Reference
-=============
+========
+Grouping
+========
+.. currentmodule:: pyspark.sql.connect
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. autosummary::
+    :toctree: api/
 
-Pandas API on Spark follows the API specifications of latest pandas release.
-
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.connect/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
+    GroupedData.agg
+    GroupedData.avg
+    GroupedData.count
+    GroupedData.max
+    GroupedData.mean
+    GroupedData.min
+    GroupedData.pivot
+    GroupedData.sum

@@ -17,23 +17,22 @@
 
 
 =============
-API Reference
+Spark Connect
 =============
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
-
-Pandas API on Spark follows the API specifications of latest pandas release.
+This page gives an overview of all public Spark Connect API.
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 2
 
-   pyspark.sql/index
-   pyspark.connect/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
+    core_classes
+    spark_session
+    io
+    dataframe
+    column
+    functions
+    window
+    grouping
+    catalog
+    udf
+    client

@@ -16,24 +16,43 @@
     under the License.
 
 
-=============
-API Reference
-=============
+======
+Column
+======
+.. currentmodule:: pyspark.sql.connect
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. autosummary::
+    :toctree: api/
 
-Pandas API on Spark follows the API specifications of latest pandas release.
-
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.connect/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
+    Column.alias
+    Column.asc
+    Column.asc_nulls_first
+    Column.asc_nulls_last
+    Column.astype
+    Column.between
+    Column.bitwiseAND
+    Column.bitwiseOR
+    Column.bitwiseXOR
+    Column.cast
+    Column.contains
+    Column.desc
+    Column.desc_nulls_first
+    Column.desc_nulls_last
+    Column.dropFields
+    Column.endswith
+    Column.eqNullSafe
+    Column.getField
+    Column.getItem
+    Column.ilike
+    Column.isNotNull
+    Column.isNull
+    Column.isin
+    Column.like
+    Column.name
+    Column.otherwise
+    Column.over
+    Column.rlike
+    Column.startswith
+    Column.substr
+    Column.when
+    Column.withField

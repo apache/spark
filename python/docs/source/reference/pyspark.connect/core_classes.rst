@@ -16,24 +16,26 @@
     under the License.
 
 
-=============
-API Reference
-=============
+============
+Core Classes
+============
+.. currentmodule:: pyspark.sql.connect
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. autosummary::
+    :toctree: api/
 
-Pandas API on Spark follows the API specifications of latest pandas release.
-
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.connect/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
+    SparkSession
+    SparkConnectClient
+    ChannelBuilder
+    Catalog
+    DataFrame
+    Column
+    GroupedData
+    DataFrameNaFunctions
+    DataFrameStatFunctions
+    Window
+    DataFrameReader
+    DataFrameWriter
+    DataFrameWriterV2
+    UDFRegistration
+    udf.UserDefinedFunction

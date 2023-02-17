@@ -16,24 +16,23 @@
     under the License.
 
 
-=============
-API Reference
-=============
+======
+Window
+======
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. currentmodule:: pyspark.sql.connect
 
-Pandas API on Spark follows the API specifications of latest pandas release.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.connect/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
+    Window.currentRow
+    Window.orderBy
+    Window.partitionBy
+    Window.rangeBetween
+    Window.rowsBetween
+    Window.unboundedFollowing
+    Window.unboundedPreceding
+    WindowSpec.orderBy
+    WindowSpec.partitionBy
+    WindowSpec.rangeBetween
+    WindowSpec.rowsBetween

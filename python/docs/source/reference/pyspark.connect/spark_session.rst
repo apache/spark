@@ -17,23 +17,30 @@
 
 
 =============
-API Reference
+Spark Session
 =============
+.. currentmodule:: pyspark.sql.connect
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. autosummary::
+    :toctree: api/
 
-Pandas API on Spark follows the API specifications of latest pandas release.
+The entry point to programming Spark with the Dataset and DataFrame API.
+To create a Spark Session, you should use ``SparkSession.builder`` attribute.
+See also :class:`SparkSession`.
 
-.. toctree::
-   :maxdepth: 2
+.. autosummary::
+    :toctree: api/
 
-   pyspark.sql/index
-   pyspark.connect/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
+    SparkSession.builder.appName
+    SparkSession.builder.config
+    SparkSession.builder.getOrCreate
+    SparkSession.builder.master
+    SparkSession.builder.remote
+    SparkSession.catalog
+    SparkSession.createDataFrame
+    SparkSession.range
+    SparkSession.read
+    SparkSession.sql
+    SparkSession.stop
+    SparkSession.table
+    SparkSession.udf

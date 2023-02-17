@@ -16,24 +16,26 @@
     under the License.
 
 
-=============
-API Reference
-=============
+======
+Client
+======
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. currentmodule:: pyspark.sql.connect
 
-Pandas API on Spark follows the API specifications of latest pandas release.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.connect/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
+    ChannelBuilder.default_port
+    ChannelBuilder.metadata
+    ChannelBuilder.secure
+    ChannelBuilder.endpoint
+    ChannelBuilder.userId
+    ChannelBuilder.get
+    ChannelBuilder.toChannel
+    SparkConnectClient.register_udf
+    SparkConnectClient.to_table
+    SparkConnectClient.to_pandas
+    SparkConnectClient.schema
+    SparkConnectClient.explain_string
+    SparkConnectClient.execute_command
+    SparkConnectClient.close
