@@ -25,11 +25,7 @@ Client
 .. autosummary::
     :toctree: api/
 
-    ChannelBuilder.default_port
     ChannelBuilder.metadata
-    ChannelBuilder.secure
-    ChannelBuilder.endpoint
-    ChannelBuilder.userId
     ChannelBuilder.get
     ChannelBuilder.toChannel
     SparkConnectClient.register_udf

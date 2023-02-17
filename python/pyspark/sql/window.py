@@ -136,6 +136,9 @@ class Window:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         cols : str, :class:`Column` or list
@@ -206,6 +209,9 @@ class Window:
         index 4 to index 7.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -379,6 +385,9 @@ class WindowSpec:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         cols : str, :class:`Column` or list
@@ -392,6 +401,9 @@ class WindowSpec:
         Defines the ordering columns in a :class:`WindowSpec`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -414,6 +426,9 @@ class WindowSpec:
         values directly.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -446,6 +461,9 @@ class WindowSpec:
         values directly.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

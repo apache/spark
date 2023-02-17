@@ -25,13 +25,10 @@ Window
 .. autosummary::
     :toctree: api/
 
-    Window.currentRow
     Window.orderBy
     Window.partitionBy
     Window.rangeBetween
     Window.rowsBetween
-    Window.unboundedFollowing
-    Window.unboundedPreceding
     WindowSpec.orderBy
     WindowSpec.partitionBy
     WindowSpec.rangeBetween

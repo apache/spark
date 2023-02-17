@@ -66,7 +66,6 @@ DataFrame
     DataFrame.isStreaming
     DataFrame.join
     DataFrame.limit
-    DataFrame.mapInArrow
     DataFrame.melt
     DataFrame.na
     DataFrame.orderBy
