@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedRef
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -133,6 +133,25 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def quoteIdentifier(colName: String): String = {
     s""""$colName""""
+  }
+
+  /**
+   * Create the table if the table does not exist.
+   * To allow certain options to append when create a new table, which can be
+   * table_options or partition_options.
+   * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+   * @param statement
+   * @param tableName
+   * @param strSchema
+   * @param options
+   */
+  def createTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    val createTableOptions = options.createTableOptions
+    statement.executeUpdate(s"CREATE TABLE $tableName ($strSchema) $createTableOptions")
   }
 
   /**
