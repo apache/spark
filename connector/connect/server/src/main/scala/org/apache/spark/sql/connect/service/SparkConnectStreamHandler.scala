@@ -26,7 +26,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -40,23 +40,35 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     extends Logging {
 
   def handle(v: ExecutePlanRequest): Unit = {
-    val session =
+    val holder =
       SparkConnectService
         .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getClientId)
-        .session
     v.getPlan.getOpTypeCase match {
-      case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
-      case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
+      case proto.Plan.OpTypeCase.COMMAND => handleCommand(holder, v)
+      case proto.Plan.OpTypeCase.ROOT => handlePlan(holder, v)
       case _ =>
         throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
     }
   }
 
-  private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
+  private def handlePlan(holder: SessionHolder, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(session)
-    val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
-    processAsArrowBatches(request.getClientId, dataframe)
+    val planner = new SparkConnectPlanner(holder)
+    val dataframe =
+      Dataset.ofRows(holder.session, planner.transformRelation(request.getPlan.getRoot))
+
+    // If it's a SQL only plan, we have to return the DataFrame ID
+    if (planner.isSqlOnlyPlan(request.getPlan.getRoot)) {
+      val id = holder.server_side.registerDataFrame(dataframe)
+      // Retrun the remote dataframe ID to the client.
+      val response = proto.ExecutePlanResponse.newBuilder()
+      val rdf = proto.ExecutePlanResponse.RemoteDataFrame.newBuilder().setId(id)
+      response.setClientId(request.getClientId).setRemoteDataFrame(rdf)
+      responseObserver.onNext(response.build())
+      responseObserver.onCompleted()
+    } else {
+      processAsArrowBatches(request.getClientId, dataframe)
+    }
   }
 
   private def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
@@ -176,9 +188,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       .build()
   }
 
-  private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
+  private def handleCommand(holder: SessionHolder, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(holder)
     planner.process(command)
     responseObserver.onCompleted()
   }

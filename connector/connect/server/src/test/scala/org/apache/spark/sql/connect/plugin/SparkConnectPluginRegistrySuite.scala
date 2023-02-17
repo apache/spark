@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DummyPlugin extends RelationPlugin {
@@ -90,7 +91,7 @@ class ExampleCommandPlugin extends CommandPlugin {
       return None
     }
     val cmd = command.unpack(classOf[proto.ExamplePluginCommand])
-    assert(planner.session != null)
+    assert(planner.holder.session != null)
     SparkContext.getActive.get.setLocalProperty("testingProperty", cmd.getCustomField)
     Some()
   }
@@ -195,7 +196,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
               .build()))
         .build()
 
-      new SparkConnectPlanner(spark).process(plan)
+      new SparkConnectPlanner(SessionHolder("userId", "sessionId", spark)).process(plan)
       assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
     }
   }

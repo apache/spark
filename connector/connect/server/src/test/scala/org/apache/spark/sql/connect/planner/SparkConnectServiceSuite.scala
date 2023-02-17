@@ -27,7 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.execution.ExplainMode
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -35,6 +35,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Testing Connect Service implementation.
  */
 class SparkConnectServiceSuite extends SharedSparkSession {
+
+  lazy val holder = SessionHolder("userId", "sessionId", spark)
 
   test("Test schema in analyze response") {
     withTable("test") {
@@ -54,7 +56,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .build()
 
       val response =
-        instance.handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("simple"))
+        instance.handleAnalyzePlanRequest(relation, holder, ExplainMode.fromString("simple"))
 
       assert(response.getSchema.hasStruct)
       val schema = response.getSchema.getStruct
@@ -227,7 +229,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
 
       val response =
         instance
-          .handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("extended"))
+          .handleAnalyzePlanRequest(relation, holder, ExplainMode.fromString("extended"))
           .build()
       assert(response.getExplainString.contains("Parsed Logical Plan"))
       assert(response.getExplainString.contains("Analyzed Logical Plan"))

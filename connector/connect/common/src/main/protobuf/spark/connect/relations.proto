@@ -75,6 +75,7 @@ message Relation {
     StatApproxQuantile approx_quantile = 105;
     StatFreqItems freq_items = 106;
     StatSampleBy sample_by = 107;
+    ServerSideDataFrame server_side_data_frame = 108;
 
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
@@ -96,6 +97,12 @@ message RelationCommon {
 
   // (Optional) A per-client globally unique id for a given connect plan.
   optional int64 plan_id = 2;
+}
+
+// Reference to a dataframe that is cached in the Spark Session on the server. This is for example
+// used to allow eager execution of SQL commands while retaining the output for future consumption.
+message ServerSideDataFrame {
+  string id = 1;
 }
 
 // Relation that uses a SQL query to generate the output.

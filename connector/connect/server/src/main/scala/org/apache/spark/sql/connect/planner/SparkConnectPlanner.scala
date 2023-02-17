@@ -26,7 +26,8 @@ import com.google.protobuf.{Any => ProtoAny}
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
+import org.apache.spark.connect.proto.ServerSideDataFrame
+import org.apache.spark.sql.{Column, Dataset, Encoders}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -39,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -53,11 +55,16 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) {
+class SparkConnectPlanner(val holder: SessionHolder) {
+  private lazy val session = holder.session
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
-  // The root of the query plan is a relation and we apply the transformations to it.
+  def isSqlOnlyPlan(rel: proto.Relation): Boolean = {
+    rel.getRelTypeCase == proto.Relation.RelTypeCase.SQL
+  }
+
+// The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
     val plan = rel.getRelTypeCase match {
       // DataFrame API
@@ -106,6 +113,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
+      case proto.Relation.RelTypeCase.SERVER_SIDE_DATA_FRAME =>
+        transformServerSideDataFrame(rel.getServerSideDataFrame)
+
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -122,6 +132,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
     }
     plan
+  }
+
+  def transformServerSideDataFrame(serverSide: ServerSideDataFrame): LogicalPlan = {
+    holder.server_side
+      .get(serverSide.getId)
+      .getOrElse(throw InvalidPlanInput("Invalid reference to cached data frame."))
+      .logicalPlan
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -197,6 +214,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     val args = sql.getArgsMap.asScala.toMap
     val parser = session.sessionState.sqlParser
     val parsedArgs = args.mapValues(parser.parseExpression).toMap
+    // Transform every SQL query into a remote DataFrame:
     Parameter.bind(parser.parsePlan(sql.getQuery), parsedArgs)
   }
 
@@ -1497,7 +1515,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    */
   private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
     // Transform the input plan into the logical plan.
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(holder)
     val plan = planner.transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
@@ -1567,7 +1585,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    */
   def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
     // Transform the input plan into the logical plan.
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(holder)
     val plan = planner.transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
     val dataset = Dataset.ofRows(session, logicalPlan = plan)

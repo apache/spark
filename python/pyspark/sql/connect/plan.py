@@ -1328,6 +1328,16 @@ class ToDF(LogicalPlan):
         return plan
 
 
+class ServerSideDataFrame(LogicalPlan):
+    def __init__(self, id: str) -> None:
+        super(ServerSideDataFrame, self).__init__(None)
+        self._id = id
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.server_side_data_frame.id = self._id
+        return plan
+
 class CreateView(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], name: str, is_global: bool, replace: bool

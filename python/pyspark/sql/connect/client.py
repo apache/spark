@@ -500,6 +500,13 @@ class SparkConnectClient(object):
             pdf.attrs["metrics"] = metrics
         return pdf
 
+    def to_remote_plan_id(self, plan:pb2.Plan) -> str:
+        logger.info(f"To remote plan {self._proto_to_string(plan)}")
+        req = self._execute_plan_request_with_metadata()
+        req.plan.CopyFrom(plan)
+        return self._execute_for_sql(req)
+
+
     def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
         return types.proto_schema_to_pyspark_data_type(schema)
 
@@ -619,6 +626,34 @@ class SparkConnectClient(object):
                         )
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
+        except grpc.RpcError as rpc_error:
+            self._handle_error(rpc_error)
+
+    def _execute_for_sql(self, req: pb2.ExecutePlanRequest) -> str:
+        """
+
+        Parameters
+        ----------
+        req
+
+        Returns
+        -------
+
+        """
+        logger.info("Execute")
+        try:
+            for attempt in Retrying(
+                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                        if b.client_id != self._session_id:
+                            raise SparkConnectException(
+                                "Received incorrect session identifier for request: "
+                                f"{b.client_id} != {self._session_id}"
+                            )
+                        if b.HasField("remote_data_frame"):
+                            return b.remote_data_frame.id
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 

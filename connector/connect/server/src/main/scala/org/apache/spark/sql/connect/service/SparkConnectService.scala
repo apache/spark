@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.TimeUnit
+import java.util.UUID
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -42,7 +43,7 @@ import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -171,10 +172,9 @@ class SparkConnectService(debug: Boolean)
           new UnsupportedOperationException(
             s"${request.getPlan.getOpTypeCase} not supported for analysis."))
       }
-      val session =
+      val holder =
         SparkConnectService
           .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
-          .session
 
       val explainMode = request.getExplain.getExplainMode match {
         case proto.Explain.ExplainMode.SIMPLE => SimpleMode
@@ -188,7 +188,7 @@ class SparkConnectService(debug: Boolean)
               "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
       }
 
-      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, session, explainMode)
+      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, holder, explainMode)
       response.setClientId(request.getClientId)
       responseObserver.onNext(response.build())
       responseObserver.onCompleted()
@@ -197,11 +197,11 @@ class SparkConnectService(debug: Boolean)
 
   def handleAnalyzePlanRequest(
       relation: proto.Relation,
-      session: SparkSession,
+      holder: SessionHolder,
       explainMode: ExplainMode): proto.AnalyzePlanResponse.Builder = {
-    val logicalPlan = new SparkConnectPlanner(session).transformRelation(relation)
+    val logicalPlan = new SparkConnectPlanner(holder).transformRelation(relation)
 
-    val ds = Dataset.ofRows(session, logicalPlan)
+    val ds = Dataset.ofRows(holder.session, logicalPlan)
     val explainString = ds.queryExecution.explainString(explainMode)
 
     val response = proto.AnalyzePlanResponse.newBuilder()
@@ -214,13 +214,35 @@ class SparkConnectService(debug: Boolean)
   }
 }
 
+class ServerSideDataFrameManager(
+    val dataMap: ConcurrentHashMap[String, DataFrame] =
+      new ConcurrentHashMap[String, DataFrame]()) {
+  def registerDataFrame(df: DataFrame): String = {
+    val uuid = UUID.randomUUID().toString
+    dataMap.put(uuid, df)
+    uuid
+  }
+
+  def get(id: String): Option[DataFrame] = {
+    Option(dataMap.get(id))
+  }
+
+  def remove(id: String): Unit = {
+    dataMap.remove(id)
+  }
+}
+
 /**
  * Object used for referring to SparkSessions in the SessionCache.
  *
  * @param userId
  * @param session
  */
-case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
+case class SessionHolder(
+    userId: String,
+    sessionId: String,
+    session: SparkSession,
+    server_side: ServerSideDataFrameManager = new ServerSideDataFrameManager())
 
 /**
  * Static instance of the SparkConnectService.
