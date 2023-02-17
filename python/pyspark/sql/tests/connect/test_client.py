@@ -16,6 +16,7 @@
 #
 
 import unittest
+from typing import Optional
 
 from pyspark.sql.connect.client import SparkConnectClient
 import pyspark.sql.connect.proto as proto
@@ -49,7 +50,7 @@ class MockService:
     # Simplest mock of the SparkConnectService.
     # If this needs more complex logic, it needs to be replaced with Python mocking.
 
-    req: proto.ExecutePlanRequest | None
+    req: Optional[proto.ExecutePlanRequest]
 
     def __init__(self, session_id: str):
         self._session_id = session_id
