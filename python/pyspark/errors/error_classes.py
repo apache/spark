@@ -39,11 +39,6 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
-  "IS_NOT_ITERABLE" : {
-    "message" : [
-      "<objectName> is not iterable."
-    ]
-  },
   "NOT_BOOL" : {
     "message" : [
       "Argument `<arg_name>` should be a bool, got <arg_type>."
@@ -132,6 +127,11 @@ ERROR_CLASSES_JSON = """
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
+    ]
+  },
+  "NOT_ITERABLE" : {
+    "message" : [
+      "<objectName> is not iterable."
     ]
   },
   "NOT_LIST_OR_STR_OR_TUPLE" : {

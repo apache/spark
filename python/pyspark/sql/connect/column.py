@@ -435,7 +435,7 @@ class Column:
 
     def __iter__(self) -> None:
         raise PySparkTypeError(
-            error_class="IS_NOT_ITERABLE",
+            error_class="NOT_ITERABLE",
             message_parameters={"objectName": "Column"},
         )
 
