@@ -67,7 +67,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
     toDF((aggExpr +: aggExprs).map { case (colName, expr) =>
-      strToExpr(expr)(df(colName).expr)
+      strToExpr(expr, df(colName).expr)
     })
   }
 
@@ -88,7 +88,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   def agg(exprs: Map[String, String]): DataFrame = {
     toDF(exprs.map { case (colName, expr) =>
-      strToExpr(expr)(df(colName).expr)
+      strToExpr(expr, df(colName).expr)
     }.toSeq)
   }
 
@@ -109,48 +109,44 @@ class RelationalGroupedDataset protected[sql] (
     agg(exprs.asScala.toMap)
   }
 
-  private[this] def strToExpr(expr: String): (proto.Expression => proto.Expression) = {
-    val exprToFunc: (proto.Expression => proto.Expression) = {
-      val builder = proto.Expression.newBuilder()
+  private[this] def strToExpr(expr: String, inputExpr: proto.Expression): proto.Expression = {
+    val builder = proto.Expression.newBuilder()
 
-      (inputExpr: proto.Expression) =>
-        expr.toLowerCase(Locale.ROOT) match {
-          // We special handle a few cases that have alias that are not in function registry.
-          case "avg" | "average" | "mean" =>
+    expr.toLowerCase(Locale.ROOT) match {
+      // We special handle a few cases that have alias that are not in function registry.
+      case "avg" | "average" | "mean" =>
+        builder.getUnresolvedFunctionBuilder
+          .setFunctionName("avg")
+          .addArguments(inputExpr)
+          .setIsDistinct(false)
+      case "stddev" | "std" =>
+        builder.getUnresolvedFunctionBuilder
+          .setFunctionName("stddev")
+          .addArguments(inputExpr)
+          .setIsDistinct(false)
+      // Also special handle count because we need to take care count(*).
+      case "count" | "size" =>
+        // Turn count(*) into count(1)
+        inputExpr match {
+          case s if s.hasUnresolvedStar =>
+            val exprBuilder = proto.Expression.newBuilder
+            exprBuilder.getLiteralBuilder.setInteger(1)
             builder.getUnresolvedFunctionBuilder
-              .setFunctionName("avg")
-              .addArguments(inputExpr)
+              .setFunctionName("count")
+              .addArguments(exprBuilder)
               .setIsDistinct(false)
-          case "stddev" | "std" =>
+          case _ =>
             builder.getUnresolvedFunctionBuilder
-              .setFunctionName("stddev")
-              .addArguments(inputExpr)
-              .setIsDistinct(false)
-          // Also special handle count because we need to take care count(*).
-          case "count" | "size" =>
-            // Turn count(*) into count(1)
-            inputExpr match {
-              case s if s.hasUnresolvedStar =>
-                val exprBuilder = proto.Expression.newBuilder
-                exprBuilder.getLiteralBuilder.setInteger(1)
-                builder.getUnresolvedFunctionBuilder
-                  .setFunctionName("count")
-                  .addArguments(exprBuilder)
-                  .setIsDistinct(false)
-              case _ =>
-                builder.getUnresolvedFunctionBuilder
-                  .setFunctionName("count")
-                  .addArguments(inputExpr)
-                  .setIsDistinct(false)
-            }
-          case name =>
-            builder.getUnresolvedFunctionBuilder
-              .setFunctionName(name)
+              .setFunctionName("count")
               .addArguments(inputExpr)
               .setIsDistinct(false)
         }
-        builder.build()
+      case name =>
+        builder.getUnresolvedFunctionBuilder
+          .setFunctionName(name)
+          .addArguments(inputExpr)
+          .setIsDistinct(false)
     }
-    (inputExpr: proto.Expression) => exprToFunc(inputExpr)
+    builder.build()
   }
 }
