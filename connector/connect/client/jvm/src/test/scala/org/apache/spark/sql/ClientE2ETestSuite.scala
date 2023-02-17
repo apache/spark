@@ -156,6 +156,19 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
+  test("write v2") {
+    try {
+      spark.range(3).writeTo("myTableV2").using("parquet").create()
+      val result = spark.sql("select * from myTableV2").sort("id").collect()
+      assert(result.length == 3)
+      assert(result(0).getLong(0) == 0)
+      assert(result(1).getLong(0) == 1)
+      assert(result(2).getLong(0) == 2)
+    } finally {
+      spark.sql("drop table if exists myTableV2").collect()
+    }
+  }
+
   test("write path collision") {
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
