@@ -67,7 +67,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
     toDF((aggExpr +: aggExprs).map { case (colName, expr) =>
-      strToColumn(expr, df(colName).expr)
+      strToColumn(expr, df(colName))
     })
   }
 
@@ -88,7 +88,7 @@ class RelationalGroupedDataset protected[sql] (
    */
   def agg(exprs: Map[String, String]): DataFrame = {
     toDF(exprs.map { case (colName, expr) =>
-      strToColumn(expr, df(colName).expr)
+      strToColumn(expr, df(colName))
     }.toSeq)
   }
 
@@ -109,45 +109,13 @@ class RelationalGroupedDataset protected[sql] (
     agg(exprs.asScala.toMap)
   }
 
-  private[this] def strToColumn(expr: String, inputExpr: proto.Expression): Column = {
-    val builder = proto.Expression.newBuilder()
-
+  private[this] def strToColumn(expr: String, inputExpr: Column): Column = {
     expr.toLowerCase(Locale.ROOT) match {
-      // We special handle a few cases that have alias that are not in function registry.
-      case "avg" | "average" | "mean" =>
-        builder.getUnresolvedFunctionBuilder
-          .setFunctionName("avg")
-          .addArguments(inputExpr)
-          .setIsDistinct(false)
-      case "stddev" | "std" =>
-        builder.getUnresolvedFunctionBuilder
-          .setFunctionName("stddev")
-          .addArguments(inputExpr)
-          .setIsDistinct(false)
-      // Also special handle count because we need to take care count(*).
-      case "count" | "size" =>
-        // Turn count(*) into count(1)
-        inputExpr match {
-          case s if s.hasUnresolvedStar =>
-            val exprBuilder = proto.Expression.newBuilder
-            exprBuilder.getLiteralBuilder.setInteger(1)
-            builder.getUnresolvedFunctionBuilder
-              .setFunctionName("count")
-              .addArguments(exprBuilder)
-              .setIsDistinct(false)
-          case _ =>
-            builder.getUnresolvedFunctionBuilder
-              .setFunctionName("count")
-              .addArguments(inputExpr)
-              .setIsDistinct(false)
-        }
-      case name =>
-        builder.getUnresolvedFunctionBuilder
-          .setFunctionName(name)
-          .addArguments(inputExpr)
-          .setIsDistinct(false)
+      case "avg" | "average" | "mean" => functions.avg(inputExpr)
+      case "stddev" | "std" => functions.stddev(inputExpr)
+      case "count" | "size" => functions.count(inputExpr)
+      case name => Column.fn(name, inputExpr)
     }
-    new Column(builder.build())
   }
 
   /**
