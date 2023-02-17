@@ -409,7 +409,7 @@ class SparkConnectClient(object):
         self._builder = ChannelBuilder(connectionString, channelOptions)
         self._user_id = None
         self._retry_policy = {
-            "max_retries": 15,
+            "max_retries": 4,
             "backoff_multiplier": 4,
             "initial_backoff": 50,
             "max_backoff": 60000,
@@ -772,6 +772,7 @@ class AttemptManager:
         if isinstance(exc_val, BaseException):
             # Swallow the exception.
             if self._can_retry(exc_val):
+                logger.debug(f"Server responded with retryable error: {exc_val}")
                 self._retry_state.set_exception(exc_val)
                 return True
             # Bubble up the exception.
