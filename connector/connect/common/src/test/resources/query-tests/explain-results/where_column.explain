@@ -1,2 +1,2 @@
-'Filter '`=`('id, 1)
-+- LocalRelation <empty>, [none#0L, none#1, none#2]
+Filter (id#0L = 1)
++- LocalRelation <empty>, [id#0L, a#0, b#0]

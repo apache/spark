@@ -276,7 +276,7 @@ private object RowToColumnConverter {
       case dt: DecimalType => new DecimalConverter(dt)
       case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
         getConverterForType(mt.valueType, mt.valueContainsNull))
-      case unknown => throw QueryExecutionErrors.unsupportedDataTypeError(unknown.toString)
+      case unknown => throw QueryExecutionErrors.unsupportedDataTypeError(unknown)
     }
 
     if (nullable) {

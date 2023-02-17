@@ -63,6 +63,35 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   }
 
   /**
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * `DataFrame`.
+   * {{{
+   *   sparkSession.read.parquet("/path/to/file.parquet")
+   *   sparkSession.read.schema(schema).json("/path/to/file.json")
+   * }}}
+   *
+   * @since 3.4.0
+   */
+  def read: DataFrameReader = new DataFrameReader(this)
+
+  /**
+   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
+   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a
+   * view, the returned DataFrame is simply the query plan of the view, which can either be a
+   * batch or streaming query plan.
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table or view. If a database is
+   *   specified, it identifies the table/view from the database. Otherwise, it first attempts to
+   *   find a temporary view with the given name and then match the table/view from the current
+   *   database. Note that, the global temporary view database is also valid here.
+   * @since 3.4.0
+   */
+  def table(tableName: String): DataFrame = {
+    read.table(tableName)
+  }
+
+  /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
    * range from 0 to `end` (exclusive) with step value 1.
    *

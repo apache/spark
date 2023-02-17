@@ -1,2 +1,2 @@
-'Sort ['id ASC NULLS FIRST, 'b ASC NULLS FIRST], false
-+- LocalRelation <empty>, [none#0L, none#1, none#2]
+Sort [id#0L ASC NULLS FIRST, b#0 ASC NULLS FIRST], false
++- LocalRelation <empty>, [id#0L, a#0, b#0]

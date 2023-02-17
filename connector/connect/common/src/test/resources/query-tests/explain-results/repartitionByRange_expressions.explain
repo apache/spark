@@ -1,2 +1,2 @@
-'RepartitionByExpression ['a ASC NULLS FIRST, 'id DESC NULLS FIRST]
-+- LocalRelation <empty>, [none#0L, none#1, none#2]
+RepartitionByExpression [a#0 ASC NULLS FIRST, id#0L DESC NULLS FIRST]
++- LocalRelation <empty>, [id#0L, a#0, b#0]

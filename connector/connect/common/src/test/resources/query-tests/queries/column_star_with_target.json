@@ -7,7 +7,7 @@
     },
     "expressions": [{
       "unresolvedStar": {
-        "unparsedTarget": "str.*"
+        "unparsedTarget": "d.*"
       }
     }]
   }

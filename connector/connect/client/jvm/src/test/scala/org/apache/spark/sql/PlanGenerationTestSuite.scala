@@ -20,7 +20,6 @@ import java.nio.file.{Files, Path}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-import scala.util.Properties.versionNumberString
 
 import com.google.protobuf.util.JsonFormat
 import io.grpc.inprocess.InProcessChannelBuilder
@@ -31,7 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.types.{MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types._
 
 // scalastyle:off
 /**
@@ -58,8 +57,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  private val scala = versionNumberString.substring(0, versionNumberString.indexOf(".", 2))
-
   // Borrowed from SparkFunSuite
   private def getWorkspaceFilePath(first: String, more: String*): Path = {
     if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
@@ -81,6 +78,17 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   protected val queryFilePath: Path = baseResourcePath.resolve("queries")
+
+  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // with the datasource.
+  protected val testDataPath: Path = java.nio.file.Paths.get(
+    "../",
+    "common",
+    "src",
+    "test",
+    "resources",
+    "query-tests",
+    "test-data")
 
   private val printer = JsonFormat.printer()
 
@@ -197,6 +205,47 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     session.range(1, 10, 1, 2)
   }
 
+  test("read") {
+    session.read
+      .format("csv")
+      .schema(
+        StructType(
+          StructField("name", StringType) ::
+            StructField("age", IntegerType) ::
+            StructField("job", StringType) :: Nil))
+      .option("header", "true")
+      .options(Map("delimiter" -> ";"))
+      .load(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("read json") {
+    session.read.json(testDataPath.resolve("people.json").toString)
+  }
+
+  test("read csv") {
+    session.read.csv(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("read parquet") {
+    session.read.parquet(testDataPath.resolve("users.parquet").toString)
+  }
+
+  test("read orc") {
+    session.read.orc(testDataPath.resolve("users.orc").toString)
+  }
+
+  test("read table") {
+    session.read.table("myTable")
+  }
+
+  test("table") {
+    session.table("myTable")
+  }
+
+  test("read text") {
+    session.read.text(testDataPath.resolve("people.txt").toString)
+  }
+
   /* Dataset API */
   test("select") {
     simple.select(fn.col("id"))
@@ -250,11 +299,11 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("join inner_condition") {
-    left.join(right, fn.col("a") === fn.col("a"))
+    left.alias("l").join(right.alias("r"), fn.col("l.a") === fn.col("r.a"))
   }
 
   test("join condition") {
-    left.join(right, fn.col("id") === fn.col("id"), "left_anti")
+    left.as("l").join(right.as("r"), fn.col("l.id") === fn.col("r.id"), "left_anti")
   }
 
   test("crossJoin") {
@@ -298,7 +347,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("colRegex") {
-    simple.select(simple.colRegex("a|id"))
+    simple.select(simple.colRegex("`a|id`"))
   }
 
   test("as string") {
@@ -379,7 +428,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("unionByName") {
-    simple.unionByName(right)
+    simple.drop("b").unionByName(right.drop("payload"))
   }
 
   test("unionByName allowMissingColumns") {
@@ -669,13 +718,13 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   columnTest("as multi") {
-    fn.col("d").as(Array("v1", "v2", "v3"))
+    fn.expr("inline(map_values(f))").as(Array("v1", "v2", "v3"))
   }
 
   columnTest("as with metadata") {
     val builder = new MetadataBuilder
-    builder.putString("comment", "modified C field")
-    fn.col("c").as("c_mod", builder.build())
+    builder.putString("comment", "modified E field")
+    fn.col("e").as("e_mod", builder.build())
   }
 
   columnTest("cast") {
@@ -723,7 +772,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   columnTest("star with target") {
-    fn.col("str.*")
+    fn.col("d.*")
   }
 
   /* Function API */
@@ -735,22 +784,18 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     select(fn.max(Column("id")))
   }
 
-  test("function udf " + scala) {
-    // This test might be a bit tricky if different JVM
-    // versions are used to generate the golden files.
-    val functions = Seq(
-      fn.udf(TestUDFs.udf0)
-        .asNonNullable()
-        .asNondeterministic(),
-      fn.udf(TestUDFs.udf1).withName("foo"),
-      fn.udf(TestUDFs.udf2).withName("f3"),
-      fn.udf(TestUDFs.udf3).withName("bar"),
-      fn.udf(TestUDFs.udf4).withName("f_four"))
-    val id = fn.col("id")
-    val columns = functions.zipWithIndex.map { case (udf, i) =>
-      udf(Seq.fill(i)(id): _*)
-    }
-    select(columns: _*)
+  test("groupby agg") {
+    simple
+      .groupBy(Column("id"))
+      .agg(
+        "a" -> "max",
+        "b" -> "stddev",
+        "b" -> "std",
+        "b" -> "mean",
+        "b" -> "average",
+        "b" -> "avg",
+        "*" -> "size",
+        "a" -> "count")
   }
 
   test("function lit") {
