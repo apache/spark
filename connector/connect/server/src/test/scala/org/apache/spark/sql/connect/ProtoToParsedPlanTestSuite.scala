@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -75,7 +76,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     inMemoryCatalog.createTable(
       Identifier.of(Array("tempdb"), "myTable"),
       new StructType().add("id", "long"),
-      Array.empty,
+      Array.empty[Transform],
       util.Collections.emptyMap())
 
     val catalogManager = new CatalogManager(
