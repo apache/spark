@@ -447,12 +447,12 @@ def _create_pandas_udf(f, returnType, evalType):
         )
 
     if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and not (
-            argspec.varargs or len(argspec.args) >= 3
+        argspec.varargs or len(argspec.args) >= 3
     ):
         raise ValueError(
             "Invalid function: the function in cogroup.applyInPandas "
-            "must take either more than one arguments (key, df1, df2) "
-            "or at least one arg with varg (key, *dfs)"
+            "must contain vararg or "
+            "must take three or more argument with key being first"
         )
 
     if is_remote():
