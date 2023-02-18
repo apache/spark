@@ -63,7 +63,6 @@ class Command(google.protobuf.message.Message):
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
     CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_V2_FIELD_NUMBER: builtins.int
-    SQL_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -75,8 +74,6 @@ class Command(google.protobuf.message.Message):
     def create_dataframe_view(self) -> global___CreateDataFrameViewCommand: ...
     @property
     def write_operation_v2(self) -> global___WriteOperationV2: ...
-    @property
-    def sql(self) -> pyspark.sql.connect.proto.relations_pb2.SQL: ...
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
@@ -90,7 +87,6 @@ class Command(google.protobuf.message.Message):
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
         write_operation_v2: global___WriteOperationV2 | None = ...,
-        sql: pyspark.sql.connect.proto.relations_pb2.SQL | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -104,8 +100,6 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "register_function",
             b"register_function",
-            "sql",
-            b"sql",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -123,8 +117,6 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "register_function",
             b"register_function",
-            "sql",
-            b"sql",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -138,7 +130,6 @@ class Command(google.protobuf.message.Message):
         "write_operation",
         "create_dataframe_view",
         "write_operation_v2",
-        "sql",
         "extension",
     ] | None: ...
 

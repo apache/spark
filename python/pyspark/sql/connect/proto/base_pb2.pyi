@@ -416,18 +416,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class RemoteDataFrame(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        ID_FIELD_NUMBER: builtins.int
-        id: builtins.str
-        def __init__(
-            self,
-            *,
-            id: builtins.str = ...,
-        ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
-
     class ArrowBatch(google.protobuf.message.Message):
         """Batch results of metrics."""
 
@@ -554,13 +542,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
-    REMOTE_DATA_FRAME_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
-    @property
-    def remote_data_frame(self) -> global___ExecutePlanResponse.RemoteDataFrame: ...
     @property
     def metrics(self) -> global___ExecutePlanResponse.Metrics:
         """Metrics for the query execution. Typically, this field is only present in the last
@@ -571,39 +556,17 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         *,
         client_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
-        remote_data_frame: global___ExecutePlanResponse.RemoteDataFrame | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
-            "arrow_batch",
-            b"arrow_batch",
-            "metrics",
-            b"metrics",
-            "remote_data_frame",
-            b"remote_data_frame",
-            "result_type",
-            b"result_type",
-        ],
+        field_name: typing_extensions.Literal["arrow_batch", b"arrow_batch", "metrics", b"metrics"],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "arrow_batch",
-            b"arrow_batch",
-            "client_id",
-            b"client_id",
-            "metrics",
-            b"metrics",
-            "remote_data_frame",
-            b"remote_data_frame",
-            "result_type",
-            b"result_type",
+            "arrow_batch", b"arrow_batch", "client_id", b"client_id", "metrics", b"metrics"
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["arrow_batch", "remote_data_frame"] | None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
