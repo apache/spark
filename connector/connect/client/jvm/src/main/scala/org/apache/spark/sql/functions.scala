@@ -2243,8 +2243,8 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Calculates the MD5 digest of a binary column and returns the value
-   * as a 32 character hex string.
+   * Calculates the MD5 digest of a binary column and returns the value as a 32 character hex
+   * string.
    *
    * @group misc_funcs
    * @since 1.5.0
@@ -2252,8 +2252,8 @@ object functions {
   def md5(e: Column): Column = Column.fn("md5", e)
 
   /**
-   * Calculates the SHA-1 digest of a binary column and returns the value
-   * as a 40 character hex string.
+   * Calculates the SHA-1 digest of a binary column and returns the value as a 40 character hex
+   * string.
    *
    * @group misc_funcs
    * @since 1.5.0
@@ -2261,24 +2261,27 @@ object functions {
   def sha1(e: Column): Column = Column.fn("sha1", e)
 
   /**
-   * Calculates the SHA-2 family of hash functions of a binary column and
-   * returns the value as a hex string.
+   * Calculates the SHA-2 family of hash functions of a binary column and returns the value as a
+   * hex string.
    *
-   * @param e column to compute SHA-2 on.
-   * @param numBits one of 224, 256, 384, or 512.
+   * @param e
+   *   column to compute SHA-2 on.
+   * @param numBits
+   *   one of 224, 256, 384, or 512.
    *
    * @group misc_funcs
    * @since 1.5.0
    */
   def sha2(e: Column, numBits: Int): Column = {
-    require(Seq(0, 224, 256, 384, 512).contains(numBits),
+    require(
+      Seq(0, 224, 256, 384, 512).contains(numBits),
       s"numBits $numBits is not in the permitted values (0, 224, 256, 384, 512)")
     Column.fn("sha2", e, lit(numBits))
   }
 
   /**
-   * Calculates the cyclic redundancy check value  (CRC32) of a binary column and
-   * returns the value as a bigint.
+   * Calculates the cyclic redundancy check value (CRC32) of a binary column and returns the value
+   * as a bigint.
    *
    * @group misc_funcs
    * @since 1.5.0
@@ -2295,9 +2298,8 @@ object functions {
   def hash(cols: Column*): Column = Column.fn("hash", cols: _*)
 
   /**
-   * Calculates the hash code of given columns using the 64-bit
-   * variant of the xxHash algorithm, and returns the result as a long
-   * column. The hash computation uses an initial seed of 42.
+   * Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
+   * and returns the result as a long column. The hash computation uses an initial seed of 42.
    *
    * @group misc_funcs
    * @since 3.0.0
@@ -2343,8 +2345,8 @@ object functions {
   def ascii(e: Column): Column = Column.fn("ascii", e)
 
   /**
-   * Computes the BASE64 encoding of a binary column and returns it as a string column.
-   * This is the reverse of unbase64.
+   * Computes the BASE64 encoding of a binary column and returns it as a string column. This is
+   * the reverse of unbase64.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2360,8 +2362,8 @@ object functions {
   def bit_length(e: Column): Column = Column.fn("bit_length", e)
 
   /**
-   * Concatenates multiple input string columns together into a single string column,
-   * using the given separator.
+   * Concatenates multiple input string columns together into a single string column, using the
+   * given separator.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2371,9 +2373,9 @@ object functions {
     Column.fn("concat_ws", lit(sep) +: exprs: _*)
 
   /**
-   * Computes the first argument into a string from a binary using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-   * If either argument is null, the result will also be null.
+   * Computes the first argument into a string from a binary using the provided character set (one
+   * of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'). If either argument
+   * is null, the result will also be null.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2382,9 +2384,9 @@ object functions {
     Column.fn("decode", value, lit(charset))
 
   /**
-   * Computes the first argument into a binary from a string using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-   * If either argument is null, the result will also be null.
+   * Computes the first argument into a binary from a string using the provided character set (one
+   * of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'). If either argument
+   * is null, the result will also be null.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2393,11 +2395,11 @@ object functions {
     Column.fn("encode", value, lit(charset))
 
   /**
-   * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places
-   * with HALF_EVEN round mode, and returns the result as a string column.
+   * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with
+   * HALF_EVEN round mode, and returns the result as a string column.
    *
-   * If d is 0, the result has no decimal point or fractional part.
-   * If d is less than 0, the result will be null.
+   * If d is 0, the result has no decimal point or fractional part. If d is less than 0, the
+   * result will be null.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2415,8 +2417,8 @@ object functions {
     Column.fn("format_string", lit(format) +: arguments: _*)
 
   /**
-   * Returns a new string column by converting the first letter of each word to uppercase.
-   * Words are delimited by whitespace.
+   * Returns a new string column by converting the first letter of each word to uppercase. Words
+   * are delimited by whitespace.
    *
    * For example, "hello world" will become "Hello World".
    *
@@ -2426,11 +2428,12 @@ object functions {
   def initcap(e: Column): Column = Column.fn("initcap", e)
 
   /**
-   * Locate the position of the first occurrence of substr column in the given string.
-   * Returns null if either of the arguments are null.
+   * Locate the position of the first occurrence of substr column in the given string. Returns
+   * null if either of the arguments are null.
    *
-   * @note The position is not zero based, but 1 based index. Returns 0 if substr
-   * could not be found in str.
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2438,8 +2441,8 @@ object functions {
   def instr(str: Column, substring: String): Column = Column.fn("instr", str, lit(substring))
 
   /**
-   * Computes the character length of a given string or number of bytes of a binary string.
-   * The length of character strings include the trailing spaces. The length of binary strings
+   * Computes the character length of a given string or number of bytes of a binary string. The
+   * length of character strings include the trailing spaces. The length of binary strings
    * includes binary zeros.
    *
    * @group string_funcs
@@ -2465,8 +2468,9 @@ object functions {
   /**
    * Locate the position of the first occurrence of substr.
    *
-   * @note The position is not zero based, but 1 based index. Returns 0 if substr
-   * could not be found in str.
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2476,18 +2480,19 @@ object functions {
   /**
    * Locate the position of the first occurrence of substr in a string column, after position pos.
    *
-   * @note The position is not zero based, but 1 based index. returns 0 if substr
-   * could not be found in str.
+   * @note
+   *   The position is not zero based, but 1 based index. returns 0 if substr could not be found
+   *   in str.
    *
    * @group string_funcs
    * @since 1.5.0
    */
   def locate(substr: String, str: Column, pos: Int): Column =
-  Column.fn("locate", lit(substr), str, lit(pos))
+    Column.fn("locate", lit(substr), str, lit(pos))
 
   /**
-   * Left-pad the string column with pad to a length of len. If the string column is longer
-   * than len, the return value is shortened to len characters.
+   * Left-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2529,10 +2534,10 @@ object functions {
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
 
   /**
-   * Extract a specific group matched by a Java regex, from the specified string column.
-   * If the regex did not match, or the specified group did not match, an empty string is returned.
-   * if the specified group index exceeds the group count of regex, an IllegalArgumentException
-   * will be thrown.
+   * Extract a specific group matched by a Java regex, from the specified string column. If the
+   * regex did not match, or the specified group did not match, an empty string is returned. if
+   * the specified group index exceeds the group count of regex, an IllegalArgumentException will
+   * be thrown.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2559,8 +2564,8 @@ object functions {
     Column.fn("regexp_replace", e, pattern, replacement)
 
   /**
-   * Decodes a BASE64 encoded string column and returns it as a binary column.
-   * This is the reverse of base64.
+   * Decodes a BASE64 encoded string column and returns it as a binary column. This is the reverse
+   * of base64.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2568,8 +2573,8 @@ object functions {
   def unbase64(e: Column): Column = Column.fn("unbase64", e)
 
   /**
-   * Right-pad the string column with pad to a length of len. If the string column is longer
-   * than len, the return value is shortened to len characters.
+   * Right-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2621,9 +2626,11 @@ object functions {
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str a string expression to split
-   * @param pattern a string representing a regular expression. The regex string should be
-   *                a Java regular expression.
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a string representing a regular expression. The regex string should be a Java regular
+   *   expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2633,17 +2640,17 @@ object functions {
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str a string expression to split
-   * @param pattern a string representing a regular expression. The regex string should be
-   *                a Java regular expression.
-   * @param limit an integer expression which controls the number of times the regex is applied.
-   *        <ul>
-   *          <li>limit greater than 0: The resulting array's length will not be more than limit,
-   *          and the resulting array's last entry will contain all input beyond the last
-   *          matched regex.</li>
-   *          <li>limit less than or equal to 0: `regex` will be applied as many times as
-   *          possible, and the resulting array can be of any size.</li>
-   *        </ul>
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a string representing a regular expression. The regex string should be a Java regular
+   *   expression.
+   * @param limit
+   *   an integer expression which controls the number of times the regex is applied. <ul>
+   *   <li>limit greater than 0: The resulting array's length will not be more than limit, and the
+   *   resulting array's last entry will contain all input beyond the last matched regex.</li>
+   *   <li>limit less than or equal to 0: `regex` will be applied as many times as possible, and
+   *   the resulting array can be of any size.</li> </ul>
    *
    * @group string_funcs
    * @since 3.0.0
@@ -2652,11 +2659,11 @@ object functions {
     Column.fn("split", str, lit(pattern), lit(limit))
 
   /**
-   * Substring starts at `pos` and is of length `len` when str is String type or
-   * returns the slice of byte array that starts at `pos` in byte and is of length `len`
-   * when str is Binary type
+   * Substring starts at `pos` and is of length `len` when str is String type or returns the slice
+   * of byte array that starts at `pos` in byte and is of length `len` when str is Binary type
    *
-   * @note The position is not zero based, but 1 based index.
+   * @note
+   *   The position is not zero based, but 1 based index.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2665,8 +2672,8 @@ object functions {
     Column.fn("substring", str, lit(pos), lit(len))
 
   /**
-   * Returns the substring from string str before count occurrences of the delimiter delim.
-   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * Returns the substring from string str before count occurrences of the delimiter delim. If
+   * count is positive, everything the left of the final delimiter (counting from left) is
    * returned. If count is negative, every to the right of the final delimiter (counting from the
    * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
@@ -2676,8 +2683,8 @@ object functions {
     Column.fn("substring_index", str, lit(delim), lit(count))
 
   /**
-   * Overlay the specified portion of `src` with `replace`,
-   *  starting from byte position `pos` of `src` and proceeding for `len` bytes.
+   * Overlay the specified portion of `src` with `replace`, starting from byte position `pos` of
+   * `src` and proceeding for `len` bytes.
    *
    * @group string_funcs
    * @since 3.0.0
@@ -2686,8 +2693,8 @@ object functions {
     Column.fn("overlay", src, replace, pos, len)
 
   /**
-   * Overlay the specified portion of `src` with `replace`,
-   *  starting from byte position `pos` of `src`.
+   * Overlay the specified portion of `src` with `replace`, starting from byte position `pos` of
+   * `src`.
    *
    * @group string_funcs
    * @since 3.0.0
@@ -2704,18 +2711,17 @@ object functions {
     Column.fn("sentences", string, language, country)
 
   /**
-   * Splits a string into arrays of sentences, where each sentence is an array of words.
-   * The default locale is used.
+   * Splits a string into arrays of sentences, where each sentence is an array of words. The
+   * default locale is used.
    * @group string_funcs
    * @since 3.2.0
    */
   def sentences(string: Column): Column = Column.fn("sentences", string)
 
   /**
-   * Translate any character in the src by a character in replaceString.
-   * The characters in replaceString correspond to the characters in matchingString.
-   * The translate will happen when any character in the string matches the character
-   * in the `matchingString`.
+   * Translate any character in the src by a character in replaceString. The characters in
+   * replaceString correspond to the characters in matchingString. The translate will happen when
+   * any character in the string matches the character in the `matchingString`.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2753,23 +2759,29 @@ object functions {
   /**
    * Returns the date that is `numMonths` after `startDate`.
    *
-   * @param startDate A date, timestamp or string. If a string, the data must be in a format that
-   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param numMonths The number of months to add to `startDate`, can be negative to subtract months
-   * @return A date, or null if `startDate` was a string that could not be cast to a date
+   * @param startDate
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param numMonths
+   *   The number of months to add to `startDate`, can be negative to subtract months
+   * @return
+   *   A date, or null if `startDate` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def add_months(startDate: Column, numMonths: Int): Column = add_months(startDate, lit(numMonths))
+  def add_months(startDate: Column, numMonths: Int): Column =
+    add_months(startDate, lit(numMonths))
 
   /**
    * Returns the date that is `numMonths` after `startDate`.
    *
-   * @param startDate A date, timestamp or string. If a string, the data must be in a format that
-   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param numMonths A column of the number of months to add to `startDate`, can be negative to
-   *                  subtract months
-   * @return A date, or null if `startDate` was a string that could not be cast to a date
+   * @param startDate
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param numMonths
+   *   A column of the number of months to add to `startDate`, can be negative to subtract months
+   * @return
+   *   A date, or null if `startDate` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -2777,8 +2789,8 @@ object functions {
     Column.fn("add_months", startDate, numMonths)
 
   /**
-   * Returns the current date at the start of query evaluation as a date column.
-   * All calls of current_date within the same query return the same value.
+   * Returns the current date at the start of query evaluation as a date column. All calls of
+   * current_date within the same query return the same value.
    *
    * @group datetime_funcs
    * @since 1.5.0
@@ -2786,8 +2798,8 @@ object functions {
   def current_date(): Column = Column.fn("current_date")
 
   /**
-   * Returns the current timestamp at the start of query evaluation as a timestamp column.
-   * All calls of current_timestamp within the same query return the same value.
+   * Returns the current timestamp at the start of query evaluation as a timestamp column. All
+   * calls of current_timestamp within the same query return the same value.
    *
    * @group datetime_funcs
    * @since 1.5.0
@@ -2795,9 +2807,9 @@ object functions {
   def current_timestamp(): Column = Column.fn("current_timestamp")
 
   /**
-   * Returns the current timestamp without time zone at the start of query evaluation
-   * as a timestamp without time zone column.
-   * All calls of localtimestamp within the same query return the same value.
+   * Returns the current timestamp without time zone at the start of query evaluation as a
+   * timestamp without time zone column. All calls of localtimestamp within the same query return
+   * the same value.
    *
    * @group datetime_funcs
    * @since 3.3.0
@@ -2808,17 +2820,21 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>
-   * for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid date and time format patterns
    *
-   * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
-   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
-   * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
-   * @note Use specialized functions like [[year]] whenever possible as they benefit from a
-   * specialized implementation.
-   * @throws IllegalArgumentException if the `format` pattern is invalid
+   * @param dateExpr
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param format
+   *   A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   * @return
+   *   A string, or null if `dateExpr` was a string that could not be cast to a timestamp
+   * @note
+   *   Use specialized functions like [[year]] whenever possible as they benefit from a
+   *   specialized implementation.
+   * @throws IllegalArgumentException
+   *   if the `format` pattern is invalid
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2828,10 +2844,13 @@ object functions {
   /**
    * Returns the date that is `days` days after `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that
-   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days  The number of days to add to `start`, can be negative to subtract days
-   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days
+   *   The number of days to add to `start`, can be negative to subtract days
+   * @return
+   *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2840,10 +2859,13 @@ object functions {
   /**
    * Returns the date that is `days` days after `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that
-   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
-   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days
+   *   A column of the number of days to add to `start`, can be negative to subtract days
+   * @return
+   *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -2852,10 +2874,13 @@ object functions {
   /**
    * Returns the date that is `days` days before `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that
-   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days  The number of days to subtract from `start`, can be negative to add days
-   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days
+   *   The number of days to subtract from `start`, can be negative to add days
+   * @return
+   *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2864,11 +2889,13 @@ object functions {
   /**
    * Returns the date that is `days` days before `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that
-   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days  A column of the number of days to subtract from `start`, can be negative to add
-   *              days
-   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days
+   *   A column of the number of days to subtract from `start`, can be negative to add days
+   * @return
+   *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -2884,12 +2911,15 @@ object functions {
    * // returns 1
    * }}}
    *
-   * @param end A date, timestamp or string. If a string, the data must be in a format that
-   *            can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param start A date, timestamp or string. If a string, the data must be in a format that
-   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @return An integer, or null if either `end` or `start` were strings that could not be cast to
-   *         a date. Negative if `end` is before `start`
+   * @param end
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return
+   *   An integer, or null if either `end` or `start` were strings that could not be cast to a
+   *   date. Negative if `end` is before `start`
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2897,7 +2927,8 @@ object functions {
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2905,7 +2936,8 @@ object functions {
 
   /**
    * Extracts the quarter as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2913,16 +2945,18 @@ object functions {
 
   /**
    * Extracts the month as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
   def month(e: Column): Column = Column.fn("month", e)
 
   /**
-   * Extracts the day of the week as an integer from a given date/timestamp/string.
-   * Ranges from 1 for a Sunday through to 7 for a Saturday
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * Extracts the day of the week as an integer from a given date/timestamp/string. Ranges from 1
+   * for a Sunday through to 7 for a Saturday
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -2930,7 +2964,8 @@ object functions {
 
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2938,7 +2973,8 @@ object functions {
 
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2946,20 +2982,22 @@ object functions {
 
   /**
    * Extracts the hours as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
   def hour(e: Column): Column = Column.fn("hour", e)
 
   /**
-   * Returns the last day of the month which the given date belongs to.
-   * For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
-   * month in July 2015.
+   * Returns the last day of the month which the given date belongs to. For example, input
+   * "2015-07-27" returns "2015-07-31" since July 31 is the last day of the month in July 2015.
    *
-   * @param e A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @return A date, or null if the input was a string that could not be cast to a date
+   * @param e
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return
+   *   A date, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2967,14 +3005,16 @@ object functions {
 
   /**
    * Extracts the minutes as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
   def minute(e: Column): Column = Column.fn("minute", e)
 
   /**
-   * @return A date created from year, month and day fields.
+   * @return
+   *   A date created from year, month and day fields.
    * @group datetime_funcs
    * @since 3.3.0
    */
@@ -2985,7 +3025,8 @@ object functions {
    * Returns number of months between dates `start` and `end`.
    *
    * A whole number is returned if both inputs have the same day of month or both are the last day
-   * of their respective months. Otherwise, the difference is calculated assuming 31 days per month.
+   * of their respective months. Otherwise, the difference is calculated assuming 31 days per
+   * month.
    *
    * For example:
    * {{{
@@ -2994,12 +3035,15 @@ object functions {
    * months_between("2017-06-01", "2017-06-16 12:00:00")  // returns -0.5
    * }}}
    *
-   * @param end   A date, timestamp or string. If a string, the data must be in a format that can
-   *              be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param start A date, timestamp or string. If a string, the data must be in a format that can
-   *              cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @return A double, or null if either `end` or `start` were strings that could not be cast to a
-   *         timestamp. Negative if `end` is before `start`
+   * @param end
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can cast to a
+   *   timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return
+   *   A double, or null if either `end` or `start` were strings that could not be cast to a
+   *   timestamp. Negative if `end` is before `start`
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3022,11 +3066,14 @@ object functions {
    * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
    * Sunday after 2015-07-27.
    *
-   * @param date      A date, timestamp or string. If a string, the data must be in a format that
-   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param dayOfWeek Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
-   * @return A date, or null if `date` was a string that could not be cast to a date or if
-   *         `dayOfWeek` was an invalid value
+   * @param date
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param dayOfWeek
+   *   Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+   * @return
+   *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
+   *   was an invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3039,12 +3086,15 @@ object functions {
    * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
    * Sunday after 2015-07-27.
    *
-   * @param date      A date, timestamp or string. If a string, the data must be in a format that
-   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param dayOfWeek A column of the day of week. Case insensitive, and accepts: "Mon", "Tue",
-   *                  "Wed", "Thu", "Fri", "Sat", "Sun"
-   * @return A date, or null if `date` was a string that could not be cast to a date or if
-   *         `dayOfWeek` was an invalid value
+   * @param date
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param dayOfWeek
+   *   A column of the day of week. Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu",
+   *   "Fri", "Sat", "Sun"
+   * @return
+   *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
+   *   was an invalid value
    * @group datetime_funcs
    * @since 3.2.0
    */
@@ -3053,7 +3103,8 @@ object functions {
 
   /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a timestamp
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3065,7 +3116,8 @@ object functions {
    * A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
    * as defined by ISO 8601
    *
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3073,12 +3125,14 @@ object functions {
 
   /**
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
-   * representing the timestamp of that moment in the current system time zone in the
-   * yyyy-MM-dd HH:mm:ss format.
+   * representing the timestamp of that moment in the current system time zone in the yyyy-MM-dd
+   * HH:mm:ss format.
    *
-   * @param ut A number of a type that is castable to a long, such as string or integer. Can be
-   *           negative for timestamps before the unix epoch
-   * @return A string, or null if the input was a string that could not be cast to a long
+   * @param ut
+   *   A number of a type that is castable to a long, such as string or integer. Can be negative
+   *   for timestamps before the unix epoch
+   * @return
+   *   A string, or null if the input was a string that could not be cast to a long
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3089,15 +3143,17 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
    *
-   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>
-   * for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid date and time format patterns
    *
-   * @param ut A number of a type that is castable to a long, such as string or integer. Can be
-   *           negative for timestamps before the unix epoch
-   * @param f  A date time pattern that the input will be formatted to
-   * @return A string, or null if `ut` was a string that could not be cast to a long or `f` was
-   *         an invalid date time pattern
+   * @param ut
+   *   A number of a type that is castable to a long, such as string or integer. Can be negative
+   *   for timestamps before the unix epoch
+   * @param f
+   *   A date time pattern that the input will be formatted to
+   * @return
+   *   A string, or null if `ut` was a string that could not be cast to a long or `f` was an
+   *   invalid date time pattern
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3107,8 +3163,9 @@ object functions {
   /**
    * Returns the current Unix timestamp (in seconds) as a long.
    *
-   * @note All calls of `unix_timestamp` within the same query return the same value
-   * (i.e. the current timestamp is calculated at the start of query evaluation).
+   * @note
+   *   All calls of `unix_timestamp` within the same query return the same value (i.e. the current
+   *   timestamp is calculated at the start of query evaluation).
    *
    * @group datetime_funcs
    * @since 1.5.0
@@ -3116,12 +3173,14 @@ object functions {
   def unix_timestamp(): Column = unix_timestamp(current_timestamp())
 
   /**
-   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
-   * using the default timezone and the default locale.
+   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds), using the
+   * default timezone and the default locale.
    *
-   * @param s A date, timestamp or string. If a string, the data must be in the
-   *          `yyyy-MM-dd HH:mm:ss` format
-   * @return A long, or null if the input was a string not of the correct format
+   * @param s
+   *   A date, timestamp or string. If a string, the data must be in the `yyyy-MM-dd HH:mm:ss`
+   *   format
+   * @return
+   *   A long, or null if the input was a string not of the correct format
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3130,15 +3189,17 @@ object functions {
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    *
-   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>
-   * for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid date and time format patterns
    *
-   * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param p A date time pattern detailing the format of `s` when `s` is a string
-   * @return A long, or null if `s` was a string that could not be cast to a date or `p` was
-   *         an invalid format
+   * @param s
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param p
+   *   A date time pattern detailing the format of `s` when `s` is a string
+   * @return
+   *   A long, or null if `s` was a string that could not be cast to a date or `p` was an invalid
+   *   format
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3148,9 +3209,11 @@ object functions {
   /**
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
-   * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @return A timestamp, or null if the input was a string that could not be cast to a timestamp
+   * @param s
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return
+   *   A timestamp, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -3159,15 +3222,17 @@ object functions {
   /**
    * Converts time string with the given pattern to timestamp.
    *
-   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>
-   * for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid date and time format patterns
    *
-   * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param fmt A date time pattern detailing the format of `s` when `s` is a string
-   * @return A timestamp, or null if `s` was a string that could not be cast to a timestamp or
-   *         `fmt` was an invalid format
+   * @param s
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param fmt
+   *   A date time pattern detailing the format of `s` when `s` is a string
+   * @return
+   *   A timestamp, or null if `s` was a string that could not be cast to a timestamp or `fmt` was
+   *   an invalid format
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -3184,15 +3249,17 @@ object functions {
   /**
    * Converts the column into a `DateType` with a specified format
    *
-   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>
-   * for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid date and time format patterns
    *
-   * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param fmt A date time pattern detailing the format of `e` when `e`is a string
-   * @return A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
-   *         invalid format
+   * @param e
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param fmt
+   *   A date time pattern detailing the format of `e` when `e`is a string
+   * @return
+   *   A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
+   *   invalid format
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -3203,14 +3270,16 @@ object functions {
    *
    * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
    *
-   * @param date A date, timestamp or string. If a string, the data must be in a format that can be
-   *             cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
-   *               or 'month', 'mon', 'mm' to truncate by month
-   *               Other options are: 'week', 'quarter'
+   * @param date
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param format:
+   *   'year', 'yyyy', 'yy' to truncate by year, or 'month', 'mon', 'mm' to truncate by month
+   *   Other options are: 'week', 'quarter'
    *
-   * @return A date, or null if `date` was a string that could not be cast to a date or `format`
-   *         was an invalid value
+   * @return
+   *   A date, or null if `date` was a string that could not be cast to a date or `format` was an
+   *   invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3221,15 +3290,16 @@ object functions {
    *
    * For example, `date_trunc("year", "2018-11-19 12:01:19")` returns 2018-01-01 00:00:00
    *
-   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
-   *                'month', 'mon', 'mm' to truncate by month,
-   *                'day', 'dd' to truncate by day,
-   *                Other options are:
-   *                'microsecond', 'millisecond', 'second', 'minute', 'hour', 'week', 'quarter'
-   * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
-   *                  can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @return A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp
-   *         or `format` was an invalid value
+   * @param format:
+   *   'year', 'yyyy', 'yy' to truncate by year, 'month', 'mon', 'mm' to truncate by month, 'day',
+   *   'dd' to truncate by day, Other options are: 'microsecond', 'millisecond', 'second',
+   *   'minute', 'hour', 'week', 'quarter'
+   * @param timestamp
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return
+   *   A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp or
+   *   `format` was an invalid value
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -3238,19 +3308,21 @@ object functions {
 
   /**
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
-   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
-   * '2017-07-14 03:40:00.0'.
+   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14
+   * 03:40:00.0'.
    *
-   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
-   *           cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param tz A string detailing the time zone ID that the input should be adjusted to. It should
-   *           be in the format of either region-based zone IDs or zone offsets. Region IDs must
-   *           have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
-   *           the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are
-   *           supported as aliases of '+00:00'. Other short names are not recommended to use
-   *           because they can be ambiguous.
-   * @return A timestamp, or null if `ts` was a string that could not be cast to a timestamp or
-   *         `tz` was an invalid value
+   * @param ts
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param tz
+   *   A string detailing the time zone ID that the input should be adjusted to. It should be in
+   *   the format of either region-based zone IDs or zone offsets. Region IDs must have the form
+   *   'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+   *   '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported as aliases
+   *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous.
+   * @return
+   *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
+   *   an invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3258,8 +3330,8 @@ object functions {
 
   /**
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
-   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
-   * '2017-07-14 03:40:00.0'.
+   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14
+   * 03:40:00.0'.
    * @group datetime_funcs
    * @since 2.4.0
    */
@@ -3271,16 +3343,18 @@ object functions {
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
    *
-   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
-   *           cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param tz A string detailing the time zone ID that the input should be adjusted to. It should
-   *           be in the format of either region-based zone IDs or zone offsets. Region IDs must
-   *           have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
-   *           the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are
-   *           supported as aliases of '+00:00'. Other short names are not recommended to use
-   *           because they can be ambiguous.
-   * @return A timestamp, or null if `ts` was a string that could not be cast to a timestamp or
-   *         `tz` was an invalid value
+   * @param ts
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param tz
+   *   A string detailing the time zone ID that the input should be adjusted to. It should be in
+   *   the format of either region-based zone IDs or zone offsets. Region IDs must have the form
+   *   'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+   *   '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported as aliases
+   *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous.
+   * @return
+   *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
+   *   an invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3299,8 +3373,8 @@ object functions {
    * Bucketize rows into one or more time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-   * the order of months are not supported. The following example takes the average stock price for
-   * a one minute window every 10 seconds starting 5 seconds after the hour:
+   * the order of months are not supported. The following example takes the average stock price
+   * for a one minute window every 10 seconds starting 5 seconds after the hour:
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
@@ -3319,23 +3393,23 @@ object functions {
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
-   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType or TimestampNTZType.
-   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
-   *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
-   *                       valid duration identifiers. Note that the duration is a fixed length of
-   *                       time, and does not vary over time according to a calendar. For example,
-   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
-   * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
-   *                      A new window will be generated every `slideDuration`. Must be less than
-   *                      or equal to the `windowDuration`. Check
-   *                      `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
-   *                      identifiers. This duration is likewise absolute, and does not vary
-   *                      according to a calendar.
-   * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
-   *                  window intervals. For example, in order to have hourly tumbling windows that
-   *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
-   *                  `startTime` as `15 minutes`.
+   * @param timeColumn
+   *   The column or the expression to use as the timestamp for windowing by time. The time column
+   *   must be of TimestampType or TimestampNTZType.
+   * @param windowDuration
+   *   A string specifying the width of the window, e.g. `10 minutes`, `1 second`. Check
+   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. Note that
+   *   the duration is a fixed length of time, and does not vary over time according to a
+   *   calendar. For example, `1 day` always means 86,400,000 milliseconds, not a calendar day.
+   * @param slideDuration
+   *   A string specifying the sliding interval of the window, e.g. `1 minute`. A new window will
+   *   be generated every `slideDuration`. Must be less than or equal to the `windowDuration`.
+   *   Check `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. This
+   *   duration is likewise absolute, and does not vary according to a calendar.
+   * @param startTime
+   *   The offset with respect to 1970-01-01 00:00:00 UTC with which to start window intervals.
+   *   For example, in order to have hourly tumbling windows that start 15 minutes past the hour,
+   *   e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
    *
    * @group datetime_funcs
    * @since 2.0.0
@@ -3347,13 +3421,13 @@ object functions {
       startTime: String): Column =
     Column.fn("window", timeColumn, lit(windowDuration), lit(slideDuration), lit(startTime))
 
-
   /**
    * Bucketize rows into one or more time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-   * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
-   * The following example takes the average stock price for a one minute window every 10 seconds:
+   * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00
+   * UTC. The following example takes the average stock price for a one minute window every 10
+   * seconds:
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
@@ -3372,19 +3446,19 @@ object functions {
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
-   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType or TimestampNTZType.
-   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
-   *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
-   *                       valid duration identifiers. Note that the duration is a fixed length of
-   *                       time, and does not vary over time according to a calendar. For example,
-   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
-   * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
-   *                      A new window will be generated every `slideDuration`. Must be less than
-   *                      or equal to the `windowDuration`. Check
-   *                      `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
-   *                      identifiers. This duration is likewise absolute, and does not vary
-   *                      according to a calendar.
+   * @param timeColumn
+   *   The column or the expression to use as the timestamp for windowing by time. The time column
+   *   must be of TimestampType or TimestampNTZType.
+   * @param windowDuration
+   *   A string specifying the width of the window, e.g. `10 minutes`, `1 second`. Check
+   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. Note that
+   *   the duration is a fixed length of time, and does not vary over time according to a
+   *   calendar. For example, `1 day` always means 86,400,000 milliseconds, not a calendar day.
+   * @param slideDuration
+   *   A string specifying the sliding interval of the window, e.g. `1 minute`. A new window will
+   *   be generated every `slideDuration`. Must be less than or equal to the `windowDuration`.
+   *   Check `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. This
+   *   duration is likewise absolute, and does not vary according to a calendar.
    *
    * @group datetime_funcs
    * @since 2.0.0
@@ -3394,11 +3468,11 @@ object functions {
   }
 
   /**
-   * Generates tumbling time windows given a timestamp specifying column. Window
-   * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
-   * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-   * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
-   * The following example takes the average stock price for a one minute tumbling window:
+   * Generates tumbling time windows given a timestamp specifying column. Window starts are
+   * inclusive but the window ends are exclusive, e.g. 12:05 will be in the window [12:05,12:10)
+   * but not in [12:00,12:05). Windows can support microsecond precision. Windows in the order of
+   * months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC. The
+   * following example takes the average stock price for a one minute tumbling window:
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
@@ -3417,11 +3491,12 @@ object functions {
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
-   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType or TimestampNTZType.
-   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
-   *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
-   *                       valid duration identifiers.
+   * @param timeColumn
+   *   The column or the expression to use as the timestamp for windowing by time. The time column
+   *   must be of TimestampType or TimestampNTZType.
+   * @param windowDuration
+   *   A string specifying the width of the window, e.g. `10 minutes`, `1 second`. Check
+   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
    *
    * @group datetime_funcs
    * @since 2.0.0
@@ -3437,8 +3512,9 @@ object functions {
    * inclusive and end is exclusive. Since event time can support microsecond precision,
    * window_time(window) = window.end - 1 microsecond.
    *
-   * @param windowColumn The window column (typically produced by window aggregation) of type
-   *                     StructType { start: Timestamp, end: Timestamp }
+   * @param windowColumn
+   *   The window column (typically produced by window aggregation) of type StructType { start:
+   *   Timestamp, end: Timestamp }
    *
    * @group datetime_funcs
    * @since 3.4.0
@@ -3449,10 +3525,9 @@ object functions {
    * Generates session window given a timestamp specifying column.
    *
    * Session window is one of dynamic windows, which means the length of window is varying
-   * according to the given inputs. The length of session window is defined as "the timestamp
-   * of latest input of the session + gap duration", so when the new inputs are bound to the
-   * current session window, the end time of session window can be expanded according to the new
-   * inputs.
+   * according to the given inputs. The length of session window is defined as "the timestamp of
+   * latest input of the session + gap duration", so when the new inputs are bound to the current
+   * session window, the end time of session window can be expanded according to the new inputs.
    *
    * Windows can support microsecond precision. gapDuration in the order of months are not
    * supported.
@@ -3460,11 +3535,12 @@ object functions {
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
-   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType or TimestampNTZType.
-   * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`,
-   *                    `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
-   *                    valid duration identifiers.
+   * @param timeColumn
+   *   The column or the expression to use as the timestamp for windowing by time. The time column
+   *   must be of TimestampType or TimestampNTZType.
+   * @param gapDuration
+   *   A string specifying the timeout of the session, e.g. `10 minutes`, `1 second`. Check
+   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
    *
    * @group datetime_funcs
    * @since 3.2.0
@@ -3476,17 +3552,17 @@ object functions {
    * Generates session window given a timestamp specifying column.
    *
    * Session window is one of dynamic windows, which means the length of window is varying
-   * according to the given inputs. For static gap duration, the length of session window
-   * is defined as "the timestamp of latest input of the session + gap duration", so when
-   * the new inputs are bound to the current session window, the end time of session window
-   * can be expanded according to the new inputs.
+   * according to the given inputs. For static gap duration, the length of session window is
+   * defined as "the timestamp of latest input of the session + gap duration", so when the new
+   * inputs are bound to the current session window, the end time of session window can be
+   * expanded according to the new inputs.
    *
-   * Besides a static gap duration value, users can also provide an expression to specify
-   * gap duration dynamically based on the input row. With dynamic gap duration, the closing
-   * of a session window does not depend on the latest input anymore. A session window's range
-   * is the union of all events' ranges which are determined by event start time and evaluated
-   * gap duration during the query execution. Note that the rows with negative or zero gap
-   * duration will be filtered out from the aggregation.
+   * Besides a static gap duration value, users can also provide an expression to specify gap
+   * duration dynamically based on the input row. With dynamic gap duration, the closing of a
+   * session window does not depend on the latest input anymore. A session window's range is the
+   * union of all events' ranges which are determined by event start time and evaluated gap
+   * duration during the query execution. Note that the rows with negative or zero gap duration
+   * will be filtered out from the aggregation.
    *
    * Windows can support microsecond precision. gapDuration in the order of months are not
    * supported.
@@ -3494,11 +3570,13 @@ object functions {
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
-   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType or TimestampNTZType.
-   * @param gapDuration A column specifying the timeout of the session. It could be static value,
-   *                    e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
-   *                    duration dynamically based on the input row.
+   * @param timeColumn
+   *   The column or the expression to use as the timestamp for windowing by time. The time column
+   *   must be of TimestampType or TimestampNTZType.
+   * @param gapDuration
+   *   A column specifying the timeout of the session. It could be static value, e.g. `10
+   *   minutes`, `1 second`, or an expression/UDF that specifies gap duration dynamically based on
+   *   the input row.
    *
    * @group datetime_funcs
    * @since 3.2.0
@@ -3507,8 +3585,7 @@ object functions {
     Column.fn("session_window", timeColumn, gapDuration).as("session_window")
 
   /**
-   * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
-   * to a timestamp.
+   * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z) to a timestamp.
    * @group datetime_funcs
    * @since 3.1.0
    */
