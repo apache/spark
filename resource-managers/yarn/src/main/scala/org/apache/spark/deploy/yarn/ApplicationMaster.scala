@@ -891,7 +891,6 @@ object ApplicationMaster extends Logging {
   private val EXIT_MAX_EXECUTOR_FAILURES = 11
   private val EXIT_REPORTER_FAILURE = 12
   private val EXIT_SC_NOT_INITED = 13
-  private val EXIT_SECURITY = 14
   private val EXIT_EXCEPTION_USER_CLASS = 15
   private val EXIT_EARLY = 16
   private val EXIT_DISCONNECTED = 17

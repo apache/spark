@@ -197,6 +197,9 @@ message Expression {
     // (Required) An identifier that will be parsed by Catalyst parser. This should follow the
     // Spark SQL identifier syntax.
     string unparsed_identifier = 1;
+
+    // (Optional) The id of corresponding connect plan.
+    optional int64 plan_id = 2;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function

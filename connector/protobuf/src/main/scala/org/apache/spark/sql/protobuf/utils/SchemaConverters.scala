@@ -118,17 +118,17 @@ object SchemaConverters {
         // discarded.
         // SQL Schema for the protobuf message `message Person { string name = 1; Person bff = 2}`
         // will vary based on the value of "recursive.fields.max.depth".
-        // 0: struct<name: string, bff: null>
-        // 1: struct<name string, bff: <name: string, bff: null>>
-        // 2: struct<name string, bff: <name: string, bff: struct<name: string, bff: null>>> ...
+        // 1: struct<name: string, bff: null>
+        // 2: struct<name string, bff: <name: string, bff: null>>
+        // 3: struct<name string, bff: <name: string, bff: struct<name: string, bff: null>>> ...
         val recordName = fd.getMessageType.getFullName
         val recursiveDepth = existingRecordNames.getOrElse(recordName, 0)
         val recursiveFieldMaxDepth = protobufOptions.recursiveFieldMaxDepth
-        if (existingRecordNames.contains(recordName) && (recursiveFieldMaxDepth < 0 ||
+        if (existingRecordNames.contains(recordName) && (recursiveFieldMaxDepth <= 0 ||
           recursiveFieldMaxDepth > 10)) {
           throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
         } else if (existingRecordNames.contains(recordName) &&
-          recursiveDepth > recursiveFieldMaxDepth) {
+          recursiveDepth >= recursiveFieldMaxDepth) {
           Some(NullType)
         } else {
           val newRecordNames = existingRecordNames + (recordName -> (recursiveDepth + 1))
