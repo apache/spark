@@ -128,7 +128,7 @@ You can access them by doing
 |**BinaryType**|Array[Byte]|BinaryType|
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.sql.Timestamp|TimestampType|
-|**TimestampNTZType**|java.time.LocalDateTime| TimestampNTZType|
+|**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
 |**DateType**|java.sql.Date|DateType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
@@ -159,7 +159,7 @@ please use factory methods provided in
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
-|**TimestampNTZType**|java.time.LocalDateTime| TimestampNTZType|
+|**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
 |**DateType**|java.sql.Date|DataTypes.DateType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
