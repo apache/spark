@@ -2065,6 +2065,15 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     collectResult().iterator.asInstanceOf[java.util.Iterator[T]]
   }
 
+  /**
+   * Returns the number of rows in the Dataset.
+   * @group action
+   * @since 3.4.0
+   */
+  def count(): Long = {
+    groupBy().count().collect().head.getLong(0)
+  }
+
   private def buildRepartition(numPartitions: Int, shuffle: Boolean): Dataset[T] = {
     session.newDataset { builder =>
       builder.getRepartitionBuilder
