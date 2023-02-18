@@ -56,19 +56,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val planner = new SparkConnectPlanner(holder)
     val dataframe =
       Dataset.ofRows(holder.session, planner.transformRelation(request.getPlan.getRoot))
-
-    // If it's a SQL only plan, we have to return the DataFrame ID
-    if (planner.isSqlOnlyPlan(request.getPlan.getRoot)) {
-      val id = holder.server_side.registerDataFrame(dataframe)
-      // Retrun the remote dataframe ID to the client.
-      val response = proto.ExecutePlanResponse.newBuilder()
-      val rdf = proto.ExecutePlanResponse.RemoteDataFrame.newBuilder().setId(id)
-      response.setClientId(request.getClientId).setRemoteDataFrame(rdf)
-      responseObserver.onNext(response.build())
-      responseObserver.onCompleted()
-    } else {
-      processAsArrowBatches(request.getClientId, dataframe)
-    }
+    processAsArrowBatches(request.getClientId, dataframe)
   }
 
   private def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {

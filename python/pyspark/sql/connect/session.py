@@ -342,9 +342,10 @@ class SparkSession:
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
     def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
-        plan  = SQL(sqlQuery, args)
-        id = self._client.to_remote_plan_id(plan.to_proto(self))
-        return DataFrame.withPlan(ServerSideDataFrame(id), self)
+        df = DataFrame.withPlan(SQL(sqlQuery, args), self)
+        # Trigger the eager execution of the plan.
+        df.schema
+        return df
 
     sql.__doc__ = PySparkSession.sql.__doc__
 

@@ -100,7 +100,6 @@ class Relation(google.protobuf.message.Message):
     APPROX_QUANTILE_FIELD_NUMBER: builtins.int
     FREQ_ITEMS_FIELD_NUMBER: builtins.int
     SAMPLE_BY_FIELD_NUMBER: builtins.int
-    SERVER_SIDE_DATA_FRAME_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -183,8 +182,6 @@ class Relation(google.protobuf.message.Message):
     @property
     def sample_by(self) -> global___StatSampleBy: ...
     @property
-    def server_side_data_frame(self) -> global___ServerSideDataFrame: ...
-    @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
     @property
@@ -235,7 +232,6 @@ class Relation(google.protobuf.message.Message):
         approx_quantile: global___StatApproxQuantile | None = ...,
         freq_items: global___StatFreqItems | None = ...,
         sample_by: global___StatSampleBy | None = ...,
-        server_side_data_frame: global___ServerSideDataFrame | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         unknown: global___Unknown | None = ...,
@@ -301,8 +297,6 @@ class Relation(google.protobuf.message.Message):
             b"sample",
             "sample_by",
             b"sample_by",
-            "server_side_data_frame",
-            b"server_side_data_frame",
             "set_op",
             b"set_op",
             "show_string",
@@ -392,8 +386,6 @@ class Relation(google.protobuf.message.Message):
             b"sample",
             "sample_by",
             b"sample_by",
-            "server_side_data_frame",
-            b"server_side_data_frame",
             "set_op",
             b"set_op",
             "show_string",
@@ -462,7 +454,6 @@ class Relation(google.protobuf.message.Message):
         "approx_quantile",
         "freq_items",
         "sample_by",
-        "server_side_data_frame",
         "catalog",
         "extension",
         "unknown",
@@ -512,24 +503,6 @@ class RelationCommon(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["plan_id"] | None: ...
 
 global___RelationCommon = RelationCommon
-
-class ServerSideDataFrame(google.protobuf.message.Message):
-    """Reference to a dataframe that is cached in the Spark Session on the server. This is for example
-    used to allow eager execution of SQL commands while retaining the output for future consumption.
-    """
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    ID_FIELD_NUMBER: builtins.int
-    id: builtins.str
-    def __init__(
-        self,
-        *,
-        id: builtins.str = ...,
-    ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
-
-global___ServerSideDataFrame = ServerSideDataFrame
 
 class SQL(google.protobuf.message.Message):
     """Relation that uses a SQL query to generate the output."""

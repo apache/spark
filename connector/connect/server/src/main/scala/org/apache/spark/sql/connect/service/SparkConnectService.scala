@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.annotation.tailrec
@@ -215,19 +214,17 @@ class SparkConnectService(debug: Boolean)
 }
 
 class ServerSideDataFrameManager(
-    val dataMap: ConcurrentHashMap[String, DataFrame] =
-      new ConcurrentHashMap[String, DataFrame]()) {
-  def registerDataFrame(df: DataFrame): String = {
-    val uuid = UUID.randomUUID().toString
-    dataMap.put(uuid, df)
-    uuid
+    val dataMap: ConcurrentHashMap[Long, DataFrame] = new ConcurrentHashMap[Long, DataFrame]()) {
+  def registerDataFrameWithId(id: Long, df: DataFrame): Long = {
+    dataMap.put(id, df)
+    id
   }
 
-  def get(id: String): Option[DataFrame] = {
+  def get(id: Long): Option[DataFrame] = {
     Option(dataMap.get(id))
   }
 
-  def remove(id: String): Unit = {
+  def remove(id: Long): Unit = {
     dataMap.remove(id)
   }
 }

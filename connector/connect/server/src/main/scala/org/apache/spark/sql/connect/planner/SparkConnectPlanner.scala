@@ -26,7 +26,6 @@ import com.google.protobuf.{Any => ProtoAny}
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.ServerSideDataFrame
 import org.apache.spark.sql.{Column, Dataset, Encoders}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -60,8 +59,12 @@ class SparkConnectPlanner(val holder: SessionHolder) {
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
-  def isSqlOnlyPlan(rel: proto.Relation): Boolean = {
-    rel.getRelTypeCase == proto.Relation.RelTypeCase.SQL
+  def maybePlanId(rel: proto.Relation): Option[Long] = {
+    if (rel.hasCommon && rel.getCommon.hasPlanId) {
+      Some(rel.getCommon.getPlanId)
+    } else {
+      None
+    }
   }
 
 // The root of the query plan is a relation and we apply the transformations to it.
@@ -81,7 +84,7 @@ class SparkConnectPlanner(val holder: SessionHolder) {
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
-      case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
+      case proto.Relation.RelTypeCase.SQL => transformSql(maybePlanId(rel), rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
         transformLocalRelation(rel.getLocalRelation)
       case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
@@ -113,8 +116,6 @@ class SparkConnectPlanner(val holder: SessionHolder) {
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
-      case proto.Relation.RelTypeCase.SERVER_SIDE_DATA_FRAME =>
-        transformServerSideDataFrame(rel.getServerSideDataFrame)
 
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
@@ -132,13 +133,6 @@ class SparkConnectPlanner(val holder: SessionHolder) {
       plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
     }
     plan
-  }
-
-  def transformServerSideDataFrame(serverSide: ServerSideDataFrame): LogicalPlan = {
-    holder.server_side
-      .get(serverSide.getId)
-      .getOrElse(throw InvalidPlanInput("Invalid reference to cached data frame."))
-      .logicalPlan
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -210,12 +204,30 @@ class SparkConnectPlanner(val holder: SessionHolder) {
       data = Tuple1.apply(showString) :: Nil)
   }
 
-  private def transformSql(sql: proto.SQL): LogicalPlan = {
-    val args = sql.getArgsMap.asScala.toMap
-    val parser = session.sessionState.sqlParser
-    val parsedArgs = args.mapValues(parser.parseExpression).toMap
-    // Transform every SQL query into a remote DataFrame:
-    Parameter.bind(parser.parsePlan(sql.getQuery), parsedArgs)
+  /**
+   * Transform the SQL plan from the proto representation to the logical plan. Since the client
+   * triggers the eager execution of the SQL query, the operation caches the DataFrame with the
+   * session object.
+   *
+   * @param planId
+   *   Unique plan ID used as the key to cache the DataFrame
+   * @param sql
+   *   SQL plan object
+   * @return
+   *   Transformed logical plan
+   */
+  private def transformSql(planId: Option[Long], sql: proto.SQL): LogicalPlan = {
+    if (planId.isEmpty) {
+      throw new InvalidPlanInput("Eager evaluation of SQL requires the plan ID to be set.")
+    }
+    val dfOpt = holder.server_side.get(planId.get)
+    if (dfOpt.nonEmpty) {
+      dfOpt.get.logicalPlan
+    } else {
+      val df = session.sql(sql.getQuery, sql.getArgsMap.asScala.toMap)
+      holder.server_side.registerDataFrameWithId(planId.get, df)
+      df.logicalPlan
+    }
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {

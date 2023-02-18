@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -837,5 +838,41 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build())
 
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
+  }
+
+  test("Eager execution without PlanId of sql statements fails") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("create table test (id int)"))
+      .build()
+
+    intercept[InvalidPlanInput](transform(input))
+  }
+
+  test("Eager execution of sql statements") {
+    withTable("testcat.table_name") {
+      spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+      intercept[AnalysisException](spark.sql("select * from testcat.table_name").collect())
+      val input = proto.Relation
+        .newBuilder()
+        .setCommon(
+          proto.RelationCommon
+            .newBuilder()
+            .setPlanId(1))
+        .setSql(proto.SQL
+          .newBuilder()
+          .setQuery("create table testcat.table_name (id int)"))
+        .build()
+
+      // This will trigger the eager execution.
+      transform(input)
+      // Second transform with the same ID will not fail, allowing for collect.
+      val data = Dataset.ofRows(spark, transform(input)).collect()
+      assert(data.length == 0)
+      spark.sql("select * from testcat.table_name").collect()
+    }
   }
 }
