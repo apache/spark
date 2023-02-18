@@ -1140,18 +1140,16 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       true)
 
     val flapMapCoGroup = FlatMapCoGroupsInPandasExec(
-      Seq(lKey, lKey2),
-      Seq(rKey, rKey2),
+      Seq(lKey, lKey2) :: Seq(rKey, rKey2) :: Nil,
       pythonUdf,
       AttributeReference("value", IntegerType)() :: Nil,
-      left,
-      right
+      left :: right :: Nil
     )
 
     val result = EnsureRequirements.apply(flapMapCoGroup)
     result match {
-      case FlatMapCoGroupsInPandasExec(leftKeys, rightKeys, _, _,
-        SortExec(leftOrder, false, _, _), SortExec(rightOrder, false, _, _)) =>
+      case FlatMapCoGroupsInPandasExec(List(leftKeys, rightKeys), _, _,
+        List(SortExec(leftOrder, false, _, _), SortExec(rightOrder, false, _, _))) =>
         assert(leftKeys === Seq(lKey, lKey2))
         assert(rightKeys === Seq(rKey, rKey2))
         assert(leftKeys.map(k => SortOrder(k, Ascending)) === leftOrder)

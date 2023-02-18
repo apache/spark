@@ -397,7 +397,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
     val df11 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
-      df1.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+      df1.groupBy($"key2") :: Nil, flatMapCoGroupsInPandasUDF)
     val df12 = df11.filter($"x" > 0)
     assertAmbiguousSelfJoin(df11.join(df12, df11("x") === df12("y")))
     assertAmbiguousSelfJoin(df12.join(df11, df11("x") === df12("y")))

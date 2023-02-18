@@ -290,9 +290,7 @@ trait FlatMapGroupsWithStateExecBase
       // Create a CoGroupedIterator that will group the two iterators together for every key group.
       new CoGroupedIterator(
           groupedChildDataIter :: groupedInitialStateIter :: Nil, groupingAttributes).flatMap {
-        case (keyRow, iterList) =>
-          val valueRowIter = iterList.head
-          val initialStateRowIter = iterList.last
+        case (keyRow, List(valueRowIter, initialStateRowIter)) =>
           val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
           var foundInitialStateForKey = false
           initialStateRowIter.foreach { initialStateRow =>

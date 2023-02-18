@@ -657,30 +657,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
-  test("SPARK-34319: analysis fails on self-join with FlatMapCoGroupsInPandas") {
-    val pythonUdf = PythonUDF("pyUDF", null,
-      StructType(Seq(StructField("a", LongType))),
-      Seq.empty,
-      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-      true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
-    val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
-    val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
-    val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
-      1,
-      1,
-      pythonUdf,
-      output,
-      project1,
-      project2)
-    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
-    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
-    val join = Join(left, right, Inner, None, JoinHint.NONE)
-    assertAnalysisSuccess(
-      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
-  }
-
-  test("SPARK-42349: analysis fails on self-join with FlatMapMultiCoGroupsInPandas") {
+  test("SPARK-42349: analysis fails on self-join with FlatMapCoGroupsInPandas") {
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("a", LongType))),
       Seq.empty,
@@ -693,8 +670,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       List(1, 1),
       pythonUdf,
       output,
-      List(project1, project2),
-      false)
+      List(project1, project2)
+    )
     val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
     val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
     val join = Join(left, right, Inner, None, JoinHint.NONE)

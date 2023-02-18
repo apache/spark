@@ -651,9 +651,7 @@ case class CoGroupExec(
       val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
 
       new CoGroupedIterator(leftGrouped :: rightGrouped :: Nil, leftGroup).flatMap {
-        case (key, groupedIterators) =>
-          val leftResult = groupedIterators.head
-          val rightResult = groupedIterators.last
+        case (key, List(leftResult, rightResult)) =>
           val result = func(
             getKey(key),
             leftResult.map(getLeft),
