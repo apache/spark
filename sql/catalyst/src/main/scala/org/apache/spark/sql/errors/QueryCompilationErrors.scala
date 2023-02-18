@@ -2703,9 +2703,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "view",
-        "objName" -> name.toString,
+        "objName" -> toSQLId(name.nameParts),
         "tempObj" -> "view",
-        "tempObjName" -> nameParts))
+        "tempObjName" -> toSQLId(nameParts)))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempFuncError(
@@ -2715,9 +2715,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "view",
-        "objName" -> name.toString,
+        "objName" -> toSQLId(name.nameParts),
         "tempObj" -> "function",
-        "tempObjName" -> funcName))
+        "tempObjName" -> toSQLId(funcName)))
   }
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {

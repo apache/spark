@@ -90,7 +90,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               "obj" -> "view",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
               "tempObj" -> "view",
-              "tempObjName" -> "temp_jtv1"))
+              "tempObjName" -> "`temp_jtv1`"))
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
           checkError(
@@ -102,7 +102,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               "obj" -> "view",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
               "tempObj" -> "view",
-              "tempObjName" -> "global_temp.global_temp_jtv1"))
+              "tempObjName" -> "`global_temp`.`global_temp_jtv1`"))
         }
       }
     }

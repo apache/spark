@@ -2186,7 +2186,7 @@ class DataSourceV2SQLSuiteV1Filter
             "obj" -> "view",
             "objName" -> "`spark_catalog`.`default`.`v`",
             "tempObj" -> "view",
-            "tempObjName" -> "t"))
+            "tempObjName" -> "`t`"))
       }
     }
 

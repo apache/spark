@@ -618,7 +618,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
               "obj" -> "view",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
               "tempObj" -> "view",
-              "tempObjName" -> "v2"))
+              "tempObjName" -> "`v2`"))
           val tempFunctionName = "temp_udf"
           val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
           withUserDefinedFunction(tempFunctionName -> true) {
@@ -632,7 +632,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
                 "obj" -> "view",
                 "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
                 "tempObj" -> "function",
-                "tempObjName" -> tempFunctionName))
+                "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
       }

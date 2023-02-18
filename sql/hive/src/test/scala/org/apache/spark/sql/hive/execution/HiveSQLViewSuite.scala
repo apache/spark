@@ -91,7 +91,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
                 "obj" -> "view",
                 "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
                 "tempObj" -> "function",
-                "tempObjName" -> tempFunctionName))
+                "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
       }

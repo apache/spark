@@ -3967,7 +3967,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             "obj" -> "view",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
             "tempObj" -> "view",
-            "tempObjName" -> tempViewName))
+            "tempObjName" -> s"`$tempViewName`"))
 
         val e2 = intercept[AnalysisException] {
           sql(
@@ -3986,7 +3986,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             "obj" -> "view",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
             "tempObj" -> "function",
-            "tempObjName" -> tempFuncName))
+            "tempObjName" -> s"`$tempFuncName`"))
       }
     }
   }
