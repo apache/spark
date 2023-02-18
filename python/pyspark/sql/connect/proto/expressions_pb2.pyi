@@ -613,19 +613,37 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
         unparsed_identifier: builtins.str
         """(Required) An identifier that will be parsed by Catalyst parser. This should follow the
         Spark SQL identifier syntax.
         """
+        plan_id: builtins.int
+        """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,
             unparsed_identifier: builtins.str = ...,
+            plan_id: builtins.int | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal["unparsed_identifier", b"unparsed_identifier"],
+            field_name: typing_extensions.Literal[
+                "_plan_id",
+                b"_plan_id",
+                "plan_id",
+                b"plan_id",
+                "unparsed_identifier",
+                b"unparsed_identifier",
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
 
     class UnresolvedFunction(google.protobuf.message.Message):
         """An unresolved function is not explicitly bound to one explicit function, but the function

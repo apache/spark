@@ -3960,9 +3960,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               |SELECT * FROM cte
               |""".stripMargin)
         }
-        assert(e.message.contains("Not allowed to create a permanent view " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName` by referencing a " +
-          s"temporary view $tempViewName"))
+        checkError(
+          exception = e,
+          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "view",
+            "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
+            "tempObj" -> "view",
+            "tempObjName" -> s"`$tempViewName`"))
 
         val e2 = intercept[AnalysisException] {
           sql(
@@ -3974,9 +3979,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               |SELECT * FROM cte
               |""".stripMargin)
         }
-        assert(e2.message.contains("Not allowed to create a permanent view " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName` by referencing a " +
-          s"temporary function `$tempFuncName`"))
+        checkError(
+          exception = e2,
+          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "view",
+            "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
+            "tempObj" -> "function",
+            "tempObjName" -> s"`$tempFuncName`"))
       }
     }
   }
@@ -4544,6 +4554,40 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           |SELECT 1 AS a
         """.stripMargin),
       Seq(Row(2), Row(1)))
+  }
+
+  test("SPARK-42416: Dateset operations should not resolve the analyzed logical plan again") {
+    withTable("app") {
+      withView("view1") {
+        sql(
+          """
+            |CREATE TABLE app (
+            |  uid STRING,
+            |  st TIMESTAMP,
+            |  ds INT
+            |) USING parquet PARTITIONED BY (ds);
+            |""".stripMargin)
+
+        sql(
+          """
+            |create or replace temporary view view1 as WITH new_app AS (
+            |  SELECT a.* FROM app a)
+            |SELECT
+            |    uid,
+            |    20230208 AS ds
+            |  FROM
+            |    new_app
+            |  GROUP BY
+            |    1,
+            |    2
+            |""".stripMargin)
+        val df = sql("select uid from view1")
+        // If the logical plan in `df` is analyzed again, the 'group by 20230208' will be
+        // treated as ordinal again and there will be an error about GROUP BY position 20230208
+        // being out of range.
+        df.show()
+      }
+    }
   }
 
   test("SPARK-39548: CreateView will make queries go into inline CTE code path thus" +

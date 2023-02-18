@@ -1034,6 +1034,11 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TEMP_OBJ_REFERENCE" : {
+    "message" : [
+      "Cannot create a persistent <obj> <objName> by referencing a temporary <tempObj> <tempObjName>. Please make the temporary <tempObj> persistent, or make the persistent <obj> temporary."
+    ]
+  },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
@@ -1061,6 +1066,12 @@
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
+  },
+  "MALFORMED_RECORD_IN_PARSING" : {
+    "message" : [
+      "Malformed records are detected in record parsing: <badRecord>.",
+      "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
   "MISSING_AGGREGATION" : {
@@ -1223,6 +1234,12 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "428FT"
+  },
+  "PATH_ALREADY_EXISTS" : {
+    "message" : [
+      "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
+    ],
+    "sqlState" : "42K04"
   },
   "PATH_NOT_FOUND" : {
     "message" : [
@@ -1548,6 +1565,18 @@
       "Cannot resolve function <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
+  },
+  "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
+    "message" : [
+      "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<suggestion>]."
+    ],
+    "sqlState" : "42703"
+  },
+  "UNSUPPORTED_ARROWTYPE" : {
+    "message" : [
+      "Unsupported arrow type <typeName>."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
@@ -2163,11 +2192,6 @@
       "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1001" : {
-    "message" : [
-      "USING column `<colName>` cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1002" : {
     "message" : [
       "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
@@ -2765,11 +2789,6 @@
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1152" : {
-    "message" : [
-      "Path <outputPath> already exists."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1153" : {
     "message" : [
       "Cannot use <field> for partition column."
@@ -3327,16 +3346,6 @@
   "_LEGACY_ERROR_TEMP_1282" : {
     "message" : [
       "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1283" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1284" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_1285" : {
@@ -4086,11 +4095,6 @@
       "Could not compare cost with <cost>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2099" : {
-    "message" : [
-      "Unsupported data type: <dt>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2100" : {
     "message" : [
       "not support type: <dataType>."
@@ -4411,11 +4415,6 @@
   "_LEGACY_ERROR_TEMP_2176" : {
     "message" : [
       "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2177" : {
-    "message" : [
-      "Malformed records are detected in record parsing. Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2178" : {

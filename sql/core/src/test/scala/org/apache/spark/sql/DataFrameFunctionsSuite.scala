@@ -5431,6 +5431,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq(1, 2, 3, null, null)))
     )
   }
+
+  test("SPARK-42401: array_insert - explicitly insert null") {
+    checkAnswer(
+      sql("select array_insert(array('b', 'a', 'c'), 2, cast(null as string))"),
+      Seq(Row(Seq("b", null, "a", "c")))
+    )
+  }
+
+  test("SPARK-42401: array_insert - implicitly insert null") {
+    checkAnswer(
+      sql("select array_insert(array('b', 'a', 'c'), 5, 'q')"),
+      Seq(Row(Seq("b", "a", "c", null, "q")))
+    )
+  }
+
+  test("SPARK-42401: array_append - append null") {
+    checkAnswer(
+      sql("select array_append(array('b', 'a', 'c'), cast(null as string))"),
+      Seq(Row(Seq("b", "a", "c", null)))
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {

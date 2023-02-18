@@ -2,43 +2,43 @@
 Pseudo random
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 nextInt:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   1366           1384          26         73.2          13.7       1.0X
-XORShiftRandom                                      227            233           5        439.6           2.3       6.0X
+java.util.Random                                   1161           1192          48         86.1          11.6       1.0X
+XORShiftRandom                                      192            194           4        521.8           1.9       6.1X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 nextLong:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   2711           2770          52         36.9          27.1       1.0X
-XORShiftRandom                                      630            640           9        158.8           6.3       4.3X
+java.util.Random                                   2271           2286          15         44.0          22.7       1.0X
+XORShiftRandom                                      482            487           5        207.3           4.8       4.7X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 nextDouble:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   2656           2684          24         37.6          26.6       1.0X
-XORShiftRandom                                      624            631           6        160.2           6.2       4.3X
+java.util.Random                                   2276           2298          20         43.9          22.8       1.0X
+XORShiftRandom                                      500            514          15        199.9           5.0       4.6X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 nextGaussian:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   7008           7241         260         14.3          70.1       1.0X
-XORShiftRandom                                     5546           5621         121         18.0          55.5       1.3X
+java.util.Random                                   6120           6216         147         16.3          61.2       1.0X
+XORShiftRandom                                     4396           4447          87         22.7          44.0       1.4X
 
 
 ================================================================================================
 hash seed
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Hash seed:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-XORShiftRandom.hashSeed                              39             41           2        255.4           3.9       1.0X
+XORShiftRandom.hashSeed                              37             39           1        268.7           3.7       1.0X
 
 

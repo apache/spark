@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -421,7 +421,7 @@ class DataFrameWriter(OptionUtils):
             raise TypeError("all names should be `str`")
 
         self._write.num_buckets = numBuckets
-        self._write.bucket_cols = cast(List[str], cols)
+        self._write.bucket_cols = cast(List[str], [col, *cols])
         return self
 
     bucketBy.__doc__ = PySparkDataFrameWriter.bucketBy.__doc__
@@ -446,7 +446,7 @@ class DataFrameWriter(OptionUtils):
         if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
-        self._write.sort_cols = cast(List[str], cols)
+        self._write.sort_cols = cast(List[str], [col, *cols])
         return self
 
     sortBy.__doc__ = PySparkDataFrameWriter.sortBy.__doc__
@@ -472,7 +472,9 @@ class DataFrameWriter(OptionUtils):
     def insertInto(self, tableName: str, overwrite: Optional[bool] = None) -> None:
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
-        self.saveAsTable(tableName)
+        self._write.table_name = tableName
+        self._write.table_save_method = "insert_into"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
 
@@ -490,6 +492,7 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.table_name = name
+        self._write.table_save_method = "save_as_table"
         self._spark.client.execute_command(self._write.command(self._spark.client))
 
     saveAsTable.__doc__ = PySparkDataFrameWriter.saveAsTable.__doc__
@@ -689,15 +692,8 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.readwriter.__dict__.copy()
 
-    # TODO(SPARK-41817): Support reading with schema
-    del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
+    # TODO(SPARK-42458): createDataFrame should support DDL string as schema
     del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
-
-    # TODO(SPARK-41818): Support saveAsTable
-    del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
-    del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")

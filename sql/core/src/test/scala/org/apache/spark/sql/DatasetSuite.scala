@@ -960,6 +960,19 @@ class DatasetSuite extends QueryTest
     observe(spark.range(1, 10, 1, 11), Map("percentile_approx_val" -> 5))
   }
 
+  test("observation on datasets when a DataSet trigger foreach action") {
+    def f(): Unit = {}
+
+    val namedObservation = Observation("named")
+    val observed_df = spark.range(100).observe(
+      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+
+    observed_df.foreach(r => f)
+    val expected = Map("percentile_approx_val" -> 49)
+
+    assert(namedObservation.get === expected)
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()

@@ -85,7 +85,18 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         right_input = self.connect.readTable(table_name=self.tbl_name)
         crossJoin_plan = left_input.crossJoin(other=right_input)._plan.to_proto(self.connect)
         join_plan = left_input.join(other=right_input, how="cross")._plan.to_proto(self.connect)
-        self.assertEqual(crossJoin_plan, join_plan)
+        self.assertEqual(
+            crossJoin_plan.root.join.left.read.named_table,
+            join_plan.root.join.left.read.named_table,
+        )
+        self.assertEqual(
+            crossJoin_plan.root.join.right.read.named_table,
+            join_plan.root.join.right.read.named_table,
+        )
+        self.assertEqual(
+            crossJoin_plan.root.join.join_type,
+            join_plan.root.join.join_type,
+        )
 
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -619,13 +630,14 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         p = wo.command(None)
         self.assertIsNotNone(p)
         self.assertTrue(p.write_operation.HasField("path"))
-        self.assertFalse(p.write_operation.HasField("table_name"))
+        self.assertFalse(p.write_operation.HasField("table"))
 
         wo.path = None
         wo.table_name = "table"
+        wo.table_save_method = "save_as_table"
         p = wo.command(None)
         self.assertFalse(p.write_operation.HasField("path"))
-        self.assertTrue(p.write_operation.HasField("table_name"))
+        self.assertTrue(p.write_operation.HasField("table"))
 
         wo.bucket_cols = ["a", "b", "c"]
         p = wo.command(None)
@@ -732,7 +744,12 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.assertIsNotNone(cp1)
         self.assertEqual(cp1, cp2)
-        self.assertEqual(cp2, cp3)
+        self.assertEqual(
+            cp2.unresolved_attribute.unparsed_identifier,
+            cp3.unresolved_attribute.unparsed_identifier,
+        )
+        self.assertTrue(cp2.unresolved_attribute.HasField("plan_id"))
+        self.assertFalse(cp3.unresolved_attribute.HasField("plan_id"))
 
     def test_null_literal(self):
         null_lit = lit(None)

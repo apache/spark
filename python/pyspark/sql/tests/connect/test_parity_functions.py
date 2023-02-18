@@ -54,7 +54,7 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
         super().test_lit_np_scalar()
 
     def test_raise_error(self):
-        self.check_assert_true(SparkConnectException)
+        self.check_raise_error(SparkConnectException)
 
     # Comparing column type of connect and pyspark
     @unittest.skip("Fails in Spark Connect, should enable.")

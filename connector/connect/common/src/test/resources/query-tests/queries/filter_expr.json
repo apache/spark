@@ -1,0 +1,14 @@
+{
+  "filter": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "condition": {
+      "expressionString": {
+        "expression": "exp(a) \u003c 10.0"
+      }
+    }
+  }
+}

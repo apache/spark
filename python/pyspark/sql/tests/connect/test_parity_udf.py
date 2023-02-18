@@ -85,60 +85,23 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_registration_return_type_not_none(self):
         super().test_udf_registration_return_type_not_none()
 
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
     def test_worker_original_stdin_closed(self):
         super().test_worker_original_stdin_closed()
 
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_chained_udf(self):
-        super().test_chained_udf()
-
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_without_arguments(self):
-        super().test_udf_without_arguments()
-
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_multiple_udfs(self):
-        super().test_multiple_udfs()
-
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_nondeterministic_udf2(self):
-        super().test_nondeterministic_udf2()
-
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_single_udf_with_repeated_argument(self):
-        super().test_single_udf_with_repeated_argument()
-
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support SQLContext but the test depends on it.")
     def test_udf(self):
-        super().test_df()
+        super().test_udf()
 
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf2(self):
-        super().test_df2()
-
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    # TODO(SPARK-42247): implement `UserDefinedFunction.returnType`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf3(self):
-        super().test_df3()
+        super().test_udf3()
 
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
+    # TODO(SPARK-42247): implement `UserDefinedFunction.returnType`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_registration_return_type_none(self):
         super().test_udf_registration_return_type_none()
-
-    # TODO(SPARK-42263): implement `spark.catalog.registerFunction`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_with_array_type(self):
-        super().test_udf_with_array_type()
 
     # TODO(SPARK-42210): implement `spark.udf`
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -164,11 +127,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_udf_in_left_outer_join_condition(self):
         super().test_udf_in_left_outer_join_condition()
-
-    # TODO(SPARK-42269): support return type as a collection DataType in DDL strings
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_with_string_return_type(self):
-        super().test_udf_with_string_return_type()
 
     def test_udf_registration_returns_udf(self):
         df = self.spark.range(10)
