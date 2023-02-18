@@ -650,8 +650,10 @@ case class CoGroupExec(
       val getRight = ObjectOperator.deserializeRowToObject(rightDeserializer, rightAttr)
       val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
 
-      new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
-        case (key, leftResult, rightResult) =>
+      new CoGroupedIterator(leftGrouped :: rightGrouped :: Nil, leftGroup).flatMap {
+        case (key, groupedIterators) =>
+          val leftResult = groupedIterators.head
+          val rightResult = groupedIterators.last
           val result = func(
             getKey(key),
             leftResult.map(getLeft),

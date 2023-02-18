@@ -684,12 +684,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("a", LongType))),
       Seq.empty,
-      PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
     val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
     val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
-    val flatMapGroupsInPandas = FlatMapMultiCoGroupsInPandas(
+    val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
       List(1, 1),
       pythonUdf,
       output,

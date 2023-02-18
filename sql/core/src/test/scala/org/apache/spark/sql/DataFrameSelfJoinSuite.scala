@@ -403,12 +403,11 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df12.join(df11, df11("x") === df12("y")))
 
 
-    // Test for FlatMapCoGroupsInPandasMulti
-    val flatMapMultiCoGroupsInPandasUDF = PythonUDF("flagMapMultiCoGroupsInPandasUDF", null,
+    val flatMapMultiCoGroupsInPandasUDF = PythonUDF("flagMapCoGroupsInPandasUDF", null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType),
         StructField("z", LongType))),
       Seq.empty,
-      PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
     val dfMulti1 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
       Seq(df1.groupBy($"key2"), df1.groupBy($"key1")), flatMapMultiCoGroupsInPandasUDF)

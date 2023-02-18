@@ -87,7 +87,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         left = self.data1
         right = self.data2
 
-        def merge_pandas(lft, rgt):
+        def merge_pandas(_, lft, rgt):
             return pd.merge(lft.rename(columns={"id2": "id"}), rgt, on=["id", "k"])
 
         result = (
@@ -115,7 +115,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
 
         right_gdf = self.spark.createDataFrame(right).groupby(col("id") % 2 == 0)
 
-        def merge_pandas(lft, rgt):
+        def merge_pandas(_, lft, rgt):
             return pd.merge(lft[["k", "v"]], rgt[["k", "v2"]], on=["k"])
 
         result = (
@@ -136,13 +136,13 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         left = self.data1
         right = self.data2
 
-        def merge_pandas(lft, _):
+        def merge_pandas(_, lft, __):
             return lft
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 IllegalArgumentException,
-                "requirement failed: Cogroup keys must have same size: 2 != 1",
+                "requirement failed: Cogroup keys must have same size.",
             ):
                 (left.groupby("id", "k").cogroup(right.groupby("id"))).applyInPandas(
                     merge_pandas, "id long, k int, v int"
@@ -150,17 +150,17 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         self._test_merge_error(
-            fn=lambda lft, rgt: lft.size + rgt.size,
+            fn=lambda _, lft, rgt: lft.size + rgt.size,
             error_class=PythonException,
             error_message_regex="Return type of the user-defined function "
             "should be pandas.DataFrame, but is <class 'numpy.int64'>",
         )
 
     def test_apply_in_pandas_returning_column_names(self):
-        self._test_merge(fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]))
+        self._test_merge(fn=lambda _, lft, rgt: pd.merge(lft, rgt, on=["id", "k"]))
 
     def test_apply_in_pandas_returning_no_column_names(self):
-        def merge_pandas(lft, rgt):
+        def merge_pandas(_, lft, rgt):
             res = pd.merge(lft, rgt, on=["id", "k"])
             res.columns = range(res.columns.size)
             return res
@@ -168,7 +168,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         self._test_merge(fn=merge_pandas)
 
     def test_apply_in_pandas_returning_column_names_sometimes(self):
-        def merge_pandas(lft, rgt):
+        def merge_pandas(_, lft, rgt):
             res = pd.merge(lft, rgt, on=["id", "k"])
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 return res
@@ -178,7 +178,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         self._test_merge(fn=merge_pandas)
 
     def test_apply_in_pandas_returning_wrong_column_names(self):
-        def merge_pandas(lft, rgt):
+        def merge_pandas(_, lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 lft["add"] = 0
             if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
@@ -193,7 +193,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
-        def merge_pandas(lft, rgt):
+        def merge_pandas(_, lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 lft[3] = 0
             if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
@@ -210,7 +210,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
-        def merge_pandas(lft, rgt):
+        def merge_pandas(_, lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 return pd.DataFrame()
             if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
@@ -238,7 +238,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     self._test_merge_error(
-                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
+                        fn=lambda _, lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
                         output_schema="id long, k double",
                         error_class=PythonException,
                         error_message_regex=expected,
@@ -251,7 +251,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
                         r"with name 'k' to Arrow Array \(string\).\n"
                     )
                     self._test_merge_error(
-                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
+                        fn=lambda _, lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
                         output_schema="id long, k string",
                         error_class=PythonException,
                         error_message_regex=expected,
@@ -267,7 +267,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
             df.groupby()
             .cogroup(df.groupby())
             .applyInPandas(
-                lambda x, y: pd.DataFrame([(x.sum().sum(), y.sum().sum())]), "sum1 int, sum2 int"
+                lambda _, x, y: pd.DataFrame([(x.sum().sum(), y.sum().sum())]), "sum1 int, sum2 int"
             )
             .collect()
         )
@@ -309,7 +309,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
     def test_wrong_return_type(self):
         # Test that we get a sensible exception invalid values passed to apply
         self._test_merge_error(
-            fn=lambda l, r: l,
+            fn=lambda _, l, r: l,
             output_schema="id long, v array<timestamp>",
             error_class=NotImplementedError,
             error_message_regex="Invalid return type.*ArrayType.*TimestampType",
@@ -330,7 +330,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         row = (
             df1.groupby("ColUmn")
             .cogroup(df1.groupby("COLUMN"))
-            .applyInPandas(lambda r, l: r + l, "column long, value long")
+            .applyInPandas(lambda _, r, l: r + l, "column long, value long")
             .first()
         )
         self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
@@ -340,7 +340,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         row = (
             df1.groupby("ColUmn")
             .cogroup(df2.groupby("COLUMN"))
-            .applyInPandas(lambda r, l: r + l, "column long, value long")
+            .applyInPandas(lambda _, r, l: r + l, "column long, value long")
             .first()
         )
         self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
@@ -352,7 +352,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         row = (
             df.groupby("ColUmn")
             .cogroup(df.groupby("COLUMN"))
-            .applyInPandas(lambda r, l: r + l, "column long, value long")
+            .applyInPandas(lambda _, r, l: r + l, "column long, value long")
         )
 
         row = row.join(row).first()
@@ -387,7 +387,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
             "id", "day"
         )
 
-        def cogroup(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+        def cogroup(_, left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
             return pd.DataFrame(
                 [
                     {
@@ -442,25 +442,18 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         left=None,
         right=None,
         by=["id"],
-        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        fn=lambda _, lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
         expected=None,
     ):
-        def fn_with_key(_, lft, rgt):
-            return fn(lft, rgt)
-
-        # Test fn with and without key argument
-        with self.subTest("without key"):
-            self.__test_merge(left, right, by, fn, output_schema, expected)
-        with self.subTest("with key"):
-            self.__test_merge(left, right, by, fn_with_key, output_schema, expected)
+        self.__test_merge(left, right, by, fn, output_schema, expected)
 
     def __test_merge(
         self,
         left=None,
         right=None,
         by=["id"],
-        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        fn=lambda _, lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
         expected=None,
     ):
@@ -494,33 +487,19 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         left=None,
         right=None,
         by=["id"],
-        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        fn=lambda _, lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
     ):
-        def fn_with_key(_, lft, rgt):
-            return fn(lft, rgt)
 
-        # Test fn with and without key argument
-        with self.subTest("without key"):
-            self.__test_merge_error(
-                left=left,
-                right=right,
-                by=by,
-                fn=fn,
-                output_schema=output_schema,
-                error_class=error_class,
-                error_message_regex=error_message_regex,
-            )
-        with self.subTest("with key"):
-            self.__test_merge_error(
-                left=left,
-                right=right,
-                by=by,
-                fn=fn_with_key,
-                output_schema=output_schema,
-                error_class=error_class,
-                error_message_regex=error_message_regex,
-            )
+        self.__test_merge_error(
+            left=left,
+            right=right,
+            by=by,
+            fn=fn,
+            output_schema=output_schema,
+            error_class=error_class,
+            error_message_regex=error_message_regex,
+        )
 
     def __test_merge_error(
         self,
@@ -529,7 +508,7 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         left=None,
         right=None,
         by=["id"],
-        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        fn=lambda _, lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
     ):
         # Test fn as is, cf. _test_merge_error

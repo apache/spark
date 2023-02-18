@@ -286,10 +286,7 @@ class UserDefinedFunction:
                     "Invalid return type in mapInPandas/mapInArrow: "
                     "return type must be a StructType."
                 )
-        elif self.evalType in (
-            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-            PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
-        ):
+        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_type(self._returnType_placeholder)

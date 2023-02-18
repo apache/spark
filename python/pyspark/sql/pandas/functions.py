@@ -373,7 +373,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         None,
     ]:  # None means it should infer the type from type hints.
@@ -408,7 +407,6 @@ def _create_pandas_udf(f, returnType, evalType):
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
     ]:
         # In case of 'SQL_GROUPED_MAP_PANDAS_UDF', deprecation warning is being triggered
@@ -448,19 +446,13 @@ def _create_pandas_udf(f, returnType, evalType):
             "must take either one argument (data) or two arguments (key, data)."
         )
 
-    if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (2, 3):
-        raise ValueError(
-            "Invalid function: the function in cogroup.applyInPandas "
-            "must take either two arguments (left, right) "
-            "or three arguments (key, left, right)."
-        )
-
-    if evalType == PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF and (
-        len(argspec.args) < 2 and not argspec.varargs
+    if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and not (
+            argspec.varargs or len(argspec.args) >= 3
     ):
         raise ValueError(
             "Invalid function: the function in cogroup.applyInPandas "
-            "must take either more than one arguments (df1, df2, ...) "
+            "must take either more than one arguments (key, df1, df2) "
+            "or at least one arg with varg (key, *dfs)"
         )
 
     if is_remote():

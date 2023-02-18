@@ -88,7 +88,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         self._test_merge(dfs, f"id long, k int, {extra_schemas}")
 
     def test_different_keys(self):
-        def merge_pandas(*dfs):
+        def merge_pandas(_, *dfs):
             return functools.reduce(
                 lambda df1, df2: pd.merge(df1.rename(columns={"id2": "id"}), df2, on=["id", "k"]),
                 dfs,
@@ -123,7 +123,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
 
         df3_gdf = self.spark.createDataFrame(df3).groupby(col("id") % 2 == 0)
 
-        def merge_pandas(df1, df2, df3):
+        def merge_pandas(_, df1, df2, df3):
             df = pd.merge(df1[["k", "v"]], df2[["k", "v2"]], on=["k"])
             return pd.merge(df, df3[["k", "v3"]], on=["k"])
 
@@ -141,7 +141,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result)
 
     def test_empty_group_by(self):
-        def merge_pandas(*dfs):
+        def merge_pandas(_, *dfs):
             return functools.reduce(lambda df1, df2: pd.merge(df1, df2, on=["id", "k"]), dfs)
 
         df_head, *df_tail = self.dfs
@@ -161,7 +161,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result)
 
     def test_different_group_key_cardinality(self):
-        def merge_pandas(lft, _):
+        def merge_pandas(_, lft, *__):
             return lft
 
         df1, df2, df3, *_ = self.dfs
@@ -177,7 +177,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
                 )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        def merge_pandas(lft, rgt, *_):
+        def merge_pandas(_, lft, rgt, *__):
             return lft.size + rgt.size
 
         df1, df2, df3, *_ = self.dfs
@@ -195,7 +195,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
                 )
 
     def test_apply_in_pandas_returning_wrong_number_of_columns(self):
-        def merge_pandas(df1, df2, df3, df4):
+        def merge_pandas(_, df1, df2, df3, df4):
             if 0 in df1["id"] and df1["id"][0] % 2 == 0:
                 df1["add"] = 0
             if 0 in df2["id"] and df2["id"][0] % 3 == 0:
@@ -209,8 +209,8 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
-                "Number of columns of the returned pandas.DataFrame "
-                "doesn't match specified schema. Expected: 6 Actual: 8",
+                "Column names of the returned pandas.DataFrame do not match specified schema. "
+                "Unexpected: add, more.",
             ):
                 (
                     # merge_pandas returns two columns for even keys while we set schema to four
@@ -221,7 +221,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
                 )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
-        def merge_pandas(df1, df2, df3, df4):
+        def merge_pandas(_, df1, df2, df3, df4):
             if 0 in df1["id"] and df1["id"][0] % 2 == 0:
                 return pd.DataFrame([])
             if 0 in df2["id"] and df2["id"][0] % 3 == 0:
@@ -248,7 +248,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result)
 
     def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
-        def merge_pandas(df1, df2, df3, df4):
+        def merge_pandas(_, df1, df2, df3, df4):
             if 0 in df1["id"] and df1["id"][0] % 2 == 0:
                 return pd.DataFrame([], columns=["id", "k"])
             df = pd.merge(df1, df2, on=["id", "k"])
@@ -260,8 +260,8 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
-                "Number of columns of the returned pandas.DataFrame doesn't "
-                "match specified schema. Expected: 6 Actual: 2",
+                "Column names of the returned pandas.DataFrame do not match specified schema. "
+                "Missing: v0, v1, v2, v3.",
             ):
                 (
                     df1.groupby("id")
@@ -280,7 +280,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
             df.groupby()
             .cogroup(df.groupby(), df.groupby())
             .applyInPandas(
-                lambda x, y, z: pd.DataFrame([(x.sum().sum(), y.sum().sum(), z.sum().sum())]),
+                lambda _, x, y, z: pd.DataFrame([(x.sum().sum(), y.sum().sum(), z.sum().sum())]),
                 "sum1 int, sum2 int, sum3 int",
             )
             .collect()
@@ -313,7 +313,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         result = (
             df_head.groupby(col("id") % 2 == 0)
             .cogroup(*[df.groupby(col("id") % 2 == 0) for df in df_tail])
-            .applyInPandas(left_assign_key, "id long, k int, v0 int, key boolean", pass_key=True)
+            .applyInPandas(left_assign_key, "id long, k int, v0 int, key boolean")
             .sort(["id", "k"])
             .toPandas()
         )
@@ -333,7 +333,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
                 (
                     df1.groupby("id")
                     .cogroup(df2.groupby("id"), df3.groupby("id"))
-                    .applyInPandas(lambda df1, df2, df3: df1, "id long, v array<timestamp>")
+                    .applyInPandas(lambda _, df1, df2, df3: df1, "id long, v array<timestamp>")
                 )
 
     def test_wrong_args(self):
@@ -351,7 +351,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         row = (
             df1.groupby("ColUmn")
             .cogroup(df1.groupby("COLUMN"), df1.groupby("COLUMN"))
-            .applyInPandas(lambda a, b, c: a + b + c, "column long, value long")
+            .applyInPandas(lambda _, a, b, c: a + b + c, "column long, value long")
             .first()
         )
         self.assertEqual(row.asDict(), Row(column=3, value=3).asDict())
@@ -361,7 +361,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         row = (
             df1.groupby("ColUmn")
             .cogroup(df2.groupby("COLUMN"), df2.groupby("COLUMN"))
-            .applyInPandas(lambda a, b, c: a + b + c, "column long, value long")
+            .applyInPandas(lambda _, a, b, c: a + b + c, "column long, value long")
             .first()
         )
         self.assertEqual(row.asDict(), Row(column=3, value=3).asDict())
@@ -372,7 +372,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         row = (
             df.groupby("ColUmn")
             .cogroup(df.groupby("COLUMN"), df.groupby("COLUMN"))
-            .applyInPandas(lambda df1, df2, df3: df1 + df2 + df3, "column long, value long")
+            .applyInPandas(lambda _, df1, df2, df3: df1 + df2 + df3, "column long, value long")
         )
 
         row = row.join(row).first()
@@ -389,7 +389,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
         result = (
             df_head.groupby("id")
             .cogroup(*[df.groupby("id") for df in df_tail])
-            .applyInPandas(assign_key, f"id long, k int, v{index} int, key long", pass_key=True)
+            .applyInPandas(assign_key, f"id long, k int, v{index} int, key long")
             .toPandas()
         )
         expected = dfs[index].toPandas()
@@ -399,7 +399,7 @@ class MultiCogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @staticmethod
     def _test_merge(dfs, output_schema="id long, k int, v0 int, v1 int, v2 int, v3 int"):
-        def merge_pandas(*dfs):
+        def merge_pandas(_, *dfs):
             return functools.reduce(lambda df1, df2: pd.merge(df1, df2, on=["id", "k"]), dfs)
 
         df_head, *df_tail = dfs

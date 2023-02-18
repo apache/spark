@@ -21,90 +21,108 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.physical.{
+  AllTuples,
+  ClusteredDistribution,
+  Distribution,
+  Partitioning
+}
+import org.apache.spark.sql.execution.{CoGroupedIterator, NaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 
-
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapCoGroupsInPandas]]
  *
- * The input dataframes are first Cogrouped.  Rows from each side of the cogroup are passed to the
- * Python worker via Arrow.  As each side of the cogroup may have a different schema we send every
- * group in its own Arrow stream.
- * The Python worker turns the resulting record batches to `pandas.DataFrame`s, invokes the
- * user-defined function, and passes the resulting `pandas.DataFrame`
- * as an Arrow record batch. Finally, each record batch is turned to
+ * The input dataframes are first Cogrouped. Rows from each side of the cogroup are passed to the
+ * Python worker via Arrow. As each side of the cogroup may have a different schema we send every
+ * group in its own Arrow stream. The Python worker turns the resulting record batches to
+ * `pandas.DataFrame`s, invokes the user-defined function, and passes the resulting
+ * `pandas.DataFrame` as an Arrow record batch. Finally, each record batch is turned to
  * Iterator[InternalRow] using ColumnarBatch.
  *
- * Note on memory usage:
- * Both the Python worker and the Java executor need to have enough memory to
- * hold the largest cogroup. The memory on the Java side is used to construct the
- * record batches (off heap memory). The memory on the Python side is used for
- * holding the `pandas.DataFrame`. It's possible to further split one group into
- * multiple record batches to reduce the memory footprint on the Java side, this
- * is left as future work.
+ * Note on memory usage: Both the Python worker and the Java executor need to have enough memory
+ * to hold the largest cogroup. The memory on the Java side is used to construct the record
+ * batches (off heap memory). The memory on the Python side is used for holding the
+ * `pandas.DataFrame`. It's possible to further split one group into multiple record batches to
+ * reduce the memory footprint on the Java side, this is left as future work.
  */
 case class FlatMapCoGroupsInPandasExec(
-    leftGroup: Seq[Attribute],
-    rightGroup: Seq[Attribute],
+    groups: List[Seq[Attribute]],
     func: Expression,
     output: Seq[Attribute],
-    left: SparkPlan,
-    right: SparkPlan)
-  extends SparkPlan with BinaryExecNode with PythonSQLMetrics {
+    plans: List[SparkPlan])
+  extends SparkPlan with NaryExecNode with PythonSQLMetrics{
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning = plans.head.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val leftDist = if (leftGroup.isEmpty) AllTuples else ClusteredDistribution(leftGroup)
-    val rightDist = if (rightGroup.isEmpty) AllTuples else ClusteredDistribution(rightGroup)
-    leftDist :: rightDist :: Nil
+    groups.map(group =>
+      if (group.isEmpty) AllTuples else ClusteredDistribution(group)
+    )
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    leftGroup
-      .map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
+    groups.map(rightgroup => rightgroup.map(SortOrder(_, Ascending)))
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val (leftDedup, leftArgOffsets) = resolveArgOffsets(left.output, leftGroup)
-    val (rightDedup, rightArgOffsets) = resolveArgOffsets(right.output, rightGroup)
-
+    val resolvedArgOffsets = plans
+      .zip(groups)
+      .map({ case (plan: SparkPlan, group) =>
+        resolveArgOffsets(plan.output, group)
+      })
     // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
-      if (leftData.isEmpty && rightData.isEmpty) Iterator.empty else {
+    plans.head
+      .execute()
+      .zipPartitions(plans.tail.map(_.execute()))( datas =>
+        if (datas.forall(_.isEmpty)) Iterator.empty
+        else {
+          val internalRowDatas: Seq[Iterator[InternalRow]] = datas
+            .map(data => data.map(_.asInstanceOf[InternalRow]))
 
-        val leftGrouped = groupAndProject(leftData, leftGroup, left.output, leftDedup)
-        val rightGrouped = groupAndProject(rightData, rightGroup, right.output, rightDedup)
-        val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
-          .map { case (_, l, r) => (l, r) }
+          val grouped = (internalRowDatas, groups, plans.map(_.output)).zipped.toList
+            .zip(resolvedArgOffsets.map(_._1))
+            .map({
+              case (
+                (
+                  internalRowData: Iterator[InternalRow],
+                  group: Seq[Attribute],
+                  output: Seq[Attribute]
+                  ),
+                dedup: Seq[Attribute]) =>
+                groupAndProject(internalRowData, group, output, dedup)
+            })
 
-        val runner = new CoGroupedArrowPythonRunner(
-          chainedFunc,
-          PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-          Array(leftArgOffsets ++ rightArgOffsets),
-          StructType.fromAttributes(leftDedup),
-          StructType.fromAttributes(rightDedup),
-          sessionLocalTimeZone,
-          pythonRunnerConf,
-          pythonMetrics)
+          val data = new CoGroupedIterator(grouped, groups.head)
+            .map { case (_, b) => b }
 
-        executePython(data, output, runner)
-      }
-    }
+          val runner = new CoGroupedArrowPythonRunner(
+            chainedFunc,
+            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+            Array(resolvedArgOffsets.flatMap(_._2).toArray),
+            resolvedArgOffsets.map(_._1).map(StructType.fromAttributes),
+            sessionLocalTimeZone,
+            pythonRunnerConf,
+            pythonMetrics)
+
+          executePython(data, output, runner)
+        }
+      )
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapCoGroupsInPandasExec =
-    copy(left = newLeft, right = newRight)
+    plans: List[SparkPlan]): FlatMapCoGroupsInPandasExec = {
+      copy(groups = groups, func = func, output = output, plans = plans)
+  }
+
+  override def childrenNodes: Seq[SparkPlan] = plans
 }

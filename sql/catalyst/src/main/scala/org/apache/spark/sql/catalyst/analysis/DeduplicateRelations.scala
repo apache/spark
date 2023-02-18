@@ -227,13 +227,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
-        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
-        newVersion.copyTagsFrom(oldVersion)
-        Seq((oldVersion, newVersion))
-
-      case oldVersion@FlatMapMultiCoGroupsInPandas(_, _, output, _, _)
+      case oldVersion@FlatMapCoGroupsInPandas(_, _, output, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)

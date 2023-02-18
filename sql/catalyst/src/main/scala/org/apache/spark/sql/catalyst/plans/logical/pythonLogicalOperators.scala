@@ -78,40 +78,14 @@ case class PythonMapInArrow(
 }
 
 /**
- * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe
- * This is used by DataFrame.groupby().cogroup().apply().
- */
-case class FlatMapCoGroupsInPandas(
-    leftGroupingLen: Int,
-    rightGroupingLen: Int,
-    functionExpr: Expression,
-    output: Seq[Attribute],
-    left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode {
-
-  override val producedAttributes = AttributeSet(output)
-  override lazy val references: AttributeSet =
-    AttributeSet(leftAttributes ++ rightAttributes ++ functionExpr.references) -- producedAttributes
-
-  def leftAttributes: Seq[Attribute] = left.output.take(leftGroupingLen)
-
-  def rightAttributes: Seq[Attribute] = right.output.take(rightGroupingLen)
-
-  override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInPandas =
-    copy(left = newLeft, right = newRight)
-}
-
-/**
  * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe This is
  * used by DataFrame.groupby().cogroup().apply().
  */
-case class FlatMapMultiCoGroupsInPandas(
+case class FlatMapCoGroupsInPandas(
      groupingLens: List[Int],
      functionExpr: Expression,
      output: Seq[Attribute],
-     plans: List[LogicalPlan],
-     passKey: Boolean)
+     plans: List[LogicalPlan])
   extends LogicalPlan with NaryLike[LogicalPlan] {
 
   override val producedAttributes: AttributeSet = AttributeSet(output)
@@ -130,8 +104,7 @@ case class FlatMapMultiCoGroupsInPandas(
       groupingLens = groupingLens,
       functionExpr = functionExpr,
       output = output,
-      plans = newChildren,
-      passKey = passKey)
+      plans = newChildren)
 }
 
 /**

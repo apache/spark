@@ -30,10 +30,10 @@ class CoGroupedIteratorSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq($"i".int, $"s".string))
     val rightGrouped = GroupedIterator(rightInput, Seq($"i".int.at(0)),
       Seq($"i".int, $"l".long))
-    val cogrouped = new CoGroupedIterator(leftGrouped, rightGrouped, Seq($"i".int))
+    val cogrouped = new CoGroupedIterator(leftGrouped :: rightGrouped :: Nil, Seq($"i".int))
 
     val result = cogrouped.map {
-      case (key, leftData, rightData) =>
+      case (key, leftData :: rightData :: Nil) =>
         assert(key.numFields == 1)
         (key.getInt(0), leftData.toSeq, rightData.toSeq)
     }.toSeq
@@ -57,10 +57,10 @@ class CoGroupedIteratorSuite extends SparkFunSuite with ExpressionEvalHelper {
     val leftGrouped = GroupedIterator(leftInput, Seq($"i".int.at(0)),
       Seq($"i".int, $"s".string))
     val rightGrouped = GroupedIterator(rightInput, Seq($"i".int.at(0)), Seq($"i".int, $"l".long))
-    val cogrouped = new CoGroupedIterator(leftGrouped, rightGrouped, Seq($"i".int))
+    val cogrouped = new CoGroupedIterator(leftGrouped :: rightGrouped :: Nil, Seq($"i".int))
 
     val result = cogrouped.map {
-      case (key, leftData, rightData) =>
+      case (key, leftData :: rightData :: Nil) =>
         assert(key.numFields == 1)
         (key.getInt(0), leftData.toSeq, rightData.toSeq)
     }.toSeq

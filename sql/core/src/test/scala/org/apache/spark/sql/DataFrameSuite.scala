@@ -2927,7 +2927,7 @@ class DataFrameSuite extends QueryTest
     val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapMultiCoGroupsInPandasUDF", null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
       Seq.empty,
-      PythonEvalType.SQL_MULTICOGROUPED_MAP_PANDAS_UDF,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
 
     // the number of keys must match

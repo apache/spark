@@ -34,37 +34,32 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
-
 /**
- * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from two different DataFrames,
+ * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from different DataFrames,
  * groups them in Python, and receive it back in JVM as batches of single DataFrame.
  */
 class CoGroupedArrowPythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
-    evalType: Int,
-    argOffsets: Array[Array[Int]],
-    leftSchema: StructType,
-    rightSchema: StructType,
-    timeZoneId: String,
-    conf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric])
-  extends BasePythonRunner[
-    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
-  with BasicPythonArrowOutput {
+                                       funcs: Seq[ChainedPythonFunctions],
+                                       evalType: Int,
+                                       argOffsets: Array[Array[Int]],
+                                       schemas: List[StructType],
+                                       timeZoneId: String,
+                                       conf: Map[String, String],
+                                       val pythonMetrics: Map[String, SQLMetric])
+  extends BasePythonRunner[List[Iterator[InternalRow]], ColumnarBatch](funcs, evalType, argOffsets)
+    with BasicPythonArrowOutput {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriterThread(
-      env: SparkEnv,
-      worker: Socket,
-      inputIterator: Iterator[(Iterator[InternalRow], Iterator[InternalRow])],
-      partitionIndex: Int,
-      context: TaskContext): WriterThread = {
-
+                                 env: SparkEnv,
+                                 worker: Socket,
+                                 inputIterator: Iterator[List[Iterator[InternalRow]]],
+                                 partitionIndex: Int,
+                                 context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-
         // Write config for the worker as a number of key -> value pairs of strings
         dataOut.writeInt(conf.size)
         for ((k, v) <- conf) {
@@ -80,11 +75,12 @@ class CoGroupedArrowPythonRunner(
         // first df, then send second df.  End of data is marked by sending 0.
         while (inputIterator.hasNext) {
           val startData = dataOut.size()
-          dataOut.writeInt(2)
-          val (nextLeft, nextRight) = inputIterator.next()
-          writeGroup(nextLeft, leftSchema, dataOut, "left")
-          writeGroup(nextRight, rightSchema, dataOut, "right")
-
+          val input = inputIterator.next()
+          dataOut.writeInt(input.length)
+          (input, schemas, Range.inclusive(1, input.length)).zipped.map({
+            case (data: Iterator[InternalRow], schema: StructType, index) =>
+              writeGroup(data, schema, dataOut, s"df_$index")
+          })
           val deltaData = dataOut.size() - startData
           pythonMetrics("pythonDataSent") += deltaData
         }
@@ -92,13 +88,15 @@ class CoGroupedArrowPythonRunner(
       }
 
       private def writeGroup(
-          group: Iterator[InternalRow],
-          schema: StructType,
-          dataOut: DataOutputStream,
-          name: String): Unit = {
+                              group: Iterator[InternalRow],
+                              schema: StructType,
+                              dataOut: DataOutputStream,
+                              name: String): Unit = {
         val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
+          s"stdout writer for $pythonExec ($name)",
+          0,
+          Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {
@@ -112,7 +110,7 @@ class CoGroupedArrowPythonRunner(
           arrowWriter.finish()
           writer.writeBatch()
           writer.end()
-        }{
+        } {
           root.close()
           allocator.close()
         }
@@ -120,4 +118,3 @@ class CoGroupedArrowPythonRunner(
     }
   }
 }
-
