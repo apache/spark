@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.util
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.FileUtils
+
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
@@ -143,8 +146,8 @@ private[sql] object PartitioningUtils {
    * "region=US/dt=2023-02-18", then we will return an array of values ("US", "2023-02-18").
    */
   def partitionNameToValues(name: String): Array[String] = {
-    name.split("/").map {
-      case PATTERN_FOR_KEY_EQ_VAL(_, v) => v
+    name.split(Path.SEPARATOR).map {
+      case PATTERN_FOR_KEY_EQ_VAL(_, v) => FileUtils.unescapePathName(v)
     }
   }
 }
