@@ -2818,17 +2818,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 getattr(df.write, f)()
 
     def test_eager_sql_execution(self):
-        # Check eager execution works.
-        self.connect.sql(f"create table {self.tbl_name} (id int)")
-        data = self.connect.sql(f"select * from {self.tbl_name}").collect()
-        self.assertEqual(0, len(data))
+        tbl = "eager_sql_table"
+        with self.table(tbl):
+            # Check eager execution works.
+            self.connect.range(10).write.saveAsTable(tbl)
+            data = self.connect.sql(f"select * from {tbl}").collect()
+            self.assertEqual(10, len(data))
 
-        # Check data is not inserted twice.
-        self.assertEqual(0, self.connect.read.table(self.tbl_name).count())
-        df = self.connect.sql(f"insert into {self.tbl_name} values (1)")
-        self.assertEqual(1, self.connect.read.table(self.tbl_name).count())
-        df.collect()
-        self.assertEqual(1, self.connect.read.table(self.tbl_name).count())
+            # Check data is not inserted twice.
+            self.assertEqual(10, self.connect.read.table(tbl).count())
+            df = self.connect.sql(f"insert into {tbl} values (1)")
+            self.assertEqual(11, self.connect.read.table(tbl).count())
+            df.collect()
+            self.assertEqual(11, self.connect.read.table(tbl).count())
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
