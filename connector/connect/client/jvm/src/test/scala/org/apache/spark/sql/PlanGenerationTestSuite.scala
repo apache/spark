@@ -855,6 +855,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.first("a", ignoreNulls = true)
   }
 
+  test("grouping") {}
+
+  test("grouping_id") {}
+
   functionTest("kurtosis") {
     fn.kurtosis("a")
   }
@@ -1184,6 +1188,338 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("radians") {
+    fn.radians("b")
+  }
+
+  functionTest("md5") {
+    fn.radians("b")
+  }
+
+  functionTest("sha1") {
+    fn.radians("b")
+  }
+
+  functionTest("sha2") {
+    fn.radians("b")
+  }
+
+  functionTest("crc32") {
+    fn.radians("b")
+  }
+
+  functionTest("hash") {
+    fn.radians("b")
+  }
+
+  functionTest("xxhash64") {
+    fn.radians("b")
+  }
+
+  functionTest("assert_true") {
+    fn.radians("b")
+  }
+
+  functionTest("assert_true with message") {
+    fn.radians("b")
+  }
+
+  functionTest("raise_error") {
+    fn.radians("b")
+  }
+
+  functionTest("ascii") {
+    fn.radians("b")
+  }
+
+  functionTest("base64") {
+    fn.radians("b")
+  }
+
+  functionTest("bit_length") {
+    fn.radians("b")
+  }
+
+  functionTest("concat_ws") {
+    fn.radians("b")
+  }
+
+  functionTest("decode") {
+    fn.radians("b")
+  }
+
+  functionTest("encode") {
+    fn.radians("b")
+  }
+
+  functionTest("initcap") {
+    fn.radians("b")
+  }
+
+  functionTest("length") {
+    fn.radians("b")
+  }
+
+  functionTest("lower") {
+    fn.radians("b")
+  }
+
+  functionTest("levenshtein") {
+    fn.radians("b")
+  }
+
+  functionTest("locate") {
+    fn.radians("b")
+  }
+
+  functionTest("locate with pos") {
+    fn.radians("b")
+  }
+
+  functionTest("lpad") {
+    fn.radians("b")
+  }
+
+  functionTest("lpad binary") {
+    fn.radians("b")
+  }
+
+  functionTest("ltrim") {
+    fn.radians("b")
+  }
+
+  functionTest("ltrim with pattern") {
+    fn.radians("b")
+  }
+
+  functionTest("octet_length") {
+    fn.radians("b")
+  }
+
+  functionTest("regexp_extract") {
+    fn.radians("b")
+  }
+
+  functionTest("regexp_replace") {
+    fn.radians("b")
+  }
+
+  functionTest("unbase64") {
+    fn.radians("b")
+  }
+
+  functionTest("rpad") {
+    fn.radians("b")
+  }
+
+  functionTest("rpad binary") {
+    fn.radians("b")
+  }
+
+  functionTest("rtrim") {
+    fn.radians("b")
+  }
+
+  functionTest("rtrim with pattern") {
+    fn.radians("b")
+  }
+
+  functionTest("split") {
+    fn.radians("b")
+  }
+
+  functionTest("split with limit") {
+    fn.radians("b")
+  }
+
+  functionTest("substring") {
+    fn.radians("b")
+  }
+
+  functionTest("substring_index") {
+    fn.radians("b")
+  }
+
+  functionTest("overlay") {
+    fn.radians("b")
+  }
+
+  functionTest("overlay with len") {
+    fn.radians("b")
+  }
+
+  functionTest("sentences") {
+    fn.radians("b")
+  }
+
+  functionTest("sentences with locale") {
+    fn.radians("b")
+  }
+
+  functionTest("translate") {
+    fn.radians("b")
+  }
+
+  functionTest("trim") {
+    fn.radians("b")
+  }
+
+  functionTest("trim with pattern") {
+    fn.radians("b")
+  }
+
+  functionTest("upper") {
+    fn.radians("b")
+  }
+
+  functionTest("add_months") {
+    fn.radians("b")
+  }
+
+  functionTest("current_date") {
+    fn.radians("b")
+  }
+
+  functionTest("current_timestamp") {
+    fn.radians("b")
+  }
+
+  functionTest("localtimestamp") {
+    fn.radians("b")
+  }
+
+  functionTest("date_format") {
+    fn.radians("b")
+  }
+
+  functionTest("date_add") {
+    fn.radians("b")
+  }
+
+  functionTest("date_sub") {
+    fn.radians("b")
+  }
+
+  functionTest("datediff") {
+    fn.radians("b")
+  }
+
+  functionTest("year") {
+    fn.radians("b")
+  }
+
+  functionTest("quarter") {
+    fn.radians("b")
+  }
+
+  functionTest("month") {
+    fn.radians("b")
+  }
+
+  functionTest("dayofweek") {
+    fn.radians("b")
+  }
+
+  functionTest("dayofmonth") {
+    fn.radians("b")
+  }
+
+  functionTest("dayofyear") {
+    fn.radians("b")
+  }
+
+  functionTest("hour") {
+    fn.radians("b")
+  }
+
+  functionTest("last_day") {
+    fn.radians("b")
+  }
+
+  functionTest("minute") {
+    fn.radians("b")
+  }
+
+  functionTest("make_date") {
+    fn.radians("b")
+  }
+
+  functionTest("months_between") {
+    fn.radians("b")
+  }
+
+  functionTest("months_between with roundoff") {
+    fn.radians("b")
+  }
+
+  functionTest("next_day") {
+    fn.radians("b")
+  }
+
+  functionTest("second") {
+    fn.radians("b")
+  }
+
+  functionTest("weekofyear") {
+    fn.radians("b")
+  }
+
+  functionTest("from_unixtime") {
+    fn.radians("b")
+  }
+
+  functionTest("unix_timestamp") {
+    fn.radians("b")
+  }
+
+  functionTest("unix_timestamp with format") {
+    fn.radians("b")
+  }
+
+  functionTest("to_timestamp") {
+    fn.radians("b")
+  }
+
+  functionTest("to_timestamp with format") {
+    fn.radians("b")
+  }
+
+  functionTest("to_date") {
+    fn.radians("b")
+  }
+
+  functionTest("to_date with format") {
+    fn.radians("b")
+  }
+
+  functionTest("trunc") {
+    fn.radians("b")
+  }
+
+  functionTest("date_trunc") {
+    fn.radians("b")
+  }
+
+  functionTest("from_utc_timestamp") {
+    fn.radians("b")
+  }
+
+  functionTest("to_utc_timestamp") {
+    fn.radians("b")
+  }
+
+  functionTest("window") {
+    fn.radians("b")
+  }
+
+  functionTest("window_time") {
+    fn.radians("b")
+  }
+
+  functionTest("session_window") {
+    fn.radians("b")
+  }
+
+  functionTest("timestamp_seconds") {
     fn.radians("b")
   }
 
