@@ -1034,6 +1034,11 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TEMP_OBJ_REFERENCE" : {
+    "message" : [
+      "Cannot create a persistent <obj> <objName> by referencing a temporary <tempObj> <tempObjName>. Please make the temporary <tempObj> persistent, or make the persistent <obj> temporary."
+    ]
+  },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
@@ -3341,16 +3346,6 @@
   "_LEGACY_ERROR_TEMP_1282" : {
     "message" : [
       "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1283" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1284" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_1285" : {

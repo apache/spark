@@ -3960,9 +3960,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               |SELECT * FROM cte
               |""".stripMargin)
         }
-        assert(e.message.contains("Not allowed to create a permanent view " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName` by referencing a " +
-          s"temporary view $tempViewName"))
+        checkError(
+          exception = e,
+          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "view",
+            "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
+            "tempObj" -> "view",
+            "tempObjName" -> s"`$tempViewName`"))
 
         val e2 = intercept[AnalysisException] {
           sql(
@@ -3974,9 +3979,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               |SELECT * FROM cte
               |""".stripMargin)
         }
-        assert(e2.message.contains("Not allowed to create a permanent view " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName` by referencing a " +
-          s"temporary function `$tempFuncName`"))
+        checkError(
+          exception = e2,
+          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "view",
+            "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
+            "tempObj" -> "function",
+            "tempObjName" -> s"`$tempFuncName`"))
       }
     }
   }
