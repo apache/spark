@@ -43,7 +43,11 @@ public class ColumnDefaultValue {
   }
 
   /**
-   * Returns the SQL string (Spark SQL dialect) of the default value expression.
+   * Returns the SQL string (Spark SQL dialect) of the default value expression. This is the
+   * original string contents of the SQL expression specified at the time the column was created in
+   * a CREATE TABLE, REPLACE TABLE, or ADD COLUMN command. For example, for
+   * "CREATE TABLE t (col INT DEFAULT 40 + 2)", this returns the string literal "40 + 2" (without
+   * quotation marks).
    */
   @Nonnull
   public String getSql() {
@@ -51,7 +55,9 @@ public class ColumnDefaultValue {
   }
 
   /**
-   * Returns the default value literal.
+   * Returns the default value literal. This is the literal value corresponding to
+   * {@link #getSql()}. For the example in the doc of {@link #getSql()}, this returns a literal
+   * integer with a value of 42.
    */
   @Nonnull
   public Literal<?> getValue() {
