@@ -1,4 +1,6 @@
-5
-$Z" struct<id:bigint,a:int,b:double>
+
+K9
+(
+HZ" struct<id:bigint,a:int,b:double>
 id
 b

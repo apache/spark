@@ -1,2 +1,4 @@
-’2
-$Z" struct<id:bigint,a:int,b:double>x1x2x3
+
+’6
+(
+Z" struct<id:bigint,a:int,b:double>x1x2x3

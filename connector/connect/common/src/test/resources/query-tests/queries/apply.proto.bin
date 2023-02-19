@@ -1,3 +1,5 @@
--
-$Z" struct<id:bigint,a:int,b:double>
+
+E1
+(
+CZ" struct<id:bigint,a:int,b:double>
 a

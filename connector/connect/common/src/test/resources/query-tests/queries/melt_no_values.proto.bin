@@ -1,4 +1,6 @@
- <
-$Z" struct<id:bigint,a:int,b:double>
+
+h @
+(
+gZ" struct<id:bigint,a:int,b:double>
 id
 a*value

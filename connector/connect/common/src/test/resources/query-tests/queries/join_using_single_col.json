@@ -1,11 +1,20 @@
 {
+  "common": {
+    "planId": "35"
+  },
   "join": {
     "left": {
+      "common": {
+        "planId": "33"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
     },
     "right": {
+      "common": {
+        "planId": "34"
+      },
       "localRelation": {
         "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
       }

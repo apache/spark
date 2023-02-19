@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.arrow.memory.RootAllocator
 
@@ -51,6 +52,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     with Logging {
 
   private[this] val allocator = new RootAllocator()
+  private var planId: AtomicInteger = new AtomicInteger(1)
 
   /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
@@ -145,6 +147,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
 
   private[sql] def newDataset[T](f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
+    builder.setCommon(proto.RelationCommon.newBuilder().setPlanId(planId.getAndIncrement()))
     f(builder)
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     new Dataset[T](this, plan)

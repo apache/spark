@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "180"
+  },
   "repartitionByExpression": {
     "input": {
+      "common": {
+        "planId": "179"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }

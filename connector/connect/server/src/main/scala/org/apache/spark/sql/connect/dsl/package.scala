@@ -314,8 +314,10 @@ package object dsl {
         Relation.newBuilder().setRange(range).build()
       }
 
-      def sql(sqlText: String): Relation = {
-        Relation.newBuilder().setSql(SQL.newBuilder().setQuery(sqlText)).build()
+      def sql(sqlText: String, planId: Long = 1): Relation = {
+        Relation.newBuilder()
+          .setCommon(RelationCommon.newBuilder().setPlanId(planId))
+          .setSql(SQL.newBuilder().setQuery(sqlText)).build()
       }
     }
 

@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "160"
+  },
   "deduplicate": {
     "input": {
+      "common": {
+        "planId": "159"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }

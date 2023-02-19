@@ -1,5 +1,7 @@
-:P
-$Z" struct<id:bigint,a:int,b:double>
+
+B:T
+(
+AZ" struct<id:bigint,a:int,b:double>
 
 id
 

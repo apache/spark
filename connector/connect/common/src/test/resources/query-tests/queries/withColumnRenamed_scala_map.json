@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "146"
+  },
   "withColumnsRenamed": {
     "input": {
+      "common": {
+        "planId": "145"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }

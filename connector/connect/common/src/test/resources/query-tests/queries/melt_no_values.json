@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "104"
+  },
   "unpivot": {
     "input": {
+      "common": {
+        "planId": "103"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }

@@ -1,8 +1,17 @@
 {
+  "common": {
+    "planId": "117"
+  },
   "setOp": {
     "leftInput": {
+      "common": {
+        "planId": "114"
+      },
       "drop": {
         "input": {
+          "common": {
+            "planId": "113"
+          },
           "localRelation": {
             "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
           }
@@ -15,8 +24,14 @@
       }
     },
     "rightInput": {
+      "common": {
+        "planId": "116"
+      },
       "drop": {
         "input": {
+          "common": {
+            "planId": "115"
+          },
           "localRelation": {
             "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
           }

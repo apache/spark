@@ -1,4 +1,7 @@
 {
+  "common": {
+    "planId": "1"
+  },
   "sql": {
     "query": "select 1"
   }

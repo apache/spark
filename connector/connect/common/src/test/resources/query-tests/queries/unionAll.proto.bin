@@ -1,2 +1,5 @@
-2P
-$Z" struct<id:bigint,a:int,b:double>$Z" struct<id:bigint,a:int,b:double> 
+
+p2X
+(
+nZ" struct<id:bigint,a:int,b:double>(
+oZ" struct<id:bigint,a:int,b:double> 

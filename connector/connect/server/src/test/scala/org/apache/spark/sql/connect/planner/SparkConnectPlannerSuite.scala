@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
@@ -44,6 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String
 trait SparkConnectPlanTest extends SharedSparkSession {
 
   lazy val holder = SessionHolder("userId", "sessionId", spark)
+  var planIdCtr: AtomicInteger = new AtomicInteger(1)
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     new SparkConnectPlanner(holder).transformRelation(rel)
@@ -500,6 +503,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       "SELECT * FROM VALUES (1,'spark',1), (2,'hadoop',2), (3,'kafka',3) AS tab(id, name, value)"
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -601,6 +605,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Hint") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -626,6 +631,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Hint with illegal name will be ignored") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -647,6 +653,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Hint with string attribute parameters") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -670,6 +677,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Hint with wrong parameters") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -693,6 +701,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("transform SortOrder") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -737,6 +746,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("RepartitionByExpression") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -775,6 +785,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Repartition by range") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -819,6 +830,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("RepartitionByExpression with wrong parameters") {
     val input = proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planIdCtr.incrementAndGet()))
       .setSql(
         proto.SQL
           .newBuilder()
@@ -861,7 +873,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setCommon(
           proto.RelationCommon
             .newBuilder()
-            .setPlanId(1))
+            .setPlanId(planIdCtr.incrementAndGet()))
         .setSql(proto.SQL
           .newBuilder()
           .setQuery("create table testcat.table_name (id int)"))
