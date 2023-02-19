@@ -1384,6 +1384,9 @@ private[spark] class BlockManager(
       }
     }
 
+    // TODO: need a better way to handle blocks with indeterminate/unordered results, replicas
+    //  for same blockId could be different. And the reported accumulators could be not matching
+    //  the cached results.
     // Initially we hold no locks on this block.
     doPutIterator(blockId, iterator, level, classTag, keepReadLock = true) match {
       case None =>
@@ -1391,7 +1394,7 @@ private[spark] class BlockManager(
         // stored. Therefore, we now hold a read lock on the block.
         if (!isCacheVisible && !computed) {
           // Force compute to report accumulator updates.
-          makeIterator()
+          Utils.getIteratorSize(makeIterator())
         }
         val blockResult = getLocalValues(blockId).getOrElse {
           // Since we held a read lock between the doPut() and get() calls, the block should not
@@ -1479,7 +1482,14 @@ private[spark] class BlockManager(
     if (blockInfoManager.isRDDBlockVisible(blockId)) {
       return true
     }
-    master.isRDDBlockVisible(blockId)
+
+    if(master.isRDDBlockVisible(blockId)) {
+      // Cache the visibility status if block exists.
+      blockInfoManager.tryAddVisibleBlock(blockId)
+      true
+    } else {
+      false
+    }
   }
 
   /**

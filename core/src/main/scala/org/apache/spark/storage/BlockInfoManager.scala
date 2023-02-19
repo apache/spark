@@ -190,8 +190,14 @@ private[storage] class BlockInfoManager extends Logging {
     blockInfoWrappers.containsKey(blockId) && visibleRDDBlocks.contains(blockId)
   }
 
-  private[spark] def addVisibleBlocks(blockId: RDDBlockId): Unit = {
-    visibleRDDBlocks.add(blockId)
+  private[spark] def tryAddVisibleBlock(blockId: RDDBlockId): Unit = {
+    // Adding synchronized block to make sure that visible blocks are added only when
+    // blocks exist in current block manager.
+    visibleRDDBlocks.synchronized {
+      if (blockInfoWrappers.containsKey(blockId)) {
+        visibleRDDBlocks.add(blockId)
+      }
+    }
   }
 
   /**
@@ -516,8 +522,10 @@ private[storage] class BlockInfoManager extends Logging {
         throw new IllegalStateException(
           s"Task $taskAttemptId called remove() on block $blockId without a write lock")
       } else {
-        blockInfoWrappers.remove(blockId)
-        blockId.asRDDId.foreach(visibleRDDBlocks.remove)
+        visibleRDDBlocks.synchronized {
+          blockInfoWrappers.remove(blockId)
+          blockId.asRDDId.foreach(visibleRDDBlocks.remove)
+        }
         info.readerCount = 0
         info.writerTask = BlockInfo.NO_WRITER
         writeLocksByTask.get(taskAttemptId).remove(blockId)

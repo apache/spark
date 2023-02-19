@@ -90,7 +90,6 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(AccumulatorContext.get(100000).isEmpty)
   }
 
-
   test("SPARK-41497: accumulators should be reported in the case of task retry with rdd cache") {
     // Set up a cluster with 2 executors
     val conf = new SparkConf()

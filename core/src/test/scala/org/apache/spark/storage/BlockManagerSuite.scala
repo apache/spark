@@ -2298,7 +2298,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     verify(master, times(2)).updateRDDBlockTaskInfo(blockId, 1)
 
     // Cache exists and visible.
-    store.blockInfoManager.addVisibleBlocks(blockId)
+    store.blockInfoManager.tryAddVisibleBlock(blockId)
     computed = false
     assert(store.getStatus(blockId).nonEmpty && store.isRDDBlockVisible(blockId))
     val res3 = store.getOrElseUpdateRDDBlock(
@@ -2313,7 +2313,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
     val data = Seq(1, 2, 3)
     store.putIterator(blockId, data.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.blockInfoManager.addVisibleBlocks(blockId)
+    store.blockInfoManager.tryAddVisibleBlock(blockId)
 
     assert(store.getStatus(blockId).nonEmpty && store.blockInfoManager.isRDDBlockVisible(blockId))
 
@@ -2341,6 +2341,33 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     eventually(timeout(5.seconds)) {
       assert(store.blockInfoManager.isRDDBlockVisible(blockId))
     }
+  }
+
+  test("getOrElseUpdateRDDBlock should make sure accumulators updated when block already" +
+    " exist but still not visible") {
+    val store = makeBlockManager(8000, "executor1")
+    val taskId = 0L
+    val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
+    val data = Seq(1, 2, 3)
+    val acc = new LongAccumulator
+    val makeIterator = () => {
+      data.iterator.map { x =>
+        acc.add(1)
+        x
+      }
+    }
+
+    store.getOrElseUpdateRDDBlock(
+      taskId, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
+    // Block cached but not visible.
+    assert(master.getLocations(blockId).nonEmpty)
+    assert(!master.isRDDBlockVisible(blockId))
+    assert(acc.value === 3)
+
+    store.getOrElseUpdateRDDBlock(
+      taskId, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
+    // Accumulator should be updated even though block already exists.
+    assert(acc.value === 6)
   }
 
   private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {
