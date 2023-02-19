@@ -297,15 +297,7 @@ try:
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=[
-            "py4j==0.10.9.7",
-            "pandas>=%s" % _minimum_pandas_version,
-            "pyarrow>=%s" % _minimum_pyarrow_version,
-            "grpcio>=%s" % _minimum_grpc_version,
-            "grpcio-status>=%s" % _minimum_grpc_version,
-            "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
-            "numpy>=1.15",
-        ],
+        install_requires=["py4j==0.10.9.7"],
         extras_require={
             "ml": ["numpy>=1.15"],
             "mllib": ["numpy>=1.15"],
