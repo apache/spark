@@ -17,7 +17,7 @@
 package org.apache.spark.sql.connect
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{FileVisitResult, Files, Path, SimpleFileVisitor}
+import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
 import java.nio.file.attribute.BasicFileAttributes
 import java.util
 
