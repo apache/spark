@@ -33,9 +33,9 @@ class CoGroupedIteratorSuite extends SparkFunSuite with ExpressionEvalHelper {
     val cogrouped = new CoGroupedIterator(leftGrouped :: rightGrouped :: Nil, Seq($"i".int))
 
     val result = cogrouped.map {
-      case (key, List(leftData, rightData)) =>
+      case (key, data) =>
         assert(key.numFields == 1)
-        (key.getInt(0), leftData.toSeq, rightData.toSeq)
+        (key.getInt(0), data.head.toSeq, data.last.toSeq)
     }.toSeq
     assert(result ==
       (1,
