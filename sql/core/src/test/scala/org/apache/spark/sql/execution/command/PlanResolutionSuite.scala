@@ -147,7 +147,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[Identifier](0).name match {
+      invocation.getArguments()(0).asInstanceOf[Identifier].name match {
         case "tab" => table
         case "tab1" => table1
         case "tab2" => table2
@@ -165,7 +165,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val v2SessionCatalog: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
-      val ident = invocation.getArgument[Identifier](0)
+      val ident = invocation.getArguments()(0).asInstanceOf[Identifier]
       ident.name match {
         case "v1Table" | "v1Table1" => createV1TableMock(ident)
         case "v1HiveTable" => createV1TableMock(ident, provider = "hive")
@@ -189,7 +189,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[String](0) match {
+      invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
         case CatalogManager.SESSION_CATALOG_NAME =>
@@ -207,7 +207,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val catalogManagerWithoutDefault = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[String](0) match {
+      invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
         case name =>

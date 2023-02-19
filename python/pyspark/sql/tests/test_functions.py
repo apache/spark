@@ -25,7 +25,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
-from pyspark.errors import PySparkTypeError, PySparkValueError, SparkConnectException
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -218,7 +218,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "col", "arg_type": "int"},
         )
 
@@ -227,7 +227,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_DICT",
+            error_class="NOT_DICT",
             message_parameters={"arg_name": "fractions", "arg_type": "list"},
         )
 
@@ -255,7 +255,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "col1", "arg_type": "int"},
         )
 
@@ -264,7 +264,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "col2", "arg_type": "bool"},
         )
 
@@ -764,7 +764,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "pos", "arg_type": "float"},
         )
 
@@ -773,7 +773,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "len", "arg_type": "float"},
         )
 
@@ -1056,6 +1056,9 @@ class FunctionsTestsMixin:
         self.assertEqual(date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
     def test_assert_true(self):
+        self.check_assert_true(Py4JJavaError)
+
+    def check_assert_true(self, tpe):
         from pyspark.sql.functions import assert_true
 
         df = self.spark.range(3)
@@ -1065,10 +1068,10 @@ class FunctionsTestsMixin:
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "too big"):
+        with self.assertRaisesRegex(tpe, "too big"):
             df.select(assert_true(df.id < 2, "too big")).toDF("val").collect()
 
-        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "2000000"):
+        with self.assertRaisesRegex(tpe, "2000000"):
             df.select(assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1076,19 +1079,22 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": "int"},
         )
 
     def test_raise_error(self):
+        self.check_raise_error(Py4JJavaError)
+
+    def check_raise_error(self, tpe):
         from pyspark.sql.functions import raise_error
 
         df = self.spark.createDataFrame([Row(id="foobar")])
 
-        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "foobar"):
+        with self.assertRaisesRegex(tpe, "foobar"):
             df.select(raise_error(df.id)).collect()
 
-        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "barfoo"):
+        with self.assertRaisesRegex(tpe, "barfoo"):
             df.select(raise_error("barfoo")).collect()
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1096,7 +1102,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
         )
 
@@ -1280,7 +1286,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": "int"},
         )
 
@@ -1290,7 +1296,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": "int"},
         )
 
@@ -1301,7 +1307,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": "int"},
         )
 
@@ -1322,7 +1328,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": "str"},
         )
 
@@ -1332,7 +1338,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "windowDuration", "arg_type": "int"},
         )
 
@@ -1342,7 +1348,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
         )
 
@@ -1352,7 +1358,7 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER",
+            error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
 

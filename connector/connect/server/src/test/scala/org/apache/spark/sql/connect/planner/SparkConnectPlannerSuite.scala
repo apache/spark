@@ -28,6 +28,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
@@ -190,7 +191,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Union") {
-    intercept[AssertionError](
+    intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder.setSetOp(proto.SetOperation.newBuilder.build()).build))
     val union = proto.Relation.newBuilder
       .setSetOp(

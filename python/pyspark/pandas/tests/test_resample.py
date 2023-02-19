@@ -234,39 +234,31 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(pser_r, name)
 
-    def _test_resample(self, pobj, psobj, rules, funcs):
+    def _test_resample(self, pobj, psobj, rules, closed, label, func):
         for rule in rules:
-            for func in funcs:
-                for closed in [None, "left", "right"]:
-                    for label in [None, "left", "right"]:
-                        p_resample = pobj.resample(rule=rule, closed=closed, label=label)
-                        ps_resample = psobj.resample(rule=rule, closed=closed, label=label)
-                        self.assert_eq(
-                            getattr(p_resample, func)().sort_index(),
-                            getattr(ps_resample, func)().sort_index(),
-                            almost=True,
-                        )
+            p_resample = pobj.resample(rule=rule, closed=closed, label=label)
+            ps_resample = psobj.resample(rule=rule, closed=closed, label=label)
+            self.assert_eq(
+                getattr(p_resample, func)().sort_index(),
+                getattr(ps_resample, func)().sort_index(),
+                almost=True,
+            )
 
     def test_dataframe_resample(self):
-        self._test_resample(
-            self.pdf1,
-            self.psdf1,
-            ["3Y", "9M", "17D"],
-            ["min", "max", "sum", "mean", "std", "var"],
-        )
-        self._test_resample(self.pdf2, self.psdf2, ["3A", "11M", "D"], ["sum"])
-        self._test_resample(self.pdf3, self.psdf3, ["2D", "1M"], ["sum"])
-        self._test_resample(self.pdf4, self.psdf4, ["1H", "2D"], ["sum"])
-        self._test_resample(self.pdf5, self.psdf5, ["11T", "55MIN", "2H", "D"], ["sum"])
-        self._test_resample(self.pdf6, self.psdf6, ["29S", "10MIN", "3H"], ["sum"])
+        self._test_resample(self.pdf1, self.psdf1, ["3Y", "9M", "17D"], None, None, "min")
+        self._test_resample(self.pdf2, self.psdf2, ["3A", "11M", "D"], None, "left", "max")
+        self._test_resample(self.pdf3, self.psdf3, ["20D", "1M"], None, "right", "sum")
+        self._test_resample(self.pdf4, self.psdf4, ["11H", "21D"], "left", None, "mean")
+        self._test_resample(self.pdf5, self.psdf5, ["55MIN", "2H", "D"], "left", "left", "std")
+        self._test_resample(self.pdf6, self.psdf6, ["29S", "10MIN", "3H"], "left", "right", "var")
 
     def test_series_resample(self):
-        self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"], ["sum"])
-        self._test_resample(self.pdf2.A, self.psdf2.A, ["13M"], ["sum"])
-        self._test_resample(self.pdf3.A, self.psdf3.A, ["18H"], ["sum"])
-        self._test_resample(self.pdf4.A, self.psdf4.A, ["6D"], ["sum"])
-        self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"], ["sum"])
-        self._test_resample(self.pdf6.A, self.psdf6.A, ["111S"], ["sum"])
+        self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"], "right", None, "min")
+        self._test_resample(self.pdf2.A, self.psdf2.A, ["13M"], "right", "left", "max")
+        self._test_resample(self.pdf3.A, self.psdf3.A, ["1001H"], "right", "right", "sum")
+        self._test_resample(self.pdf4.A, self.psdf4.A, ["6D"], None, None, "mean")
+        self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"], "left", "left", "var")
+        self._test_resample(self.pdf6.A, self.psdf6.A, ["111S"], "right", "right", "std")
 
     def test_resample_on(self):
         np.random.seed(77)

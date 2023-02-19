@@ -10,6 +10,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "> 0",
     "functionName" : "`concat_ws`"
   }
@@ -27,6 +28,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "> 0",
     "functionName" : "`format_string`"
   }
@@ -812,6 +814,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`decode`"
   },
@@ -836,6 +839,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`decode`"
   },

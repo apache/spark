@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -677,9 +678,6 @@ case class KeyGroupedShuffleSpec(
     }
   }
 
-  lazy val ordering: Ordering[InternalRow] =
-    RowOrdering.createNaturalAscendingOrdering(partitioning.expressions.map(_.dataType))
-
   override def numPartitions: Int = partitioning.numPartitions
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
@@ -697,7 +695,9 @@ case class KeyGroupedShuffleSpec(
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
-            case (left, right) => ordering.compare(left, right) == 0
+            case (left, right) =>
+              InternalRowComparableWrapper(left, partitioning.expressions)
+                .equals(InternalRowComparableWrapper(right, partitioning.expressions))
           }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)

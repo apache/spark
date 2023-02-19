@@ -14,6 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+__all__ = [
+    "ChannelBuilder",
+    "SparkConnectClient",
+]
+
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__, __file__)
+
 import logging
 import os
 import random
@@ -21,6 +30,7 @@ import time
 import urllib.parse
 import uuid
 import json
+import sys
 from types import TracebackType
 from typing import (
     Iterable,
@@ -49,21 +59,23 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-import pyspark.sql.types
-from pyspark import cloudpickle
-from pyspark.errors import (
+from pyspark.errors.exceptions.connect import (
+    convert_exception,
     SparkConnectException,
     SparkConnectGrpcException,
-    SparkConnectAnalysisException,
-    SparkConnectParseException,
-    SparkConnectTempTableAlreadyExistsException,
-    SparkConnectIllegalArgumentException,
 )
+from pyspark.sql.connect.expressions import (
+    PythonUDF,
+    CommonInlineUserDefinedFunction,
+)
+from pyspark.sql.connect.types import parse_data_type
 from pyspark.sql.types import (
     DataType,
     StructType,
     StructField,
 )
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.rdd import PythonEvalType
 
 
 def _configure_logging() -> logging.Logger:
@@ -109,7 +121,33 @@ class ChannelBuilder:
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
 
-    DEFAULT_PORT = 15002
+    @staticmethod
+    def default_port() -> int:
+        if "SPARK_TESTING" in os.environ:
+            from pyspark.sql.session import SparkSession as PySparkSession
+
+            # In the case when Spark Connect uses the local mode, it starts the regular Spark
+            # session that starts Spark Connect server that sets `SparkSession._instantiatedSession`
+            # via SparkSession.__init__.
+            #
+            # We are getting the actual server port from the Spark session via Py4J to address
+            # the case when the server port is set to 0 (in which allocates an ephemeral port).
+            #
+            # This is only used in the test/development mode.
+            session = PySparkSession._instantiatedSession
+
+            # 'spark.local.connect' is set when we use the local mode in Spark Connect.
+            if session is not None and session.conf.get("spark.local.connect", "0") == "1":
+
+                jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
+                return getattr(
+                    getattr(
+                        jvm.org.apache.spark.sql.connect.service,  # type: ignore[union-attr]
+                        "SparkConnectService$",
+                    ),
+                    "MODULE$",
+                ).localPort()
+        return 15002
 
     def __init__(self, url: str, channelOptions: Optional[List[Tuple[str, Any]]] = None) -> None:
         """
@@ -150,7 +188,7 @@ class ChannelBuilder:
         netloc = self.url.netloc.split(":")
         if len(netloc) == 1:
             self.host = netloc[0]
-            self.port = ChannelBuilder.DEFAULT_PORT
+            self.port = ChannelBuilder.default_port()
         elif len(netloc) == 2:
             self.host = netloc[0]
             self.port = int(netloc[1])
@@ -395,18 +433,41 @@ class SparkConnectClient(object):
         # Configure logging for the SparkConnect client.
 
     def register_udf(
-        self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
+        self,
+        function: Any,
+        return_type: Union[str, DataType],
+        name: Optional[str] = None,
+        eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
+        deterministic: bool = True,
     ) -> str:
         """Create a temporary UDF in the session catalog on the other side. We generate a
         temporary name for it."""
-        name = f"fun_{uuid.uuid4().hex}"
-        fun = pb2.CreateScalarFunction()
-        fun.parts.append(name)
-        logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
-        fun.serialized_function = cloudpickle.dumps((function, return_type))
 
+        if name is None:
+            name = f"fun_{uuid.uuid4().hex}"
+
+        # convert str return_type to DataType
+        if isinstance(return_type, str):
+            return_type = parse_data_type(return_type)
+        # construct a PythonUDF
+        py_udf = PythonUDF(
+            output_type=return_type.json(),
+            eval_type=eval_type,
+            command=CloudPickleSerializer().dumps((function, return_type)),
+            python_ver="%d.%d" % sys.version_info[:2],
+        )
+
+        # construct a CommonInlineUserDefinedFunction
+        fun = CommonInlineUserDefinedFunction(
+            function_name=name,
+            deterministic=deterministic,
+            arguments=[],
+            function=py_udf,
+        ).to_command(self)
+
+        # construct the request
         req = self._execute_plan_request_with_metadata()
-        req.plan.command.create_function.CopyFrom(fun)
+        req.plan.command.register_function.CopyFrom(fun)
 
         self._execute(req)
         return name
@@ -654,28 +715,7 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
-                    reason = info.reason
-                    if reason == "org.apache.spark.sql.AnalysisException":
-                        raise SparkConnectAnalysisException(
-                            info.metadata["message"], plan=info.metadata["plan"]
-                        ) from None
-                    elif reason == "org.apache.spark.sql.catalyst.parser.ParseException":
-                        raise SparkConnectParseException(info.metadata["message"]) from None
-                    elif (
-                        reason
-                        == "org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException"
-                    ):
-                        raise SparkConnectTempTableAlreadyExistsException(
-                            info.metadata["message"], plan=info.metadata["plan"]
-                        ) from None
-                    elif reason == "java.lang.IllegalArgumentException":
-                        message = info.metadata["message"]
-                        message = message if message != "" else status.message
-                        raise SparkConnectIllegalArgumentException(message) from None
-                    else:
-                        raise SparkConnectGrpcException(
-                            status.message, reason=info.reason
-                        ) from None
+                    raise convert_exception(info, status.message) from None
 
             raise SparkConnectGrpcException(status.message) from None
         else:
@@ -813,9 +853,3 @@ class Retrying:
                 time.sleep(backoff / 1000.0)
 
             yield AttemptManager(self._can_retry, retry_state)
-
-
-__all__ = [
-    "ChannelBuilder",
-    "SparkConnectClient",
-]

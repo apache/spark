@@ -254,7 +254,7 @@ class StreamingTests(ReusedSQLTestCase):
             self._assert_exception_tree_contains_msg(e, "ZeroDivisionError")
         finally:
             sq.stop()
-        self.assertTrue(type(sq.exception()) is StreamingQueryException)
+        self.assertIsInstance(sq.exception(), StreamingQueryException)
         self._assert_exception_tree_contains_msg(sq.exception(), "ZeroDivisionError")
 
     def _assert_exception_tree_contains_msg(self, exception, msg):

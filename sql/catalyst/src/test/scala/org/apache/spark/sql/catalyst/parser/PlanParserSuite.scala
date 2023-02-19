@@ -642,8 +642,9 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "select * from a natural cross join b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
-      parameters = Map.empty,
+      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      parameters = Map("joinType1" -> "NATURAL", "joinType2" -> "CROSS"),
+      sqlState = "42613",
       context = ExpectedContext(
         fragment = "natural cross join b",
         start = 16,

@@ -35,6 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -1072,9 +1073,14 @@ abstract class JsonSuite
         .schema("a string")
         .json(corruptRecords)
         .collect()
-    }.getMessage
-    assert(exceptionTwo.contains(
-      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+    }.getCause
+    checkError(
+      exception = exceptionTwo.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      parameters = Map(
+        "badRecord" -> "[null]",
+        "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1988,9 +1994,14 @@ abstract class JsonSuite
           .schema(schema)
           .json(path)
           .collect()
-      }
-      assert(exceptionTwo.getMessage.contains("Malformed records are detected in record " +
-        "parsing. Parse Mode: FAILFAST."))
+      }.getCause
+      checkError(
+        exception = exceptionTwo.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map(
+          "badRecord" -> "[null]",
+          "failFastMode" -> "FAILFAST")
+      )
     }
   }
 
@@ -2608,11 +2619,12 @@ abstract class JsonSuite
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
       .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-    val errMessage = intercept[SparkException] {
-      df.collect()
-    }.getMessage
-    assert(errMessage.contains(
-      s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+    val e = intercept[SparkException] {df.collect()}
+    checkError(
+      exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "EMPTY_JSON_FIELD_VALUE",
+      parameters = Map("dataType" -> toSQLType(dataType))
+    )
   }
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {
@@ -2770,7 +2782,7 @@ abstract class JsonSuite
         .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .json(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
         val res = spark.read
           .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
           .option("inferTimestamp", "true")
@@ -2792,7 +2804,7 @@ abstract class JsonSuite
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .json(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "false") {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
         val res = spark.read
           .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
           .option("inferTimestamp", "true")
@@ -2835,11 +2847,11 @@ abstract class JsonSuite
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
         SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
 
-      Seq(true, false).foreach { inferTimestampNTZ =>
-        withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+      timestampTypes.foreach { timestampType =>
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
           val res = spark.read.option("inferTimestamp", "true").json(path.getAbsolutePath)
 
-          if (inferTimestampNTZ) {
+          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
             checkAnswer(res, exp)
           } else {
             checkAnswer(

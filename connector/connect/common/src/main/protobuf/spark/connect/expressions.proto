@@ -197,6 +197,9 @@ message Expression {
     // (Required) An identifier that will be parsed by Catalyst parser. This should follow the
     // Spark SQL identifier syntax.
     string unparsed_identifier = 1;
+
+    // (Optional) The id of corresponding connect plan.
+    optional int64 plan_id = 2;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function
@@ -307,6 +310,7 @@ message CommonInlineUserDefinedFunction {
   // (Required) Indicate the function type of the user-defined function.
   oneof function {
     PythonUDF python_udf = 4;
+    ScalarScalaUDF scalar_scala_udf = 5;
   }
 }
 
@@ -317,5 +321,18 @@ message PythonUDF {
   int32 eval_type = 2;
   // (Required) The encoded commands of the Python UDF
   bytes command = 3;
+  // (Required) Python version being used in the client.
+  string python_ver = 4;
+}
+
+message ScalarScalaUDF {
+  // (Required) Serialized JVM object containing UDF definition, input encoders and output encoder
+  bytes payload = 1;
+  // (Optional) Input type(s) of the UDF
+  repeated DataType inputTypes = 2;
+  // (Required) Output type of the UDF
+  DataType outputType = 3;
+  // (Required) True if the UDF can return null value
+  bool nullable = 4;
 }
 

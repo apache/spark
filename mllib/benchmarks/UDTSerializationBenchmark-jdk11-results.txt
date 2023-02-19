@@ -2,11 +2,11 @@
 VectorUDT de/serialization
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 VectorUDT de/serialization:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-serialize                                           254            260           7          0.0      253874.2       1.0X
-deserialize                                         136            139           3          0.0      135709.1       1.9X
+serialize                                           251            256           6          0.0      251110.2       1.0X
+deserialize                                         132            136           3          0.0      132453.8       1.9X
 
 

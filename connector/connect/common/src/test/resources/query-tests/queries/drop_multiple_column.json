@@ -1,0 +1,18 @@
+{
+  "drop": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "cols": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "b"
+      }
+    }, {
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "id"
+      }
+    }]
+  }
+}

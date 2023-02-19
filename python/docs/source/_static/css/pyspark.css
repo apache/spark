@@ -92,3 +92,6 @@ u.bd-sidebar .nav>li>ul>.active:hover>a,.bd-sidebar .nav>li>ul>.active>a {
     border-left: 2px solid #1B5162!important;
 }
 
+.spec_table tr, td, th {
+    border-top: none!important;
+}

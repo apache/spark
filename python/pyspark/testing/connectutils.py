@@ -65,7 +65,7 @@ connect_requirement_message = (
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 if should_test_connect:
-    from pyspark.sql.connect import DataFrame
+    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL
     from pyspark.sql.connect.session import SparkSession
 
@@ -122,7 +122,6 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
 
-        cls.connect.set_hook("register_udf", cls._udf_mock)
         cls.connect.set_hook("readTable", cls._read_table)
         cls.connect.set_hook("range", cls._session_range)
         cls.connect.set_hook("sql", cls._session_sql)
@@ -130,7 +129,6 @@ class PlanOnlyTestFixture(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.connect.drop_hook("register_udf")
         cls.connect.drop_hook("readTable")
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")

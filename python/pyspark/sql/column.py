@@ -279,7 +279,6 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
-    # TODO(SPARK-41812): DataFrame.join: ambiguous column
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
@@ -315,9 +314,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),

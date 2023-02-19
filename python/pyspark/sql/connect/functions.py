@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 import inspect
 import warnings
@@ -34,10 +37,7 @@ from typing import (
 
 import numpy as np
 
-from pyspark.errors.exceptions import (
-    PySparkTypeError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -61,6 +61,15 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
     from pyspark.sql.connect.dataframe import DataFrame
+
+
+def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col, plan_id=plan_id))
 
 
 def _to_col(col: "ColumnOrName") -> Column:
@@ -202,12 +211,7 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
-    elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
-    else:
-        return Column(ColumnReference(unparsed_identifier=col))
+    return _to_col_with_plan_id(col=col, plan_id=None)
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -262,7 +266,7 @@ def broadcast(df: "DataFrame") -> "DataFrame":
 
     if not isinstance(df, DataFrame):
         raise PySparkTypeError(
-            error_class="NOT_A_DATAFRAME",
+            error_class="NOT_DATAFRAME",
             message_parameters={"arg_name": "df", "arg_type": type(df).__name__},
         )
     return df.hint("broadcast")
@@ -375,7 +379,7 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
 
@@ -1152,8 +1156,8 @@ def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName
 array.__doc__ = pysparkfuncs.array.__doc__
 
 
-def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("array_append", col1, col2)
+def array_append(col: "ColumnOrName", value: Any) -> Column:
+    return _invoke_function("array_append", _to_col(col), lit(value))
 
 
 array_append.__doc__ = pysparkfuncs.array_append.__doc__
@@ -1178,6 +1182,14 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 array_except.__doc__ = pysparkfuncs.array_except.__doc__
+
+
+def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
+    _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
+    return _invoke_function("array_insert", _to_col(arr), _pos, lit(value))
+
+
+array_insert.__doc__ = pysparkfuncs.array_insert.__doc__
 
 
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -1357,7 +1369,7 @@ def from_csv(
         _schema = lit(schema)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
@@ -1383,7 +1395,7 @@ def from_json(
         _schema = lit(schema)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_DATATYPE_OR_STRING",
+            error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
@@ -1544,7 +1556,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
         _csv = lit(csv)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
@@ -1564,7 +1576,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
         _json = lit(json)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
@@ -1600,7 +1612,7 @@ def slice(
         _start = lit(start)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "start", "arg_type": type(start).__name__},
         )
 
@@ -1610,7 +1622,7 @@ def slice(
         _length = lit(length)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
         )
 
@@ -1802,12 +1814,12 @@ def overlay(
 ) -> Column:
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
@@ -2224,7 +2236,7 @@ def window(
 ) -> Column:
     if windowDuration is None or not isinstance(windowDuration, str):
         raise PySparkTypeError(
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={
                 "arg_name": "windowDuration",
                 "arg_type": type(windowDuration).__name__,
@@ -2232,7 +2244,7 @@ def window(
         )
     if slideDuration is not None and not isinstance(slideDuration, str):
         raise PySparkTypeError(
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={
                 "arg_name": "slideDuration",
                 "arg_type": type(slideDuration).__name__,
@@ -2240,7 +2252,7 @@ def window(
         )
     if startTime is not None and not isinstance(startTime, str):
         raise PySparkTypeError(
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
         )
 
@@ -2275,7 +2287,7 @@ window_time.__doc__ = pysparkfuncs.window_time.__doc__
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     if gapDuration is None or not isinstance(gapDuration, (Column, str)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "gapDuration", "arg_type": type(gapDuration).__name__},
         )
 
@@ -2300,7 +2312,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         _numBuckets = numBuckets
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER",
+            error_class="NOT_COLUMN_OR_INT",
             message_parameters={
                 "arg_name": "numBuckets",
                 "arg_type": type(numBuckets).__name__,
@@ -2348,7 +2360,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
     _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
@@ -2361,7 +2373,7 @@ assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
 def raise_error(errMsg: Union[Column, str]) -> Column:
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
     _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
@@ -2455,56 +2467,42 @@ def pandas_udf(*args: Any, **kwargs: Any) -> None:
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.functions
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.functions.__dict__.copy()
 
-    if should_test_connect:
-        import pyspark.sql.connect.functions
+    # Spark Connect does not support Spark Context but the test depends on that.
+    del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
-        globs = pyspark.sql.connect.functions.__dict__.copy()
+    # TODO(SPARK-41834): implement Dataframe.conf
+    del pyspark.sql.connect.functions.from_unixtime.__doc__
+    del pyspark.sql.connect.functions.timestamp_seconds.__doc__
+    del pyspark.sql.connect.functions.unix_timestamp.__doc__
 
-        # Spark Connect does not support Spark Context but the test depends on that.
-        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
+    # TODO(SPARK-41843): Implement SparkSession.udf
+    del pyspark.sql.connect.functions.call_udf.__doc__
 
-        # TODO(SPARK-41834): implement Dataframe.conf
-        del pyspark.sql.connect.functions.from_unixtime.__doc__
-        del pyspark.sql.connect.functions.timestamp_seconds.__doc__
-        del pyspark.sql.connect.functions.unix_timestamp.__doc__
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.functions tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
 
-        # TODO(SPARK-41812): Proper column names after join
-        del pyspark.sql.connect.functions.count_distinct.__doc__
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.functions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        # TODO(SPARK-41843): Implement SparkSession.udf
-        del pyspark.sql.connect.functions.call_udf.__doc__
+    globs["spark"].stop()
 
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.functions tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
-
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.functions,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.functions doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,10 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
 
+// Add sample tests.
+// - sample fraction: simple.sample(0.1)
+// - sample withReplacement_fraction: simple.sample(withReplacement = true, 0.11)
+// Add tests for exceptions thrown
 class DatasetSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterEach {
@@ -108,6 +112,38 @@ class DatasetSuite
     val expectedPlan = proto.Plan.newBuilder().setRoot(builder).build()
 
     df.filter(dummyCondition).analyze
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
+
+  test("write") {
+    val df = ss.newDataset(_ => ()).limit(10)
+
+    val builder = proto.WriteOperation.newBuilder()
+    builder
+      .setInput(df.plan.getRoot)
+      .setPath("my/test/path")
+      .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS)
+      .setSource("parquet")
+      .addSortColumnNames("col1")
+      .addPartitioningColumns("col99")
+      .setBucketBy(
+        proto.WriteOperation.BucketBy
+          .newBuilder()
+          .setNumBuckets(2)
+          .addBucketColumnNames("col1")
+          .addBucketColumnNames("col2"))
+
+    val expectedPlan = proto.Plan
+      .newBuilder()
+      .setCommand(proto.Command.newBuilder().setWriteOperation(builder))
+      .build()
+
+    df.write
+      .sortBy("col1")
+      .partitionBy("col99")
+      .bucketBy(2, "col1", "col2")
+      .parquet("my/test/path")
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }

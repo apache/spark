@@ -24,18 +24,19 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -46,11 +47,6 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
-final case class InvalidPlanInput(
-    private val message: String = "",
-    private val cause: Throwable = None.orNull)
-    extends Exception(message, cause)
 
 final case class InvalidCommandInput(
     private val message: String = "",
@@ -63,7 +59,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
-    rel.getRelTypeCase match {
+    val plan = rel.getRelTypeCase match {
       // DataFrame API
       case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
@@ -121,6 +117,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformRelationPlugin(rel.getExtension)
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
     }
+
+    if (rel.hasCommon && rel.getCommon.hasPlanId) {
+      plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
+    }
+    plan
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -164,13 +165,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformDropGlobalTempView(catalog.getDropGlobalTempView)
       case proto.Catalog.CatTypeCase.RECOVER_PARTITIONS =>
         transformRecoverPartitions(catalog.getRecoverPartitions)
-      // TODO(SPARK-41612): Support Catalog.isCached
-      // case proto.Catalog.CatTypeCase.IS_CACHED => transformIsCached(catalog.getIsCached)
-      // TODO(SPARK-41600): Support Catalog.cacheTable
-      // case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(catalog.getCacheTable)
-      // TODO(SPARK-41623): Support Catalog.uncacheTable
-      // case proto.Catalog.CatTypeCase.UNCACHE_TABLE =>
-      //   transformUncacheTable(catalog.getUncacheTable)
+      case proto.Catalog.CatTypeCase.IS_CACHED => transformIsCached(catalog.getIsCached)
+      case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(catalog.getCacheTable)
+      case proto.Catalog.CatTypeCase.UNCACHE_TABLE =>
+        transformUncacheTable(catalog.getUncacheTable)
       case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache(catalog.getClearCache)
       case proto.Catalog.CatTypeCase.REFRESH_TABLE =>
         transformRefreshTable(catalog.getRefreshTable)
@@ -196,7 +194,10 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
-    session.sessionState.sqlParser.parsePlan(sql.getQuery)
+    val args = sql.getArgsMap.asScala.toMap
+    val parser = session.sessionState.sqlParser
+    val parsedArgs = args.mapValues(parser.parseExpression).toMap
+    Parameter.bind(parser.parsePlan(sql.getQuery), parsedArgs)
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
@@ -512,7 +513,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       Column(transformExpression(expr))
     }
 
-    if (rel.getValuesList.isEmpty) {
+    if (!rel.hasValues) {
       Unpivot(
         Some(ids.map(_.named)),
         None,
@@ -521,7 +522,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         Seq(rel.getValueColumnName),
         transformRelation(rel.getInput))
     } else {
-      val values = rel.getValuesList.asScala.toArray.map { expr =>
+      val values = rel.getValues.getValuesList.asScala.toArray.map { expr =>
         Column(transformExpression(expr))
       }
 
@@ -699,10 +700,6 @@ class SparkConnectPlanner(val session: SparkSession) {
     logical.Project(projectList = projection, child = baseRel)
   }
 
-  private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute.quotedString(exp.getUnresolvedAttribute.getUnparsedIdentifier)
-  }
-
   /**
    * Transforms an input protobuf expression into the Catalyst expression. This is usually not
    * called directly. Typically the planner will traverse the expressions automatically, only
@@ -717,7 +714,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
-        transformUnresolvedExpression(exp)
+        transformUnresolvedAttribute(exp.getUnresolvedAttribute)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformUnregisteredFunction(exp.getUnresolvedFunction)
           .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
@@ -753,6 +750,15 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
     case named: NamedExpression => named
     case expr => UnresolvedAlias(expr)
+  }
+
+  private def transformUnresolvedAttribute(
+      attr: proto.Expression.UnresolvedAttribute): UnresolvedAttribute = {
+    val expr = UnresolvedAttribute.quotedString(attr.getUnparsedIdentifier)
+    if (attr.hasPlanId) {
+      expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
+    }
+    expr
   }
 
   private def transformExpressionPlugin(extension: ProtoAny): Expression = {
@@ -831,10 +837,35 @@ class SparkConnectPlanner(val session: SparkSession) {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         transformPythonUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+        transformScalarScalaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
+  }
+
+  /**
+   * Translates a Scalar Scala user-defined function from proto to the Catalyst expression.
+   *
+   * @param fun
+   *   Proto representation of the Scalar Scalar user-defined function.
+   * @return
+   *   ScalaUDF.
+   */
+  private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
+    val udf = fun.getScalarScalaUdf
+    val udfPacket =
+      Utils.deserialize[UdfPacket](udf.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+    ScalaUDF(
+      function = udfPacket.function,
+      dataType = udfPacket.outputEncoder.dataType,
+      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+      inputEncoders = udfPacket.inputEncoders.map(e => Option(ExpressionEncoder(e))),
+      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
+      udfName = Option(fun.getFunctionName),
+      nullable = udf.getNullable,
+      udfDeterministic = fun.getDeterministic)
   }
 
   /**
@@ -870,7 +901,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       // No imported Python libraries
       pythonIncludes = Lists.newArrayList(),
       pythonExec = pythonExec,
-      pythonVer = "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      pythonVer = fun.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
       // Null accumulator
@@ -1199,37 +1230,36 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
-    assert(u.hasLeftInput && u.hasRightInput, "Union must have 2 inputs")
+    if (!u.hasLeftInput || !u.hasRightInput) {
+      throw InvalidPlanInput("Set operation must have 2 inputs")
+    }
+    val leftPlan = transformRelation(u.getLeftInput)
+    val rightPlan = transformRelation(u.getRightInput)
+    val isAll = if (u.hasIsAll) u.getIsAll else false
 
     u.getSetOpType match {
       case proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT =>
         if (u.getByName) {
           throw InvalidPlanInput("Except does not support union_by_name")
         }
-        Except(transformRelation(u.getLeftInput), transformRelation(u.getRightInput), u.getIsAll)
+        Except(leftPlan, rightPlan, isAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT =>
         if (u.getByName) {
           throw InvalidPlanInput("Intersect does not support union_by_name")
         }
-        Intersect(
-          transformRelation(u.getLeftInput),
-          transformRelation(u.getRightInput),
-          u.getIsAll)
+        Intersect(leftPlan, rightPlan, isAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_UNION =>
         if (!u.getByName && u.getAllowMissingColumns) {
           throw InvalidPlanInput(
             "UnionByName `allowMissingCol` can be true only if `byName` is true.")
         }
-        val combinedUnion = CombineUnions(
-          Union(
-            Seq(transformRelation(u.getLeftInput), transformRelation(u.getRightInput)),
-            byName = u.getByName,
-            allowMissingCol = u.getAllowMissingColumns))
-        if (u.getIsAll) {
-          combinedUnion
+        val union = Union(Seq(leftPlan, rightPlan), u.getByName, u.getAllowMissingColumns)
+        if (isAll) {
+          union
         } else {
-          logical.Deduplicate(combinedUnion.output, combinedUnion)
+          logical.Distinct(union)
         }
+
       case _ =>
         throw InvalidPlanInput(s"Unsupported set operation ${u.getSetOpTypeValue}")
     }
@@ -1375,16 +1405,48 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(command: proto.Command): Unit = {
     command.getCommandTypeCase match {
-      case proto.Command.CommandTypeCase.CREATE_FUNCTION =>
-        handleCreateScalarFunction(command.getCreateFunction)
+      case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
+        handleRegisterUserDefinedFunction(command.getRegisterFunction)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         handleCreateViewCommand(command.getCreateDataframeView)
+      case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
+        handleWriteOperationV2(command.getWriteOperationV2)
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
+  }
+
+  private def handleRegisterUserDefinedFunction(
+      fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    fun.getFunctionCase match {
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+        handleRegisterPythonUDF(fun)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+    }
+  }
+
+  private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = fun.getPythonUdf
+    val function = transformPythonFunction(udf)
+    val udpf = UserDefinedPythonFunction(
+      name = fun.getFunctionName,
+      func = function,
+      dataType = DataType.parseTypeWithFallback(
+        schema = udf.getOutputType,
+        parser = DataType.fromDDL,
+        fallbackParser = DataType.fromJson) match {
+        case s: DataType => s
+        case other => throw InvalidPlanInput(s"Invalid return type $other")
+      },
+      pythonEvalType = udf.getEvalType,
+      udfDeterministic = fun.getDeterministic)
+
+    session.udf.registerPython(fun.getFunctionName, udpf)
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {
@@ -1397,40 +1459,6 @@ class SparkConnectPlanner(val session: SparkSession) {
       .find(_.nonEmpty)
       .flatten
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
-  }
-
-  /**
-   * This is a helper function that registers a new Python function in the SparkSession.
-   *
-   * Right now this function is very rudimentary and bare-bones just to showcase how it is
-   * possible to remotely serialize a Python function and execute it on the Spark cluster. If the
-   * Python version on the client and server diverge, the execution of the function that is
-   * serialized will most likely fail.
-   *
-   * @param cf
-   */
-  private def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
-    val function = SimplePythonFunction(
-      cf.getSerializedFunction.toByteArray,
-      // Empty environment variables
-      Maps.newHashMap(),
-      // No imported Python libraries
-      Lists.newArrayList(),
-      pythonExec,
-      "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
-      // Empty broadcast variables
-      Lists.newArrayList(),
-      // Null accumulator
-      null)
-
-    val udf = UserDefinedPythonFunction(
-      cf.getPartsList.asScala.head,
-      function,
-      StringType,
-      PythonEvalType.SQL_BATCHED_UDF,
-      udfDeterministic = false)
-
-    session.udf.registerPython(cf.getPartsList.asScala.head, udf)
   }
 
   private def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
@@ -1453,8 +1481,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       plan = transformRelation(createView.getInput),
       allowExisting = false,
       replace = createView.getReplace,
-      viewType = viewType,
-      isAnalyzed = true)
+      viewType = viewType)
 
     Dataset.ofRows(session, plan).queryExecution.commandExecuted
   }
@@ -1477,7 +1504,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     val w = dataset.write
     if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
-      w.mode(DataTypeProtoConverter.toSaveMode(writeOperation.getMode))
+      w.mode(SaveModeConverter.toSaveMode(writeOperation.getMode))
     }
 
     if (writeOperation.getOptionsCount > 0) {
@@ -1504,18 +1531,95 @@ class SparkConnectPlanner(val session: SparkSession) {
       w.partitionBy(names.toSeq: _*)
     }
 
-    if (writeOperation.getSource != null) {
+    if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
 
     writeOperation.getSaveTypeCase match {
       case proto.WriteOperation.SaveTypeCase.PATH => w.save(writeOperation.getPath)
-      case proto.WriteOperation.SaveTypeCase.TABLE_NAME =>
-        w.saveAsTable(writeOperation.getTableName)
+      case proto.WriteOperation.SaveTypeCase.TABLE =>
+        val tableName = writeOperation.getTable.getTableName
+        writeOperation.getTable.getSaveMethod match {
+          case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE =>
+            w.saveAsTable(tableName)
+          case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
+            w.insertInto(tableName)
+          case _ =>
+            throw new UnsupportedOperationException(
+              "WriteOperation:SaveTable:TableSaveMethod not supported "
+                + s"${writeOperation.getTable.getSaveMethodValue}")
+        }
       case _ =>
         throw new UnsupportedOperationException(
           "WriteOperation:SaveTypeCase not supported "
             + s"${writeOperation.getSaveTypeCase.getNumber}")
+    }
+  }
+
+  /**
+   * Transforms the write operation and executes it.
+   *
+   * The input write operation contains a reference to the input plan and transforms it to the
+   * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
+   * parameters of the WriteOperation into the corresponding methods calls.
+   *
+   * @param writeOperation
+   */
+  def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+    // Transform the input plan into the logical plan.
+    val planner = new SparkConnectPlanner(session)
+    val plan = planner.transformRelation(writeOperation.getInput)
+    // And create a Dataset from the plan.
+    val dataset = Dataset.ofRows(session, logicalPlan = plan)
+
+    val w = dataset.writeTo(table = writeOperation.getTableName)
+
+    if (writeOperation.getOptionsCount > 0) {
+      writeOperation.getOptionsMap.asScala.foreach { case (key, value) => w.option(key, value) }
+    }
+
+    if (writeOperation.getTablePropertiesCount > 0) {
+      writeOperation.getTablePropertiesMap.asScala.foreach { case (key, value) =>
+        w.tableProperty(key, value)
+      }
+    }
+
+    if (writeOperation.getPartitioningColumnsCount > 0) {
+      val names = writeOperation.getPartitioningColumnsList.asScala
+        .map(transformExpression)
+        .map(Column(_))
+        .toSeq
+      w.partitionedBy(names.head, names.tail.toSeq: _*)
+    }
+
+    writeOperation.getMode match {
+      case proto.WriteOperationV2.Mode.MODE_CREATE =>
+        if (writeOperation.getProvider != null) {
+          w.using(writeOperation.getProvider).create()
+        } else {
+          w.create()
+        }
+      case proto.WriteOperationV2.Mode.MODE_OVERWRITE =>
+        w.overwrite(Column(transformExpression(writeOperation.getOverwriteCondition)))
+      case proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS =>
+        w.overwritePartitions()
+      case proto.WriteOperationV2.Mode.MODE_APPEND =>
+        w.append()
+      case proto.WriteOperationV2.Mode.MODE_REPLACE =>
+        if (writeOperation.getProvider != null) {
+          w.using(writeOperation.getProvider).replace()
+        } else {
+          w.replace()
+        }
+      case proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE =>
+        if (writeOperation.getProvider != null) {
+          w.using(writeOperation.getProvider).createOrReplace()
+        } else {
+          w.createOrReplace()
+        }
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
     }
   }
 
@@ -1731,25 +1835,22 @@ class SparkConnectPlanner(val session: SparkSession) {
     emptyLocalRelation
   }
 
-// TODO(SPARK-41612): Support Catalog.isCached
-//  private def transformIsCached(getIsCached: proto.IsCached): LogicalPlan = {
-//    session
-//      .createDataset(session.catalog.isCached(getIsCached.getTableName) :: Nil)(
-//        Encoders.scalaBoolean)
-//      .logicalPlan
-//  }
-//
-// TODO(SPARK-41600): Support Catalog.cacheTable
-//  private def transformCacheTable(getCacheTable: proto.CacheTable): LogicalPlan = {
-//    session.catalog.cacheTable(getCacheTable.getTableName)
-//    emptyLocalRelation
-//  }
-//
-// TODO(SPARK-41623): Support Catalog.uncacheTable
-//  private def transformUncacheTable(getUncacheTable: proto.UncacheTable): LogicalPlan = {
-//    session.catalog.uncacheTable(getUncacheTable.getTableName)
-//    emptyLocalRelation
-//  }
+  private def transformIsCached(getIsCached: proto.IsCached): LogicalPlan = {
+    session
+      .createDataset(session.catalog.isCached(getIsCached.getTableName) :: Nil)(
+        Encoders.scalaBoolean)
+      .logicalPlan
+  }
+
+  private def transformCacheTable(getCacheTable: proto.CacheTable): LogicalPlan = {
+    session.catalog.cacheTable(getCacheTable.getTableName)
+    emptyLocalRelation
+  }
+
+  private def transformUncacheTable(getUncacheTable: proto.UncacheTable): LogicalPlan = {
+    session.catalog.uncacheTable(getUncacheTable.getTableName)
+    emptyLocalRelation
+  }
 
   private def transformClearCache(getClearCache: proto.ClearCache): LogicalPlan = {
     session.catalog.clearCache()

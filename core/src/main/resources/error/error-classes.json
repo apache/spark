@@ -17,6 +17,12 @@
     ],
     "sqlState" : "42704"
   },
+  "AMBIGUOUS_REFERENCE_TO_FIELDS" : {
+    "message" : [
+      "Ambiguous reference to the field <field>. It appears <count> times in the schema."
+    ],
+    "sqlState" : "42000"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -70,6 +76,19 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
+    "message" : [
+      "Failed to merge incompatible data types <left> and <right>."
+    ],
+    "sqlState" : "42825"
+  },
+  "CANNOT_MODIFY_CONFIG" : {
+    "message" : [
+      "Cannot modify the value of the Spark config: <key>.",
+      "See also '<docroot>/sql-migration-guide.html#ddl-statements'."
+    ],
+    "sqlState" : "46110"
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal."
@@ -92,6 +111,17 @@
       "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22007"
+  },
+  "CANNOT_READ_FILE_FOOTER" : {
+    "message" : [
+      "Could not read footer for file: <file>."
+    ]
+  },
+  "CANNOT_RECOGNIZE_HIVE_TYPE" : {
+    "message" : [
+      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
+    ],
+    "sqlState" : "429BB"
   },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
@@ -482,6 +512,12 @@
     ],
     "sqlState" : "22012"
   },
+  "DUPLICATED_MAP_KEY" : {
+    "message" : [
+      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
+    ],
+    "sqlState" : "23505"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -494,9 +530,15 @@
     ],
     "sqlState" : "22003"
   },
+  "EMPTY_JSON_FIELD_VALUE" : {
+    "message" : [
+      "Failed to parse an empty string for data type <dataType>."
+    ],
+    "sqlState" : "42604"
+  },
   "ENCODER_NOT_FOUND" : {
     "message" : [
-      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at https://spark.apache.org/docs/latest/sql-ref-datatypes.html."
+      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
   "FAILED_EXECUTE_UDF" : {
@@ -575,16 +617,34 @@
     ],
     "sqlState" : "42805"
   },
+  "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
+    "message" : [
+      "<identifier> is not a valid identifier as it has more than 2 name parts."
+    ],
+    "sqlState" : "42601"
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
     ],
     "sqlState" : "42818"
   },
+  "INCOMPATIBLE_COLUMN_TYPE" : {
+    "message" : [
+      "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
+    ],
+    "sqlState" : "42825"
+  },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
+  },
+  "INCOMPATIBLE_JOIN_TYPES" : {
+    "message" : [
+      "The join types <joinType1> and <joinType2> are incompatible."
+    ],
+    "sqlState" : "42613"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -609,7 +669,7 @@
       },
       "STRUCT" : {
         "message" : [
-          "The definition of \"STRUCT\" type is incomplete. You must provide at least one field type. For example: \"STRUCT<Field1: INT>\"."
+          "The definition of \"STRUCT\" type is incomplete. You must provide at least one field type. For example: \"STRUCT<name STRING, phone DECIMAL(10, 0)>\"."
         ]
       }
     },
@@ -623,7 +683,7 @@
       "DATETIME_PATTERN_RECOGNITION" : {
         "message" : [
           "Spark >= 3.0:",
-          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html."
+          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
@@ -726,6 +786,12 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
+  "INVALID_COLUMN_NAME_AS_PATH" : {
+    "message" : [
+      "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
+    ],
+    "sqlState" : "46121"
+  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -738,11 +804,23 @@
     ],
     "sqlState" : "42K05"
   },
+  "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
+    "message" : [
+      "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_EXTRACT_FIELD" : {
     "message" : [
       "Cannot extract <field> from <expr>."
     ],
     "sqlState" : "42601"
+  },
+  "INVALID_EXTRACT_FIELD_TYPE" : {
+    "message" : [
+      "Field name should be a non-null string literal, but it's <extraction>."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_FIELD_NAME" : {
     "message" : [
@@ -926,6 +1004,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SET_SYNTAX" : {
+    "message" : [
+      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
@@ -949,6 +1033,11 @@
       }
     },
     "sqlState" : "42823"
+  },
+  "INVALID_TEMP_OBJ_REFERENCE" : {
+    "message" : [
+      "Cannot create a persistent <obj> <objName> by referencing a temporary <tempObj> <tempObjName>. Please make the temporary <tempObj> persistent, or make the persistent <obj> temporary."
+    ]
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
@@ -977,6 +1066,12 @@
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
+  },
+  "MALFORMED_RECORD_IN_PARSING" : {
+    "message" : [
+      "Malformed records are detected in record parsing: <badRecord>.",
+      "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
   "MISSING_AGGREGATION" : {
@@ -1140,6 +1235,12 @@
     ],
     "sqlState" : "428FT"
   },
+  "PATH_ALREADY_EXISTS" : {
+    "message" : [
+      "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
+    ],
+    "sqlState" : "42K04"
+  },
   "PATH_NOT_FOUND" : {
     "message" : [
       "Path does not exist: <path>."
@@ -1207,6 +1308,18 @@
       "Failed to rename as <sourcePath> was not found."
     ],
     "sqlState" : "42K03"
+  },
+  "REPEATED_CLAUSE" : {
+    "message" : [
+      "The <clause> clause may be used at most once per <operation> operation."
+    ],
+    "sqlState" : "42614"
+  },
+  "REQUIRES_SINGLE_PART_NAMESPACE" : {
+    "message" : [
+      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+    ],
+    "sqlState" : "42K05"
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
@@ -1328,6 +1441,12 @@
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ]
   },
+  "UNABLE_TO_INFER_SCHEMA" : {
+    "message" : [
+      "Unable to infer schema for <format>. It must be specified manually."
+    ],
+    "sqlState" : "42KD9"
+  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
@@ -1447,6 +1566,23 @@
     ],
     "sqlState" : "42883"
   },
+  "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
+    "message" : [
+      "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<suggestion>]."
+    ],
+    "sqlState" : "42703"
+  },
+  "UNSUPPORTED_ARROWTYPE" : {
+    "message" : [
+      "Unsupported arrow type <typeName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "Unsupported data source type for direct query on files: <dataSourceType>"
+    ]
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."
@@ -1476,6 +1612,12 @@
       "A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
       "Invalid expressions: [<invalidExprSqls>]"
     ]
+  },
+  "UNSUPPORTED_EXPR_FOR_WINDOW" : {
+    "message" : [
+      "Expression <sqlExpr> not supported within a window function."
+    ],
+    "sqlState" : "42P20"
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
@@ -1522,24 +1664,29 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
-      "JDBC_TRANSACTION" : {
-        "message" : [
-          "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
-        ]
-      },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
         "message" : [
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
         ]
       },
+      "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING" : {
+        "message" : [
+          "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
+        "message" : [
+          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in window expression <windowExpr>."
+        ]
+      },
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
-        ]
-      },
-      "LATERAL_NATURAL_JOIN" : {
-        "message" : [
-          "NATURAL join with LATERAL correlation."
         ]
       },
       "LITERAL_TYPE" : {
@@ -1552,9 +1699,9 @@
           "Multiple bucket TRANSFORMs."
         ]
       },
-      "NATURAL_CROSS_JOIN" : {
+      "MULTI_ACTION_ALTER" : {
         "message" : [
-          "NATURAL CROSS JOIN."
+          "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
         ]
       },
       "ORC_TYPE_CAST" : {
@@ -1580,11 +1727,6 @@
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
-        ]
-      },
-      "REPEATED_PIVOT" : {
-        "message" : [
-          "Repeated PIVOT operation."
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
@@ -1789,7 +1931,7 @@
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
-          "Please, refer to 'https://spark.apache.org/docs/latest/sql-ref-functions.html' for a fix."
+          "Please, refer to '<docroot>/sql-ref-functions.html' for a fix."
         ]
       },
       "WITH_SUGGESTION" : {
@@ -1950,11 +2092,6 @@
       "Found duplicate clauses: <clauseName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0042" : {
-    "message" : [
-      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use quotes, e.g., SET `key`=`value`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0043" : {
     "message" : [
       "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
@@ -2058,11 +2195,6 @@
   "_LEGACY_ERROR_TEMP_1000" : {
     "message" : [
       "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1001" : {
-    "message" : [
-      "USING column `<colName>` cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_1002" : {
@@ -2467,16 +2599,6 @@
       "The second argument should be a double literal."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1105" : {
-    "message" : [
-      "Field name should be String Literal, but it's <extraction>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1106" : {
-    "message" : [
-      "Can't extract value from <child>: need struct type but got <other>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1107" : {
     "message" : [
       "Table <table> declares <batchWrite> capability but <v2WriteClassName> is not an instance of <v1WriteClassName>."
@@ -2512,11 +2634,6 @@
       "The streaming sources in a query do not have a common supported execution mode.",
       "Sources support micro-batch: <microBatchSources>.",
       "Sources support continuous: <continuousSources>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1117" : {
-    "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <ns>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1119" : {
@@ -2567,11 +2684,6 @@
   "_LEGACY_ERROR_TEMP_1128" : {
     "message" : [
       "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1129" : {
-    "message" : [
-      "Unable to infer schema for <format>. It must be specified manually."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
@@ -2680,11 +2792,6 @@
   "_LEGACY_ERROR_TEMP_1151" : {
     "message" : [
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1152" : {
-    "message" : [
-      "Path <outputPath> already exists."
     ]
   },
   "_LEGACY_ERROR_TEMP_1153" : {
@@ -2833,11 +2940,6 @@
       "Catalog <plugin> does not support <ability>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1185" : {
-    "message" : [
-      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1186" : {
     "message" : [
       "Multi-part identifier cannot be empty."
@@ -2953,11 +3055,6 @@
       "The duration and time inputs to window must be an integer, long or string literal."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1209" : {
-    "message" : [
-      "Ambiguous reference to fields <fields>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1210" : {
     "message" : [
       "The second argument in <funcName> should be a boolean literal."
@@ -3044,11 +3141,6 @@
   "_LEGACY_ERROR_TEMP_1228" : {
     "message" : [
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1229" : {
-    "message" : [
-      "<decimalType> can only support precision up to <precision>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1231" : {
@@ -3261,16 +3353,6 @@
       "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1283" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1284" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1285" : {
     "message" : [
       "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the",
@@ -3296,11 +3378,6 @@
   "_LEGACY_ERROR_TEMP_1288" : {
     "message" : [
       "Table or view '<name>' already exists. SaveMode: ErrorIfExists."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1289" : {
-    "message" : [
-      "Column name \"<name>\" contains invalid character(s). Please use alias to rename it."
     ]
   },
   "_LEGACY_ERROR_TEMP_1290" : {
@@ -3423,11 +3500,6 @@
       "Invalid partition transformation: <expr>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1317" : {
-    "message" : [
-      "Cannot resolve column name \"<colName>\" among (<fieldsStr>)<extraMsg>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1318" : {
     "message" : [
       "Unable to parse '<delayThreshold>'."
@@ -3466,12 +3538,6 @@
   "_LEGACY_ERROR_TEMP_1325" : {
     "message" : [
       "Cannot modify the value of a static config: <key>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1326" : {
-    "message" : [
-      "Cannot modify the value of a Spark config: <key>.",
-      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1327" : {
@@ -4004,16 +4070,6 @@
       "The input filter of <owner> should be fully convertible."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2091" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2092" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2093" : {
     "message" : [
       "Found duplicate field(s) \"<requiredFieldName>\": <matchedOrcFields> in case-insensitive mode."
@@ -4042,11 +4098,6 @@
   "_LEGACY_ERROR_TEMP_2098" : {
     "message" : [
       "Could not compare cost with <cost>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2099" : {
-    "message" : [
-      "Unsupported data type: <dt>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2100" : {
@@ -4149,29 +4200,14 @@
       "Failed parsing <simpleString>: <raw>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2123" : {
-    "message" : [
-      "Failed to merge fields '<leftName>' and '<rightName>'. <message>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2124" : {
     "message" : [
       "Failed to merge decimal types with incompatible scale <leftScale> and <rightScale>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2125" : {
-    "message" : [
-      "Failed to merge incompatible data types <leftCatalogString> and <rightCatalogString>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2126" : {
     "message" : [
       "Unsuccessful attempt to build maps with <size> elements due to exceeding the map size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2127" : {
-    "message" : [
-      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to <lastWin> so that the key inserted at last takes precedence."
     ]
   },
   "_LEGACY_ERROR_TEMP_2128" : {
@@ -4186,7 +4222,7 @@
   },
   "_LEGACY_ERROR_TEMP_2130" : {
     "message" : [
-      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html."
+      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2131" : {
@@ -4207,11 +4243,6 @@
   "_LEGACY_ERROR_TEMP_2134" : {
     "message" : [
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2135" : {
-    "message" : [
-      "Failed to parse an empty string for data type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2138" : {
@@ -4391,11 +4422,6 @@
       "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2177" : {
-    "message" : [
-      "Malformed records are detected in record parsing. Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2178" : {
     "message" : [
       "Remote operations not supported."
@@ -4446,11 +4472,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2188" : {
-    "message" : [
-      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2189" : {
@@ -5091,11 +5112,6 @@
       "failed to evaluate expression <sqlExpr>: <msg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2332" : {
-    "message" : [
-      "<msg>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2400" : {
     "message" : [
       "The <name> expression must evaluate to a constant value, but got <limitExpr>."
@@ -5156,11 +5172,6 @@
       "Cannot specify order by or frame for '<aggFunc>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2412" : {
-    "message" : [
-      "Expression '<sqlExpr>' not supported within a window function."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2413" : {
     "message" : [
       "Input argument to <argName> must be a constant."
@@ -5219,11 +5230,6 @@
   "_LEGACY_ERROR_TEMP_2428" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2430" : {
-    "message" : [
-      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2431" : {
