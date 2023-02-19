@@ -115,4 +115,36 @@ class DatasetSuite
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }
+
+  test("write") {
+    val df = ss.newDataset(_ => ()).limit(10)
+
+    val builder = proto.WriteOperation.newBuilder()
+    builder
+      .setInput(df.plan.getRoot)
+      .setPath("my/test/path")
+      .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS)
+      .setSource("parquet")
+      .addSortColumnNames("col1")
+      .addPartitioningColumns("col99")
+      .setBucketBy(
+        proto.WriteOperation.BucketBy
+          .newBuilder()
+          .setNumBuckets(2)
+          .addBucketColumnNames("col1")
+          .addBucketColumnNames("col2"))
+
+    val expectedPlan = proto.Plan
+      .newBuilder()
+      .setCommand(proto.Command.newBuilder().setWriteOperation(builder))
+      .build()
+
+    df.write
+      .sortBy("col1")
+      .partitionBy("col99")
+      .bucketBy(2, "col1", "col2")
+      .parquet("my/test/path")
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
 }
