@@ -2690,20 +2690,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: TableIdentifier,
       nameParts: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1283",
+      errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "name" -> name.toString,
-        "nameParts" -> nameParts))
+        "obj" -> "view",
+        "objName" -> toSQLId(name.nameParts),
+        "tempObj" -> "view",
+        "tempObjName" -> toSQLId(nameParts)))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempFuncError(
       name: TableIdentifier,
       funcName: String): Throwable = {
      new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1284",
+      errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "name" -> name.toString,
-        "funcName" -> funcName))
+        "obj" -> "view",
+        "objName" -> toSQLId(name.nameParts),
+        "tempObj" -> "function",
+        "tempObjName" -> toSQLId(funcName)))
   }
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {

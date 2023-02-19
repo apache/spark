@@ -2186,8 +2186,12 @@ class DataSourceV2SQLSuiteV1Filter
           exception = intercept[AnalysisException] {
             sql(s"CREATE VIEW $sessionCatalogName.default.v AS SELECT * FROM t")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1283",
-          parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "nameParts" -> "t"))
+          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "view",
+            "objName" -> "`spark_catalog`.`default`.`v`",
+            "tempObj" -> "view",
+            "tempObjName" -> "`t`"))
       }
     }
 
