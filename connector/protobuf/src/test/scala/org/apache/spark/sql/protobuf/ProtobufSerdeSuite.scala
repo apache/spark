@@ -19,13 +19,12 @@ package org.apache.spark.sql.protobuf
 
 import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 /**
  * Tests for [[ProtobufSerializer]] and [[ProtobufDeserializer]] with a more specific focus on
@@ -38,6 +37,8 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
   val testFileDesc = testFile("serde_suite.desc", "protobuf/serde_suite.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
+
+  val proto2Desc = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
 
   test("Test basic conversion") {
     withFieldMatchType { fieldMatch =>
@@ -144,44 +145,52 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   test("Fail to convert with missing Catalyst fields") {
     val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
 
-    // serializing with extra fails if extra field is missing in SQL Schema
+    val foobarSQLType = DataType.fromDDL(
+      "struct<foo string>" // "bar" is missing.
+    ).asInstanceOf[StructType]
+
     assertFailedConversionMessage(
-      protoFile,
+      ProtobufUtils.buildDescriptor(proto2Desc, "FoobarWithRequiredFieldBar"),
       Serializer,
       BY_NAME,
+      catalystSchema = foobarSQLType,
       errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
       params = Map(
-        "protobufType" -> "FieldMissingInSQLRoot",
-        "toType" -> toSQLType(CATALYST_STRUCT)))
+        "protobufType" -> "FoobarWithRequiredFieldBar",
+        "toType" -> toSQLType(foobarSQLType)))
 
     /* deserializing should work regardless of whether the extra field is missing
      in SQL Schema or not */
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
 
-    val protoNestedFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLNested")
+    val protoNestedFile = ProtobufUtils
+      .buildDescriptor(proto2Desc, "NestedFoobarWithRequiredFieldBar")
 
-    // serializing with extra fails if extra field is missing in SQL Schema
+    val nestedFoobarSQLType = DataType.fromDDL(
+      "struct<nested_foobar: struct<foo string>>", // "bar" field is missing.
+    ).asInstanceOf[StructType]
+    // serializing with extra fails if required field is missing in inner struct
     assertFailedConversionMessage(
-      protoNestedFile,
+      ProtobufUtils.buildDescriptor(proto2Desc, "NestedFoobarWithRequiredFieldBar"),
       Serializer,
       BY_NAME,
+      catalystSchema = nestedFoobarSQLType,
       errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
       params = Map(
-        "protobufType" -> "FieldMissingInSQLNested",
-        "toType" -> toSQLType(CATALYST_STRUCT)))
+        "protobufType" -> "NestedFoobarWithRequiredFieldBar",
+        "toType" -> toSQLType(nestedFoobarSQLType)))
 
     /* deserializing should work regardless of whether the extra field is missing
       in SQL Schema or not */
-    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
-    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
+    withFieldMatchType(Deserializer.create(nestedFoobarSQLType, protoNestedFile, _))
   }
 
   test("raise cannot parse and construct protobuf descriptor error") {
     // passing serde_suite.proto instead serde_suite.desc
     var testFileDesc = testFile("serde_suite.proto", "protobuf/serde_suite.proto")
     val e1 = intercept[AnalysisException] {
-      ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
+      ProtobufUtils.buildDescriptor(testFileDesc, "SerdeBasicMessage")
     }
 
     checkError(
@@ -191,7 +200,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     testFileDesc = testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
     val e2 = intercept[AnalysisException] {
-      ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
+      ProtobufUtils.buildDescriptor(testFileDesc, "SerdeBasicMessage")
     }
 
     checkError(
