@@ -25,7 +25,6 @@ license: |
 ## Starting Point: SparkSession
 
 <div class="codetabs">
-
 <div data-lang="python"  markdown="1">
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
@@ -64,7 +63,6 @@ To use these features, you do not need to have an existing Hive setup.
 ## Creating DataFrames
 
 <div class="codetabs">
-
 <div data-lang="python"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
 from a Hive table, or from [Spark data sources](sql-data-sources.html).
@@ -202,6 +200,14 @@ refer it, e.g. `SELECT * FROM global_temp.view1`.
 {% include_example global_temp_view python/sql/basic.py %}
 </div>
 
+<div data-lang="SQL"  markdown="1">
+{% highlight sql %}
+CREATE GLOBAL TEMPORARY VIEW temp_view AS SELECT a + 1, b * 2 FROM tbl
+
+SELECT * FROM global_temp.temp_view
+{% endhighlight %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example global_temp_view scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
@@ -210,17 +216,6 @@ refer it, e.g. `SELECT * FROM global_temp.view1`.
 {% include_example global_temp_view java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="SQL"  markdown="1">
-
-{% highlight sql %}
-
-CREATE GLOBAL TEMPORARY VIEW temp_view AS SELECT a + 1, b * 2 FROM tbl
-
-SELECT * FROM global_temp.temp_view
-
-{% endhighlight %}
-
-</div>
 </div>
 
 
