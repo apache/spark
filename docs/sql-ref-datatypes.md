@@ -128,7 +128,7 @@ You can access them by doing
 |**BinaryType**|Array[Byte]|BinaryType|
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.sql.Timestamp|TimestampType|
-|**TimestampNTZType**|java.time.LocalDateTime| TimestampNTZType|
+|**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
 |**DateType**|java.sql.Date|DateType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
@@ -159,10 +159,10 @@ please use factory methods provided in
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
-|**TimestampNTZType**|java.time.LocalDateTime| TimestampNTZType|
+|**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
 |**DateType**|java.sql.Date|DataTypes.DateType|
-|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
-|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
+|**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
 |**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
 |**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
