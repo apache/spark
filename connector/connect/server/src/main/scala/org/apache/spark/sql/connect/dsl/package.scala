@@ -315,9 +315,11 @@ package object dsl {
       }
 
       def sql(sqlText: String, planId: Long = 1): Relation = {
-        Relation.newBuilder()
+        Relation
+          .newBuilder()
           .setCommon(RelationCommon.newBuilder().setPlanId(planId))
-          .setSql(SQL.newBuilder().setQuery(sqlText)).build()
+          .setSql(SQL.newBuilder().setQuery(sqlText))
+          .build()
       }
     }
 
