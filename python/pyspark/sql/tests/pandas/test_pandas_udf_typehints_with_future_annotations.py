@@ -286,7 +286,7 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
     def test_ignore_type_hint_in_cogroup_apply_in_pandas(self):
         df = self.spark.range(10)
 
-        def pandas_plus_one(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+        def pandas_plus_one(_, left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
             return left + 1
 
         actual = (

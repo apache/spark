@@ -106,7 +106,6 @@ if TYPE_CHECKING:
         PandasCogroupedMapUDFType,
         ArrowMapIterUDFType,
         PandasGroupedMapUDFWithStateType,
-        PandasMultiCogroupedMapUDFType,
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType

@@ -2905,12 +2905,12 @@ class DataFrameSuite extends QueryTest
       df1.groupBy($"key1", $"key2").flatMapCoGroupsInPandas(
         df2.groupBy($"key2") :: Nil, flatMapCoGroupsInPandasUDF)
     }
-    assert(exception1.getMessage.contains("Cogroup keys must have same size: 2 != 1"))
+    assert(exception1.getMessage.contains("Cogroup keys must have same size"))
     val exception2 = intercept[IllegalArgumentException] {
       df1.groupBy($"key1").flatMapCoGroupsInPandas(
         df2.groupBy($"key1", $"key2") :: Nil, flatMapCoGroupsInPandasUDF)
     }
-    assert(exception2.getMessage.contains("Cogroup keys must have same size: 1 != 2"))
+    assert(exception2.getMessage.contains("Cogroup keys must have same size"))
 
     // but different keys are allowed
     val actual = df1.groupBy($"key1").flatMapCoGroupsInPandas(
@@ -2924,7 +2924,7 @@ class DataFrameSuite extends QueryTest
     val df2 = df1.filter($"value" === "A2")
     val df3 = df1.filter($"value" === "A1")
 
-    val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapMultiCoGroupsInPandasUDF", null,
+    val flatMapCoGroupsInPandasUDF = PythonUDF("flatMapCoGroupsInPandasUDF", null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,

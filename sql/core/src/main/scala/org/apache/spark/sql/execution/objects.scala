@@ -651,11 +651,11 @@ case class CoGroupExec(
       val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
 
       new CoGroupedIterator(leftGrouped :: rightGrouped :: Nil, leftGroup).flatMap {
-        case (key, List(leftResult, rightResult)) =>
+        case (key, coGroupedIterators) =>
           val result = func(
             getKey(key),
-            leftResult.map(getLeft),
-            rightResult.map(getRight))
+            coGroupedIterators.head.map(getLeft),
+            coGroupedIterators.last.map(getRight))
           result.map(outputObject)
       }
     }
