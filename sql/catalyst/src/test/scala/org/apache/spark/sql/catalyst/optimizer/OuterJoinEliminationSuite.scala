@@ -317,26 +317,24 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("SPARK-42360: Transform LeftOuter join with IsNull filter on right side to Anti join") {
-    object InferFilterOptimize extends RuleExecutor[LogicalPlan] {
-      val batches =
-        Batch("Infer Filters", Once,
-          InferFiltersFromConstraints) ::
-          Batch("Subqueries", Once,
-            EliminateSubqueryAliases) ::
-          Batch("Outer Join Elimination", Once,
-            EliminateOuterJoin,
-            PushPredicateThroughJoin) :: Nil
-    }
-
     val x = testRelation.subquery("x")
-    val y = testRelation1.subquery("y")
-    comparePlans(InferFilterOptimize.execute(
-      x.join(y, LeftOuter, Some($"a" === $"d"))
-        .where($"d".isNull && rand(1) < 0.5)
-        .select($"a", $"b", $"c").analyze),
-      x.join(y.where($"d".isNotNull), LeftAnti, Some($"a" === $"d"))
-        .where(rand(1) < 0.5)
-        .select($"a", $"b", $"c").analyze
-    )
+    val y = testRelation1.subquery("y").where($"d".isNotNull)
+    // Convert LeftOuter to Anti join
+    val originQuery1 = x.join(y, LeftOuter, Some($"a" === $"d"))
+      .where($"d".isNull && rand(1) < 0.5)
+      .select($"a", $"b", $"c")
+    val correctAnswer1 = x.join(y, LeftAnti, Some($"a" === $"d"))
+      .where(rand(1) < 0.5)
+      .select($"a", $"b", $"c")
+    comparePlans(Optimize.execute(originQuery1.analyze), correctAnswer1.analyze)
+
+    // Convert LeftOuter to Inner join
+    val originQuery2 = x.join(y, LeftOuter, Some($"a" === $"d"))
+      .where($"d".isNull && $"f" > 10 && rand(1) < 0.5)
+      .select($"a", $"b", $"c")
+    val correctAnswer2 = x.join(y.where($"d".isNull && $"f" > 10), Inner, Some($"a" === $"d"))
+      .where(rand(1) < 0.5)
+      .select($"a", $"b", $"c")
+    comparePlans(Optimize.execute(originQuery2.analyze), correctAnswer2.analyze)
   }
 }
