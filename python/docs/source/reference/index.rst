@@ -28,7 +28,6 @@ Pandas API on Spark follows the API specifications of latest pandas release.
    :maxdepth: 2
 
    pyspark.sql/index
-   pyspark.connect/index
    pyspark.pandas/index
    pyspark.ss/index
    pyspark.ml

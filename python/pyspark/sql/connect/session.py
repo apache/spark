@@ -103,8 +103,6 @@ class SparkSession:
                     self._options[cast(str, key)] = to_str(value)
                 return self
 
-        config.__doc__ = PySparkSession.builder.config.__doc__
-
         def master(self, master: str) -> "SparkSession.Builder":
             return self
 
@@ -123,8 +121,6 @@ class SparkSession:
 
         def getOrCreate(self) -> "SparkSession":
             return SparkSession(connectionString=self._options["spark.remote"])
-
-        getOrCreate.__doc__ = PySparkSession.builder.getOrCreate.__doc__
 
     _client: SparkConnectClient
 
