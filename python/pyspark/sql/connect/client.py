@@ -203,8 +203,6 @@ class ChannelBuilder:
         parameters will be converted to metadata except ones that are explicitly used
         by the channel.
 
-        .. versionadded:: 3.4.0
-
         Returns
         -------
         A list of tuples (key, value)
@@ -248,8 +246,6 @@ class ChannelBuilder:
 
     def get(self, key: str) -> Any:
         """
-        .. versionadded:: 3.4.0
-
         Parameters
         ----------
         key : str
@@ -266,8 +262,6 @@ class ChannelBuilder:
         Applies the parameters of the connection string and creates a new
         GRPC channel according to the configuration. Passes optional channel options to
         construct the channel.
-
-        .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -453,8 +447,6 @@ class SparkConnectClient(object):
         """
         Create a temporary UDF in the session catalog on the other side. We generate a
         temporary name for it.
-
-        .. versionadded:: 3.4.0
         """
 
         if name is None:
@@ -500,8 +492,6 @@ class SparkConnectClient(object):
     def to_table(self, plan: pb2.Plan) -> "pa.Table":
         """
         Return given plan as a PyArrow Table.
-
-        .. versionadded:: 3.4.0
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
@@ -512,8 +502,6 @@ class SparkConnectClient(object):
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
         """
         Return given plan as a pandas DataFrame.
-
-        .. versionadded:: 3.4.0
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
@@ -544,8 +532,6 @@ class SparkConnectClient(object):
     def schema(self, plan: pb2.Plan) -> StructType:
         """
         Return schema for given plan.
-
-        .. versionadded:: 3.4.0
         """
         logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
         proto_schema = self._analyze(plan).schema
@@ -571,8 +557,6 @@ class SparkConnectClient(object):
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
         """
         Return explain string for given plan.
-
-        .. versionadded:: 3.4.0
         """
         logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(plan, explain_mode)
@@ -581,8 +565,6 @@ class SparkConnectClient(object):
     def execute_command(self, command: pb2.Command) -> None:
         """
         Execute given command.
-
-        .. versionadded:: 3.4.0
         """
         logger.info(f"Execute command for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
@@ -595,8 +577,6 @@ class SparkConnectClient(object):
     def close(self) -> None:
         """
         Close the channel.
-
-        .. versionadded:: 3.4.0
         """
         self._channel.close()
 
