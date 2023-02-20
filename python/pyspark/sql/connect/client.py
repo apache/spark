@@ -403,7 +403,11 @@ class AnalyzeResult:
 
 
 class SparkConnectClient(object):
-    """Conceptually the remote spark session that communicates with the server"""
+    """
+    Conceptually the remote spark session that communicates with the server
+
+    .. versionadded:: 3.4.0
+    """
 
     @classmethod
     def retry_exception(cls, e: grpc.RpcError) -> bool:
@@ -465,8 +469,10 @@ class SparkConnectClient(object):
         eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
     ) -> str:
-        """Create a temporary UDF in the session catalog on the other side. We generate a
-        temporary name for it."""
+        """
+        Create a temporary UDF in the session catalog on the other side. We generate a
+        temporary name for it.
+        """
 
         if name is None:
             name = f"fun_{uuid.uuid4().hex}"
@@ -509,6 +515,9 @@ class SparkConnectClient(object):
         ]
 
     def to_table(self, plan: pb2.Plan) -> "pa.Table":
+        """
+        Return given plan as a PyArrow Table.
+        """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
@@ -516,6 +525,9 @@ class SparkConnectClient(object):
         return table
 
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
+        """
+        Return given plan as a pandas DataFrame.
+        """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
@@ -543,6 +555,9 @@ class SparkConnectClient(object):
         return text_format.MessageToString(p, as_one_line=True)
 
     def schema(self, plan: pb2.Plan) -> StructType:
+        """
+        Return schema for given plan.
+        """
         logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
         proto_schema = self._analyze(plan).schema
         # Server side should populate the struct field which is the schema.
@@ -565,11 +580,17 @@ class SparkConnectClient(object):
         return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
+        """
+        Return explain string for given plan.
+        """
         logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(plan, explain_mode)
         return result.explain_string
 
     def execute_command(self, command: pb2.Command) -> None:
+        """
+        Execute given command.
+        """
         logger.info(f"Execute command for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
@@ -579,6 +600,9 @@ class SparkConnectClient(object):
         return
 
     def close(self) -> None:
+        """
+        Close the channel.
+        """
         self._channel.close()
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
