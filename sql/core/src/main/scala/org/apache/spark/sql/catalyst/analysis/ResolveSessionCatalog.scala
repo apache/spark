@@ -256,8 +256,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ShowTableExtended(
         DatabaseInSessionCatalog(db),
         pattern,
-        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)) |
-                         Some(ExtractPartitionSpec(_, _))),
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
         output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
         assert(output.length == 4)
@@ -265,11 +264,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       } else {
         output
       }
-      val tablePartitionSpec = partitionSpec match {
-        case Some(UnresolvedPartitionSpec(spec, _)) => Some(spec)
-        case Some(ExtractPartitionSpec(spec, _)) => Some(spec)
-        case _ => None
-      }
+      val tablePartitionSpec = partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec)
       ShowTablesCommand(Some(db), Some(pattern), newOutput, true, tablePartitionSpec)
 
     // ANALYZE TABLE works on permanent views if the views are cached.

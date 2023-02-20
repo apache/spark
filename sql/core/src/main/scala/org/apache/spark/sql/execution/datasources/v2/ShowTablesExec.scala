@@ -23,9 +23,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec.convertToPartIdent
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, StringUtils}
@@ -35,7 +34,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits.TableHelper
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.sql.util.PartitioningUtils.{normalizePartitionSpec, requireExactMatchedPartitionSpec}
 
 /**
  * Physical plan node for showing tables.
@@ -46,36 +44,34 @@ case class ShowTablesExec(
     namespace: Seq[String],
     pattern: Option[String],
     isExtended: Boolean = false,
-    partitionSpec: Option[TablePartitionSpec] = None) extends V2CommandExec with LeafExecNode {
+    partitionSpec: Option[ResolvedPartitionSpec] = None) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
 
-    val identifiers = catalog.listTables(namespace.toArray)
-    identifiers.map { identifier =>
-      if (pattern.map(StringUtils.filterPattern(
-        Seq(identifier.name()), _).nonEmpty).getOrElse(true)) {
-        if (!isExtended) {
-          rows += toCatalystRow(identifier.namespace().quoted, identifier.name(),
-            isTempView(identifier))
-        } else {
-          val table = catalog.loadTable(identifier)
-          if (!partitionSpec.isEmpty && table.isPartitionable) {
-            // Show the information of partitions.
-            rows += toCatalystRow(
-              identifier.namespace().quoted,
-              identifier.name(),
-              isTempView(identifier),
-              s"${extendedPartition(identifier, table.asPartitionable, partitionSpec)}")
+    if (partitionSpec.isEmpty) {
+      // Show the information of tables.
+      val identifiers = catalog.listTables(namespace.toArray)
+      identifiers.map { identifier =>
+        if (pattern.map(StringUtils.filterPattern(
+          Seq(identifier.name()), _).nonEmpty).getOrElse(true)) {
+          val isTemp = isTempView(identifier)
+          if (isExtended) {
+            val table = catalog.loadTable(identifier)
+            val information = extendedTable(identifier, table)
+            rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp,
+              s"$information\n")
           } else {
-            // Show the information of tables.
-            rows += toCatalystRow(
-              identifier.namespace().quoted,
-              identifier.name(),
-              isTempView(identifier),
-              s"${extendedTable(identifier, table)}")
+            rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp)
           }
         }
       }
+    } else {
+      // Show the information of partitions.
+      val identifier = Identifier.of(namespace.toArray, pattern.get)
+      val table = catalog.loadTable(identifier)
+      val isTemp = isTempView(identifier)
+      val information = extendedPartition(identifier, table.asPartitionable, partitionSpec.get)
+      rows += toCatalystRow(namespace.quoted, table.name(), isTemp, s"$information\n")
     }
 
     rows.toSeq
@@ -121,7 +117,6 @@ case class ShowTablesExec(
     }
 
     // Partition Provider & Partition Columns
-    // TODO check
     if (table.isPartitionable && !table.asPartitionable.partitionSchema().isEmpty) {
       results.put("Partition Provider", "Catalog")
       results.put("Partition Columns", table.asPartitionable.partitionSchema().map(
@@ -130,7 +125,7 @@ case class ShowTablesExec(
 
     if (table.schema().nonEmpty) results.put("Schema", table.schema().treeString)
 
-    results.map { case ((key, value)) =>
+    results.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "")
   }
@@ -138,53 +133,40 @@ case class ShowTablesExec(
   private def extendedPartition(
       identifier: Identifier,
       partitionTable: SupportsPartitionManagement,
-      partitionSpec: Option[TablePartitionSpec]): String = {
+      resolvedPartitionSpec: ResolvedPartitionSpec): String = {
     val results = new mutable.LinkedHashMap[String, String]()
 
     // "Partition Values"
     val partitionSchema = partitionTable.partitionSchema()
-    val normalizedSpec = normalizePartitionSpec(
-      partitionSpec.get,
-      partitionSchema,
-      partitionTable.name(),
-      conf.resolver)
-    requireExactMatchedPartitionSpec(identifier.toString,
-      normalizedSpec, partitionSchema.fieldNames)
-
-    val partitionNames = normalizedSpec.keySet
-    val (names, ident) = (partitionSchema.map(_.name),
-      convertToPartIdent(normalizedSpec, partitionSchema))
+    val (names, ident) = (resolvedPartitionSpec.names, resolvedPartitionSpec.ident)
     val partitionIdentifiers = partitionTable.listPartitionIdentifiers(names.toArray, ident)
     partitionIdentifiers.length match {
       case 0 =>
         throw QueryExecutionErrors.notExistPartitionError(
           identifier.toString, ident, partitionSchema)
-      case len if (len > 1) =>
+      case len if len > 1 =>
         throw QueryExecutionErrors.showTableExtendedMultiPartitionUnsupportedError(
           identifier.toString)
       case _ => // do nothing
     }
-    val partitionIdentifier = partitionIdentifiers.head
+    val row = partitionIdentifiers.head
     val len = partitionSchema.length
     val partitions = new Array[String](len)
     val timeZoneId = conf.sessionLocalTimeZone
-    var i = 0
-    while (i < len) {
+    for (i <- 0 until len) {
       val dataType = partitionSchema(i).dataType
       val partValueUTF8String =
-        Cast(Literal(partitionIdentifier.get(i, dataType), dataType),
-          StringType, Some(timeZoneId)).eval()
+        Cast(Literal(row.get(i, dataType), dataType), StringType, Some(timeZoneId)).eval()
       val partValueStr = if (partValueUTF8String == null) "null" else partValueUTF8String.toString
       partitions(i) = escapePathName(partitionSchema(i).name) + "=" + escapePathName(partValueStr)
-      i += 1
     }
     val partitionValues = partitions.mkString("[", ", ", "]")
-    results.put("Partition Values", s"${partitionValues}")
+    results.put("Partition Values", s"$partitionValues")
 
     // "Partition Parameters"
     val metadata = partitionTable.loadPartitionMetadata(ident)
     if (!metadata.isEmpty) {
-      val metadataValues = metadata.map { case ((key, value)) =>
+      val metadataValues = metadata.map { case (key, value) =>
         if (value.isEmpty) key else s"$key: $value"
       }.mkString("{", ", ", "}")
       results.put("Partition Parameters", metadataValues)
@@ -192,7 +174,7 @@ case class ShowTablesExec(
 
     // TODO "Created Time", "Last Access", "Partition Statistics"
 
-    results.map { case ((key, value)) =>
+    results.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "\n")
   }

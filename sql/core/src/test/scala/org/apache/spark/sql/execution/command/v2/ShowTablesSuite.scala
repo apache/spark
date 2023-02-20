@@ -59,13 +59,41 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       parameters = Map("schemaName" -> "`unknown`"))
   }
 
+  test("SHOW TABLE EXTENDED in a not existing table") {
+    val table = "people"
+    withTable(s"$catalog.$table") {
+      val result = sql(s"SHOW TABLE EXTENDED FROM $catalog LIKE '*$table*'")
+      assert(result.schema.fieldNames ===
+        Seq("namespace", "tableName", "isTemporary", "information"))
+      assert(result.collect().isEmpty)
+    }
+  }
+
+  test("SHOW TABLE EXTENDED in a not existing partition") {
+    val namespace = "ns1.ns2"
+    val table = "tbl"
+    withNamespaceAndTable(s"$namespace", s"$table", s"$catalog") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
+      checkError(
+        exception = intercept[NoSuchPartitionException] {
+          sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE 'tbl' PARTITION(id = 2)")
+        },
+        errorClass = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "PARTITION (`id` = 2)",
+          "tableName" -> "`ns1`.`ns2`.`tbl`"
+        )
+      )
+    }
+  }
+
   test("SHOW TABLE EXTENDED for v2 tables") {
     val namespace = "ns1.ns2"
     val table = "tbl"
     withNamespaceAndTable(s"$namespace", s"$table", s"$catalog") { tbl =>
-      sql(s"CREATE TABLE $tbl (id bigint, data string) " +
-        s"$defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $tbl ADD PARTITION (id=1)")
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
 
       val result1 = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE 'tb*'")
       assert(result1.schema.fieldNames ===
@@ -82,6 +110,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
            |Schema: root
            | |-- id: long (nullable = true)
            | |-- data: string (nullable = true)
+           |
            |""".stripMargin)
 
       val result2 = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE 'tb*'")
@@ -99,23 +128,27 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
            |Schema: root
            | |-- id: long (nullable = true)
            | |-- data: string (nullable = true)
+           |
            |""".stripMargin)
 
       val result3 = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace " +
-        s"LIKE 'tb*' PARTITION(id = 1)")
+        "LIKE 'tbl' PARTITION(id = 1)")
       assert(result3.schema.fieldNames ===
         Seq("namespace", "tableName", "isTemporary", "information"))
       assert(result3.collect()(0).length == 4)
       assert(result3.collect()(0)(3) ===
         """Partition Values: [id=1]
+          |
           |""".stripMargin)
 
-      val result4 = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE 'tb*' PARTITION(id = 1)")
+      val result4 = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace " +
+        "LIKE 'tbl' PARTITION(id = 1)")
       assert(result4.schema.fieldNames ===
         Seq("namespace", "tableName", "isTemporary", "information"))
       assert(result4.collect()(0).length == 4)
       assert(result4.collect()(0)(3) ===
         """Partition Values: [id=1]
+          |
           |""".stripMargin)
 
       sql(s"ALTER TABLE $tbl SET LOCATION 's3://bucket/path'")
@@ -134,37 +167,8 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
            |Schema: root
            | |-- id: long (nullable = true)
            | |-- data: string (nullable = true)
+           |
            |""".stripMargin)
-    }
-  }
-
-  test("SHOW TABLE EXTENDED in a not existing partition") {
-    val namespace = "ns1.ns2"
-    val table = "tbl"
-    withNamespaceAndTable(s"$namespace", s"$table", s"$catalog") { tbl =>
-      sql(s"CREATE TABLE $tbl (id bigint, data string) " +
-        s"$defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $tbl ADD PARTITION (id=1)")
-      checkError(
-        exception = intercept[NoSuchPartitionException] {
-          sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE 'tb*' PARTITION(id = 2)")
-        },
-        errorClass = "PARTITIONS_NOT_FOUND",
-        parameters = Map(
-          "partitionList" -> "PARTITION (`id` = 2)",
-          "tableName" -> "`ns1`.`ns2`.`tbl`"
-        )
-      )
-    }
-  }
-
-  test("SHOW TABLE EXTENDED in a not existing table") {
-    val table = "people"
-    withTable(s"$catalog.$table") {
-      val result = sql(s"SHOW TABLE EXTENDED FROM $catalog LIKE '*$table*'")
-      assert(result.schema.fieldNames ===
-          Seq("namespace", "tableName", "isTemporary", "information"))
-      assert(result.collect().isEmpty)
     }
   }
 }

@@ -24,7 +24,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ExtractPartitionSpec, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -396,18 +396,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case ShowTableExtended(
-        ResolvedNamespace(catalog, ns),
-        pattern,
-        partitionSpec @ (None | Some(ExtractPartitionSpec(_, _))),
+        ResolvedNamespace(catalog, ns), pattern,
+        partitionSpec @ (None | Some(_: ResolvedPartitionSpec)),
         output) =>
-      val tablePartitionSpec = partitionSpec.map(_.asInstanceOf[ExtractPartitionSpec].spec)
-      ShowTablesExec(
-        output,
-        catalog.asTableCatalog,
-        ns,
-        Some(pattern),
-        true,
-        tablePartitionSpec) :: Nil
+      ShowTablesExec(output, catalog.asTableCatalog, ns, Some(pattern), true,
+        partitionSpec.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
 
     case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns)) =>
       val catalogManager = session.sessionState.catalogManager
