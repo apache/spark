@@ -1,0 +1,7 @@
+¤
+ˆº„
+YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>'
+
+wtwt{"spark.timeWindow":true}
+window_time
+wt

@@ -1,0 +1,36 @@
+{
+  "project": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "datediff",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "d"
+          }
+        }, {
+          "unresolvedFunction": {
+            "functionName": "make_date",
+            "arguments": [{
+              "literal": {
+                "integer": 2020
+              }
+            }, {
+              "literal": {
+                "integer": 10
+              }
+            }, {
+              "literal": {
+                "integer": 10
+              }
+            }]
+          }
+        }]
+      }
+    }]
+  }
+}

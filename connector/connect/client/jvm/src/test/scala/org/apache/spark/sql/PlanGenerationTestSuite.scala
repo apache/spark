@@ -190,6 +190,19 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   private val binarySchemaString = binarySchema.catalogString
 
+  private val temporalsSchema = new StructType()
+    .add("d", "date")
+    .add("t", "timestamp")
+    .add("s", "string")
+    .add("x", "bigint")
+    .add(
+      "wt",
+      new StructType()
+        .add("start", "timestamp")
+        .add("end", "timestamp"))
+
+  private val temporalsSchemaString = temporalsSchema.catalogString
+
   private def createLocalRelation(schema: String): DataFrame = session.newDataset { builder =>
     // TODO API is not consistent. Now we have two different ways of working with schemas!
     builder.getLocalRelationBuilder.setSchema(schema)
@@ -201,8 +214,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   private def right: DataFrame = createLocalRelation(otherSchemaString)
   private def complex = createLocalRelation(complexSchemaString)
   private def binary = createLocalRelation(binarySchemaString)
-
-  private def select(cs: Column*): DataFrame = simple.select(cs: _*)
+  private def temporals = createLocalRelation(temporalsSchemaString)
 
   /* Spark Session API */
   test("sql") {
@@ -862,13 +874,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.first("a", ignoreNulls = true)
   }
 
-  test("function grouping and grouping_id") {
-    simple
-      .groupBy(fn.col("a"))
-      .agg(fn.count(fn.col("id")), fn.grouping("a"), fn.grouping("id"), fn.grouping_id("a"))
-  }
-
-
   functionTest("kurtosis") {
     fn.kurtosis("a")
   }
@@ -882,7 +887,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("function max") {
-    select(fn.max("id"))
+    simple.select(fn.max("id"))
   }
 
   functionTest("max_by") {
@@ -1222,7 +1227,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("xxhash64") {
-    fn.xxhash64(fn.col("*"))
+    fn.xxhash64(fn.col("id"), fn.col("a"), fn.col("d"), fn.col("g"))
   }
 
   functionTest("assert_true") {
@@ -1234,7 +1239,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("raise_error") {
-    fn.raise_error(fn.col("kaboom"))
+    fn.raise_error(fn.lit("kaboom"))
   }
 
   functionTest("ascii") {
@@ -1294,7 +1299,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("function lpad binary") {
-    binary.select(fn.lpad(fn.col("bytes"), 5, Array(0xC, 0xA, 0xF, 0xE).map(_.toByte)))
+    binary.select(fn.lpad(fn.col("bytes"), 5, Array(0xc, 0xa, 0xf, 0xe).map(_.toByte)))
   }
 
   functionTest("ltrim") {
@@ -1326,7 +1331,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("function rpad binary") {
-    binary.select(fn.rpad(fn.col("bytes"), 5, Array(0xB, 0xA, 0xB, 0xE).map(_.toByte)))
+    binary.select(fn.rpad(fn.col("bytes"), 5, Array(0xb, 0xa, 0xb, 0xe).map(_.toByte)))
   }
 
   functionTest("rtrim") {
@@ -1385,156 +1390,165 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.upper(fn.col("g"))
   }
 
-  functionTest("add_months") {
-    fn.radians("b")
+  private def temporalFunctionTest(name: String)(f: => Column): Unit = {
+    test("function " + name) {
+      temporals.select(f)
+    }
   }
 
-  functionTest("current_date") {
-    fn.radians("b")
+  temporalFunctionTest("add_months") {
+    fn.add_months(fn.col("d"), 2)
   }
 
-  functionTest("current_timestamp") {
-    fn.radians("b")
+  temporalFunctionTest("current_date") {
+    fn.current_date()
   }
 
-  functionTest("localtimestamp") {
-    fn.radians("b")
+  temporalFunctionTest("current_timestamp") {
+    fn.current_timestamp()
   }
 
-  functionTest("date_format") {
-    fn.radians("b")
+  temporalFunctionTest("localtimestamp") {
+    fn.localtimestamp()
   }
 
-  functionTest("date_add") {
-    fn.radians("b")
+  temporalFunctionTest("date_format") {
+    fn.date_format(fn.col("d"), "yyyy-MM-dd")
   }
 
-  functionTest("date_sub") {
-    fn.radians("b")
+  temporalFunctionTest("date_add") {
+    fn.date_add(fn.col("d"), 2)
   }
 
-  functionTest("datediff") {
-    fn.radians("b")
+  temporalFunctionTest("date_sub") {
+    fn.date_sub(fn.col("d"), 2)
   }
 
-  functionTest("year") {
-    fn.radians("b")
+  temporalFunctionTest("datediff") {
+    fn.datediff(fn.col("d"), fn.make_date(lit(2020), lit(10), lit(10)))
   }
 
-  functionTest("quarter") {
-    fn.radians("b")
+  temporalFunctionTest("year") {
+    fn.year(fn.col("d"))
   }
 
-  functionTest("month") {
-    fn.radians("b")
+  temporalFunctionTest("quarter") {
+    fn.quarter(fn.col("d"))
   }
 
-  functionTest("dayofweek") {
-    fn.radians("b")
+  temporalFunctionTest("month") {
+    fn.month(fn.col("d"))
   }
 
-  functionTest("dayofmonth") {
-    fn.radians("b")
+  temporalFunctionTest("dayofweek") {
+    fn.dayofweek(fn.col("d"))
   }
 
-  functionTest("dayofyear") {
-    fn.radians("b")
+  temporalFunctionTest("dayofmonth") {
+    fn.dayofmonth(fn.col("d"))
   }
 
-  functionTest("hour") {
-    fn.radians("b")
+  temporalFunctionTest("dayofyear") {
+    fn.dayofyear(fn.col("d"))
   }
 
-  functionTest("last_day") {
-    fn.radians("b")
+  temporalFunctionTest("hour") {
+    fn.hour(fn.col("t"))
   }
 
-  functionTest("minute") {
-    fn.radians("b")
+  temporalFunctionTest("last_day") {
+    fn.last_day(fn.col("t"))
   }
 
-  functionTest("make_date") {
-    fn.radians("b")
+  temporalFunctionTest("minute") {
+    fn.minute(fn.col("t"))
   }
 
-  functionTest("months_between") {
-    fn.radians("b")
+  temporalFunctionTest("make_date") {
+    fn.make_date(fn.lit(2018), fn.lit(5), fn.lit(14))
   }
 
-  functionTest("months_between with roundoff") {
-    fn.radians("b")
+  temporalFunctionTest("months_between") {
+    fn.months_between(fn.current_date(), fn.col("d"))
   }
 
-  functionTest("next_day") {
-    fn.radians("b")
+  temporalFunctionTest("months_between with roundoff") {
+    fn.months_between(fn.current_date(), fn.col("d"), roundOff = true)
   }
 
-  functionTest("second") {
-    fn.radians("b")
+  temporalFunctionTest("next_day") {
+    fn.next_day(fn.col("d"), "Mon")
   }
 
-  functionTest("weekofyear") {
-    fn.radians("b")
+  temporalFunctionTest("second") {
+    fn.second(fn.col("t"))
   }
 
-  functionTest("from_unixtime") {
-    fn.radians("b")
+  temporalFunctionTest("weekofyear") {
+    fn.weekofyear(fn.col("d"))
   }
 
-  functionTest("unix_timestamp") {
-    fn.radians("b")
+  temporalFunctionTest("from_unixtime") {
+    fn.from_unixtime(lit(1L))
   }
 
-  functionTest("unix_timestamp with format") {
-    fn.radians("b")
+  temporalFunctionTest("unix_timestamp") {
+    fn.unix_timestamp()
   }
 
-  functionTest("to_timestamp") {
-    fn.radians("b")
+  temporalFunctionTest("unix_timestamp with format") {
+    fn.unix_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS")
   }
 
-  functionTest("to_timestamp with format") {
-    fn.radians("b")
+  temporalFunctionTest("to_timestamp") {
+    fn.to_timestamp(fn.col("s"))
   }
 
-  functionTest("to_date") {
-    fn.radians("b")
+  temporalFunctionTest("to_timestamp with format") {
+    fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS")
   }
 
-  functionTest("to_date with format") {
-    fn.radians("b")
+  temporalFunctionTest("to_date") {
+    fn.to_date(fn.col("s"))
   }
 
-  functionTest("trunc") {
-    fn.radians("b")
+  temporalFunctionTest("to_date with format") {
+    fn.to_date(fn.col("s"), "yyyy-MM-dd")
   }
 
-  functionTest("date_trunc") {
-    fn.radians("b")
+  temporalFunctionTest("trunc") {
+    fn.trunc(fn.col("d"), "mm")
   }
 
-  functionTest("from_utc_timestamp") {
-    fn.radians("b")
+  temporalFunctionTest("date_trunc") {
+    fn.trunc(fn.col("t"), "minute")
   }
 
-  functionTest("to_utc_timestamp") {
-    fn.radians("b")
+  temporalFunctionTest("from_utc_timestamp") {
+    fn.from_utc_timestamp(fn.col("t"), "-08:00")
   }
 
-  functionTest("window") {
-    fn.radians("b")
+  temporalFunctionTest("to_utc_timestamp") {
+    fn.to_utc_timestamp(fn.col("t"), "-04:00")
   }
 
-  functionTest("window_time") {
-    fn.radians("b")
+  temporalFunctionTest("window") {
+    fn.window(fn.col("t"), "1 second")
   }
 
-  functionTest("session_window") {
-    fn.radians("b")
+  test("function window_time") {
+    val metadata = new MetadataBuilder().putBoolean("spark.timeWindow", value = true).build()
+    temporals
+      .withMetadata("wt", metadata)
+      .select(fn.window_time(fn.col("wt")))
   }
 
-  functionTest("timestamp_seconds") {
-    fn.radians("b")
+  temporalFunctionTest("session_window") {
+    fn.session_window(fn.col("t"), "10 minutes")
+  }
+
+  temporalFunctionTest("timestamp_seconds") {
+    fn.timestamp_seconds(fn.col("x"))
   }
 
   test("groupby agg") {
@@ -1594,7 +1608,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("function lit") {
-    select(
+    simple.select(
       fn.lit(fn.col("id")),
       fn.lit('id),
       fn.lit(true),
