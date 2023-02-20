@@ -89,7 +89,8 @@ public class ParquetCodecFactory extends CodecFactory {
     public void decompress(
         ByteBuffer input, int compressedSize, ByteBuffer output, int uncompressedSize)
         throws IOException {
-      ByteBuffer decompressed = decompress(BytesInput.from(input), uncompressedSize).toByteBuffer();
+      ByteBuffer decompressed =
+          decompress(BytesInput.from(input), uncompressedSize).toByteBuffer();
       output.put(decompressed);
     }
 
