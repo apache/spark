@@ -1934,9 +1934,6 @@ class DataFrameWriterV2:
         """
         Specifies a provider for the underlying output data source.
         Spark's default catalog supports "parquet", "json", etc.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.using(provider)
         return self
@@ -1945,9 +1942,6 @@ class DataFrameWriterV2:
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriterV2":
         """
         Add a write option.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.option(key, to_str(value))
         return self
@@ -1956,9 +1950,6 @@ class DataFrameWriterV2:
     def options(self, **options: "OptionalPrimitiveType") -> "DataFrameWriterV2":
         """
         Add write options.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         options = {k: to_str(v) for k, v in options.items()}
         self._jwriter.options(options)
@@ -1968,9 +1959,6 @@ class DataFrameWriterV2:
     def tableProperty(self, property: str, value: str) -> "DataFrameWriterV2":
         """
         Add table property.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.tableProperty(property, value)
         return self
@@ -2002,9 +1990,6 @@ class DataFrameWriterV2:
         * :py:func:`pyspark.sql.functions.hours`
         * :py:func:`pyspark.sql.functions.bucket`
 
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
@@ -2018,9 +2003,6 @@ class DataFrameWriterV2:
 
         The new table's schema, partition layout, properties, and other configuration will be
         based on the configuration set on this writer.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.create()
 
@@ -2031,9 +2013,6 @@ class DataFrameWriterV2:
 
         The existing table's schema, partition layout, properties, and other configuration will be
         replaced with the contents of the data frame and the configuration set on this writer.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.replace()
 
@@ -2046,9 +2025,6 @@ class DataFrameWriterV2:
         and other configuration will be based on the contents of the data frame
         and the configuration set on this writer.
         If the table exists, its configuration and data will be replaced.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.createOrReplace()
 
@@ -2056,9 +2032,6 @@ class DataFrameWriterV2:
     def append(self) -> None:
         """
         Append the contents of the data frame to the output table.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.append()
 
@@ -2067,9 +2040,6 @@ class DataFrameWriterV2:
         """
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         condition = _to_java_column(condition)
         self._jwriter.overwrite(condition)
@@ -2082,9 +2052,6 @@ class DataFrameWriterV2:
 
         This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
         partitions dynamically depending on the contents of the data frame.
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
         """
         self._jwriter.overwritePartitions()
 
