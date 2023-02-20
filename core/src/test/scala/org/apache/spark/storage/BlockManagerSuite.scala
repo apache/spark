@@ -2308,7 +2308,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     verify(master, times(2)).updateRDDBlockTaskInfo(blockId, 1)
   }
 
-  test("add block rdd visibility status") {
+  test("SPARK-41497: add block rdd visibility status") {
     val store = makeBlockManager(8000, "executor1")
     val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
     val data = Seq(1, 2, 3)
@@ -2328,7 +2328,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(!store.blockInfoManager.visibleRDDBlocks.contains(blockId))
   }
 
-  test("master & manager interaction about rdd block visibility information") {
+  test("SPARK-41497: master & manager interaction about rdd block visibility information") {
     val store1 = makeBlockManager(8000, "executor1")
     val store2 = makeBlockManager(8000, "executor2")
     val store3 = makeBlockManager(8000, "executor3")
@@ -2367,7 +2367,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     }
   }
 
-  test("rdd block's visibility status should be cached once got from driver") {
+  test("SPARK-41497: rdd block's visibility status should be cached once got from driver") {
     val store = makeBlockManager(8000, "executor1")
     val taskId = 0L
     val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
@@ -2387,8 +2387,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(store.blockInfoManager.isRDDBlockVisible(blockId))
   }
 
-  test("getOrElseUpdateRDDBlock should make sure accumulators updated when block already" +
-    " exist but still not visible") {
+  test("SPARK-41497: getOrElseUpdateRDDBlock should make sure accumulators updated when block" +
+    " already exist but still not visible") {
     val store = makeBlockManager(8000, "executor1")
     val taskId = 0L
     val blockId = RDDBlockId(rddId = 1, splitIndex = 1)

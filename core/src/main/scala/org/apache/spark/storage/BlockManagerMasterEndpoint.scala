@@ -80,7 +80,8 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
-  // Record the visible RDD blocks which have been generated at least from one successful task.
+  // Record the RDD blocks which are not visible yet, a block will be removed from this collection
+  // after at least one task generating the block finishes successfully.
   private val invisibleRDDBlocks = new mutable.HashSet[RDDBlockId]
 
   // Mapping from host name to shuffle (mergers) services where the current app
@@ -222,19 +223,14 @@ class BlockManagerMasterEndpoint(
 
     case UpdateRDDBlockTaskInfo(blockId, taskId) =>
       // This is to report the information that a rdd block(with `blockId`) is computed
-      // and cached by task(with `taskId`). The happens right after the task finished
+      // and cached by task(with `taskId`). And this happens right after the task finished
       // computing/caching the block only when the block is not visible yet. And the rdd
-      // block will be marked as visible only when the corresponding task finished successfully.
+      // block will be marked as visible when the corresponding task finished successfully.
       context.reply(updateRDDBlockTaskInfo(blockId, taskId))
 
     case GetRDDBlockVisibility(blockId) =>
       // Get the visibility status of a specific rdd block.
-      if (!trackingCacheVisibility) {
-        // Always visible if the feature flag is disabled.
-        context.reply(true)
-      } else {
-        context.reply(isRDDBlockVisible(blockId))
-      }
+      context.reply(isRDDBlockVisible(blockId))
 
     case UpdateRDDBlockVisibility(taskId, visible) =>
       // This is to report the information that whether rdd blocks computed by task(with `taskId`)
@@ -245,8 +241,13 @@ class BlockManagerMasterEndpoint(
   }
 
   private def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
-    blockLocations.containsKey(blockId) &&
-      blockLocations.get(blockId).nonEmpty && !invisibleRDDBlocks.contains(blockId)
+    if (trackingCacheVisibility) {
+      blockLocations.containsKey(blockId) &&
+        blockLocations.get(blockId).nonEmpty && !invisibleRDDBlocks.contains(blockId)
+    } else {
+      // Blocks should always be visible if the feature flag is disabled.
+      true
+    }
   }
 
   private def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
