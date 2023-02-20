@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
@@ -556,10 +557,16 @@ class Column:
         +---+
         """
         if not isinstance(fieldName, str):
-            raise TypeError("fieldName should be a string")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+            )
 
         if not isinstance(col, Column):
-            raise TypeError("col should be a Column")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+            )
 
         return Column(self._jc.withField(fieldName, col._jc))
 
