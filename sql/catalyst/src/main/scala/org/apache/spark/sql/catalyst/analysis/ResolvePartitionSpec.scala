@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsPartitionManagement, TableCatalog}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits.TableHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils.{castPartitionSpec, normalizePartitionSpec, requireExactMatchedPartitionSpec}
@@ -56,8 +55,11 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       if command.childrenResolved && !command.resolved => command.transformExpressions {
         case partSpecs: UnresolvedPartitionSpec =>
           val table = catalog.loadTable(Identifier.of(namespace.toArray, pattern))
-          val partitionSchema = table.asPartitionable.partitionSchema()
-          resolvePartitionSpec(table.name, partSpecs, partitionSchema, false)
+          table match {
+            case s: SupportsPartitionManagement =>
+              resolvePartitionSpec(table.name, partSpecs, s.partitionSchema(), false)
+            case _ => partSpecs
+          }
       }
   }
 
