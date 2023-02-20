@@ -1,3 +1,5 @@
-"9
-$Z" struct<id:bigint,a:int,b:double>"
+
+_"=
+(
+^Z" struct<id:bigint,a:int,b:double>"
 a + id < 1000

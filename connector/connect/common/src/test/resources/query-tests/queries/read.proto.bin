@@ -1,4 +1,5 @@
-‡„
+
+‡„
 csvname STRING,age INT,job STRING
 headertrue
 	delimiter;"=../common/src/test/resources/query-tests/test-data/people.csv

@@ -1,11 +1,20 @@
 {
+  "common": {
+    "planId": "122"
+  },
   "setOp": {
     "leftInput": {
+      "common": {
+        "planId": "120"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
     },
     "rightInput": {
+      "common": {
+        "planId": "121"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }

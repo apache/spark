@@ -1,4 +1,7 @@
 {
+  "common": {
+    "planId": "2"
+  },
   "read": {
     "dataSource": {
       "format": "csv",

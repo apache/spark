@@ -1,4 +1,6 @@
-5
-$Z" struct<id:bigint,a:int,b:double>
+
+J9
+(
+GZ" struct<id:bigint,a:int,b:double>
 id
 b

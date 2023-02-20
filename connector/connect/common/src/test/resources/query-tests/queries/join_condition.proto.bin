@@ -1,7 +1,12 @@
-*
-,‚)
-$Z" struct<id:bigint,a:int,b:double>l2‚/
-*Z(&struct<a:int,id:bigint,payload:binary>r
+
+2*
+4
+/‚-
+(
+.Z" struct<id:bigint,a:int,b:double>l:
+1‚3
+.
+0Z(&struct<a:int,id:bigint,payload:binary>r
 =
 l.id
 r.id 

@@ -1,5 +1,7 @@
-:B
-$Z" struct<id:bigint,a:int,b:double>
+
+;:F
+(
+:Z" struct<id:bigint,a:int,b:double>
 
 b
 

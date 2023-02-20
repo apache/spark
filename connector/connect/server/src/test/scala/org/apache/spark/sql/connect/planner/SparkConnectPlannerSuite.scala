@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
@@ -41,6 +43,8 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
 
+  private var planId = new AtomicInteger()
+
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     new SparkConnectPlanner(spark).transformRelation(rel)
   }
@@ -49,9 +53,25 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     new SparkConnectPlanner(spark).process(cmd)
   }
 
-  def readRel: proto.Relation =
+  def relBuilder: proto.Relation.Builder = {
     proto.Relation
       .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planId.getAndIncrement()))
+  }
+
+  def sqlRelation(sql: String): proto.Relation = {
+    proto.Relation
+      .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planId.getAndIncrement()))
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery(sql))
+      .build()
+  }
+
+  def readRel: proto.Relation =
+    relBuilder
       .setRead(
         proto.Read
           .newBuilder()
@@ -84,7 +104,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
-    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+    relBuilder.setLocalRelation(localRelationBuilder.build()).build()
   }
 }
 
@@ -99,7 +119,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assertThrows[IndexOutOfBoundsException] {
       new SparkConnectPlanner(None.orNull)
         .transformRelation(
-          proto.Relation.newBuilder
+          relBuilder
             .setLimit(proto.Limit.newBuilder.setLimit(10))
             .build())
     }
@@ -108,22 +128,21 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(None.orNull).transformRelation(proto.Relation.newBuilder().build()))
+      new SparkConnectPlanner(None.orNull).transformRelation(relBuilder.build()))
 
     intercept[InvalidPlanInput](
       new SparkConnectPlanner(None.orNull)
-        .transformRelation(
-          proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
+        .transformRelation(relBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
   }
 
   test("Simple Read") {
     val read = proto.Read.newBuilder().build()
     // Invalid read without Table name.
-    intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
+    intercept[InvalidPlanInput](transform(relBuilder.setRead(read).build()))
     val readWithTable = read.toBuilder
       .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
-    val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
+    val res = transform(relBuilder.setRead(readWithTable).build())
     assert(res !== null)
     assert(res.nodeName == "UnresolvedRelation")
   }
@@ -136,14 +155,14 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val project =
       proto.Project
         .newBuilder()
-        .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
+        .setInput(relBuilder.setRead(readWithTable).build())
         .addExpressions(
           proto.Expression
             .newBuilder()
             .setUnresolvedStar(UnresolvedStar.newBuilder().build())
             .build())
         .build()
-    val res = transform(proto.Relation.newBuilder.setProject(project).build())
+    val res = transform(relBuilder.setProject(project).build())
     assert(res !== null)
     assert(res.nodeName == "Project")
   }
@@ -153,7 +172,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .addAllOrder(Seq(proto.Expression.SortOrder.newBuilder().build()).asJava)
       .build()
     intercept[IndexOutOfBoundsException](
-      transform(proto.Relation.newBuilder().setSort(sort).build()),
+      transform(relBuilder.setSort(sort).build()),
       "No Input set.")
 
     val f = proto.Expression.SortOrder
@@ -168,7 +187,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .build()
 
     val res = transform(
-      proto.Relation.newBuilder
+      relBuilder
         .setSort(
           proto.Sort.newBuilder
             .addAllOrder(Seq(f).asJava)
@@ -179,7 +198,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.asInstanceOf[logical.Sort].global)
 
     val res2 = transform(
-      proto.Relation.newBuilder
+      relBuilder
         .setSort(
           proto.Sort.newBuilder
             .addAllOrder(Seq(f).asJava)
@@ -192,8 +211,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Union") {
     intercept[InvalidPlanInput](
-      transform(proto.Relation.newBuilder.setSetOp(proto.SetOperation.newBuilder.build()).build))
-    val union = proto.Relation.newBuilder
+      transform(relBuilder.setSetOp(proto.SetOperation.newBuilder.build()).build))
+    val union = relBuilder
       .setSetOp(
         proto.SetOperation.newBuilder.setLeftInput(readRel).setRightInput(readRel).build())
       .build()
@@ -203,7 +222,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(msg.getMessage.contains("Unsupported set operation"))
 
     val res = transform(
-      proto.Relation.newBuilder
+      relBuilder
         .setSetOp(
           proto.SetOperation.newBuilder
             .setLeftInput(readRel)
@@ -216,7 +235,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Union By Name") {
-    val union = proto.Relation.newBuilder
+    val union = relBuilder
       .setSetOp(
         proto.SetOperation.newBuilder
           .setLeftInput(readRel)
@@ -236,12 +255,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Join") {
     val incompleteJoin =
-      proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
+      relBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
     intercept[AssertionError](transform(incompleteJoin))
 
     // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     intercept[InvalidPlanInput] {
-      val simpleJoin = proto.Relation.newBuilder
+      val simpleJoin = relBuilder
         .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
         .build()
       transform(simpleJoin)
@@ -261,7 +280,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .addArguments(unresolvedAttribute)
         .build())
 
-    val simpleJoin = proto.Relation.newBuilder
+    val simpleJoin = relBuilder
       .setJoin(
         proto.Join.newBuilder
           .setLeft(readRel)
@@ -276,7 +295,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res != null)
 
     val e = intercept[InvalidPlanInput] {
-      val simpleJoin = proto.Relation.newBuilder
+      val simpleJoin = relBuilder
         .setJoin(
           proto.Join.newBuilder
             .setLeft(readRel)
@@ -300,7 +319,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .build())
       .build()
 
-    val res = transform(proto.Relation.newBuilder.setProject(project).build())
+    val res = transform(relBuilder.setProject(project).build())
     assert(res.nodeName == "Project")
   }
 
@@ -328,7 +347,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
       .build()
 
-    val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
+    val res = transform(relBuilder.setAggregate(agg).build())
     assert(res.nodeName == "Aggregate")
   }
 
@@ -337,8 +356,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val e = intercept[InvalidPlanInput](
       transform(
-        proto.Relation
-          .newBuilder()
+        relBuilder
           .setRead(proto.Read.newBuilder().setDataSource(dataSource))
           .build()))
     assert(e.getMessage.contains("DataSource requires a format"))
@@ -352,7 +370,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .addColumnNames("test")
 
     val e = intercept[InvalidPlanInput] {
-      transform(proto.Relation.newBuilder.setDeduplicate(deduplicate).build())
+      transform(relBuilder.setDeduplicate(deduplicate).build())
     }
     assert(
       e.getMessage.contains("Cannot deduplicate on both all columns and a subset of columns"))
@@ -361,7 +379,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setInput(readRel)
     val e2 = intercept[InvalidPlanInput] {
-      transform(proto.Relation.newBuilder.setDeduplicate(deduplicate2).build())
+      transform(relBuilder.setDeduplicate(deduplicate2).build())
     }
     assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
   }
@@ -375,7 +393,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setByName(true)
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT)
     val e =
-      intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setSetOp(except).build()))
+      intercept[InvalidPlanInput](transform(relBuilder.setSetOp(except).build()))
     assert(e.getMessage.contains("Except does not support union_by_name"))
 
     // Intersect with union_by_name=true
@@ -385,8 +403,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setRightInput(readRel)
       .setByName(true)
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT)
-    val e2 = intercept[InvalidPlanInput](
-      transform(proto.Relation.newBuilder.setSetOp(intersect).build()))
+    val e2 = intercept[InvalidPlanInput](transform(relBuilder.setSetOp(intersect).build()))
     assert(e2.getMessage.contains("Intersect does not support union_by_name"))
   }
 
@@ -420,8 +437,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
     val data = ArrowConverters.createEmptyArrowBatch(schema, null)
-    val localRelation = proto.Relation
-      .newBuilder()
+    val localRelation = relBuilder
       .setLocalRelation(
         proto.LocalRelation
           .newBuilder()
@@ -436,8 +452,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Illegal LocalRelation data") {
     intercept[Exception] {
       transform(
-        proto.Relation
-          .newBuilder()
+        relBuilder
           .setLocalRelation(
             proto.LocalRelation
               .newBuilder()
@@ -450,8 +465,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Test duplicated names in WithColumns") {
     intercept[AnalysisException] {
       transform(
-        proto.Relation
-          .newBuilder()
+        relBuilder
           .setWithColumns(
             proto.WithColumns
               .newBuilder()
@@ -473,8 +487,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Test multi nameparts for column names in WithColumns") {
     val e = intercept[InvalidPlanInput] {
       transform(
-        proto.Relation
-          .newBuilder()
+        relBuilder
           .setWithColumns(
             proto.WithColumns
               .newBuilder()
@@ -494,13 +507,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("transform UnresolvedStar and ExpressionString") {
     val sql =
       "SELECT * FROM VALUES (1,'spark',1), (2,'hadoop',2), (3,'kafka',3) AS tab(id, name, value)"
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery(sql)
-          .build())
+    val input = sqlRelation(sql)
 
     val project =
       proto.Project
@@ -519,7 +526,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build()
 
     val df =
-      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+      Dataset.ofRows(spark, transform(relBuilder.setProject(project).build()))
     val array = df.collect()
     assert(array.length == 3)
     assert(array(0).toString == InternalRow(1, "spark", 1, "spark").toString)
@@ -558,7 +565,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build()
 
     val df =
-      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+      Dataset.ofRows(spark, transform(relBuilder.setProject(project).build()))
     assertResult(df.schema)(
       StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType))))
 
@@ -590,22 +597,14 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build()
 
     val df =
-      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+      Dataset.ofRows(spark, transform(relBuilder.setProject(project).build()))
     assert(df.schema.fields.toSeq.map(_.name) == Seq("id"))
   }
 
   test("Hint") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("select id from range(10)")
-          .build())
-
+    val input = sqlRelation("select id from range(10)")
     val logical = transform(
-      proto.Relation
-        .newBuilder()
+      relBuilder
         .setHint(
           proto.Hint
             .newBuilder()
@@ -620,17 +619,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Hint with illegal name will be ignored") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("select id from range(10)")
-          .build())
-
+    val input = sqlRelation("select id from range(10)")
     val logical = transform(
-      proto.Relation
-        .newBuilder()
+      relBuilder
         .setHint(
           proto.Hint
             .newBuilder()
@@ -641,17 +632,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Hint with string attribute parameters") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("select id from range(10)")
-          .build())
-
+    val input = sqlRelation("select id from range(10)")
     val logical = transform(
-      proto.Relation
-        .newBuilder()
+      relBuilder
         .setHint(
           proto.Hint
             .newBuilder()
@@ -664,17 +647,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Hint with wrong parameters") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("select id from range(10)")
-          .build())
-
+    val input = sqlRelation("select id from range(10)")
     val logical = transform(
-      proto.Relation
-        .newBuilder()
+      relBuilder
         .setHint(
           proto.Hint
             .newBuilder()
@@ -687,16 +662,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform SortOrder") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("SELECT id FROM VALUES (5),(1),(2),(6),(4),(3),(7),(9),(8),(null) AS tab(id)")
-          .build())
-
-    val relation = proto.Relation
-      .newBuilder()
+    val input =
+      sqlRelation("SELECT id FROM VALUES (5),(1),(2),(6),(4),(3),(7),(9),(8),(null) AS tab(id)")
+    val relation = relBuilder
       .setSort(
         proto.Sort
           .newBuilder()
@@ -731,17 +699,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("RepartitionByExpression") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("select id from range(10)")
-          .build())
-
+    val input = sqlRelation("select id from range(10)")
     val logical = transform(
-      proto.Relation
-        .newBuilder()
+      relBuilder
         .setRepartitionByExpression(
           proto.RepartitionByExpression
             .newBuilder()
@@ -769,17 +729,10 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Repartition by range") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("select id from range(10)")
-          .build())
+    val input = sqlRelation("select id from range(10)")
 
     val logical = transform(
-      proto.Relation
-        .newBuilder()
+      relBuilder
         .setRepartitionByExpression(
           proto.RepartitionByExpression
             .newBuilder()
@@ -813,17 +766,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("RepartitionByExpression with wrong parameters") {
-    val input = proto.Relation
-      .newBuilder()
-      .setSql(
-        proto.SQL
-          .newBuilder()
-          .setQuery("select id from range(10)")
-          .build())
-
+    val input = sqlRelation("select id from range(10)")
     val logical = transform(
-      proto.Relation
-        .newBuilder()
+      relBuilder
         .setRepartitionByExpression(
           proto.RepartitionByExpression
             .newBuilder()

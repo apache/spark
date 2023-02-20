@@ -17,12 +17,14 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.RelationCommon
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.Cleaner
@@ -53,6 +55,8 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     with Logging {
 
   private[this] val allocator = new RootAllocator()
+
+  private var planId = new AtomicInteger()
 
   /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
@@ -146,7 +150,9 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   }
 
   private[sql] def newDataset[T](f: proto.Relation.Builder => Unit): Dataset[T] = {
-    val builder = proto.Relation.newBuilder()
+    val builder = proto.Relation
+      .newBuilder()
+      .setCommon(RelationCommon.newBuilder().setPlanId(planId.getAndIncrement()))
     f(builder)
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     new Dataset[T](this, plan)

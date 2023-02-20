@@ -1,4 +1,6 @@
-√
-éZãàstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>02.
+
+Å»
+ì
+ÄZãàstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>02.
 
 ee_mod{"comment":"modified E field"}

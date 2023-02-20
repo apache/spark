@@ -1,4 +1,7 @@
 {
+  "common": {
+    "planId": "7"
+  },
   "read": {
     "namedTable": {
       "unparsedIdentifier": "myTable"

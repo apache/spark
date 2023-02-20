@@ -1,4 +1,6 @@
-2
-$Z" struct<id:bigint,a:int,b:double>
+
+M6
+(
+KZ" struct<id:bigint,a:int,b:double>
 B
 `a|id`

@@ -969,8 +969,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         Long.MaxValue,
         null)
       .next()
-    proto.Relation
-      .newBuilder()
+    relBuilder
       .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(buffer)).build())
       .build()
   }

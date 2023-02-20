@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "70"
+  },
   "hint": {
     "input": {
+      "common": {
+        "planId": "69"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }

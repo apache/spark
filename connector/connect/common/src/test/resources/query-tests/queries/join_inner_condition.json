@@ -1,8 +1,17 @@
 {
+  "common": {
+    "planId": "45"
+  },
   "join": {
     "left": {
+      "common": {
+        "planId": "42"
+      },
       "subqueryAlias": {
         "input": {
+          "common": {
+            "planId": "41"
+          },
           "localRelation": {
             "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
           }
@@ -11,8 +20,14 @@
       }
     },
     "right": {
+      "common": {
+        "planId": "44"
+      },
       "subqueryAlias": {
         "input": {
+          "common": {
+            "planId": "43"
+          },
           "localRelation": {
             "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
           }
