@@ -68,16 +68,17 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
 
   protected val inputFilePath: Path = baseResourcePath.resolve("queries")
   protected val goldenFilePath: Path = baseResourcePath.resolve("explain-results")
+  private val emptyProps: util.Map[String, String] = util.Collections.emptyMap()
 
   private val analyzer = {
     val inMemoryCatalog = new InMemoryCatalog
     inMemoryCatalog.initialize("primary", CaseInsensitiveStringMap.empty())
-    inMemoryCatalog.createNamespace(Array("tempdb"), util.Collections.emptyMap())
+    inMemoryCatalog.createNamespace(Array("tempdb"), emptyProps)
     inMemoryCatalog.createTable(
       Identifier.of(Array("tempdb"), "myTable"),
       new StructType().add("id", "long"),
       Array.empty[Transform],
-      util.Collections.emptyMap())
+      emptyProps)
 
     val catalogManager = new CatalogManager(
       inMemoryCatalog,
