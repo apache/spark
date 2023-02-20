@@ -1578,6 +1578,11 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "Unsupported data source type for direct query on files: <dataSourceType>"
+    ]
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."
@@ -5105,11 +5110,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2332" : {
-    "message" : [
-      "<msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2400" : {

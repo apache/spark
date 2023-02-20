@@ -181,7 +181,7 @@ def lit(col: Any) -> Column:
         if has_numpy and isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is not None:
-                return _invoke_function("lit", col).astype(dt)
+                return _invoke_function("lit", col).astype(dt).alias(str(col))
         return _invoke_function("lit", col)
 
 
