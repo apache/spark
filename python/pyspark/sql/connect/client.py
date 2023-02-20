@@ -19,6 +19,8 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+import string
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
@@ -120,6 +122,7 @@ class ChannelBuilder:
     PARAM_USE_SSL = "use_ssl"
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
+    PARAM_USER_AGENT = "user_agent"
 
     @staticmethod
     def default_port() -> int:
@@ -215,6 +218,7 @@ class ChannelBuilder:
                 ChannelBuilder.PARAM_TOKEN,
                 ChannelBuilder.PARAM_USE_SSL,
                 ChannelBuilder.PARAM_USER_ID,
+                ChannelBuilder.PARAM_USER_AGENT,
             ]
         ]
 
@@ -243,6 +247,27 @@ class ChannelBuilder:
         specified.
         """
         return self.params.get(ChannelBuilder.PARAM_USER_ID, None)
+
+    @property
+    def userAgent(self) -> str:
+        """
+        Returns
+        -------
+        user_agent : str
+            The user_agent parameter specified in the connection string,
+            or "_SPARK_CONNECT_PYTHON" when not specified.
+        """
+        user_agent = self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
+        allowed_chars = string.ascii_letters + string.punctuation
+        if len(user_agent) > 200:
+            raise SparkConnectException(
+                "'user_agent' parameter cannot exceed 200 characters in length"
+            )
+        if set(user_agent).difference(allowed_chars):
+            raise SparkConnectException(
+                "Only alphanumeric and common punctuations are allowed for 'user_agent'"
+            )
+        return user_agent
 
     def get(self, key: str) -> Any:
         """
@@ -559,7 +584,7 @@ class SparkConnectClient(object):
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
         req.client_id = self._session_id
-        req.client_type = "_SPARK_CONNECT_PYTHON"
+        req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -567,7 +592,7 @@ class SparkConnectClient(object):
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
         req.client_id = self._session_id
-        req.client_type = "_SPARK_CONNECT_PYTHON"
+        req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req

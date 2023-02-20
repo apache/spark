@@ -2949,9 +2949,32 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = ChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
-
+        self.assertEqual(chan.userAgent, "_SPARK_CONNECT_PYTHON")
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
+
+    def test_invalid_user_agent_charset(self):
+        # fmt: off
+        invalid_user_agents = [
+            "agent»",  # non standard symbol
+            "age nt",  # whitespace
+            "ägent",   # non-ascii alphabet
+        ]
+        # fmt: on
+        for user_agent in invalid_user_agents:
+            with self.subTest(user_agent=user_agent):
+                chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+                with self.assertRaises(SparkConnectException) as err:
+                    chan.userAgent
+
+                self.assertRegex(err.exception.message, "alphanumeric and common punctuations")
+
+    def test_invalid_user_agent_len(self):
+        user_agent = "x" * 201
+        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        with self.assertRaises(SparkConnectException) as err:
+            chan.userAgent
+        self.assertRegex(err.exception.message, "characters in length")
 
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
@@ -2965,8 +2988,9 @@ class ChannelBuilderTests(unittest.TestCase):
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021")
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
         self.assertEqual("host:15002", chan.endpoint)
+        self.assertEqual("foo", chan.userAgent)
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
