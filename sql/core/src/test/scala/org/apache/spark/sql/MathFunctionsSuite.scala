@@ -30,12 +30,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 private object MathFunctionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
-
   case class NullDoubles(a: java.lang.Double)
 }
 
 class MathFunctionsSuite extends QueryTest with SharedSparkSession {
-
   import MathFunctionsTestData._
   import testImplicits._
 
@@ -47,10 +45,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     Seq(NullDoubles(1.0), NullDoubles(2.0), NullDoubles(3.0), NullDoubles(null)).toDF()
 
   private def testOneToOneMathFunction[
-    @specialized(Int, Long, Float, Double) T,
-    @specialized(Int, Long, Float, Double) U](
-                                               c: Column => Column,
-                                               f: T => U): Unit = {
+  @specialized(Int, Long, Float, Double) T,
+  @specialized(Int, Long, Float, Double) U](
+      c: Column => Column,
+      f: T => U): Unit = {
     checkAnswer(
       doubleData.select(c($"a")),
       (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
@@ -67,7 +65,8 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  private def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit = {
+  private def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit =
+  {
     checkAnswer(
       nnDoubleData.select(c($"a")),
       (1 to 10).map(n => Row(f(n * 0.1)))
@@ -87,9 +86,9 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   private def testTwoToOneMathFunction(
-                                        c: (Column, Column) => Column,
-                                        d: (Column, Double) => Column,
-                                        f: (Double, Double) => Double): Unit = {
+      c: (Column, Column) => Column,
+      d: (Column, Double) => Column,
+      f: (Double, Double) => Double): Unit = {
     checkAnswer(
       nnDoubleData.select(c($"a", $"a")),
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
@@ -124,7 +123,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("csc") {
     testOneToOneMathFunction(csc,
-      (x: Double) => (1 / math.sin(x)))
+      (x: Double) => (1 / math.sin(x)) )
   }
 
   test("asin") {
@@ -137,7 +136,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("asinh") {
     testOneToOneMathFunction(asinh,
-      (x: Double) => math.log(x + math.sqrt(x * x + 1)))
+      (x: Double) => math.log(x + math.sqrt(x * x + 1)) )
   }
 
   test("cos") {
@@ -146,7 +145,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("sec") {
     testOneToOneMathFunction(sec,
-      (x: Double) => (1 / math.cos(x)))
+      (x: Double) => (1 / math.cos(x)) )
   }
 
   test("acos") {
@@ -159,7 +158,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("acosh") {
     testOneToOneMathFunction(acosh,
-      (x: Double) => math.log(x + math.sqrt(x * x - 1)))
+      (x: Double) => math.log(x + math.sqrt(x * x - 1)) )
   }
 
   test("tan") {
@@ -168,7 +167,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("cot") {
     testOneToOneMathFunction(cot,
-      (x: Double) => (1 / math.tan(x)))
+      (x: Double) => (1 / math.tan(x)) )
   }
 
   test("atan") {
@@ -181,7 +180,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("atanh") {
     testOneToOneMathFunction(atanh,
-      (x: Double) => (0.5 * (math.log1p(x) - math.log1p(-x))))
+      (x: Double) => (0.5 * (math.log1p(x) - math.log1p(-x))) )
   }
 
   test("degrees") {
@@ -209,10 +208,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     // testOneToOneMathFunction does not validate the resulting data type
     assert(
       spark.range(1).select(ceil(col("id")).alias("a")).schema ==
-        types.StructType(Seq(types.StructField("a", types.LongType))))
+          types.StructType(Seq(types.StructField("a", types.LongType))))
     assert(
       spark.range(1).select(ceil(col("id"), lit(0)).alias("a")).schema ==
-        types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
+          types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
       Row(0L, 1L, 2L))
@@ -276,10 +275,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     // testOneToOneMathFunction does not validate the resulting data type
     assert(
       spark.range(1).select(floor(col("id")).alias("a")).schema ==
-        types.StructType(Seq(types.StructField("a", types.LongType))))
+          types.StructType(Seq(types.StructField("a", types.LongType))))
     assert(
       spark.range(1).select(floor(col("id"), lit(0)).alias("a")).schema ==
-        types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
+          types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
   }
 
   test("factorial") {
@@ -515,7 +514,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(
         shiftleft($"a", 1), shiftleft($"b", 1), shiftleft($"c", 1), shiftleft($"d", 1),
         shiftLeft($"f", 1)), // test deprecated one.
-      Row(42.toLong, 42, 42.toShort, 42.toByte, null))
+        Row(42.toLong, 42, 42.toShort, 42.toByte, null))
 
     checkAnswer(
       df.selectExpr(
