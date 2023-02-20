@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDate, LocalDateTime, Period, ZoneId}
@@ -2131,6 +2132,28 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           checkAnswer(notIn, Seq())
         }
       }
+    }
+  }
+  
+  test("SPARK-41741: StringStartsWith should encode the string using the UTF_8 charset") {
+    // A hacky way to set the default Java character encoding.
+    def setDefaultEncoding(encoding: String): Unit = {
+      System.setProperty("file.encoding", encoding)
+      val charset = classOf[Charset].getDeclaredField("defaultCharset")
+      charset.setAccessible(true)
+      charset.set(null, null)
+    }
+    import testImplicits._
+    try {
+      setDefaultEncoding("US-ASCII")
+      assert(Charset.defaultCharset().name().equals("US-ASCII"))
+      // scalastyle:off nonascii
+      val df = Seq("中文", "中国").toDF()
+      testStringPredicate(df, "value like '中%'", false)
+      testStringPredicate(df, "value like '流浪%'", true)
+      // scalastyle:on nonascii
+    } finally {
+      setDefaultEncoding(Charset.defaultCharset().name())
     }
   }
 }
