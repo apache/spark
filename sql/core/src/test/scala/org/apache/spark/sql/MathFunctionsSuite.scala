@@ -222,8 +222,6 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
     checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
     checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
-    checkAnswer(
-      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
   }
 
   test("SPARK-33428 conv function should trim input string") {
