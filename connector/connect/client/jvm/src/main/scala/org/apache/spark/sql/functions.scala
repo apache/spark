@@ -2247,7 +2247,7 @@ object functions {
    * string.
    *
    * @group misc_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def md5(e: Column): Column = Column.fn("md5", e)
 
@@ -2256,7 +2256,7 @@ object functions {
    * string.
    *
    * @group misc_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def sha1(e: Column): Column = Column.fn("sha1", e)
 
@@ -2270,7 +2270,7 @@ object functions {
    *   one of 224, 256, 384, or 512.
    *
    * @group misc_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def sha2(e: Column, numBits: Int): Column = {
     require(
@@ -2284,7 +2284,7 @@ object functions {
    * as a bigint.
    *
    * @group misc_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def crc32(e: Column): Column = Column.fn("crc32", e)
 
@@ -2292,7 +2292,7 @@ object functions {
    * Calculates the hash code of given columns, and returns the result as an int column.
    *
    * @group misc_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def hash(cols: Column*): Column = Column.fn("hash", cols: _*)
@@ -2302,7 +2302,7 @@ object functions {
    * and returns the result as a long column. The hash computation uses an initial seed of 42.
    *
    * @group misc_funcs
-   * @since 3.0.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def xxhash64(cols: Column*): Column = Column.fn("xxhash64", cols: _*)
@@ -2311,7 +2311,7 @@ object functions {
    * Returns null if the condition is true, and throws an exception otherwise.
    *
    * @group misc_funcs
-   * @since 3.1.0
+   * @since 3.4.0
    */
   def assert_true(c: Column): Column = Column.fn("assert_true", c)
 
@@ -2319,7 +2319,7 @@ object functions {
    * Returns null if the condition is true; throws an exception with the error message otherwise.
    *
    * @group misc_funcs
-   * @since 3.1.0
+   * @since 3.4.0
    */
   def assert_true(c: Column, e: Column): Column = Column.fn("assert_true", c, e)
 
@@ -2327,7 +2327,7 @@ object functions {
    * Throws an exception with the provided error message.
    *
    * @group misc_funcs
-   * @since 3.1.0
+   * @since 3.4.0
    */
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
 
@@ -2340,7 +2340,7 @@ object functions {
    * result as an int column.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def ascii(e: Column): Column = Column.fn("ascii", e)
 
@@ -2349,7 +2349,7 @@ object functions {
    * the reverse of unbase64.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def base64(e: Column): Column = Column.fn("base64", e)
 
@@ -2357,7 +2357,7 @@ object functions {
    * Calculates the bit length for the specified string column.
    *
    * @group string_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def bit_length(e: Column): Column = Column.fn("bit_length", e)
 
@@ -2366,7 +2366,7 @@ object functions {
    * given separator.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def concat_ws(sep: String, exprs: Column*): Column =
@@ -2378,7 +2378,7 @@ object functions {
    * is null, the result will also be null.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def decode(value: Column, charset: String): Column =
     Column.fn("decode", value, lit(charset))
@@ -2389,7 +2389,7 @@ object functions {
    * is null, the result will also be null.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def encode(value: Column, charset: String): Column =
     Column.fn("encode", value, lit(charset))
@@ -2402,7 +2402,7 @@ object functions {
    * result will be null.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def format_number(x: Column, d: Int): Column = Column.fn("format_number", x, lit(d))
 
@@ -2410,7 +2410,7 @@ object functions {
    * Formats the arguments in printf-style and returns the result as a string column.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def format_string(format: String, arguments: Column*): Column =
@@ -2423,7 +2423,7 @@ object functions {
    * For example, "hello world" will become "Hello World".
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def initcap(e: Column): Column = Column.fn("initcap", e)
 
@@ -2436,7 +2436,7 @@ object functions {
    *   in str.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def instr(str: Column, substring: String): Column = Column.fn("instr", str, lit(substring))
 
@@ -2446,7 +2446,7 @@ object functions {
    * includes binary zeros.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def length(e: Column): Column = Column.fn("length", e)
 
@@ -2454,14 +2454,14 @@ object functions {
    * Converts a string column to lower case.
    *
    * @group string_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def lower(e: Column): Column = Column.fn("lower", e)
 
   /**
    * Computes the Levenshtein distance of the two given string columns.
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
@@ -2473,7 +2473,7 @@ object functions {
    *   in str.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def locate(substr: String, str: Column): Column = Column.fn("locate", lit(substr), str)
 
@@ -2485,7 +2485,7 @@ object functions {
    *   in str.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def locate(substr: String, str: Column, pos: Int): Column =
     Column.fn("locate", lit(substr), str, lit(pos))
@@ -2495,7 +2495,7 @@ object functions {
    * len, the return value is shortened to len characters.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def lpad(str: Column, len: Int, pad: String): Column =
     Column.fn("lpad", str, lit(len), lit(pad))
@@ -2505,7 +2505,7 @@ object functions {
    * than len, the return value is shortened to len bytes.
    *
    * @group string_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column =
     Column.fn("lpad", str, lit(len), lit(pad))
@@ -2514,14 +2514,14 @@ object functions {
    * Trim the spaces from left end for the specified string value.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def ltrim(e: Column): Column = Column.fn("ltrim", e)
 
   /**
    * Trim the specified character string from left end for the specified string column.
    * @group string_funcs
-   * @since 2.3.0
+   * @since 3.4.0
    */
   def ltrim(e: Column, trimString: String): Column = Column.fn("ltrim", e, lit(trimString))
 
@@ -2529,7 +2529,7 @@ object functions {
    * Calculates the byte length for the specified string column.
    *
    * @group string_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
 
@@ -2540,7 +2540,7 @@ object functions {
    * be thrown.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column =
     Column.fn("regexp_extract", e, lit(exp), lit(groupIdx))
@@ -2549,7 +2549,7 @@ object functions {
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def regexp_replace(e: Column, pattern: String, replacement: String): Column =
     regexp_replace(e, lit(pattern), lit(replacement))
@@ -2558,7 +2558,7 @@ object functions {
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs
-   * @since 2.1.0
+   * @since 3.4.0
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
@@ -2568,7 +2568,7 @@ object functions {
    * of base64.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def unbase64(e: Column): Column = Column.fn("unbase64", e)
 
@@ -2577,7 +2577,7 @@ object functions {
    * len, the return value is shortened to len characters.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def rpad(str: Column, len: Int, pad: String): Column =
     Column.fn("rpad", str, lit(len), lit(pad))
@@ -2587,7 +2587,7 @@ object functions {
    * than len, the return value is shortened to len bytes.
    *
    * @group string_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column =
     Column.fn("rpad", str, lit(len), lit(pad))
@@ -2596,7 +2596,7 @@ object functions {
    * Repeats a string column n times, and returns it as a new string column.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def repeat(str: Column, n: Int): Column = Column.fn("repeat", str, lit(n))
 
@@ -2604,14 +2604,14 @@ object functions {
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def rtrim(e: Column): Column = Column.fn("rtrim", e)
 
   /**
    * Trim the specified character string from right end for the specified string column.
    * @group string_funcs
-   * @since 2.3.0
+   * @since 3.4.0
    */
   def rtrim(e: Column, trimString: String): Column = Column.fn("rtrim", e, lit(trimString))
 
@@ -2619,7 +2619,7 @@ object functions {
    * Returns the soundex code for the specified expression.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def soundex(e: Column): Column = Column.fn("soundex", e)
 
@@ -2633,7 +2633,7 @@ object functions {
    *   expression.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def split(str: Column, pattern: String): Column = Column.fn("split", str, lit(pattern))
 
@@ -2653,7 +2653,7 @@ object functions {
    *   the resulting array can be of any size.</li> </ul>
    *
    * @group string_funcs
-   * @since 3.0.0
+   * @since 3.4.0
    */
   def split(str: Column, pattern: String, limit: Int): Column =
     Column.fn("split", str, lit(pattern), lit(limit))
@@ -2666,7 +2666,7 @@ object functions {
    *   The position is not zero based, but 1 based index.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def substring(str: Column, pos: Int, len: Int): Column =
     Column.fn("substring", str, lit(pos), lit(len))
@@ -2687,7 +2687,7 @@ object functions {
    * `src` and proceeding for `len` bytes.
    *
    * @group string_funcs
-   * @since 3.0.0
+   * @since 3.4.0
    */
   def overlay(src: Column, replace: Column, pos: Column, len: Column): Column =
     Column.fn("overlay", src, replace, pos, len)
@@ -2697,7 +2697,7 @@ object functions {
    * `src`.
    *
    * @group string_funcs
-   * @since 3.0.0
+   * @since 3.4.0
    */
   def overlay(src: Column, replace: Column, pos: Column): Column =
     Column.fn("overlay", src, replace, pos)
@@ -2705,7 +2705,7 @@ object functions {
   /**
    * Splits a string into arrays of sentences, where each sentence is an array of words.
    * @group string_funcs
-   * @since 3.2.0
+   * @since 3.4.0
    */
   def sentences(string: Column, language: Column, country: Column): Column =
     Column.fn("sentences", string, language, country)
@@ -2714,7 +2714,7 @@ object functions {
    * Splits a string into arrays of sentences, where each sentence is an array of words. The
    * default locale is used.
    * @group string_funcs
-   * @since 3.2.0
+   * @since 3.4.0
    */
   def sentences(string: Column): Column = Column.fn("sentences", string)
 
@@ -2724,7 +2724,7 @@ object functions {
    * any character in the string matches the character in the `matchingString`.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def translate(src: Column, matchingString: String, replaceString: String): Column =
     Column.fn("translate", src, lit(matchingString), lit(replaceString))
@@ -2733,14 +2733,14 @@ object functions {
    * Trim the spaces from both ends for the specified string column.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def trim(e: Column): Column = Column.fn("trim", e)
 
   /**
    * Trim the specified character from both ends for the specified string column.
    * @group string_funcs
-   * @since 2.3.0
+   * @since 3.4.0
    */
   def trim(e: Column, trimString: String): Column = Column.fn("trim", e, lit(trimString))
 
@@ -2748,7 +2748,7 @@ object functions {
    * Converts a string column to upper case.
    *
    * @group string_funcs
-   * @since 1.3.0
+   * @since 3.4.0
    */
   def upper(e: Column): Column = Column.fn("upper", e)
 
@@ -2767,7 +2767,7 @@ object functions {
    * @return
    *   A date, or null if `startDate` was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def add_months(startDate: Column, numMonths: Int): Column =
     add_months(startDate, lit(numMonths))
@@ -2783,7 +2783,7 @@ object functions {
    * @return
    *   A date, or null if `startDate` was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 3.0.0
+   * @since 3.4.0
    */
   def add_months(startDate: Column, numMonths: Column): Column =
     Column.fn("add_months", startDate, numMonths)
@@ -2793,7 +2793,7 @@ object functions {
    * current_date within the same query return the same value.
    *
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def current_date(): Column = Column.fn("current_date")
 
@@ -2802,7 +2802,7 @@ object functions {
    * calls of current_timestamp within the same query return the same value.
    *
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def current_timestamp(): Column = Column.fn("current_timestamp")
 
@@ -2812,7 +2812,7 @@ object functions {
    * the same value.
    *
    * @group datetime_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def localtimestamp(): Column = Column.fn("localtimestamp")
 
@@ -2836,7 +2836,7 @@ object functions {
    * @throws IllegalArgumentException
    *   if the `format` pattern is invalid
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def date_format(dateExpr: Column, format: String): Column =
     Column.fn("date_format", dateExpr, lit(format))
@@ -2852,7 +2852,7 @@ object functions {
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def date_add(start: Column, days: Int): Column = date_add(start, lit(days))
 
@@ -2867,7 +2867,7 @@ object functions {
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 3.0.0
+   * @since 3.4.0
    */
   def date_add(start: Column, days: Column): Column = Column.fn("date_add", start, days)
 
@@ -2882,7 +2882,7 @@ object functions {
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def date_sub(start: Column, days: Int): Column = date_sub(start, lit(days))
 
@@ -2897,7 +2897,7 @@ object functions {
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 3.0.0
+   * @since 3.4.0
    */
   def date_sub(start: Column, days: Column): Column =
     Column.fn("date_sub", start, days)
@@ -2921,7 +2921,7 @@ object functions {
    *   An integer, or null if either `end` or `start` were strings that could not be cast to a
    *   date. Negative if `end` is before `start`
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def datediff(end: Column, start: Column): Column = Column.fn("datediff", end, start)
 
@@ -2930,7 +2930,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def year(e: Column): Column = Column.fn("year", e)
 
@@ -2939,7 +2939,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def quarter(e: Column): Column = Column.fn("quarter", e)
 
@@ -2948,7 +2948,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def month(e: Column): Column = Column.fn("month", e)
 
@@ -2958,7 +2958,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 2.3.0
+   * @since 3.4.0
    */
   def dayofweek(e: Column): Column = Column.fn("dayofweek", e)
 
@@ -2967,7 +2967,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def dayofmonth(e: Column): Column = Column.fn("dayofmonth", e)
 
@@ -2976,7 +2976,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
@@ -2985,7 +2985,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def hour(e: Column): Column = Column.fn("hour", e)
 
@@ -2999,7 +2999,7 @@ object functions {
    * @return
    *   A date, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
@@ -3008,7 +3008,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def minute(e: Column): Column = Column.fn("minute", e)
 
@@ -3016,7 +3016,7 @@ object functions {
    * @return
    *   A date created from year, month and day fields.
    * @group datetime_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def make_date(year: Column, month: Column, day: Column): Column =
     Column.fn("make_date", year, month, day)
@@ -3045,7 +3045,7 @@ object functions {
    *   A double, or null if either `end` or `start` were strings that could not be cast to a
    *   timestamp. Negative if `end` is before `start`
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def months_between(end: Column, start: Column): Column =
     Column.fn("months_between", end, start)
@@ -3054,7 +3054,7 @@ object functions {
    * Returns number of months between dates `end` and `start`. If `roundOff` is set to true, the
    * result is rounded off to 8 digits; it is not rounded otherwise.
    * @group datetime_funcs
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def months_between(end: Column, start: Column, roundOff: Boolean): Column =
     Column.fn("months_between", end, start, lit(roundOff))
@@ -3075,7 +3075,7 @@ object functions {
    *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
    *   was an invalid value
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def next_day(date: Column, dayOfWeek: String): Column = next_day(date, lit(dayOfWeek))
 
@@ -3096,7 +3096,7 @@ object functions {
    *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
    *   was an invalid value
    * @group datetime_funcs
-   * @since 3.2.0
+   * @since 3.4.0
    */
   def next_day(date: Column, dayOfWeek: Column): Column =
     Column.fn("next_day", date, dayOfWeek)
@@ -3106,7 +3106,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def second(e: Column): Column = Column.fn("second", e)
 
@@ -3119,7 +3119,7 @@ object functions {
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def weekofyear(e: Column): Column = Column.fn("weekofyear", e)
 
@@ -3134,7 +3134,7 @@ object functions {
    * @return
    *   A string, or null if the input was a string that could not be cast to a long
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def from_unixtime(ut: Column): Column = Column.fn("from_unixtime", ut)
 
@@ -3155,7 +3155,7 @@ object functions {
    *   A string, or null if `ut` was a string that could not be cast to a long or `f` was an
    *   invalid date time pattern
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def from_unixtime(ut: Column, f: String): Column =
     Column.fn("from_unixtime", ut, lit(f))
@@ -3168,7 +3168,7 @@ object functions {
    *   timestamp is calculated at the start of query evaluation).
    *
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def unix_timestamp(): Column = unix_timestamp(current_timestamp())
 
@@ -3182,7 +3182,7 @@ object functions {
    * @return
    *   A long, or null if the input was a string not of the correct format
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def unix_timestamp(s: Column): Column = Column.fn("unix_timestamp", s)
 
@@ -3201,7 +3201,7 @@ object functions {
    *   A long, or null if `s` was a string that could not be cast to a date or `p` was an invalid
    *   format
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def unix_timestamp(s: Column, p: String): Column =
     Column.fn("unix_timestamp", s, lit(p))
@@ -3215,7 +3215,7 @@ object functions {
    * @return
    *   A timestamp, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
-   * @since 2.2.0
+   * @since 3.4.0
    */
   def to_timestamp(s: Column): Column = Column.fn("to_timestamp", s)
 
@@ -3234,7 +3234,7 @@ object functions {
    *   A timestamp, or null if `s` was a string that could not be cast to a timestamp or `fmt` was
    *   an invalid format
    * @group datetime_funcs
-   * @since 2.2.0
+   * @since 3.4.0
    */
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
 
@@ -3242,7 +3242,7 @@ object functions {
    * Converts the column into `DateType` by casting rules to `DateType`.
    *
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def to_date(e: Column): Column = Column.fn("to_date", e)
 
@@ -3261,7 +3261,7 @@ object functions {
    *   A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
    *   invalid format
    * @group datetime_funcs
-   * @since 2.2.0
+   * @since 3.4.0
    */
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
 
@@ -3281,7 +3281,7 @@ object functions {
    *   A date, or null if `date` was a string that could not be cast to a date or `format` was an
    *   invalid value
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def trunc(date: Column, format: String): Column = Column.fn("trunc", date, lit(format))
 
@@ -3301,7 +3301,7 @@ object functions {
    *   A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp or
    *   `format` was an invalid value
    * @group datetime_funcs
-   * @since 2.3.0
+   * @since 3.4.0
    */
   def date_trunc(format: String, timestamp: Column): Column =
     Column.fn("date_trunc", lit(format), timestamp)
@@ -3324,7 +3324,7 @@ object functions {
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
    *   an invalid value
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def from_utc_timestamp(ts: Column, tz: String): Column = from_utc_timestamp(ts, lit(tz))
 
@@ -3333,7 +3333,7 @@ object functions {
    * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14
    * 03:40:00.0'.
    * @group datetime_funcs
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def from_utc_timestamp(ts: Column, tz: Column): Column =
     Column.fn("from_utc_timestamp", ts, tz)
@@ -3356,7 +3356,7 @@ object functions {
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
    *   an invalid value
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def to_utc_timestamp(ts: Column, tz: String): Column = to_utc_timestamp(ts, lit(tz))
 
@@ -3365,7 +3365,7 @@ object functions {
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
    * @group datetime_funcs
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def to_utc_timestamp(ts: Column, tz: Column): Column = Column.fn("to_utc_timestamp", ts, tz)
 
@@ -3412,7 +3412,7 @@ object functions {
    *   e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
    *
    * @group datetime_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def window(
       timeColumn: Column,
@@ -3461,7 +3461,7 @@ object functions {
    *   duration is likewise absolute, and does not vary according to a calendar.
    *
    * @group datetime_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
     window(timeColumn, windowDuration, slideDuration, "0 second")
@@ -3499,7 +3499,7 @@ object functions {
    *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
    *
    * @group datetime_funcs
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
@@ -3543,7 +3543,7 @@ object functions {
    *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
    *
    * @group datetime_funcs
-   * @since 3.2.0
+   * @since 3.4.0
    */
   def session_window(timeColumn: Column, gapDuration: String): Column =
     session_window(timeColumn, lit(gapDuration))
@@ -3579,7 +3579,7 @@ object functions {
    *   the input row.
    *
    * @group datetime_funcs
-   * @since 3.2.0
+   * @since 3.4.0
    */
   def session_window(timeColumn: Column, gapDuration: Column): Column =
     Column.fn("session_window", timeColumn, gapDuration).as("session_window")
@@ -3587,7 +3587,7 @@ object functions {
   /**
    * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z) to a timestamp.
    * @group datetime_funcs
-   * @since 3.1.0
+   * @since 3.4.0
    */
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
 
