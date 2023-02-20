@@ -778,4 +778,3 @@ message FrameMap {
   CommonInlineUserDefinedFunction func = 2;
 }
 
-
