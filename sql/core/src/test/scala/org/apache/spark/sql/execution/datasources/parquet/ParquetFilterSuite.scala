@@ -2137,23 +2137,25 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   
   test("SPARK-41741: StringStartsWith should encode the string using the UTF_8 charset") {
     // A hacky way to set the default Java character encoding.
-    def setDefaultEncoding(encoding: String): Unit = {
-      System.setProperty("file.encoding", encoding)
-      val charset = classOf[Charset].getDeclaredField("defaultCharset")
-      charset.setAccessible(true)
-      charset.set(null, null)
+    def setDefaultEncoding(charset: Charset): Unit = {
+      System.setProperty("file.encoding", charset.name())
+      val defaultCharsetField = classOf[Charset].getDeclaredField("defaultCharset")
+      defaultCharsetField.setAccessible(true)
+      defaultCharsetField.set(null, null)
     }
     import testImplicits._
+    val defaultCharset = Charset.defaultCharset()
+    val testCharset = Charset.forName("US-ASCII")
     try {
-      setDefaultEncoding("US-ASCII")
-      assert(Charset.defaultCharset().name().equals("US-ASCII"))
+      setDefaultEncoding(testCharset)
+      assert(Charset.defaultCharset() === testCharset)
       // scalastyle:off nonascii
       val df = Seq("中文", "中国").toDF()
       testStringPredicate(df, "value like '中%'", false)
       testStringPredicate(df, "value like '流浪%'", true)
       // scalastyle:on nonascii
     } finally {
-      setDefaultEncoding(Charset.defaultCharset().name())
+      setDefaultEncoding(defaultCharset)
     }
   }
 }
