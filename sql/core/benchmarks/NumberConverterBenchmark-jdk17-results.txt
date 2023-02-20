@@ -3,12 +3,12 @@ Benchmark to measure CONV function performance
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.6+10 on Linux 5.15.0-1033-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 convert:                                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-convert positive values from 10 to 16 (unsigned) bases           3599           3629          42          2.8         359.9       1.0X
-convert negative values from 10 to 16 (unsigned) bases           5967           6002          31          1.7         596.7       0.6X
-convert positive values from 10 to -16 (signed) bases            3590           3735         179          2.8         359.0       1.0X
-convert negative values from 10 to -16 (signed) bases            3754           3838          82          2.7         375.4       1.0X
+convert positive values from 10 to 16 (unsigned) bases           5422           5460          40          1.8         542.2       1.0X
+convert negative values from 10 to 16 (unsigned) bases          11650          11658           7          0.9        1165.0       0.5X
+convert positive values from 10 to -16 (signed) bases            5813           5893          93          1.7         581.3       0.9X
+convert negative values from 10 to -16 (signed) bases            6583           6604          18          1.5         658.3       0.8X
 
 
