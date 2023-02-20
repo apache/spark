@@ -606,6 +606,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DATAWRITE_PARTITION_SIZE_IN_BYTES =
+    buildConf("spark.sql.adaptive.dataWritePartitionSizeInBytes")
+      .doc("The advisory size in bytes of the shuffle partition during adaptive optimization " +
+        s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} and ${COALESCE_PARTITIONS_ENABLED.key} is " +
+        s"true). It takes effect the finalStage with `DataWritingCommand` or `V2TableWriteExec` " +
+        s"coalesces small shuffle partitions or splits skewed shuffle partition")
+      .version("3.3.0")
+      .fallbackConf(ADVISORY_PARTITION_SIZE_IN_BYTES)
+
   val COALESCE_PARTITIONS_PARALLELISM_FIRST =
     buildConf("spark.sql.adaptive.coalescePartitions.parallelismFirst")
       .doc("When true, Spark does not respect the target size specified by " +
@@ -2891,6 +2900,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REPARTITION_WRITING_DATASOURCE =
+    buildConf("spark.sql.sources.repartitionWritingDataSource")
+      .internal()
+      .doc("Add a repartition before writing Spark SQL Data Sources. It supports three patterns:" +
+        "1. Repartition by none when writing normal table/directory. " +
+        "2. Repartition by dynamic partition column when writing dynamic partition " +
+        "table/directory. 3. Repartition by bucket column with bucket number and sort by sort " +
+        "column when writing bucket table/directory.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.nestedSchemaPruning.enabled")
       .internal()
@@ -4148,6 +4169,8 @@ class SQLConf extends Serializable with Logging {
   def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def repartitionWritingDataSource: Boolean = getConf(REPARTITION_WRITING_DATASOURCE)
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 

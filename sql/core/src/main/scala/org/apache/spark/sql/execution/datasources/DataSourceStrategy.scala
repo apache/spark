@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, RebalancePartitions, RepartitionByExpression, RepartitionOperation, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
@@ -229,6 +229,107 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Add a repartition before writing Spark SQL Data Sources. It supports three patterns:
+ * 1. Repartition by none when writing normal table/directory.
+ * 2. Repartition by dynamic partition column when writing dynamic partition table/directory.
+ * 3. Repartition by bucket column with bucket number and sort by sort column when writing
+ *    bucket table/directory.
+ *
+ * Note that, this rule must be run after `DataSourceAnalysis`.
+ */
+object RepartitionWritingDataSource extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (conf.repartitionWritingDataSource) {
+      insertRepartition(plan)
+    } else {
+      plan
+    }
+  }
+
+  private def insertRepartition(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case c @ CreateDataSourceTableAsSelectCommand(table, _, query, _) if c.resolved =>
+      val dynamicPartExps = resolveColumnNames(table.partitionColumnNames, query.output)
+      applyRepartition(c, table.bucketSpec, dynamicPartExps)
+
+    case i: InsertIntoHadoopFsRelationCommand if i.resolved =>
+
+      val dynamicPartExps = i.partitionColumns
+        .filterNot(p => i.staticPartitions.exists(s => conf.resolver(p.name, s._1)))
+      applyRepartition(i, i.bucketSpec, dynamicPartExps)
+
+    case i: InsertIntoDataSourceDirCommand if i.resolved && canApplyRebalancePartitions(i.query) =>
+      i.copy(query = RebalancePartitions(Nil, i.query))
+
+    // InsertIntoDataSourceCommand only accept InsertableRelation, do not need repartition.
+  }
+
+  private def applyRepartition(
+                                dataWriting: DataWritingCommand,
+                                bucketSpec: Option[BucketSpec],
+                                partitionColumns: Seq[Expression]): LogicalPlan = {
+    val query = dataWriting.query
+    (bucketSpec, partitionColumns) match {
+      case (None, partExps) if partExps.nonEmpty =>
+        query match {
+          case RepartitionByExpression(partitionExpressions, _, _)
+            if partitionExpressions == partExps =>
+            dataWriting
+          case _ =>
+            dataWriting.withNewChildren(
+              Seq(RepartitionByExpression(partExps, query, conf.numShufflePartitions)))
+        }
+
+      case (Some(bucket), partExps) =>
+        val bucketExps = partExps ++ resolveColumnNames(bucket.bucketColumnNames, query.output)
+        if (bucket.sortColumnNames.nonEmpty) {
+          val sortExps = resolveColumnNames(bucket.sortColumnNames, query.output)
+            .map(SortOrder(_, Ascending))
+          query match {
+            case Sort(order, false, RepartitionByExpression(partExpr, _, Some(bucket.numBuckets)))
+              if order == sortExps && partExpr == bucketExps =>
+              dataWriting
+            case _ =>
+              dataWriting.withNewChildren(
+                Seq(Sort(sortExps, false,
+                  RepartitionByExpression(bucketExps, query, bucket.numBuckets))))
+          }
+        } else {
+          query match {
+            case RepartitionByExpression(partExpr, _, Some(bucket.numBuckets))
+              if partExpr == bucketExps =>
+              dataWriting
+            case _ =>
+              dataWriting.withNewChildren(
+                Seq(RepartitionByExpression(bucketExps, query, bucket.numBuckets)))
+          }
+        }
+
+      case _ =>
+        if (canApplyRebalancePartitions(query)) {
+          dataWriting.withNewChildren(Seq(RebalancePartitions(Nil, query)))
+        } else {
+          dataWriting
+        }
+    }
+  }
+
+  private def resolveColumnNames(
+    columnNames: Seq[String], outputAttrs: Seq[Attribute]): Seq[NamedExpression] = {
+    columnNames.map { c =>
+      outputAttrs.resolve(c :: Nil, conf.resolver).
+        getOrElse(throw new AnalysisException(s"Cannot resolve column name $c among (" +
+          s"${outputAttrs.map(_.name).mkString(",")})."))
+    }
+  }
+
+  private def canApplyRebalancePartitions(plan: LogicalPlan): Boolean = {
+    plan match {
+      case _: RebalancePartitions | _: RepartitionOperation | _: Sort => false
+      case _ => conf.adaptiveExecutionEnabled && conf.coalesceShufflePartitionsEnabled
+    }
+  }
+}
 
 /**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.

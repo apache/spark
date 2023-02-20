@@ -102,6 +102,7 @@ class HiveSessionStateBuilder(
         DataSourceAnalysis +:
         HiveAnalysis +:
         ReplaceCharWithVarchar +:
+        RepartitionWritingDataSource +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =

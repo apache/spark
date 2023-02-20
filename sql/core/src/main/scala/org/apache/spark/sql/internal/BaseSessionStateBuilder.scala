@@ -202,6 +202,7 @@ abstract class BaseSessionStateBuilder(
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
         ReplaceCharWithVarchar +:
+        RepartitionWritingDataSource +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
