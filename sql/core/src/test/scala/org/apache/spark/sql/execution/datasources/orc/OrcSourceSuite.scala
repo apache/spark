@@ -443,7 +443,8 @@ abstract class OrcSuite
         .write.orc(new Path(basePath, "foo=2").toString)
 
       // with schema merging, there should throw exception
-      withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true",
+        "spark.default.parallelism" -> "1") {
         val exception = intercept[SparkException] {
           spark.read.orc(basePath).columns.length
         }.getCause
