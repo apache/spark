@@ -200,11 +200,11 @@ private[spark] class BlockManager(
     new DiskBlockManager(conf, deleteFilesOnStop = deleteFilesOnStop, isDriver = isDriver)
   }
 
-  // Visible for testing
-  private[storage] val blockInfoManager = new BlockInfoManager
-
   /** Whether rdd cache visibility tracking is enabled. */
   private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
+
+  // Visible for testing
+  private[storage] val blockInfoManager = new BlockInfoManager(trackingCacheVisibility)
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
@@ -1485,7 +1485,7 @@ private[spark] class BlockManager(
 
     if(master.isRDDBlockVisible(blockId)) {
       // Cache the visibility status if block exists.
-      blockInfoManager.tryAddVisibleBlock(blockId)
+      blockInfoManager.tryMarkBlockAsVisible(blockId)
       true
     } else {
       false
