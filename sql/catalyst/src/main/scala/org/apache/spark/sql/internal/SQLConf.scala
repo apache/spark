@@ -4038,7 +4038,7 @@ object SQLConf {
       .doc("When set to true, spark-sql CLI prints the the current database in prompt")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA =
     buildConf("spark.sql.legacy.keepCommandOutputSchema")

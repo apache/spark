@@ -279,13 +279,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     var ret = 0
     var prefix = ""
 
-    def currentDB: String = {
-      val printCurrentDb = conf.getBoolVar(HiveConf.ConfVars.CLIPRINTCURRENTDB) ||
-        SparkSQLEnv.sqlContext.conf.cliPrintCurrentDb
-      if (printCurrentDb) {
+    def currentDB = {
+      if (SparkSQLEnv.sqlContext.conf.cliPrintCurrentDb) {
         s" (${SparkSQLEnv.sqlContext.sparkSession.catalog.currentDatabase})"
       } else {
-        ""
+        ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
+          classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
       }
     }
 
