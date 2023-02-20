@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
@@ -47,7 +48,10 @@ import org.apache.spark.sql.connect.client.util.Cleaner
  *     .getOrCreate()
  * }}}
  */
-class SparkSession(private val client: SparkConnectClient, private val cleaner: Cleaner)
+class SparkSession(
+    private val client: SparkConnectClient,
+    private val cleaner: Cleaner,
+    private[sql] val planIdGenerator: AtomicLong)
     extends Serializable
     with Closeable
     with Logging {
@@ -148,6 +152,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   private[sql] def newDataset[T](f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
+    builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     new Dataset[T](this, plan)
   }
@@ -178,9 +183,11 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
 object SparkSession extends Logging {
+  private val planIdGenerator = new AtomicLong
+
   def builder(): Builder = new Builder()
 
-  private lazy val cleaner = {
+  private[sql] lazy val cleaner = {
     val cleaner = new Cleaner
     cleaner.start()
     cleaner
@@ -198,7 +205,7 @@ object SparkSession extends Logging {
       if (_client == null) {
         _client = SparkConnectClient.builder().build()
       }
-      new SparkSession(_client, cleaner)
+      new SparkSession(_client, cleaner, planIdGenerator)
     }
   }
 }

@@ -117,6 +117,8 @@ import org.apache.spark.util.Utils
  */
 class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan: proto.Plan)
     extends Serializable {
+  // Make sure we don't forget to set plan id.
+  assert(plan.getRoot.getCommon.hasPlanId)
 
   override def toString: String = {
     try {

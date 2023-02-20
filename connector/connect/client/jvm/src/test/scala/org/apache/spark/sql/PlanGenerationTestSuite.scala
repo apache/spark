@@ -17,13 +17,14 @@
 package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
@@ -53,7 +54,11 @@ import org.apache.spark.sql.types._
  * `connector/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll with Logging {
+class PlanGenerationTestSuite
+    extends ConnectFunSuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach
+    with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
@@ -100,8 +105,12 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     val client = new SparkConnectClient(
       proto.UserContext.newBuilder().build(),
       InProcessChannelBuilder.forName("/dev/null").build())
-    val builder = SparkSession.builder().client(client)
-    session = builder.build()
+    session =
+      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+  }
+
+  override protected def beforeEach(): Unit = {
+    session.planIdGenerator.set(0L)
   }
 
   override protected def afterAll(): Unit = {
