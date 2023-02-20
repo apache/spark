@@ -184,6 +184,12 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   private val complexSchemaString = complexSchema.catalogString
 
+  private val binarySchema = new StructType()
+    .add("id", "long")
+    .add("bytes", "binary")
+
+  private val binarySchemaString = binarySchema.catalogString
+
   private def createLocalRelation(schema: String): DataFrame = session.newDataset { builder =>
     // TODO API is not consistent. Now we have two different ways of working with schemas!
     builder.getLocalRelationBuilder.setSchema(schema)
@@ -194,6 +200,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   private def left: DataFrame = simple
   private def right: DataFrame = createLocalRelation(otherSchemaString)
   private def complex = createLocalRelation(complexSchemaString)
+  private def binary = createLocalRelation(binarySchemaString)
 
   private def select(cs: Column*): DataFrame = simple.select(cs: _*)
 
@@ -855,9 +862,12 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.first("a", ignoreNulls = true)
   }
 
-  test("grouping") {}
+  test("function grouping and grouping_id") {
+    simple
+      .groupBy(fn.col("a"))
+      .agg(fn.count(fn.col("id")), fn.grouping("a"), fn.grouping("id"), fn.grouping_id("a"))
+  }
 
-  test("grouping_id") {}
 
   functionTest("kurtosis") {
     fn.kurtosis("a")
@@ -1192,183 +1202,187 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("md5") {
-    fn.radians("b")
+    fn.md5(fn.col("g").cast("binary"))
   }
 
   functionTest("sha1") {
-    fn.radians("b")
+    fn.sha1(fn.col("g").cast("binary"))
   }
 
   functionTest("sha2") {
-    fn.radians("b")
+    fn.sha2(fn.col("g").cast("binary"), 512)
   }
 
   functionTest("crc32") {
-    fn.radians("b")
+    fn.crc32(fn.col("g").cast("binary"))
   }
 
   functionTest("hash") {
-    fn.radians("b")
+    fn.hash(fn.col("b"), fn.col("id"))
   }
 
   functionTest("xxhash64") {
-    fn.radians("b")
+    fn.xxhash64(fn.col("*"))
   }
 
   functionTest("assert_true") {
-    fn.radians("b")
+    fn.assert_true(fn.col("id") > 0)
   }
 
   functionTest("assert_true with message") {
-    fn.radians("b")
+    fn.assert_true(fn.col("id") > 0, lit("id negative!"))
   }
 
   functionTest("raise_error") {
-    fn.radians("b")
+    fn.raise_error(fn.col("kaboom"))
   }
 
   functionTest("ascii") {
-    fn.radians("b")
+    fn.ascii(fn.col("g"))
   }
 
   functionTest("base64") {
-    fn.radians("b")
+    fn.base64(fn.col("g").cast("binary"))
   }
 
   functionTest("bit_length") {
-    fn.radians("b")
+    fn.bit_length(fn.col("g"))
   }
 
   functionTest("concat_ws") {
-    fn.radians("b")
+    fn.concat_ws("-", fn.col("b"), lit("world"), fn.col("id"))
   }
 
   functionTest("decode") {
-    fn.radians("b")
+    fn.decode(fn.col("g").cast("binary"), "UTF-8")
   }
 
   functionTest("encode") {
-    fn.radians("b")
+    fn.encode(fn.col("g"), "UTF-8")
+  }
+
+  functionTest("format_number") {
+    fn.format_number(fn.col("b"), 1)
   }
 
   functionTest("initcap") {
-    fn.radians("b")
+    fn.initcap(fn.col("g"))
   }
 
   functionTest("length") {
-    fn.radians("b")
+    fn.length(fn.col("g"))
   }
 
   functionTest("lower") {
-    fn.radians("b")
+    fn.lower(fn.col("g"))
   }
 
   functionTest("levenshtein") {
-    fn.radians("b")
+    fn.levenshtein(fn.col("g"), lit("bob"))
   }
 
   functionTest("locate") {
-    fn.radians("b")
+    fn.locate("jar", fn.col("g"))
   }
 
   functionTest("locate with pos") {
-    fn.radians("b")
+    fn.locate("jar", fn.col("g"), 10)
   }
 
   functionTest("lpad") {
-    fn.radians("b")
+    fn.lpad(fn.col("g"), 10, "-")
   }
 
-  functionTest("lpad binary") {
-    fn.radians("b")
+  test("function lpad binary") {
+    binary.select(fn.lpad(fn.col("bytes"), 5, Array(0xC, 0xA, 0xF, 0xE).map(_.toByte)))
   }
 
   functionTest("ltrim") {
-    fn.radians("b")
+    fn.ltrim(fn.col("g"))
   }
 
   functionTest("ltrim with pattern") {
-    fn.radians("b")
+    fn.ltrim(fn.col("g"), "xxx")
   }
 
   functionTest("octet_length") {
-    fn.radians("b")
+    fn.octet_length(fn.col("g"))
   }
 
   functionTest("regexp_extract") {
-    fn.radians("b")
+    fn.regexp_extract(fn.col("g"), "(\\d+)-(\\d+)", 1)
   }
 
   functionTest("regexp_replace") {
-    fn.radians("b")
+    fn.regexp_replace(fn.col("g"), "(\\d+)", "XXX")
   }
 
   functionTest("unbase64") {
-    fn.radians("b")
+    fn.unbase64(fn.col("g"))
   }
 
   functionTest("rpad") {
-    fn.radians("b")
+    fn.rpad(fn.col("g"), 10, "-")
   }
 
-  functionTest("rpad binary") {
-    fn.radians("b")
+  test("function rpad binary") {
+    binary.select(fn.rpad(fn.col("bytes"), 5, Array(0xB, 0xA, 0xB, 0xE).map(_.toByte)))
   }
 
   functionTest("rtrim") {
-    fn.radians("b")
+    fn.rtrim(fn.col("g"))
   }
 
   functionTest("rtrim with pattern") {
-    fn.radians("b")
+    fn.rtrim(fn.col("g"), "yyy")
   }
 
   functionTest("split") {
-    fn.radians("b")
+    fn.split(fn.col("g"), ";")
   }
 
   functionTest("split with limit") {
-    fn.radians("b")
+    fn.split(fn.col("g"), ";", 10)
   }
 
   functionTest("substring") {
-    fn.radians("b")
+    fn.substring(fn.col("g"), 4, 5)
   }
 
   functionTest("substring_index") {
-    fn.radians("b")
+    fn.substring_index(fn.col("g"), ";", 5)
   }
 
   functionTest("overlay") {
-    fn.radians("b")
+    fn.overlay(fn.col("b"), lit("foo"), lit(4))
   }
 
   functionTest("overlay with len") {
-    fn.radians("b")
+    fn.overlay(fn.col("b"), lit("foo"), lit(4), lit("3"))
   }
 
   functionTest("sentences") {
-    fn.radians("b")
+    fn.sentences(fn.col("g"))
   }
 
   functionTest("sentences with locale") {
-    fn.radians("b")
+    fn.sentences(fn.col("g"), lit("en"), lit("US"))
   }
 
   functionTest("translate") {
-    fn.radians("b")
+    fn.translate(fn.col("g"), "foo", "bar")
   }
 
   functionTest("trim") {
-    fn.radians("b")
+    fn.trim(fn.col("g"))
   }
 
   functionTest("trim with pattern") {
-    fn.radians("b")
+    fn.trim(fn.col("g"), "---")
   }
 
   functionTest("upper") {
-    fn.radians("b")
+    fn.upper(fn.col("g"))
   }
 
   functionTest("add_months") {
