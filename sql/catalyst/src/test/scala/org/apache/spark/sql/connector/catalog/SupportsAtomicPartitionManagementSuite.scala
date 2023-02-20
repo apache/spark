@@ -22,7 +22,7 @@ import java.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
+import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -41,7 +41,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
         .add("id", IntegerType)
         .add("data", StringType)
         .add("dt", StringType),
-      Array(LogicalExpressions.identity(ref("dt"))),
+      Array[Transform](LogicalExpressions.identity(ref("dt"))),
       util.Collections.emptyMap[String, String])
     newCatalog
   }
