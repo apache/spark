@@ -212,10 +212,13 @@ class GroupedLimitIterator(
     limitIterator = createLimitIterator(groupIterator)
   }
 
-  override final def hasNext: Boolean = limitIterator.hasNext || {
-    groupIterator.skipRemainingRows()
-    limitIterator.reset()
-    groupIterator.hasNext
+  override final def hasNext: Boolean = {
+    if (!limitIterator.hasNext) {
+      // if `limitIterator.hasNext` is false, we should jump to the next group if present
+      groupIterator.skipRemainingRows()
+      limitIterator.reset()
+    }
+    limitIterator.hasNext
   }
 
   override final def next(): InternalRow = {
