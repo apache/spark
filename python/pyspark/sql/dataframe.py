@@ -1681,6 +1681,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         numPartitions : int
@@ -1873,6 +1876,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         fraction given on each stratum.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -3191,6 +3197,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         cols : list, str or :class:`Column`
@@ -3236,6 +3245,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         the specified columns, so we can run aggregations on them.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4328,6 +4340,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col: str, tuple or list
@@ -4427,6 +4442,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col1 : str
@@ -4476,6 +4494,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4574,6 +4595,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4805,6 +4829,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns a new :class:`DataFrame` by updating an existing column with metadata.
 
         .. versionadded:: 3.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

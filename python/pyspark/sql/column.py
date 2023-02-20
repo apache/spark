@@ -669,13 +669,13 @@ class Column:
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other : :class:`Column` or str
         string at start of line (do not use a regex `^`)
-
-    .. versionchanged:: 3.4.0
-        Support Spark Connect.
 
     Examples
     --------
@@ -903,6 +903,9 @@ class Column:
     _asc_doc = """
     Returns a sort expression based on the ascending order of the column.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -915,6 +918,9 @@ class Column:
     return before non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -930,6 +936,9 @@ class Column:
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -942,6 +951,9 @@ class Column:
     Returns a sort expression based on the descending order of the column.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -956,6 +968,9 @@ class Column:
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -969,6 +984,9 @@ class Column:
     appear after non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -1127,6 +1145,9 @@ class Column:
         True if the current column is between the lower bound and upper bound, inclusive.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

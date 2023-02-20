@@ -172,6 +172,8 @@ class UserDefinedFunction:
     def asNondeterministic(self) -> "UserDefinedFunction":
         """
         Updates UserDefinedFunction to nondeterministic.
+
+        .. versionadded:: 3.4.0
         """
         self.deterministic = False
         return self
