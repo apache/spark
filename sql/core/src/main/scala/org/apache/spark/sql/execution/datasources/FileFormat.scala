@@ -184,6 +184,10 @@ object FileFormat {
 
   val FILE_NAME = "file_name"
 
+  val FILE_BLOCK_START = "file_block_start"
+
+  val FILE_BLOCK_LENGTH = "file_block_length"
+
   val FILE_SIZE = "file_size"
 
   val FILE_MODIFICATION_TIME = "file_modification_time"
@@ -212,6 +216,8 @@ object FileFormat {
     .add(StructField(FileFormat.FILE_PATH, StringType, nullable = false))
     .add(StructField(FileFormat.FILE_NAME, StringType, nullable = false))
     .add(StructField(FileFormat.FILE_SIZE, LongType, nullable = false))
+    .add(StructField(FileFormat.FILE_BLOCK_START, LongType, nullable = false))
+    .add(StructField(FileFormat.FILE_BLOCK_LENGTH, LongType, nullable = false))
     .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
   /**
@@ -231,9 +237,12 @@ object FileFormat {
       fieldNames: Seq[String],
       filePath: Path,
       fileSize: Long,
-      fileModificationTime: Long): InternalRow =
+      fileModificationTime: Long): InternalRow = {
+    // We are not aware of `FILE_BLOCK_START` and `FILE_BLOCK_LENGTH` before splitting files
+    assert(!fieldNames.contains(FILE_BLOCK_START) && !fieldNames.contains(FILE_BLOCK_LENGTH))
     updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames,
-      filePath, fileSize, fileModificationTime)
+      filePath, fileSize, 0L, fileSize, fileModificationTime)
+  }
 
   // update an internal row given required metadata fields and file information
   def updateMetadataInternalRow(
@@ -241,12 +250,16 @@ object FileFormat {
       fieldNames: Seq[String],
       filePath: Path,
       fileSize: Long,
+      fileBlockStart: Long,
+      fileBlockLength: Long,
       fileModificationTime: Long): InternalRow = {
     fieldNames.zipWithIndex.foreach { case (name, i) =>
       name match {
         case FILE_PATH => row.update(i, UTF8String.fromString(filePath.toString))
         case FILE_NAME => row.update(i, UTF8String.fromString(filePath.getName))
         case FILE_SIZE => row.update(i, fileSize)
+        case FILE_BLOCK_START => row.update(i, fileBlockStart)
+        case FILE_BLOCK_LENGTH => row.update(i, fileBlockLength)
         case FILE_MODIFICATION_TIME =>
           // the modificationTime from the file is in millisecond,
           // while internally, the TimestampType `file_modification_time` is stored in microsecond

@@ -313,6 +313,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
         val structColumns = metadataColumns.map { col => col.name match {
             case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
+                 FileFormat.FILE_BLOCK_START | FileFormat.FILE_BLOCK_LENGTH |
                  FileFormat.FILE_MODIFICATION_TIME =>
               col
             case FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME =>
