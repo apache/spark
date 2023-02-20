@@ -106,12 +106,8 @@ class SparkSession:
         def master(self, master: str) -> "SparkSession.Builder":
             return self
 
-        master.__doc__ = PySparkSession.builder.master.__doc__
-
         def appName(self, name: str) -> "SparkSession.Builder":
             return self.config("spark.app.name", name)
-
-        appName.__doc__ = PySparkSession.builder.appName.__doc__
 
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
