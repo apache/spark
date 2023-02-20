@@ -46,8 +46,6 @@ from pyspark.sql.types import (
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
-    SparkConnectException,
-    SparkConnectAnalysisException,
     PySparkTypeError,
 )
 from pyspark.testing.sqlutils import (
@@ -122,7 +120,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_DICT",
+            error_class="NOT_DICT",
             message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
         )
 
@@ -225,7 +223,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+            error_class="NOT_LIST_OR_STR_OR_TUPLE",
             message_parameters={"arg_name": "subset", "arg_type": "int"},
         )
 
@@ -305,7 +303,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
             message_parameters={"arg_name": "value", "arg_type": "list"},
         )
 
@@ -356,7 +354,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
         )
 
@@ -555,7 +553,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
             message_parameters={"arg_name": "to_replace", "arg_type": "function"},
         )
 
@@ -948,8 +946,7 @@ class DataFrameTestsMixin:
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample(seed="abc"))
 
         self.assertRaises(
-            (IllegalArgumentException, SparkConnectException),
-            lambda: self.spark.range(1).sample(-1.0).count(),
+            IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
         )
 
     def test_toDF_with_schema_string(self):
@@ -1027,7 +1024,7 @@ class DataFrameTestsMixin:
         spark = self.spark
         with self.tempView("tab1", "tab2"):
             spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
-            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab2")
+            spark.createDataFrame([(2, 4), (3, 4)]).createOrReplaceTempView("tab2")
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
             spark.catalog.cacheTable("tab1")
@@ -1489,7 +1486,7 @@ class DataFrameTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "other", "arg_type": "int"},
             )
 
@@ -1525,7 +1522,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_AN_INTEGER",
+            error_class="NOT_INT",
             message_parameters={"arg_name": "n", "arg_type": "bool"},
         )
 
@@ -1534,7 +1531,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_BOOLEAN",
+            error_class="NOT_BOOL",
             message_parameters={"arg_name": "vertical", "arg_type": "str"},
         )
 
@@ -1543,7 +1540,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_BOOLEAN",
+            error_class="NOT_BOOL",
             message_parameters={"arg_name": "truncate", "arg_type": "str"},
         )
 
@@ -1595,17 +1592,13 @@ class DataFrameTestsMixin:
         # incompatible field nullability
         schema4 = StructType([StructField("j", LongType(), False)])
         self.assertRaisesRegex(
-            (AnalysisException, SparkConnectAnalysisException),
-            "NULLABLE_COLUMN_OR_FIELD",
-            lambda: df.to(schema4).count(),
+            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4).count()
         )
 
         # field cannot upcast
         schema5 = StructType([StructField("i", LongType())])
         self.assertRaisesRegex(
-            (AnalysisException, SparkConnectAnalysisException),
-            "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
-            lambda: df.to(schema5).count(),
+            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5).count()
         )
 
     def test_repartition(self):
@@ -1615,7 +1608,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
         )
 
@@ -1625,7 +1618,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_A_STRING",
+            error_class="NOT_STR",
             message_parameters={"arg_name": "colName", "arg_type": "int"},
         )
 
@@ -1635,7 +1628,7 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "condition", "arg_type": "int"},
         )
 

@@ -144,6 +144,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`ceil`"
   },
@@ -302,6 +303,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`floor`"
   },

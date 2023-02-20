@@ -205,9 +205,9 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e1,
-      errorClass = "UNSUPPORTED_FEATURE.REPEATED_PIVOT",
-      parameters = Map[String, String](),
-      sqlState = "0A000")
+      errorClass = "REPEATED_CLAUSE",
+      parameters = Map("clause" -> "PIVOT", "operation" -> "SUBQUERY"),
+      sqlState = "42614")
 
     val e2 = intercept[SparkUnsupportedOperationException] {
       trainingSales
@@ -634,37 +634,6 @@ class QueryExecutionErrorsSuite
       sqlState = "0A000")
   }
 
-  test("FAILED_RENAME_PATH: rename when destination path already exists") {
-    withTempPath { p =>
-      withSQLConf(
-        "spark.sql.streaming.checkpointFileManagerClass" ->
-          classOf[FileSystemBasedCheckpointFileManager].getName,
-        "fs.file.impl" -> classOf[FakeFileSystemAlwaysExists].getName,
-        // FileSystem caching could cause a different implementation of fs.file to be used
-        "fs.file.impl.disable.cache" -> "true") {
-        val checkpointLocation = p.getAbsolutePath
-
-        val ds = spark.readStream.format("rate").load()
-        val e = intercept[SparkConcurrentModificationException] {
-          ds.writeStream
-            .option("checkpointLocation", checkpointLocation)
-            .queryName("_")
-            .format("memory")
-            .start()
-        }
-
-        val expectedPath = p.toURI
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkFileAlreadyExistsException],
-          errorClass = "FAILED_RENAME_PATH",
-          sqlState = Some("42K04"),
-          matchPVals = true,
-          parameters = Map("sourcePath" -> s"$expectedPath.+",
-            "targetPath" -> s"$expectedPath.+"))
-      }
-    }
-  }
-
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
     withTempPath { p =>
       withSQLConf(
@@ -771,6 +740,31 @@ class QueryExecutionErrorsSuite
     assert(e.getErrorClass === "STREAM_FAILED")
     assert(e.getCause.isInstanceOf[NullPointerException])
   }
+
+  test("UNSUPPORTED_EXPR_FOR_WINDOW: to_date is not supported with WINDOW") {
+    withTable("t") {
+      sql("CREATE TABLE t(c String) USING parquet")
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT to_date('2009-07-30 04:17:52') OVER (PARTITION BY c ORDER BY c) FROM t;")
+      }
+
+      checkError(
+        exception = e,
+        errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+        parameters = Map(
+          "sqlExpr" -> "\"to_date(2009-07-30 04:17:52)\""
+        ),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "to_date('2009-07-30 04:17:52') OVER (PARTITION BY c ORDER BY c)",
+            start = 7,
+            stop = 69
+          )
+        )
+      )
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
@@ -778,10 +772,6 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
   override def setPermission(src: Path, permission: FsPermission): Unit = {
     throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
-}
-
-class FakeFileSystemAlwaysExists extends DebugFilesystem {
-  override def exists(f: Path): Boolean = true
 }
 
 class FakeFileSystemNeverExists extends DebugFilesystem {

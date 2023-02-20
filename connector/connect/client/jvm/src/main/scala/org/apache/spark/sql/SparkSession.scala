@@ -18,6 +18,8 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 
+import scala.collection.JavaConverters._
+
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.connect.proto
@@ -63,12 +65,41 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   }
 
   /**
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * `DataFrame`.
+   * {{{
+   *   sparkSession.read.parquet("/path/to/file.parquet")
+   *   sparkSession.read.schema(schema).json("/path/to/file.json")
+   * }}}
+   *
+   * @since 3.4.0
+   */
+  def read: DataFrameReader = new DataFrameReader(this)
+
+  /**
+   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
+   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a
+   * view, the returned DataFrame is simply the query plan of the view, which can either be a
+   * batch or streaming query plan.
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table or view. If a database is
+   *   specified, it identifies the table/view from the database. Otherwise, it first attempts to
+   *   find a temporary view with the given name and then match the table/view from the current
+   *   database. Note that, the global temporary view database is also valid here.
+   * @since 3.4.0
+   */
+  def table(tableName: String): DataFrame = {
+    read.table(tableName)
+  }
+
+  /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
    * range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 3.4.0
    */
-  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
+  def range(end: Long): Dataset[Row] = range(0, end)
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -76,7 +107,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long): Dataset[java.lang.Long] = {
+  def range(start: Long, end: Long): Dataset[Row] = {
     range(start, end, step = 1)
   }
 
@@ -86,7 +117,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
+  def range(start: Long, end: Long, step: Long): Dataset[Row] = {
     range(start, end, step, None)
   }
 
@@ -96,7 +127,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Row] = {
     range(start, end, step, Option(numPartitions))
   }
 
@@ -104,7 +135,7 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
       start: Long,
       end: Long,
       step: Long,
-      numPartitions: Option[Int]): Dataset[java.lang.Long] = {
+      numPartitions: Option[Int]): Dataset[Row] = {
     newDataset { builder =>
       val rangeBuilder = builder.getRangeBuilder
         .setStart(start)
@@ -121,14 +152,21 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     new Dataset[T](this, plan)
   }
 
-  private[sql] def analyze(plan: proto.Plan): proto.AnalyzePlanResponse =
-    client.analyze(plan)
+  private[sql] def analyze(
+      plan: proto.Plan,
+      mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
+    client.analyze(plan, mode)
 
   private[sql] def execute(plan: proto.Plan): SparkResult = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator)
     cleaner.register(result)
     result
+  }
+
+  private[sql] def execute(command: proto.Command): Unit = {
+    val plan = proto.Plan.newBuilder().setCommand(command).build()
+    client.execute(plan).asScala.foreach(_ => ())
   }
 
   override def close(): Unit = {
@@ -149,7 +187,7 @@ object SparkSession extends Logging {
   }
 
   class Builder() extends Logging {
-    private var _client = SparkConnectClient.builder().build()
+    private var _client: SparkConnectClient = _
 
     def client(client: SparkConnectClient): Builder = {
       _client = client
@@ -157,6 +195,9 @@ object SparkSession extends Logging {
     }
 
     def build(): SparkSession = {
+      if (_client == null) {
+        _client = SparkConnectClient.builder().build()
+      }
       new SparkSession(_client, cleaner)
     }
   }

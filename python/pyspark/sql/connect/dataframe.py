@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -50,12 +50,14 @@ from pyspark.sql.dataframe import (
 )
 
 from pyspark.errors import PySparkTypeError
+from pyspark.errors.exceptions.connect import SparkConnectException
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
-from pyspark.sql.connect.readwriter import DataFrameWriter
+from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
+    _to_col_with_plan_id,
     _to_col,
     _invoke_function,
     col,
@@ -146,7 +148,7 @@ class DataFrame:
     def colRegex(self, colName: str) -> Column:
         if not isinstance(colName, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
             )
         return Column(UnresolvedRegex(colName))
@@ -235,7 +237,7 @@ class DataFrame:
             )
         else:
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
@@ -436,6 +438,8 @@ class DataFrame:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot join when other._plan is empty.")
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
 
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
@@ -577,7 +581,7 @@ class DataFrame:
     def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
@@ -590,12 +594,12 @@ class DataFrame:
     ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
-                error_class="NOT_AN_INTEGER",
+                error_class="NOT_INT",
                 message_parameters={"arg_name": "n", "arg_type": type(n).__name__},
             )
         if not isinstance(vertical, bool):
             raise PySparkTypeError(
-                error_class="NOT_A_BOOLEAN",
+                error_class="NOT_BOOL",
                 message_parameters={"arg_name": "vertical", "arg_type": type(vertical).__name__},
             )
 
@@ -607,7 +611,7 @@ class DataFrame:
                 _truncate = int(truncate)
             except ValueError:
                 raise PySparkTypeError(
-                    error_class="NOT_A_BOOLEAN",
+                    error_class="NOT_BOOL",
                     message_parameters={
                         "arg_name": "truncate",
                         "arg_type": type(truncate).__name__,
@@ -674,7 +678,7 @@ class DataFrame:
 
     def unpivot(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        ids: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]],
         values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
         variableColumnName: str,
         valueColumnName: str,
@@ -696,7 +700,11 @@ class DataFrame:
 
         return DataFrame.withPlan(
             plan.Unpivot(
-                self._plan, to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+                self._plan,
+                to_jcols(ids),
+                to_jcols(values) if values is not None else None,
+                variableColumnName,
+                valueColumnName,
             ),
             self._session,
         )
@@ -839,7 +847,7 @@ class DataFrame:
     def where(self, condition: Union[Column, str]) -> "DataFrame":
         if not isinstance(condition, (str, Column)):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
             )
         return self.filter(condition)
@@ -859,7 +867,7 @@ class DataFrame:
     ) -> "DataFrame":
         if not isinstance(value, (float, int, str, bool, dict)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
                 message_parameters={"arg_name": "value", "arg_type": type(value).__name__},
             )
         if isinstance(value, dict):
@@ -946,7 +954,7 @@ class DataFrame:
                 _cols = list(subset)
             else:
                 raise PySparkTypeError(
-                    error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+                    error_class="NOT_LIST_OR_STR_OR_TUPLE",
                     message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
                 )
 
@@ -1000,7 +1008,7 @@ class DataFrame:
         valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict,)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
                 message_parameters={
                     "arg_name": "to_replace",
                     "arg_type": type(to_replace).__name__,
@@ -1100,12 +1108,12 @@ class DataFrame:
     def cov(self, col1: str, col2: str) -> float:
         if not isinstance(col1, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col1", "arg_type": type(col1).__name__},
             )
         if not isinstance(col2, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
         pdf = DataFrame.withPlan(
@@ -1227,12 +1235,12 @@ class DataFrame:
             col = Column(ColumnReference(col))
         elif not isinstance(col, Column):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
             )
         if not isinstance(fractions, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
             )
         for k, v in fractions.items():
@@ -1278,10 +1286,12 @@ class DataFrame:
         if isinstance(item, str):
             # Check for alias
             alias = self._get_alias()
-            if alias is not None:
-                return col(alias)
-            else:
-                return col(item)
+            if self._plan is None:
+                raise SparkConnectException("Cannot analyze on empty plan.")
+            return _to_col_with_plan_id(
+                col=alias if alias is not None else item,
+                plan_id=self._plan._plan_id,
+            )
         elif isinstance(item, Column):
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
@@ -1551,8 +1561,11 @@ class DataFrame:
     def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("sameSemantics() is not implemented.")
 
-    def writeTo(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("writeTo() is not implemented.")
+    def writeTo(self, table: str) -> "DataFrameWriterV2":
+        assert self._plan is not None
+        return DataFrameWriterV2(self._plan, self._session, table)
+
+    writeTo.__doc__ = PySparkDataFrame.writeTo.__doc__
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
@@ -1685,19 +1698,11 @@ def _test() -> None:
     del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
     del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
-    # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
-    del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
-
-    # TODO(SPARK-41823): ambiguous column names
+    # TODO(SPARK-42367): DataFrame.drop should handle duplicated columns
     del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
-    # TODO(SPARK-41818): Support saveAsTable
-    del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

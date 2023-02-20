@@ -142,6 +142,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
     checkAnalysis0(inlineCTE(plan))
+    plan.setAnalyzed()
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
@@ -316,8 +317,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
               case other =>
                 other.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2412",
-                  messageParameters = Map("sqlExpr" -> other.toString))
+                  errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+                  messageParameters = Map("sqlExpr" -> toSQLExpr(other)))
             }
 
           case s: SubqueryExpression =>
@@ -573,13 +574,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 // SPARK-18058: we shall not care about the nullability of columns
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   e.failAnalysis(
-                    errorClass = "_LEGACY_ERROR_TEMP_2430",
+                    errorClass = "INCOMPATIBLE_COLUMN_TYPE",
                     messageParameters = Map(
                       "operator" -> toSQLStmt(operator.nodeName),
-                      "ci" -> ordinalNumber(ci),
-                      "ti" -> ordinalNumber(ti + 1),
-                      "dt1" -> dt1.catalogString,
-                      "dt2" -> dt2.catalogString,
+                      "columnOrdinalNumber" -> ordinalNumber(ci),
+                      "tableOrdinalNumber" -> ordinalNumber(ti + 1),
+                      "dataType1" -> toSQLType(dt1),
+                      "dataType2" -> toSQLType(dt2),
                       "hint" -> extraHintForAnsiTypeCoercionPlan(operator)))
                 }
               }
@@ -771,8 +772,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           summary = o.origin.context.summary)
       case _ =>
     }
-
-    plan.setAnalyzed()
   }
 
   private def getAllExpressions(plan: LogicalPlan): Seq[Expression] = {

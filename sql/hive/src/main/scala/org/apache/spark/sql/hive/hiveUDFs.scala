@@ -91,12 +91,9 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
 
-  @transient
-  private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
-
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
-    val inputs = wrap(children.map(_.eval(input)), wrappers, cached, inputDataTypes)
+    val inputs = wrap(children.map(_.eval(input)), wrappers, cached)
     val ret = FunctionRegistry.invoke(
       method,
       function,
@@ -292,11 +289,11 @@ private[hive] case class HiveGenericUDTF(
   @transient
   private lazy val unwrapper = unwrapperFor(outputInspector)
 
+  @transient
+  private lazy val inputProjection = new InterpretedProjection(children)
+
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
-
-    val inputProjection = new InterpretedProjection(children)
-
     function.process(wrap(inputProjection(input), wrappers, udtInput, inputDataTypes))
     collector.collectRows()
   }

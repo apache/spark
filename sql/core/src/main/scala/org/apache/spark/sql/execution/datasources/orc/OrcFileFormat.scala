@@ -140,12 +140,10 @@ class OrcFileFormat
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
     val enableVectorizedReader = sqlConf.orcVectorizedReaderEnabled &&
-      options.get(FileFormat.OPTION_RETURNING_BATCH)
-        .getOrElse {
-          throw new IllegalArgumentException(
-            "OPTION_RETURNING_BATCH should always be set for OrcFileFormat. " +
-              "To workaround this issue, set spark.sql.orc.enableVectorizedReader=false.")
-        }
+      options.getOrElse(FileFormat.OPTION_RETURNING_BATCH,
+        throw new IllegalArgumentException(
+          "OPTION_RETURNING_BATCH should always be set for OrcFileFormat. " +
+            "To workaround this issue, set spark.sql.orc.enableVectorizedReader=false."))
         .equals("true")
     if (enableVectorizedReader) {
       // If the passed option said that we are to return batches, we need to also be able to

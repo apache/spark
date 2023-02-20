@@ -1,0 +1,10 @@
+{
+  "offset": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "offset": 1000
+  }
+}

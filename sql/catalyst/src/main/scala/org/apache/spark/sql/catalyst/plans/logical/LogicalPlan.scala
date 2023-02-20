@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -154,6 +155,18 @@ abstract class LogicalPlan
       case (a1, a2) => a1.semanticEquals(a2)
     }
   }
+}
+
+object LogicalPlan {
+  // A dedicated tag for Spark Connect.
+  // If an expression (only support UnresolvedAttribute for now) was attached by this tag,
+  // the analyzer will:
+  //    1, extract the plan id;
+  //    2, top-down traverse the query plan to find the node that was attached by the same tag.
+  //    and fails the whole analysis if can not find it;
+  //    3, resolve this expression with the matching node. If any error occurs, analyzer fallbacks
+  //    to the old code path.
+  private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
 }
 
 /**
@@ -317,5 +330,27 @@ object LogicalPlanIntegrity {
  * A logical plan node that can generate metadata columns
  */
 trait ExposesMetadataColumns extends LogicalPlan {
+  protected def metadataOutputWithOutConflicts(
+      metadataOutput: Seq[AttributeReference]): Seq[AttributeReference] = {
+    // If `metadataColFromOutput` is not empty that means `AddMetadataColumns` merged
+    // metadata output into output. We should still return an available metadata output
+    // so that the rule `ResolveReferences` can resolve metadata column correctly.
+    val metadataColFromOutput = output.filter(_.isMetadataCol)
+    if (metadataColFromOutput.isEmpty) {
+      val resolve = conf.resolver
+      val outputNames = outputSet.map(_.name)
+
+      def isOutputColumn(col: AttributeReference): Boolean = {
+        outputNames.exists(name => resolve(col.name, name))
+      }
+      // filter out the metadata struct column if it has the name conflicting with output columns.
+      // if the file has a column "_metadata",
+      // then the data column should be returned not the metadata struct column
+      metadataOutput.filterNot(isOutputColumn)
+    } else {
+      metadataColFromOutput.asInstanceOf[Seq[AttributeReference]]
+    }
+  }
+
   def withMetadataColumns(): LogicalPlan
 }

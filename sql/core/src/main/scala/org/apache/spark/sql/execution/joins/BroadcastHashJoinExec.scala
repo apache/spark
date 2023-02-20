@@ -112,28 +112,11 @@ case class BroadcastHashJoinExec(
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
   // The expanded expressions are returned as PartitioningCollection.
   private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
-    val maxNumCombinations = conf.broadcastHashJoinOutputPartitioningExpandLimit
-    var currentNumCombinations = 0
-
-    def generateExprCombinations(
-        current: Seq[Expression],
-        accumulated: Seq[Expression]): Seq[Seq[Expression]] = {
-      if (currentNumCombinations >= maxNumCombinations) {
-        Nil
-      } else if (current.isEmpty) {
-        currentNumCombinations += 1
-        Seq(accumulated)
-      } else {
-        val buildKeysOpt = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
-        generateExprCombinations(current.tail, accumulated :+ current.head) ++
-          buildKeysOpt.map(_.flatMap(b => generateExprCombinations(current.tail, accumulated :+ b)))
-            .getOrElse(Nil)
-      }
-    }
-
-    PartitioningCollection(
-      generateExprCombinations(partitioning.expressions, Nil)
-        .map(HashPartitioning(_, partitioning.numPartitions)))
+    PartitioningCollection(partitioning.multiTransformDown {
+      case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
+        e +: streamedKeyToBuildKeyMapping(e.canonicalized)
+    }.asInstanceOf[Stream[HashPartitioning]]
+      .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

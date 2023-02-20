@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -149,16 +151,28 @@ object ResolveDefaultColumns {
       field: StructField,
       statementType: String,
       metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
+    analyze(field.name, field.dataType, field.metadata.getString(metadataKey), statementType)
+  }
+
+  /**
+   * Parses and analyzes the DEFAULT column SQL string, returning an error upon failure.
+   *
+   * @return Result of the analysis and constant-folding operation.
+   */
+  def analyze(
+      colName: String,
+      dataType: DataType,
+      defaultSQL: String,
+      statementType: String): Expression = {
     // Parse the expression.
-    val colText: String = field.metadata.getString(metadataKey)
     lazy val parser = new CatalystSqlParser()
     val parsed: Expression = try {
-      parser.parseExpression(colText)
+      parser.parseExpression(defaultSQL)
     } catch {
       case ex: ParseException =>
         throw new AnalysisException(
           s"Failed to execute $statementType command because the destination table column " +
-            s"${field.name} has a DEFAULT value of $colText which fails to parse as a valid " +
+            s"$colName has a DEFAULT value of $defaultSQL which fails to parse as a valid " +
             s"expression: ${ex.getMessage}")
     }
     // Check invariants before moving on to analysis.
@@ -168,28 +182,28 @@ object ResolveDefaultColumns {
     // Analyze the parse result.
     val plan = try {
       val analyzer: Analyzer = DefaultColumnAnalyzer
-      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, field.name)()), OneRowRelation()))
+      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
       ConstantFolding(analyzed)
     } catch {
       case ex: AnalysisException =>
         throw new AnalysisException(
           s"Failed to execute $statementType command because the destination table column " +
-            s"${field.name} has a DEFAULT value of $colText which fails to resolve as a valid " +
+            s"$colName has a DEFAULT value of $defaultSQL which fails to resolve as a valid " +
             s"expression: ${ex.getMessage}")
     }
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
     // Perform implicit coercion from the provided expression type to the required column type.
-    if (field.dataType == analyzed.dataType) {
+    if (dataType == analyzed.dataType) {
       analyzed
-    } else if (Cast.canUpCast(analyzed.dataType, field.dataType)) {
-      Cast(analyzed, field.dataType)
+    } else if (Cast.canUpCast(analyzed.dataType, dataType)) {
+      Cast(analyzed, dataType)
     } else {
       throw new AnalysisException(
         s"Failed to execute $statementType command because the destination table column " +
-          s"${field.name} has a DEFAULT value with type ${field.dataType}, but the " +
+          s"$colName has a DEFAULT value with type $dataType, but the " +
           s"statement provided a value of incompatible type ${analyzed.dataType}")
     }
   }
@@ -265,6 +279,21 @@ object ResolveDefaultColumns {
         }
       }
     }
+  }
+
+  /** If any fields in a schema have default values, appends them to the result. */
+  def getDescribeMetadata(schema: StructType): Seq[(String, String, String)] = {
+    val rows = new ArrayBuffer[(String, String, String)]()
+    if (schema.fields.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+      rows.append(("", "", ""))
+      rows.append(("# Column Default Values", "", ""))
+      schema.foreach { column =>
+        column.getCurrentDefaultValue().map { value =>
+          rows.append((column.name, column.dataType.simpleString, value))
+        }
+      }
+    }
+    rows.toSeq
   }
 
   /**

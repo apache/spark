@@ -2219,14 +2219,18 @@ abstract class AvroSuite
       withView("v") {
         spark.range(1).createTempView("v")
         withTempDir { dir =>
-          val e = intercept[AnalysisException] {
-            sql(
-              s"""
-                 |CREATE TABLE test_ddl USING AVRO
-                 |LOCATION '${dir}'
-                 |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
-          }.getMessage
-          assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(
+                s"""
+                   |CREATE TABLE test_ddl USING AVRO
+                   |LOCATION '${dir}'
+                   |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
+            },
+            errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+            parameters = Map(
+              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+          )
         }
 
         withTempDir { dir =>
@@ -2298,20 +2302,28 @@ class AvroV1Suite extends AvroSuite {
     withView("v") {
       spark.range(1).createTempView("v")
       withTempDir { dir =>
-        val e = intercept[AnalysisException] {
-          sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
-            .format("avro").save(dir.getCanonicalPath)
-        }.getMessage
-        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
+              .format("avro").save(dir.getCanonicalPath)
+          },
+          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          parameters = Map(
+            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+        )
       }
 
       withTempDir { dir =>
-        val e = intercept[AnalysisException] {
-          sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
-            .write.mode(SaveMode.Overwrite)
-            .format("avro").save(dir.getCanonicalPath)
-        }.getMessage
-        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
+              .write.mode(SaveMode.Overwrite)
+              .format("avro").save(dir.getCanonicalPath)
+          },
+          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          parameters = Map(
+            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+        )
       }
     }
   }
@@ -2350,7 +2362,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2384,7 +2396,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2465,7 +2477,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

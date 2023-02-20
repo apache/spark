@@ -612,7 +612,8 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               } catch {
                 case NonFatal(e) =>
-                  throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
+                  throw QueryExecutionErrors.cannotMergeIncompatibleDataTypesError(
+                    leftType, rightType)
               }
             }
             .orElse {

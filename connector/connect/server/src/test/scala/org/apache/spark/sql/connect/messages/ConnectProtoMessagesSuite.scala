@@ -63,6 +63,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
       .setEvalType(100)
       .setOutputType("\"integer\"")
       .setCommand(ByteString.copyFrom("command".getBytes()))
+      .setPythonVer("3.10")
       .build()
 
     val commonInlineUserDefinedFunctionExpr = proto.Expression
@@ -81,5 +82,6 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     assert(fun.getDeterministic == true)
     assert(fun.getArgumentsCount == 1)
     assert(fun.hasPythonUdf == true)
+    assert(pythonUdf.getPythonVer == "3.10")
   }
 }
