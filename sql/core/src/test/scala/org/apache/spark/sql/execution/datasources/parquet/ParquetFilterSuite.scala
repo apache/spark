@@ -2134,7 +2134,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
-  
+
   test("SPARK-41741: StringStartsWith should encode the string using the UTF_8 charset") {
     // A hacky way to set the default Java character encoding.
     def setDefaultEncoding(charset: Charset): Unit = {
