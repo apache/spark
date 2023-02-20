@@ -2956,9 +2956,9 @@ class ChannelBuilderTests(unittest.TestCase):
     def test_invalid_user_agent_charset(self):
         # fmt: off
         invalid_user_agents = [
-            "agent»", # non standard symbol
-            "age nt", # whitespace
-            "ägent",  # non-ascii alphabet
+            "agent»",  # non standard symbol
+            "age nt",  # whitespace
+            "ägent",   # non-ascii alphabet
         ]
         # fmt: on
         for user_agent in invalid_user_agents:
