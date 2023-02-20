@@ -187,7 +187,8 @@ class GroupedLimitIterator(
     input: Iterator[InternalRow],
     output: Seq[Attribute],
     partitionSpec: Seq[Expression],
-    createLimitIterator: Iterator[InternalRow] => BaseLimitIterator) extends Iterator[InternalRow] {
+    createLimitIterator: Iterator[InternalRow] => BaseLimitIterator)
+  extends Iterator[InternalRow] {
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
@@ -211,21 +212,14 @@ class GroupedLimitIterator(
     limitIterator = createLimitIterator(groupIterator)
   }
 
-  override final def hasNext: Boolean = nextRowAvailable
+  override final def hasNext: Boolean = limitIterator.hasNext || {
+    groupIterator.skipRemainingRows()
+    limitIterator.reset()
+    groupIterator.hasNext
+  }
 
   override final def next(): InternalRow = {
     if (!hasNext) throw new NoSuchElementException
-    if (!limitIterator.hasNext && nextRowAvailable) {
-      groupIterator.skipRemainingRows()
-      limitIterator.reset()
-
-      if (!nextRowAvailable) {
-        // After skip remaining row in previous partition, all the input rows have been processed,
-        // so returns the last row directly.
-        return nextRow
-      }
-    }
-
     limitIterator.next()
   }
 
@@ -243,15 +237,13 @@ class GroupedLimitIterator(
     }
 
     def skipRemainingRows(): Unit = {
-      if (nextRowAvailable && nextGroup == currentGroup) {
-        // Skip all the remaining rows in this group
-        do {
-          fetchNextRow()
-        } while (nextRowAvailable && nextGroup == currentGroup)
+      // Skip all the remaining rows in this group
+      while (hasNext) {
+        fetchNextRow()
       }
 
       // Switch to next group
-      currentGroup = nextGroup.copy()
+      if (nextRowAvailable) currentGroup = nextGroup.copy()
     }
   }
 }
