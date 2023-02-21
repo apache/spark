@@ -50,16 +50,15 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
           }
         case _ => command
       }
-    case command @ ShowTableExtended(ResolvedNamespace(catalog: TableCatalog,
-        namespace), pattern, _, _)
-      if command.childrenResolved && !command.resolved => command.transformExpressions {
-        case partSpecs: UnresolvedPartitionSpec =>
-          val table = catalog.loadTable(Identifier.of(namespace.toArray, pattern))
-          table match {
-            case s: SupportsPartitionManagement =>
-              resolvePartitionSpec(table.name, partSpecs, s.partitionSchema(), false)
-            case _ => partSpecs
-          }
+    case command @ ShowTableExtended(ResolvedNamespace(catalog: TableCatalog, namespace),
+        pattern, _, _) if command.childrenResolved && !command.resolved =>
+      val table = catalog.loadTable(Identifier.of(namespace.toArray, pattern))
+      table match {
+        case s: SupportsPartitionManagement => command.transformExpressions {
+          case partSpecs: UnresolvedPartitionSpec =>
+            resolvePartitionSpec(table.name, partSpecs, s.partitionSchema(), false)
+        }
+        case _ => command
       }
   }
 
