@@ -419,6 +419,22 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       assert(df.schema == dfFromView.schema)
     }
   }
+
+  test("capture the session time zone config while creating a view") {
+    val viewName = "v1"
+    withView(viewName) {
+      assert(get.sessionLocalTimeZone === "America/Los_Angeles")
+      createView(viewName,
+        """select hour(ts) as H from (
+          |  select cast('2022-01-01T00:00:00.000 America/Los_Angeles' as timestamp) as ts
+          |)""".stripMargin, Seq("H"))
+      withDefaultTimeZone(java.time.ZoneId.of("UTC-09:00")) {
+        withSQLConf(SESSION_LOCAL_TIMEZONE.key -> "UTC-10:00") {
+          checkAnswer(sql(s"select H from $viewName"), Row(0))
+        }
+      }
+    }
+  }
 }
 
 abstract class TempViewTestSuite extends SQLViewTestSuite {
@@ -703,22 +719,6 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')" +
           " AS SELECT 1 AS c1, '2' AS c2"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
-      }
-    }
-  }
-
-  test("capture the session time zone config while creating a view") {
-    val viewName = "v1"
-    withView(viewName) {
-      assert(get.sessionLocalTimeZone === "America/Los_Angeles")
-      createView(viewName,
-        """select hour(ts) as H from (
-          |  select cast('2022-01-01T00:00:00.000 America/Los_Angeles' as timestamp) as ts
-          |)""".stripMargin, Seq("H"))
-      withDefaultTimeZone(java.time.ZoneId.of("UTC-09:00")) {
-        withSQLConf(SESSION_LOCAL_TIMEZONE.key -> "UTC-10:00") {
-          checkAnswer(sql(s"select H from $viewName"), Row(0))
-        }
       }
     }
   }
