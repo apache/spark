@@ -48,6 +48,7 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.internal.SharedState
+import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
 
@@ -280,7 +281,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     var prefix = ""
 
     def currentDB = {
-      if (SparkSQLEnv.sqlContext.conf.cliPrintCurrentDb) {
+      if (!SparkSQLEnv.sqlContext.conf.getConf(LEGACY_EMPTY_CURRENT_DB_IN_CLI)) {
         s" (${SparkSQLEnv.sqlContext.sparkSession.catalog.currentDatabase})"
       } else {
         ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",

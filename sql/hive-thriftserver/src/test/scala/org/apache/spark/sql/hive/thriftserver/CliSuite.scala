@@ -128,7 +128,7 @@ class CliSuite extends SparkFunSuite {
          |  --driver-java-options -Dderby.system.durability=test
          |  $extraHive
          |  --conf spark.ui.enabled=false
-         |  --conf spark.sql.cli.print.currentDb=false
+         |  --conf ${SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI.key}=true
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
          |  --hiveconf conf1=conftest
@@ -794,14 +794,15 @@ class CliSuite extends SparkFunSuite {
   test("SPARK-42448: Print correct database in prompt") {
     runCliWithin(
       2.minute,
-      Seq("--conf", s"${SQLConf.CLI_PRINT_CURRENT_DB.key}=true"),
+      Seq("--conf", s"${SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI.key}=false"),
       prompt = "spark-sql (default)>")(
       "set abc;" -> "abc\t<undefined>",
       "create database spark_42448;" -> "")
 
     runCliWithin(
       2.minute,
-      Seq("--conf", s"${SQLConf.CLI_PRINT_CURRENT_DB.key}=true", "--database", "spark_42448"),
+      Seq("--conf", s"${SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI.key}=false", "--database",
+        "spark_42448"),
       prompt = "spark-sql (spark_42448)>")(
       "select current_database();" -> "spark_42448")
   }
