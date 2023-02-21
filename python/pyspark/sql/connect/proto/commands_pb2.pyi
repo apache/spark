@@ -474,9 +474,9 @@ class WriteOperationV2(google.protobuf.message.Message):
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
     table_name: builtins.str
-    """The destination of the write operation must be either a path or a table."""
+    """(Required) The destination of the write operation must be either a path or a table."""
     provider: builtins.str
-    """A provider for the underlying output data source. Spark's default catalog supports
+    """(Optional) A provider for the underlying output data source. Spark's default catalog supports
     "parquet", "json", etc.
     """
     @property
@@ -497,6 +497,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """(Optional) A list of table properties."""
     mode: global___WriteOperationV2.Mode.ValueType
+    """(Required) Write mode."""
     @property
     def overwrite_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Optional) A condition for overwrite saving mode"""
