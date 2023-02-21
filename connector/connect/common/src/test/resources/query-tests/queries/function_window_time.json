@@ -1,0 +1,32 @@
+{
+  "project": {
+    "input": {
+      "withColumns": {
+        "input": {
+          "localRelation": {
+            "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
+          }
+        },
+        "aliases": [{
+          "expr": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "wt"
+            }
+          },
+          "name": ["wt"],
+          "metadata": "{\"spark.timeWindow\":true}"
+        }]
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "window_time",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "wt"
+          }
+        }]
+      }
+    }]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "project": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "make_date",
+        "arguments": [{
+          "literal": {
+            "integer": 2018
+          }
+        }, {
+          "literal": {
+            "integer": 5
+          }
+        }, {
+          "literal": {
+            "integer": 14
+          }
+        }]
+      }
+    }]
+  }
+}

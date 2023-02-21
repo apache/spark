@@ -1,0 +1,4 @@
+Project [session_window#0 AS session_window#0]
++- Filter isnotnull(t#0)
+   +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(t#0, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(t#0 + cast(10 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#0, d#0, t#0, s#0, x#0L, wt#0]
+      +- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

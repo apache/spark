@@ -1,0 +1,31 @@
+{
+  "project": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double,d:struct\u003cid:bigint,a:int,b:double\u003e,e:array\u003cint\u003e,f:map\u003cstring,struct\u003cid:bigint,a:int,b:double\u003e\u003e,g:string\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "decode",
+        "arguments": [{
+          "cast": {
+            "expr": {
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "g"
+              }
+            },
+            "type": {
+              "binary": {
+              }
+            }
+          }
+        }, {
+          "literal": {
+            "string": "UTF-8"
+          }
+        }]
+      }
+    }]
+  }
+}
