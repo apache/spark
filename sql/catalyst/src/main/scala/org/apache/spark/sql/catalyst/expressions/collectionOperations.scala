@@ -4603,7 +4603,12 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1, or start from the end if start is negative).\",",
+  usage = """
+    _FUNC_(x, pos, val) - Places val into index pos of array x.
+      Array indices start at 1, or start from the end if index is negative.
+      Index above array size appends the array, or prepends the array if index is negative,
+      with 'null' elements.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
@@ -4840,7 +4845,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override def third: Expression = itemExpr
 
   override def prettyName: String = "array_insert"
-  override def dataType: DataType = first.dataType
+  override def dataType: DataType = first.dataType.asNullable // out of range pos will add nulls
   override def nullable: Boolean = first.nullable | second.nullable
 
   @transient private lazy val elementType: DataType =
@@ -5024,7 +5029,7 @@ case class ArrayAppend(left: Expression, right: Expression)
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
-  override def dataType: DataType = left.dataType
+  override def dataType: DataType = if (right.nullable) left.dataType.asNullable else left.dataType
   protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayAppend =
     copy(left = newLeft, right = newRight)
 

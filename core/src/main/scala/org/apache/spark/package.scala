@@ -54,7 +54,8 @@ package object spark {
         spark_revision: String,
         spark_build_user: String,
         spark_repo_url: String,
-        spark_build_date: String) = {
+        spark_build_date: String,
+        spark_doc_root: String) = {
 
       val resourceStream = Thread.currentThread().getContextClassLoader.
         getResourceAsStream("spark-version-info.properties")
@@ -72,7 +73,8 @@ package object spark {
           props.getProperty("revision", unknownProp),
           props.getProperty("user", unknownProp),
           props.getProperty("url", unknownProp),
-          props.getProperty("date", unknownProp)
+          props.getProperty("date", unknownProp),
+          props.getProperty("docroot", unknownProp)
         )
       } catch {
         case e: Exception =>
@@ -97,5 +99,6 @@ package object spark {
   val SPARK_BUILD_USER = SparkBuildInfo.spark_build_user
   val SPARK_REPO_URL = SparkBuildInfo.spark_repo_url
   val SPARK_BUILD_DATE = SparkBuildInfo.spark_build_date
+  val SPARK_DOC_ROOT = SparkBuildInfo.spark_doc_root
 }
 

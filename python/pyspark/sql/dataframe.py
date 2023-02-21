@@ -356,7 +356,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throw an exception if the table already exists.
 
-        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
+        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -439,7 +439,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throws an exception if the global temporary view already exists.
 
-        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
+        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -695,7 +695,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not (is_no_argument or is_extended_case or is_extended_as_mode or is_mode_case):
             if (extended is not None) and (not isinstance(extended, (bool, str))):
                 raise PySparkTypeError(
-                    error_class="NOT_BOOL_OR_STRING",
+                    error_class="NOT_BOOL_OR_STR",
                     message_parameters={
                         "arg_name": "extended",
                         "arg_type": type(extended).__name__,
@@ -703,7 +703,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 )
             if (mode is not None) and (not isinstance(mode, str)):
                 raise PySparkTypeError(
-                    error_class="NOT_A_STRING",
+                    error_class="NOT_STR",
                     message_parameters={"arg_name": "mode", "arg_type": type(mode).__name__},
                 )
 
@@ -901,13 +901,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
-                error_class="NOT_AN_INTEGER",
+                error_class="NOT_INT",
                 message_parameters={"arg_name": "n", "arg_type": type(n).__name__},
             )
 
         if not isinstance(vertical, bool):
             raise PySparkTypeError(
-                error_class="NOT_A_BOOLEAN",
+                error_class="NOT_BOOL",
                 message_parameters={"arg_name": "vertical", "arg_type": type(vertical).__name__},
             )
 
@@ -918,7 +918,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 int_truncate = int(truncate)
             except ValueError:
                 raise PySparkTypeError(
-                    error_class="NOT_A_BOOLEAN",
+                    error_class="NOT_BOOL",
                     message_parameters={
                         "arg_name": "truncate",
                         "arg_type": type(truncate).__name__,
@@ -1104,12 +1104,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not eventTime or type(eventTime) is not str:
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "eventTime", "arg_type": type(eventTime).__name__},
             )
         if not delayThreshold or type(delayThreshold) is not str:
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={
                     "arg_name": "delayThreshold",
                     "arg_type": type(delayThreshold).__name__,
@@ -1163,7 +1163,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(name, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
             )
 
@@ -1657,7 +1657,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sparkSession)
         else:
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
@@ -1680,6 +1680,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         resulting :class:`DataFrame` is range partitioned.
 
         .. versionadded:: 2.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1730,7 +1733,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sparkSession)
         else:
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+                error_class="NOT_COLUMN_OR_INT_OR_STR",
                 message_parameters={
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
@@ -1874,6 +1877,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.5.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col : :class:`Column` or str
@@ -1910,12 +1916,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             col = Column(col)
         elif not isinstance(col, Column):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
             )
         if not isinstance(fractions, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
             )
         for k, v in fractions.items():
@@ -2061,7 +2067,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(colName, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
             )
         jc = self._jdf.colRegex(colName)
@@ -2890,7 +2896,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return Column(jc)
         else:
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING",
+                error_class="NOT_COLUMN_OR_FLOAT_OR_INT_OR_LIST_OR_STR",
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
@@ -3089,7 +3095,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.filter(condition._jc)
         else:
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
             )
         return DataFrame(jdf, self.sparkSession)
@@ -3191,6 +3197,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         cols : list, str or :class:`Column`
@@ -3236,6 +3245,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         the specified columns, so we can run aggregations on them.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -3937,7 +3949,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+                error_class="NOT_LIST_OR_STR_OR_TUPLE",
                 message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
@@ -4036,7 +4048,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(value, (float, int, str, bool, dict)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_STRING",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
                 message_parameters={"arg_name": "value", "arg_type": type(value).__name__},
             )
 
@@ -4221,7 +4233,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict,)):
             raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INTEGER_OR_LIST_OR_STRING_OR_TUPLE",
+                error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
                 message_parameters={
                     "arg_name": "to_replace",
                     "arg_type": type(to_replace).__name__,
@@ -4248,7 +4260,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if not (subset is None or isinstance(subset, (list, tuple, str))):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+                error_class="NOT_LIST_OR_STR_OR_TUPLE",
                 message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
@@ -4328,6 +4340,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col: str, tuple or list
@@ -4364,7 +4379,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(col, (str, list, tuple)):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_STRING_OR_TUPLE",
+                error_class="NOT_LIST_OR_STR_OR_TUPLE",
                 message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
             )
 
@@ -4405,7 +4420,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(relativeError, (float, int)):
             raise PySparkTypeError(
-                error_class="NOT_FLOAT_OR_INTEGER",
+                error_class="NOT_FLOAT_OR_INT",
                 message_parameters={
                     "arg_name": "relativeError",
                     "arg_type": type(relativeError).__name__,
@@ -4426,6 +4441,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases of each other.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4453,12 +4471,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(col1, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col1", "arg_type": type(col1).__name__},
             )
         if not isinstance(col2, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
         if not method:
@@ -4476,6 +4494,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4501,12 +4522,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(col1, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col1", "arg_type": type(col1).__name__},
             )
         if not isinstance(col2, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
         return self._jdf.stat().cov(col1, col2)
@@ -4554,12 +4575,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(col1, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col1", "arg_type": type(col1).__name__},
             )
         if not isinstance(col2, str):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sparkSession)
@@ -4574,6 +4595,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4659,7 +4683,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
@@ -4716,7 +4740,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(col, Column):
             raise PySparkTypeError(
-                error_class="NOT_A_COLUMN",
+                error_class="NOT_COLUMN",
                 message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
             )
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sparkSession)
@@ -4795,7 +4819,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
@@ -4805,6 +4829,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns a new :class:`DataFrame` by updating an existing column with metadata.
 
         .. versionadded:: 3.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4827,7 +4854,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(metadata, dict):
             raise PySparkTypeError(
-                error_class="NOT_A_DICT",
+                error_class="NOT_DICT",
                 message_parameters={"arg_name": "metadata", "arg_type": type(metadata).__name__},
             )
         sc = SparkContext._active_spark_context
@@ -4904,7 +4931,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 jdf = self._jdf.drop(col._jc)
             else:
                 raise PySparkTypeError(
-                    error_class="NOT_COLUMN_OR_STRING",
+                    error_class="NOT_COLUMN_OR_STR",
                     message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
                 )
         else:
@@ -5048,7 +5075,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(other, DataFrame):
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": "other", "arg_type": type(other).__name__},
             )
         return self._jdf.sameSemantics(other._jdf)

@@ -38,10 +38,7 @@ from typing import (
 )
 
 from pyspark import SparkContext
-from pyspark.errors.exceptions import (
-    PySparkTypeError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
@@ -184,7 +181,7 @@ def lit(col: Any) -> Column:
         if has_numpy and isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is not None:
-                return _invoke_function("lit", col).astype(dt)
+                return _invoke_function("lit", col).astype(dt).alias(str(col))
         return _invoke_function("lit", col)
 
 
@@ -3832,7 +3829,7 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            error_class="NOT_A_COLUMN",
+            error_class="NOT_COLUMN",
             message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
     v = value._jc if isinstance(value, Column) else value
@@ -4910,6 +4907,9 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 
     .. versionadded:: 1.5.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     date1 : :class:`~pyspark.sql.Column` or str
@@ -5427,6 +5427,9 @@ def window(
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     timeColumn : :class:`~pyspark.sql.Column`
@@ -5470,7 +5473,7 @@ def window(
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise PySparkTypeError(
-                error_class="NOT_A_STRING",
+                error_class="NOT_STR",
                 message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
@@ -5502,6 +5505,9 @@ def window_time(
     time precision). The window column must be one produced by a window aggregating operator.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -5558,6 +5564,9 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
     .. versionadded:: 3.2.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     timeColumn : :class:`~pyspark.sql.Column` or str
@@ -5589,7 +5598,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STRING",
+                error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
@@ -5853,7 +5862,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
 
@@ -5893,7 +5902,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
 
@@ -6302,6 +6311,9 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
 
     .. versionadded:: 1.5.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -6435,12 +6447,12 @@ def overlay(
     """
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
@@ -7680,24 +7692,27 @@ def array_distinct(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName") -> Column:
+def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
     """
     Collection function: adds an item into a given array at a specified array index.
-    Array indices start at 1 (or from the end if the index is negative).
-    Index specified beyond the size of the current array (plus additional element)
-    is extended with 'null' elements.
+    Array indices start at 1, or start from the end if index is negative.
+    Index above array size appends the array, or prepends the array if index is negative,
+    with 'null' elements.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
     arr : :class:`~pyspark.sql.Column` or str
         name of column containing an array
-    pos : :class:`~pyspark.sql.Column` or str
+    pos : :class:`~pyspark.sql.Column` or str or int
         name of Numeric type column indicating position of insertion
         (starting at index 1, negative position is a start from the back of the array)
-    value : :class:`~pyspark.sql.Column` or str
-        name of column containing values for insertion into array
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
 
     Returns
     -------
@@ -7712,8 +7727,12 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     ... )
     >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val).alias('data')).collect()
     [Row(data=['a', 'd', 'b', 'c']), Row(data=['c', 'd', 'b', 'a'])]
+    >>> df.select(array_insert(df.data, 5, 'hello').alias('data')).collect()
+    [Row(data=['a', 'b', 'c', None, 'hello']), Row(data=['c', 'b', 'a', None, 'hello'])]
     """
-    return _invoke_function_over_columns("array_insert", arr, pos, value)
+    pos = lit(pos) if isinstance(pos, int) else pos
+
+    return _invoke_function_over_columns("array_insert", arr, pos, lit(value))
 
 
 @try_remote_functions
@@ -7822,6 +7841,9 @@ def array_compact(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -7842,7 +7864,7 @@ def array_compact(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+def array_append(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: returns an array of the elements in col1 along
     with the added element in col2 at the last of the array.
@@ -7854,10 +7876,10 @@ def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column containing array
-    col2 : :class:`~pyspark.sql.Column` or str
-        name of column containing element
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
 
     Returns
     -------
@@ -7870,8 +7892,10 @@ def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
     >>> df.select(array_append(df.c1, df.c2)).collect()
     [Row(array_append(c1, c2)=['b', 'a', 'c', 'c'])]
+    >>> df.select(array_append(df.c1, 'x')).collect()
+    [Row(array_append(c1, x)=['b', 'a', 'c', 'x'])]
     """
-    return _invoke_function_over_columns("array_append", col1, col2)
+    return _invoke_function_over_columns("array_append", col, lit(value))
 
 
 @try_remote_functions
@@ -8381,7 +8405,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
         col = _to_java_column(json)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
@@ -8428,7 +8452,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
         col = _to_java_column(csv)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
@@ -9077,6 +9101,9 @@ def sequence(
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     start : :class:`~pyspark.sql.Column` or str
@@ -9163,7 +9190,7 @@ def from_csv(
         schema = _to_java_column(schema)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STRING",
+            error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
@@ -9810,6 +9837,9 @@ def years(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -9881,6 +9911,9 @@ def days(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -9914,6 +9947,9 @@ def hours(col: "ColumnOrName") -> Column:
     to partition data into hours.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -9949,6 +9985,9 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
@@ -9974,7 +10013,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     """
     if not isinstance(numBuckets, (int, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INTEGER",
+            error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": type(numBuckets).__name__},
         )
 

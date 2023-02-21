@@ -318,6 +318,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     state.isHiveServerQuery
   }
 
+  def printUsage(): Unit = {
+    val processor = new OptionsProcessor()
+    ReflectionUtils.invoke(classOf[OptionsProcessor], processor, "printUsage")
+  }
+
 }
 
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {

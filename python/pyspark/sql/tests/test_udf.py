@@ -83,9 +83,7 @@ class BaseUDFTestsMixin(object):
     def test_udf2(self):
         with self.tempView("test"):
             self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
-            self.spark.createDataFrame(
-                self.sc.parallelize([Row(a="test")])
-            ).createOrReplaceTempView("test")
+            self.spark.createDataFrame([("test",)], ["a"]).createOrReplaceTempView("test")
             [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
             self.assertEqual(4, res[0])
 

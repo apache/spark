@@ -19,7 +19,9 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-from pyspark.sql.connect import check_dependencies
+import string
+
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -30,6 +32,7 @@ import time
 import urllib.parse
 import uuid
 import json
+import sys
 from types import TracebackType
 from typing import (
     Iterable,
@@ -58,21 +61,23 @@ from google.rpc import error_details_pb2
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-import pyspark.sql.types
-from pyspark import cloudpickle
-from pyspark.errors import (
+from pyspark.errors.exceptions.connect import (
+    convert_exception,
     SparkConnectException,
     SparkConnectGrpcException,
-    SparkConnectAnalysisException,
-    SparkConnectParseException,
-    SparkConnectTempTableAlreadyExistsException,
-    SparkConnectIllegalArgumentException,
 )
+from pyspark.sql.connect.expressions import (
+    PythonUDF,
+    CommonInlineUserDefinedFunction,
+)
+from pyspark.sql.connect.types import parse_data_type
 from pyspark.sql.types import (
     DataType,
     StructType,
     StructField,
 )
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.rdd import PythonEvalType
 
 
 def _configure_logging() -> logging.Logger:
@@ -117,6 +122,7 @@ class ChannelBuilder:
     PARAM_USE_SSL = "use_ssl"
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
+    PARAM_USER_AGENT = "user_agent"
 
     @staticmethod
     def default_port() -> int:
@@ -212,6 +218,7 @@ class ChannelBuilder:
                 ChannelBuilder.PARAM_TOKEN,
                 ChannelBuilder.PARAM_USE_SSL,
                 ChannelBuilder.PARAM_USER_ID,
+                ChannelBuilder.PARAM_USER_AGENT,
             ]
         ]
 
@@ -240,6 +247,27 @@ class ChannelBuilder:
         specified.
         """
         return self.params.get(ChannelBuilder.PARAM_USER_ID, None)
+
+    @property
+    def userAgent(self) -> str:
+        """
+        Returns
+        -------
+        user_agent : str
+            The user_agent parameter specified in the connection string,
+            or "_SPARK_CONNECT_PYTHON" when not specified.
+        """
+        user_agent = self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
+        allowed_chars = string.ascii_letters + string.punctuation
+        if len(user_agent) > 200:
+            raise SparkConnectException(
+                "'user_agent' parameter cannot exceed 200 characters in length"
+            )
+        if set(user_agent).difference(allowed_chars):
+            raise SparkConnectException(
+                "Only alphanumeric and common punctuations are allowed for 'user_agent'"
+            )
+        return user_agent
 
     def get(self, key: str) -> Any:
         """
@@ -375,7 +403,11 @@ class AnalyzeResult:
 
 
 class SparkConnectClient(object):
-    """Conceptually the remote spark session that communicates with the server"""
+    """
+    Conceptually the remote spark session that communicates with the server
+
+    .. versionadded:: 3.4.0
+    """
 
     @classmethod
     def retry_exception(cls, e: grpc.RpcError) -> bool:
@@ -430,18 +462,43 @@ class SparkConnectClient(object):
         # Configure logging for the SparkConnect client.
 
     def register_udf(
-        self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
+        self,
+        function: Any,
+        return_type: Union[str, DataType],
+        name: Optional[str] = None,
+        eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
+        deterministic: bool = True,
     ) -> str:
-        """Create a temporary UDF in the session catalog on the other side. We generate a
-        temporary name for it."""
-        name = f"fun_{uuid.uuid4().hex}"
-        fun = pb2.CreateScalarFunction()
-        fun.parts.append(name)
-        logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
-        fun.serialized_function = cloudpickle.dumps((function, return_type))
+        """
+        Create a temporary UDF in the session catalog on the other side. We generate a
+        temporary name for it.
+        """
 
+        if name is None:
+            name = f"fun_{uuid.uuid4().hex}"
+
+        # convert str return_type to DataType
+        if isinstance(return_type, str):
+            return_type = parse_data_type(return_type)
+        # construct a PythonUDF
+        py_udf = PythonUDF(
+            output_type=return_type.json(),
+            eval_type=eval_type,
+            command=CloudPickleSerializer().dumps((function, return_type)),
+            python_ver="%d.%d" % sys.version_info[:2],
+        )
+
+        # construct a CommonInlineUserDefinedFunction
+        fun = CommonInlineUserDefinedFunction(
+            function_name=name,
+            deterministic=deterministic,
+            arguments=[],
+            function=py_udf,
+        ).to_command(self)
+
+        # construct the request
         req = self._execute_plan_request_with_metadata()
-        req.plan.command.create_function.CopyFrom(fun)
+        req.plan.command.register_function.CopyFrom(fun)
 
         self._execute(req)
         return name
@@ -458,6 +515,9 @@ class SparkConnectClient(object):
         ]
 
     def to_table(self, plan: pb2.Plan) -> "pa.Table":
+        """
+        Return given plan as a PyArrow Table.
+        """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
@@ -465,6 +525,9 @@ class SparkConnectClient(object):
         return table
 
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
+        """
+        Return given plan as a pandas DataFrame.
+        """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
@@ -492,6 +555,9 @@ class SparkConnectClient(object):
         return text_format.MessageToString(p, as_one_line=True)
 
     def schema(self, plan: pb2.Plan) -> StructType:
+        """
+        Return schema for given plan.
+        """
         logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
         proto_schema = self._analyze(plan).schema
         # Server side should populate the struct field which is the schema.
@@ -514,11 +580,17 @@ class SparkConnectClient(object):
         return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
+        """
+        Return explain string for given plan.
+        """
         logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(plan, explain_mode)
         return result.explain_string
 
     def execute_command(self, command: pb2.Command) -> None:
+        """
+        Execute given command.
+        """
         logger.info(f"Execute command for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
@@ -528,12 +600,15 @@ class SparkConnectClient(object):
         return
 
     def close(self) -> None:
+        """
+        Close the channel.
+        """
         self._channel.close()
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
         req.client_id = self._session_id
-        req.client_type = "_SPARK_CONNECT_PYTHON"
+        req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -541,7 +616,7 @@ class SparkConnectClient(object):
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
         req.client_id = self._session_id
-        req.client_type = "_SPARK_CONNECT_PYTHON"
+        req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -689,28 +764,7 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
-                    reason = info.reason
-                    if reason == "org.apache.spark.sql.AnalysisException":
-                        raise SparkConnectAnalysisException(
-                            info.metadata["message"], plan=info.metadata["plan"]
-                        ) from None
-                    elif reason == "org.apache.spark.sql.catalyst.parser.ParseException":
-                        raise SparkConnectParseException(info.metadata["message"]) from None
-                    elif (
-                        reason
-                        == "org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException"
-                    ):
-                        raise SparkConnectTempTableAlreadyExistsException(
-                            info.metadata["message"], plan=info.metadata["plan"]
-                        ) from None
-                    elif reason == "java.lang.IllegalArgumentException":
-                        message = info.metadata["message"]
-                        message = message if message != "" else status.message
-                        raise SparkConnectIllegalArgumentException(message) from None
-                    else:
-                        raise SparkConnectGrpcException(
-                            status.message, reason=info.reason
-                        ) from None
+                    raise convert_exception(info, status.message) from None
 
             raise SparkConnectGrpcException(status.message) from None
         else:

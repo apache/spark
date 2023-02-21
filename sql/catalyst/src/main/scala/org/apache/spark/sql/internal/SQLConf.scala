@@ -240,6 +240,15 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
+    buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
+      .internal()
+      .doc("The minimum number of operands in a commutative expression tree to" +
+        " invoke the MultiCommutativeOp memory optimization during canonicalization.")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(3)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -814,7 +823,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+  val ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
     buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
       .doc(s"A partition will be merged during splitting if its size is small than this factor " +
         s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
@@ -1102,7 +1111,7 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-   val PARQUET_FIELD_ID_WRITE_ENABLED =
+  val PARQUET_FIELD_ID_WRITE_ENABLED =
     buildConf("spark.sql.parquet.fieldId.write.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, " +
         "Parquet writers will populate the field Id " +
@@ -1416,16 +1425,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES =
-    buildConf("spark.sql.sources.timestampNTZTypeInference.enabled")
-      .doc("For the schema inference of JSON/CSV/JDBC data sources and partition directories, " +
-        "this config determines whether to choose the TimestampNTZ type if a column can be " +
-        "either TimestampNTZ or TimestampLTZ type. If set to true, the inference result of " +
-        "the column will be TimestampNTZ type. Otherwise, the result will be TimestampLTZ type.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val BUCKETING_ENABLED = buildConf("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
     .version("2.0.0")
@@ -1449,6 +1448,19 @@ object SQLConf {
         "values, Spark will calculate a superset of partition values and pushdown that info to " +
         "scan nodes, which will use empty partitions for the missing partition values on either " +
         "side. This could help to eliminate unnecessary shuffles")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
+      .doc("During a storage-partitioned join, whether to allow input partitions to be " +
+        "partially clustered, when both sides of the join are of KeyGroupedPartitioning. At " +
+        "planning time, Spark will pick the side with less data size based on table " +
+        "statistics, group and replicate them to match the other side. This is an optimization " +
+        "on skew join and can help to reduce data skewness when certain partitions are assigned " +
+        s"large amount of data. This config requires both ${V2_BUCKETING_ENABLED.key} and " +
+        s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be enabled")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -2616,6 +2628,17 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val WINDOW_GROUP_LIMIT_THRESHOLD =
+    buildConf("spark.sql.optimizer.windowGroupLimitThreshold")
+      .internal()
+      .doc("Threshold for triggering `InsertWindowGroupLimit`. " +
+        "0 means the output results is empty. -1 means disabling the optimization.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= -1,
+        "The threshold of window group limit must be -1, 0 or positive integer.")
+      .createWithDefault(1000)
+
   val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
       .internal()
@@ -2786,7 +2809,7 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
-  val PYSPARK_SIMPLIFIEID_TRACEBACK =
+  val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
       .doc(
         "When true, the traceback from Python UDFs is simplified. It hides " +
@@ -3516,8 +3539,9 @@ object SQLConf {
 
   val TIMESTAMP_TYPE =
     buildConf("spark.sql.timestampType")
-      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause " +
-        s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
+      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause, " +
+        "type literal and the schema inference of data sources. " +
+        s"Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
         "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
         s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
         "Before the 3.4.0 release, Spark only supports the TIMESTAMP WITH " +
@@ -3757,7 +3781,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-   val LEGACY_INTEGER_GROUPING_ID =
+  val LEGACY_INTEGER_GROUPING_ID =
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
@@ -3765,7 +3789,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-   val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
+  val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
     buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
       .internal()
       .doc("When true, grouping_id() returns values based on grouping set columns plus " +
@@ -3777,7 +3801,7 @@ object SQLConf {
   val LEGACY_PARQUET_NANOS_AS_LONG = buildConf("spark.sql.legacy.parquet.nanosAsLong")
     .internal()
     .doc("When true, the Parquet's nanos precision timestamps are converted to SQL long values.")
-    .version("3.2.3")
+    .version("3.2.4")
     .booleanConf
     .createWithDefault(false)
 
@@ -4627,6 +4651,9 @@ class SQLConf extends Serializable with Logging {
   def v2BucketingPushPartValuesEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
 
+  def v2BucketingPartiallyClusteredDistributionEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -4700,6 +4727,8 @@ class SQLConf extends Serializable with Logging {
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
+  def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
+
   def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
 
   def sessionWindowBufferSpillThreshold: Int = getConf(SESSION_WINDOW_BUFFER_SPILL_THRESHOLD)
@@ -4756,7 +4785,7 @@ class SQLConf extends Serializable with Logging {
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
-  def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIEID_TRACEBACK)
+  def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
@@ -4821,18 +4850,6 @@ class SQLConf extends Serializable with Logging {
 
     case "TIMESTAMP_NTZ" =>
       TimestampNTZType
-  }
-
-  def inferTimestampNTZInDataSources: Boolean = getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)
-
-  // Preferred timestamp type in schema reference when a column can be either Timestamp type or
-  // TimestampNTZ type.
-  def timestampTypeInSchemaInference: AtomicType = {
-    if (getConf(INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES)) {
-      TimestampNTZType
-    } else {
-      TimestampType
-    }
   }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)

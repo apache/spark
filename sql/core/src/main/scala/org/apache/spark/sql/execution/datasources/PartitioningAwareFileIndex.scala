@@ -77,7 +77,10 @@ abstract class PartitioningAwareFileIndex(
     // be applied to files.
     val fileMetadataFilterOpt = dataFilters.filter { f =>
       f.references.nonEmpty && f.references.forall {
-        case FileSourceConstantMetadataAttribute(_) => true
+        case FileSourceConstantMetadataAttribute(metadataAttr) =>
+          // we only know block start and length after splitting files, so skip it here
+          metadataAttr.name != FileFormat.FILE_BLOCK_START &&
+            metadataAttr.name != FileFormat.FILE_BLOCK_LENGTH
         case _ => false
       }
     }.reduceOption(expressions.And)

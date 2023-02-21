@@ -72,7 +72,7 @@ private[spark] class BlockResult(
 
 /**
  * Abstracts away how blocks are stored and provides different ways to read the underlying block
- * data. Callers should call [[dispose()]] when they're done with the block.
+ * data. Callers should call [[BlockData#dispose()]] when they're done with the block.
  */
 private[spark] trait BlockData {
 
@@ -99,7 +99,7 @@ private[spark] class ByteBufferBlockData(
     val buffer: ChunkedByteBuffer,
     val shouldDispose: Boolean) extends BlockData {
 
-  override def toInputStream(): InputStream = buffer.toInputStream(dispose = false)
+  override def toInputStream(): InputStream = buffer.toInputStream()
 
   override def toNetty(): Object = buffer.toNetty
 
@@ -120,7 +120,6 @@ private[spark] class ByteBufferBlockData(
 }
 
 private[spark] class HostLocalDirManager(
-    futureExecutionContext: ExecutionContext,
     cacheSize: Int,
     blockStoreClient: BlockStoreClient) extends Logging {
 
@@ -553,7 +552,6 @@ private[spark] class BlockManager(
           !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) ||
           Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
         Some(new HostLocalDirManager(
-          futureExecutionContext,
           conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
           blockStoreClient))
       } else {
@@ -743,7 +741,7 @@ private[spark] class BlockManager(
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
-        case e: ClassCastException =>
+        case _: ClassCastException =>
           throw SparkCoreErrors.unexpectedShuffleBlockWithUnsupportedResolverError(shuffleManager,
             blockId)
       }
@@ -960,7 +958,7 @@ private[spark] class BlockManager(
               maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
               val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskData)
-                .map { _.toInputStream(dispose = false) }
+                .map { _.toInputStream() }
                 .getOrElse { diskData.toInputStream() }
               serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
@@ -1791,7 +1789,7 @@ private[spark] class BlockManager(
       numPeersToReplicateTo)
 
     while(numFailures <= maxReplicationFailureCount &&
-      !peersForReplication.isEmpty &&
+      peersForReplication.nonEmpty &&
       peersReplicatedTo.size < numPeersToReplicateTo) {
       val peer = peersForReplication.head
       try {

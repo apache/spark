@@ -1,104 +1,104 @@
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Invoke extract for timestamp:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to timestamp                                   443            604         273         22.6          44.3       1.0X
-YEAR of timestamp                                  1350           1486         203          7.4         135.0       0.3X
-YEAROFWEEK of timestamp                            1461           1502          42          6.8         146.1       0.3X
-QUARTER of timestamp                               1476           1529          54          6.8         147.6       0.3X
-MONTH of timestamp                                 1227           1247          26          8.2         122.7       0.4X
-WEEK of timestamp                                  1705           1736          31          5.9         170.5       0.3X
-DAY of timestamp                                   1218           1285          58          8.2         121.8       0.4X
-DAYOFWEEK of timestamp                             1368           1402          46          7.3         136.8       0.3X
-DOW of timestamp                                   1363           1394          28          7.3         136.3       0.3X
-DOW_ISO of timestamp                               1297           1317          32          7.7         129.7       0.3X
-DAYOFWEEK_ISO of timestamp                         1296           1307          10          7.7         129.6       0.3X
-DOY of timestamp                                   1242           1268          22          8.1         124.2       0.4X
-HOUR of timestamp                                   934            955          27         10.7          93.4       0.5X
-MINUTE of timestamp                                 974            981           8         10.3          97.4       0.5X
-SECOND of timestamp                                1037           1069          29          9.6         103.7       0.4X
+cast to timestamp                                   390            431          65         25.6          39.0       1.0X
+YEAR of timestamp                                  1156           1169          14          8.7         115.6       0.3X
+YEAROFWEEK of timestamp                            1266           1286          20          7.9         126.6       0.3X
+QUARTER of timestamp                               1214           1222           9          8.2         121.4       0.3X
+MONTH of timestamp                                 1098           1126          41          9.1         109.8       0.4X
+WEEK of timestamp                                  1488           1492           6          6.7         148.8       0.3X
+DAY of timestamp                                   1059           1071          13          9.4         105.9       0.4X
+DAYOFWEEK of timestamp                             1241           1255          18          8.1         124.1       0.3X
+DOW of timestamp                                   1256           1264          12          8.0         125.6       0.3X
+DOW_ISO of timestamp                               1198           1213          18          8.3         119.8       0.3X
+DAYOFWEEK_ISO of timestamp                         1204           1213          11          8.3         120.4       0.3X
+DOY of timestamp                                   1125           1131           5          8.9         112.5       0.3X
+HOUR of timestamp                                   792            804          13         12.6          79.2       0.5X
+MINUTE of timestamp                                 791            798           7         12.6          79.1       0.5X
+SECOND of timestamp                                 902            916          14         11.1          90.2       0.4X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Invoke date_part for timestamp:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to timestamp                                   456            463           8         21.9          45.6       1.0X
-YEAR of timestamp                                  1371           1398          33          7.3         137.1       0.3X
-YEAROFWEEK of timestamp                            1594           1599           5          6.3         159.4       0.3X
-QUARTER of timestamp                               1555           1571          20          6.4         155.5       0.3X
-MONTH of timestamp                                 1219           1236          16          8.2         121.9       0.4X
-WEEK of timestamp                                  1698           1741          42          5.9         169.8       0.3X
-DAY of timestamp                                   1191           1210          18          8.4         119.1       0.4X
-DAYOFWEEK of timestamp                             1363           1382          32          7.3         136.3       0.3X
-DOW of timestamp                                   1361           1372          19          7.3         136.1       0.3X
-DOW_ISO of timestamp                               1331           1366          31          7.5         133.1       0.3X
-DAYOFWEEK_ISO of timestamp                         1425           1448          30          7.0         142.5       0.3X
-DOY of timestamp                                   1225           1238          14          8.2         122.5       0.4X
-HOUR of timestamp                                   949            968          22         10.5          94.9       0.5X
-MINUTE of timestamp                                 985           1019          30         10.2          98.5       0.5X
-SECOND of timestamp                                1096           1137          54          9.1         109.6       0.4X
+cast to timestamp                                   401            402           1         24.9          40.1       1.0X
+YEAR of timestamp                                  1172           1178          10          8.5         117.2       0.3X
+YEAROFWEEK of timestamp                            1240           1242           2          8.1         124.0       0.3X
+QUARTER of timestamp                               1211           1223          11          8.3         121.1       0.3X
+MONTH of timestamp                                 1065           1069           4          9.4         106.5       0.4X
+WEEK of timestamp                                  1474           1481           8          6.8         147.4       0.3X
+DAY of timestamp                                   1051           1061           9          9.5         105.1       0.4X
+DAYOFWEEK of timestamp                             1232           1232           1          8.1         123.2       0.3X
+DOW of timestamp                                   1233           1240           9          8.1         123.3       0.3X
+DOW_ISO of timestamp                               1210           1215           6          8.3         121.0       0.3X
+DAYOFWEEK_ISO of timestamp                         1212           1221           9          8.3         121.2       0.3X
+DOY of timestamp                                   1108           1118          10          9.0         110.8       0.4X
+HOUR of timestamp                                   797            804           6         12.5          79.7       0.5X
+MINUTE of timestamp                                 783            792          13         12.8          78.3       0.5X
+SECOND of timestamp                                 887            892           4         11.3          88.7       0.5X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Invoke extract for date:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to date                                       1113           1122           8          9.0         111.3       1.0X
-YEAR of date                                       1385           1410          30          7.2         138.5       0.8X
-YEAROFWEEK of date                                 1665           1711          40          6.0         166.5       0.7X
-QUARTER of date                                    1647           1683          42          6.1         164.7       0.7X
-MONTH of date                                      1172           1184          15          8.5         117.2       0.9X
-WEEK of date                                       1673           1682           8          6.0         167.3       0.7X
-DAY of date                                        1183           1200          25          8.5         118.3       0.9X
-DAYOFWEEK of date                                  1367           1379          13          7.3         136.7       0.8X
-DOW of date                                        1368           1390          19          7.3         136.8       0.8X
-DOW_ISO of date                                    1258           1289          33          7.9         125.8       0.9X
-DAYOFWEEK_ISO of date                              1282           1309          31          7.8         128.2       0.9X
-DOY of date                                        1218           1225           8          8.2         121.8       0.9X
-HOUR of date                                       2014           2111          88          5.0         201.4       0.6X
-MINUTE of date                                     1923           1962          56          5.2         192.3       0.6X
-SECOND of date                                     2116           2149          35          4.7         211.6       0.5X
+cast to date                                        886            902          15         11.3          88.6       1.0X
+YEAR of date                                       1121           1133          11          8.9         112.1       0.8X
+YEAROFWEEK of date                                 1189           1209          20          8.4         118.9       0.7X
+QUARTER of date                                    1207           1213          10          8.3         120.7       0.7X
+MONTH of date                                      1054           1066          11          9.5         105.4       0.8X
+WEEK of date                                       1469           1475          10          6.8         146.9       0.6X
+DAY of date                                        1048           1064          15          9.5         104.8       0.8X
+DAYOFWEEK of date                                  1235           1237           2          8.1         123.5       0.7X
+DOW of date                                        1227           1238          15          8.1         122.7       0.7X
+DOW_ISO of date                                    1197           1203           8          8.4         119.7       0.7X
+DAYOFWEEK_ISO of date                              1199           1199           1          8.3         119.9       0.7X
+DOY of date                                        1099           1105           5          9.1         109.9       0.8X
+HOUR of date                                       1741           1748           9          5.7         174.1       0.5X
+MINUTE of date                                     1736           1739           3          5.8         173.6       0.5X
+SECOND of date                                     1853           1860           8          5.4         185.3       0.5X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Invoke date_part for date:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to date                                       1039           1062          20          9.6         103.9       1.0X
-YEAR of date                                       1287           1303          14          7.8         128.7       0.8X
-YEAROFWEEK of date                                 1589           1599          14          6.3         158.9       0.7X
-QUARTER of date                                    1575           1589          14          6.4         157.5       0.7X
-MONTH of date                                      1158           1184          23          8.6         115.8       0.9X
-WEEK of date                                       1712           1759          41          5.8         171.2       0.6X
-DAY of date                                        1153           1186          35          8.7         115.3       0.9X
-DAYOFWEEK of date                                  1330           1362          37          7.5         133.0       0.8X
-DOW of date                                        1329           1352          19          7.5         132.9       0.8X
-DOW_ISO of date                                    1270           1287          18          7.9         127.0       0.8X
-DAYOFWEEK_ISO of date                              1344           1357          16          7.4         134.4       0.8X
-DOY of date                                        1222           1239          17          8.2         122.2       0.9X
-HOUR of date                                       1960           2008          42          5.1         196.0       0.5X
-MINUTE of date                                     1964           2014          53          5.1         196.4       0.5X
-SECOND of date                                     2116           2124          12          4.7         211.6       0.5X
+cast to date                                        884            903          16         11.3          88.4       1.0X
+YEAR of date                                       1119           1129          17          8.9         111.9       0.8X
+YEAROFWEEK of date                                 1187           1202          23          8.4         118.7       0.7X
+QUARTER of date                                    1202           1204           2          8.3         120.2       0.7X
+MONTH of date                                      1056           1064          12          9.5         105.6       0.8X
+WEEK of date                                       1467           1477          17          6.8         146.7       0.6X
+DAY of date                                        1045           1053          10          9.6         104.5       0.8X
+DAYOFWEEK of date                                  1234           1241           6          8.1         123.4       0.7X
+DOW of date                                        1232           1238           5          8.1         123.2       0.7X
+DOW_ISO of date                                    1199           1200           1          8.3         119.9       0.7X
+DAYOFWEEK_ISO of date                              1200           1211          10          8.3         120.0       0.7X
+DOY of date                                        1098           1106          10          9.1         109.8       0.8X
+HOUR of date                                       1739           1745           7          5.7         173.9       0.5X
+MINUTE of date                                     1746           1750           5          5.7         174.6       0.5X
+SECOND of date                                     1846           1849           3          5.4         184.6       0.5X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Invoke extract for interval:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to interval                                   1407           1448          48          7.1         140.7       1.0X
-YEAR of interval                                   1410           1426          15          7.1         141.0       1.0X
-MONTH of interval                                  1402           1416          19          7.1         140.2       1.0X
-DAY of interval                                    1415           1432          15          7.1         141.5       1.0X
-HOUR of interval                                   1444           1464          24          6.9         144.4       1.0X
-MINUTE of interval                                 1427           1443          19          7.0         142.7       1.0X
-SECOND of interval                                 1579           1604          35          6.3         157.9       0.9X
+cast to interval                                   1266           1279          11          7.9         126.6       1.0X
+YEAR of interval                                   1291           1295           3          7.7         129.1       1.0X
+MONTH of interval                                  1286           1295          12          7.8         128.6       1.0X
+DAY of interval                                    1288           1289           3          7.8         128.8       1.0X
+HOUR of interval                                   1303           1311           9          7.7         130.3       1.0X
+MINUTE of interval                                 1300           1313          12          7.7         130.0       1.0X
+SECOND of interval                                 1380           1395          20          7.2         138.0       0.9X
 
-OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Invoke date_part for interval:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to interval                                   1412           1449          33          7.1         141.2       1.0X
-YEAR of interval                                   1420           1437          14          7.0         142.0       1.0X
-MONTH of interval                                  1440           1450          12          6.9         144.0       1.0X
-DAY of interval                                    1450           1457          11          6.9         145.0       1.0X
-HOUR of interval                                   1431           1435           4          7.0         143.1       1.0X
-MINUTE of interval                                 1444           1472          28          6.9         144.4       1.0X
-SECOND of interval                                 1523           1549          23          6.6         152.3       0.9X
+cast to interval                                   1278           1285           6          7.8         127.8       1.0X
+YEAR of interval                                   1284           1289           5          7.8         128.4       1.0X
+MONTH of interval                                  1288           1290           2          7.8         128.8       1.0X
+DAY of interval                                    1285           1292          10          7.8         128.5       1.0X
+HOUR of interval                                   1308           1315          11          7.6         130.8       1.0X
+MINUTE of interval                                 1302           1315          11          7.7         130.2       1.0X
+SECOND of interval                                 1387           1388           1          7.2         138.7       0.9X
 

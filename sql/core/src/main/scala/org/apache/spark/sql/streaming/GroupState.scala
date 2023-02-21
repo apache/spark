@@ -259,7 +259,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
   @throws[IllegalArgumentException](
     "if 'timestampMs' is not positive or less than the current watermark in a streaming query")
   @throws[UnsupportedOperationException](
-    "if processing time timeout has not been enabled in [map|flatMap]GroupsWithState")
+    "if event time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutTimestamp(timestampMs: Long): Unit
 
 

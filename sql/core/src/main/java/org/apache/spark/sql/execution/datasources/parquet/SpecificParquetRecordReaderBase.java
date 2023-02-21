@@ -28,12 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.annotations.VisibleForTesting;
-import org.apache.parquet.VersionParser;
-import org.apache.parquet.VersionParser.ParsedVersion;
-import org.apache.parquet.column.page.PageReadStore;
 import scala.Option;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
@@ -42,6 +39,9 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.VersionParser.ParsedVersion;
+import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
@@ -51,6 +51,7 @@ import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
+
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.internal.SQLConf;
@@ -95,6 +96,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ParquetReadOptions options = HadoopReadOptions
       .builder(configuration, file)
       .withRange(split.getStart(), split.getStart() + split.getLength())
+      .withCodecFactory(new ParquetCodecFactory(configuration, 0))
       .build();
     ParquetFileReader fileReader = new ParquetFileReader(
         HadoopInputFile.fromPath(file, configuration), options);
@@ -158,6 +160,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ParquetReadOptions options = HadoopReadOptions
       .builder(config, file)
       .withRange(0, length)
+      .withCodecFactory(new ParquetCodecFactory(config, 0))
       .build();
     ParquetFileReader fileReader = ParquetFileReader.open(
       HadoopInputFile.fromPath(file, config), options);

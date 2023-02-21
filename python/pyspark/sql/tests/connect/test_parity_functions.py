@@ -17,11 +17,15 @@
 
 import unittest
 
+from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.sql.tests.test_functions import FunctionsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
+    def test_assert_true(self):
+        self.check_assert_true(SparkConnectException)
+
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_basic_functions(self):
         super().test_basic_functions()
@@ -44,10 +48,8 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_lit_list(self):
         super().test_lit_list()
 
-    # TODO(SPARK-41283): Different column names of `lit(np.int8(1))`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lit_np_scalar(self):
-        super().test_lit_np_scalar()
+    def test_raise_error(self):
+        self.check_raise_error(SparkConnectException)
 
     # Comparing column type of connect and pyspark
     @unittest.skip("Fails in Spark Connect, should enable.")

@@ -66,7 +66,10 @@ object PushDownUtils {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (Left(r.pushedFilters()), (untranslatableExprs ++ postScanFilters).toSeq)
+        // Normally translated filters (postScanFilters) are simple filters that can be evaluated
+        // faster, while the untranslated filters are complicated filters that take more time to
+        // evaluate, so we want to evaluate the postScanFilters filters first.
+        (Left(r.pushedFilters()), (postScanFilters ++ untranslatableExprs).toSeq)
 
       case r: SupportsPushDownV2Filters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -95,7 +98,10 @@ object PushDownUtils {
         val postScanFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
           DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
-        (Right(r.pushedPredicates), (untranslatableExprs ++ postScanFilters).toSeq)
+        // Normally translated filters (postScanFilters) are simple filters that can be evaluated
+        // faster, while the untranslated filters are complicated filters that take more time to
+        // evaluate, so we want to evaluate the postScanFilters filters first.
+        (Right(r.pushedPredicates), (postScanFilters ++ untranslatableExprs).toSeq)
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)

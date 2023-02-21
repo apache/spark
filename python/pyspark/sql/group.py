@@ -430,6 +430,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.6.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         pivot_col : str

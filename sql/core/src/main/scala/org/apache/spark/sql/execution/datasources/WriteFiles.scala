@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
  * The write files spec holds all information of [[V1WriteCommand]] if its provider is
@@ -68,6 +69,8 @@ case class WriteFilesExec(
     options: Map[String, String],
     staticPartitions: TablePartitionSpec) extends UnaryExecNode {
   override def output: Seq[Attribute] = Seq.empty
+
+  override lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.writeFilesMetrics
 
   override protected def doExecuteWrite(
       writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {

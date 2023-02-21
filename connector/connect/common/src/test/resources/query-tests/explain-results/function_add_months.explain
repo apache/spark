@@ -1,0 +1,2 @@
+Project [add_months(d#0, 2) AS add_months(d, 2)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

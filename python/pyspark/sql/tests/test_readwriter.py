@@ -181,17 +181,23 @@ class ReadwriterTestsMixin:
 
 class ReadwriterV2TestsMixin:
     def test_api(self):
+        self.check_api(DataFrameWriterV2)
+
+    def check_api(self, tpe):
         df = self.df
         writer = df.writeTo("testcat.t")
-        self.assertIsInstance(writer, DataFrameWriterV2)
-        self.assertIsInstance(writer.option("property", "value"), DataFrameWriterV2)
-        self.assertIsInstance(writer.options(property="value"), DataFrameWriterV2)
-        self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
-        self.assertIsInstance(writer.partitionedBy("id"), DataFrameWriterV2)
-        self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
-        self.assertIsInstance(writer.tableProperty("foo", "bar"), DataFrameWriterV2)
+        self.assertIsInstance(writer, tpe)
+        self.assertIsInstance(writer.option("property", "value"), tpe)
+        self.assertIsInstance(writer.options(property="value"), tpe)
+        self.assertIsInstance(writer.using("source"), tpe)
+        self.assertIsInstance(writer.partitionedBy("id"), tpe)
+        self.assertIsInstance(writer.partitionedBy(col("id")), tpe)
+        self.assertIsInstance(writer.tableProperty("foo", "bar"), tpe)
 
     def test_partitioning_functions(self):
+        self.check_partitioning_functions(DataFrameWriterV2)
+
+    def check_partitioning_functions(self, tpe):
         import datetime
         from pyspark.sql.functions import years, months, days, hours, bucket
 
@@ -201,15 +207,13 @@ class ReadwriterV2TestsMixin:
 
         writer = df.writeTo("testcat.t")
 
-        self.assertIsInstance(writer.partitionedBy(years("ts")), DataFrameWriterV2)
-        self.assertIsInstance(writer.partitionedBy(months("ts")), DataFrameWriterV2)
-        self.assertIsInstance(writer.partitionedBy(days("ts")), DataFrameWriterV2)
-        self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
-        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
-        self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), DataFrameWriterV2)
-        self.assertIsInstance(
-            writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), DataFrameWriterV2
-        )
+        self.assertIsInstance(writer.partitionedBy(years("ts")), tpe)
+        self.assertIsInstance(writer.partitionedBy(months("ts")), tpe)
+        self.assertIsInstance(writer.partitionedBy(days("ts")), tpe)
+        self.assertIsInstance(writer.partitionedBy(hours("ts")), tpe)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), tpe)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), tpe)
+        self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), tpe)
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
