@@ -1187,7 +1187,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // When the CASE_SENSITIVE configuration is disabled, then using different cases for the
     // required and provided column names is successful.
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+    withSQLConf(
+      SQLConf.CASE_SENSITIVE.key -> "false",
+      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
       withTable("t") {
         sql("create table t(i boolean, s bigint default 42, q int default 43) using parquet")
         sql("insert into t (I, Q) select true from (select 1)")
