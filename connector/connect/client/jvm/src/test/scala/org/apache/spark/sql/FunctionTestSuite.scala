@@ -150,6 +150,21 @@ class FunctionTestSuite extends ConnectFunSuite {
   testEquals("degrees", toDegrees(a), toDegrees("a"), degrees(a), degrees("a"))
   testEquals("radians", toRadians(a), toRadians("a"), radians(a), radians("a"))
 
+  // slice
+  // aggregate
+  // from_json
+  // schema_of_json
+  // to_json
+  // sort_array
+  // sequence
+  // from_csv
+  // schema_of_csv
+  // to_csv
+  // bucket
+  test("json_tuple zero args") {
+    intercept[IllegalArgumentException](json_tuple(a))
+  }
+
   test("rand no seed") {
     val e = rand().expr
     assert(e.hasUnresolvedFunction)

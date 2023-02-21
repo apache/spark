@@ -1187,6 +1187,274 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.radians("b")
   }
 
+  functionTest("array_contains") {
+    lit(null)
+  }
+
+  functionTest("array_append") {
+    lit(null)
+  }
+
+  functionTest("arrays_overlap") {
+    lit(null)
+  }
+
+  functionTest("slice") {
+    lit(null)
+  }
+
+  functionTest("array_join") {
+    lit(null)
+  }
+
+  functionTest("array_join with null replacement") {
+    lit(null)
+  }
+
+  functionTest("concat") {
+    lit(null)
+  }
+
+  functionTest("array_position") {
+    lit(null)
+  }
+
+  functionTest("element_at") {
+    lit(null)
+  }
+
+  functionTest("get") {
+    lit(null)
+  }
+
+  functionTest("array_sort") {
+    lit(null)
+  }
+
+  functionTest("array_sort with comparator") {
+    lit(null)
+  }
+
+  functionTest("array_remove") {
+    lit(null)
+  }
+
+  functionTest("array_compact") {
+    lit(null)
+  }
+
+  functionTest("array_distinct") {
+    lit(null)
+  }
+
+  functionTest("array_intersect") {
+    lit(null)
+  }
+
+  functionTest("array_insert") {
+    lit(null)
+  }
+
+  functionTest("array_union") {
+    lit(null)
+  }
+
+  functionTest("array_except") {
+    lit(null)
+  }
+
+  functionTest("transform") {
+    lit(null)
+  }
+
+  functionTest("transform with pair input") {
+    lit(null)
+  }
+
+  functionTest("exists") {
+    lit(null)
+  }
+
+  functionTest("forall") {
+    lit(null)
+  }
+
+  functionTest("filter") {
+    lit(null)
+  }
+
+  functionTest("filter with pair input") {
+    lit(null)
+  }
+
+  functionTest("aggregate") {
+    lit(null)
+  }
+
+  functionTest("zip_with") {
+    lit(null)
+  }
+
+  functionTest("transform_keys") {
+    lit(null)
+  }
+
+  functionTest("transform_values") {
+    lit(null)
+  }
+
+  functionTest("map_filter") {
+    lit(null)
+  }
+
+  functionTest("map_zip_with") {
+    lit(null)
+  }
+
+  functionTest("explode") {
+    lit(null)
+  }
+
+  functionTest("explode_outer") {
+    lit(null)
+  }
+
+  functionTest("posexplode") {
+    lit(null)
+  }
+
+  functionTest("posexplode_outer") {
+    lit(null)
+  }
+
+  functionTest("inline") {
+    lit(null)
+  }
+
+  functionTest("inline_outer") {
+    lit(null)
+  }
+
+  functionTest("get_json_object") {
+    lit(null)
+  }
+
+  functionTest("json_tuple") {
+    lit(null)
+  }
+
+  functionTest("from_json") {
+    lit(null)
+  }
+
+  functionTest("schema_of_json") {
+    lit(null)
+  }
+
+  functionTest("schema_of_json with options") {
+    lit(null)
+  }
+
+  functionTest("to_json") {
+    lit(null)
+  }
+
+  functionTest("size") {
+    lit(null)
+  }
+
+  functionTest("sort_array") {
+    lit(null)
+  }
+
+  functionTest("array_min") {
+    lit(null)
+  }
+
+  functionTest("array_max") {
+    lit(null)
+  }
+
+  functionTest("shuffle") {
+    lit(null)
+  }
+
+  functionTest("reverse") {
+    lit(null)
+  }
+
+  functionTest("flatten") {
+    lit(null)
+  }
+
+  functionTest("sequence") {
+    lit(null)
+  }
+
+  functionTest("array_repeat") {
+    lit(null)
+  }
+
+  functionTest("map_contains_key") {
+    lit(null)
+  }
+
+  functionTest("map_keys") {
+    lit(null)
+  }
+
+  functionTest("map_values") {
+    lit(null)
+  }
+
+  functionTest("map_entries") {
+    lit(null)
+  }
+
+  functionTest("map_from_entries") {
+    lit(null)
+  }
+
+  functionTest("arrays_zip") {
+    lit(null)
+  }
+
+  functionTest("map_concat") {
+    lit(null)
+  }
+
+  functionTest("from_csv") {
+    lit(null)
+  }
+
+  functionTest("schema_of_csv") {
+    lit(null)
+  }
+
+  functionTest("to_csv") {
+    lit(null)
+  }
+
+  functionTest("years") {
+    lit(null)
+  }
+
+  functionTest("months") {
+    lit(null)
+  }
+
+  functionTest("days") {
+    lit(null)
+  }
+
+  functionTest("hours") {
+    lit(null)
+  }
+
+  functionTest("bucket") {
+    lit(null)
+  }
+
   test("groupby agg") {
     simple
       .groupBy(Column("id"))
