@@ -40,6 +40,7 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -122,6 +123,49 @@ object FileFormatWriter extends Logging {
     val outputWriterFactory =
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
+    // SPARK-40588: when planned writing is disabled and AQE is enabled,
+    // plan contains an AdaptiveSparkPlanExec, which does not know
+    // its final plan's ordering, so we have to materialize that plan first
+    // it is fine to use plan further down as the final plan is cached in that plan
+    def materializeAdaptiveSparkPlan(plan: SparkPlan): SparkPlan = plan match {
+      case a: AdaptiveSparkPlanExec => a.finalPhysicalPlan
+      case p: SparkPlan => p.withNewChildren(p.children.map(materializeAdaptiveSparkPlan))
+    }
+
+    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+    // columns.
+    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
+      writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
+    val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
+    // the sort order doesn't matter
+    val actualOrdering = writeFilesOpt.map(_.child)
+      .getOrElse(materializeAdaptiveSparkPlan(plan))
+      .outputOrdering
+    val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
+
+    // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
+    // operator based on the required ordering of the V1 write command. So the output
+    // ordering of the physical plan should always match the required ordering. Here
+    // we set the variable to verify this behavior in tests.
+    // There are two cases where FileFormatWriter still needs to add physical sort:
+    // 1) When the planned write config is disabled.
+    // 2) When the concurrent writers are enabled (in this case the required ordering of a
+    //    V1 write command will be empty).
+    if (Utils.isTesting) outputOrderingMatched = orderingMatched
+
+    SQLExecution.checkSQLExecutionId(sparkSession)
+
+    val finalStatsTrackers = if (writeFilesOpt.isDefined) {
+      val writeFilesMetrics = writeFilesOpt.get.metrics
+      statsTrackers.map {
+        case tracker: BasicWriteJobStatsTracker =>
+          val finalMetrics = writeFilesMetrics ++ tracker.writeCommitMetrics()
+          DataWritingCommand.basicWriteJobStatsTracker(finalMetrics, hadoopConf)
+        case other => other
+      }
+    } else {
+      statsTrackers
+    }
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
@@ -136,45 +180,12 @@ object FileFormatWriter extends Logging {
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
       timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
         .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
-      statsTrackers = statsTrackers
+      statsTrackers = finalStatsTrackers
     )
-
-    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
-    // columns.
-    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
-        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
-    val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
-
-    // SPARK-40588: when planned writing is disabled and AQE is enabled,
-    // plan contains an AdaptiveSparkPlanExec, which does not know
-    // its final plan's ordering, so we have to materialize that plan first
-    // it is fine to use plan further down as the final plan is cached in that plan
-    def materializeAdaptiveSparkPlan(plan: SparkPlan): SparkPlan = plan match {
-      case a: AdaptiveSparkPlanExec => a.finalPhysicalPlan
-      case p: SparkPlan => p.withNewChildren(p.children.map(materializeAdaptiveSparkPlan))
-    }
-
-    // the sort order doesn't matter
-    val actualOrdering = writeFilesOpt.map(_.child)
-      .getOrElse(materializeAdaptiveSparkPlan(plan))
-      .outputOrdering
-    val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
-
-    SQLExecution.checkSQLExecutionId(sparkSession)
 
     // propagate the description UUID into the jobs, so that committers
     // get an ID guaranteed to be unique.
     job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
-
-    // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
-    // operator based on the required ordering of the V1 write command. So the output
-    // ordering of the physical plan should always match the required ordering. Here
-    // we set the variable to verify this behavior in tests.
-    // There are two cases where FileFormatWriter still needs to add physical sort:
-    // 1) When the planned write config is disabled.
-    // 2) When the concurrent writers are enabled (in this case the required ordering of a
-    //    V1 write command will be empty).
-    if (Utils.isTesting) outputOrderingMatched = orderingMatched
 
     if (writeFilesOpt.isDefined) {
       // build `WriteFilesSpec` for `WriteFiles`
