@@ -1265,15 +1265,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.lit(java.time.LocalDate.of(2020, 10, 10)))
   }
 
+  /* Window API */
   test("window") {
     simple.select(
-      fn.min(Column("id").over(Window.partitionBy(Column("a"), Column("b")))),
-      fn.min(Column("id").over(Window.partitionBy("a", "b"))),
-      fn.min(Column("id").over(Window.orderBy(Column("a"), Column("b")))),
-      fn.min(Column("id").over(Window.orderBy("a", "b"))),
-      fn.min(Column("id").over(Window.rowsBetween(2L, 3L))),
-      fn.min(Column("id").over(Window.rangeBetween(2L, 3L))))
+      fn.min("id").over(Window.partitionBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.partitionBy("a", "b")),
+      fn.min("id").over(Window.orderBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.orderBy("a", "b")),
+      fn.min("id").over(Window.orderBy("a").rowsBetween(2L, 3L)),
+      fn.min("id").over(Window.orderBy("a").rangeBetween(2L, 3L)))
   }
-
-  /* Window API */
 }
