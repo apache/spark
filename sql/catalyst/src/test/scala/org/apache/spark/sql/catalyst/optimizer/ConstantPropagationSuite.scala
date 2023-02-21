@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -159,8 +160,9 @@ class ConstantPropagationSuite extends PlanTest {
         columnA === Literal(1) && columnA === Literal(2) && columnB === Add(columnA, Literal(3)))
 
     val correctAnswer = testRelation
-      .select(columnA)
-      .where(columnA === Literal(1) && columnA === Literal(2) && columnB === Literal(5)).analyze
+      .select(columnA, columnB)
+      .where(FalseLiteral)
+      .select(columnA).analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -185,5 +187,32 @@ class ConstantPropagationSuite extends PlanTest {
       .where(true)
       .analyze
     comparePlans(Optimize.execute(query2), correctAnswer2)
+  }
+
+  test("SPARK-42500: ConstantPropagation supports more cases") {
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnB > columnA + 2).analyze),
+      testRelation.where(columnA === 1 && columnB > 3).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnA === 2).analyze),
+      testRelation.where(FalseLiteral).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnA === columnA + 2).analyze),
+      testRelation.where(FalseLiteral).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        testRelation.where((columnA === 1 || columnB === 2) && columnB === 1).analyze),
+      testRelation.where(columnA === 1 && columnB === 1).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnA === 1).analyze),
+      testRelation.where(columnA === 1).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(Not(columnA === 1 && columnA === columnA + 2)).analyze),
+      testRelation.where(Not(columnA === 1) || Not(columnA === columnA + 2)).analyze)
   }
 }
