@@ -52,12 +52,12 @@ class CoGroupedArrowPythonRunner(
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriterThread(
-                                 env: SparkEnv,
-                                 worker: Socket,
-                                 inputIterator: Iterator[List[Iterator[InternalRow]]],
-                                 partitionIndex: Int,
-                                 context: TaskContext): WriterThread = {
-    new WriterThread(env, worker, inputIterator, partitionIndex, context) {
+    env: SparkEnv,
+    worker: Socket,
+    inputIterator: Iterator[List[Iterator[InternalRow]]],
+    partitionIndex: Int,
+    context: TaskContext): WriterThread = {
+  new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         // Write config for the worker as a number of key -> value pairs of strings
@@ -88,15 +88,13 @@ class CoGroupedArrowPythonRunner(
       }
 
       private def writeGroup(
-                              group: Iterator[InternalRow],
-                              schema: StructType,
-                              dataOut: DataOutputStream,
-                              name: String): Unit = {
+        group: Iterator[InternalRow],
+        schema: StructType,
+        dataOut: DataOutputStream,
+        name: String): Unit = {
         val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for $pythonExec ($name)",
-          0,
-          Long.MaxValue)
+          s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {

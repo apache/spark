@@ -360,7 +360,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
     def load_stream(self, stream):
         """
-        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
+        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as
         lists of pandas.Series.
         """
         import pyarrow as pa

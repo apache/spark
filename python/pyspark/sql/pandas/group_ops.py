@@ -343,7 +343,7 @@ class PandasGroupedOpsMixin:
 
     def cogroup(self, *other: "GroupedData") -> "PandasCogroupedOps":
         """
-        Cogroups this group with another group so that we can run cogrouped operations.
+        Cogroups this group with other group[s] so that we can run cogrouped operations.
 
         .. versionadded:: 3.0.0
 
@@ -381,16 +381,10 @@ class PandasCogroupedOps:
         Applies a function to each cogroup using pandas and returns the result
         as a `DataFrame`.
 
-        The function can take two `pandas.DataFrame`\\s and return another
-        `pandas.DataFrame`. Alternatively, the user can pass a function that takes
-        a tuple of the grouping key(s) and the two `pandas.DataFrame`\\s.
-        For each side of the cogroup, all columns are passed together as a
-        `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined as
-        a :class:`DataFrame`.
-
-        The function can also take multiple `pandas.DataFrame`\\s and return another
-        `pandas.DataFrame`. To get key as first argument of the function, pass `pass_key=True`
-        followed by dataframe args.
+        The function takes a tuple of the grouping key(s) and two or more `pandas.DataFrame`\\s
+        passed as args or varargs. For each cogroup, all columns are passed together as a
+        `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined
+        as a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
         `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
@@ -403,8 +397,7 @@ class PandasCogroupedOps:
         Parameters
         ----------
         func : function
-            a Python native function that takes two `pandas.DataFrame`\\s, and
-            outputs a `pandas.DataFrame`, or that takes one tuple (grouping keys) and two
+            a Python native function that takes one tuple (grouping keys) and two or more
             ``pandas.DataFrame``\\s, and outputs a ``pandas.DataFrame``.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
@@ -421,40 +414,34 @@ class PandasCogroupedOps:
         >>> df2 = spark.createDataFrame(
         ...     [(20000101, 1, "x"), (20000101, 2, "y")],
         ...     ("time", "id", "v2"))
-        >>> def asof_join(l, r):
-        ...     return pd.merge_asof(l, r, on="time", by="id")
-        >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-        ...     asof_join, schema="time int, id int, v1 double, v2 string"
-        ... ).show()  # doctest: +SKIP
-        +--------+---+---+---+
-        |    time| id| v1| v2|
-        +--------+---+---+---+
-        |20000101|  1|1.0|  x|
-        |20000102|  1|3.0|  x|
-        |20000101|  2|2.0|  y|
-        |20000102|  2|4.0|  y|
-        +--------+---+---+---+
-
-        Alternatively, the user can define a function that takes three arguments.  In this case,
-        the grouping key(s) will be passed as the first argument and the data will be passed as the
-        second and third arguments.  The grouping key(s) will be passed as a tuple of numpy data
-        types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
-        `pandas.DataFrame` containing all columns from the original Spark DataFrames.
-
         >>> def asof_join(k, l, r):
         ...     if k == (1,):
         ...         return pd.merge_asof(l, r, on="time", by="id")
         ...     else:
         ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-        ...     asof_join, "time int, id int, v1 double, v2 string").show()  # doctest: +SKIP
+        ...     asof_join, "time int, id int, v1 double, v2 string").show() # doctest: +SKIP
         +--------+---+---+---+
         |    time| id| v1| v2|
         +--------+---+---+---+
         |20000101|  1|1.0|  x|
         |20000102|  1|3.0|  x|
         +--------+---+---+---+
-
+        >>> df3 = spark.createDataFrame(
+        ...     [(20000101, 1, "x"), (20000101, 2, "y")],
+        ...     ("time", "id", "v3"))
+        >>> def asof_join_multiple(_, *dfs):
+        ...     return functools.reduce(lambda df1, df2: pd.merge(df1, df2, on=["id", "k"]), dfs)
+        >>> df1.groupby("id").cogroup(df2.groupby("id"), df3.groupby("id")).applyInPandas(
+        ...     asof_join_multiple, "time int, id int, v1 double, v2 string, v3 string").show() # doctest: +SKIP
+        +--------+---+---+---+---+
+        |    time| id| v1| v2| v3|
+        +--------+---+---+---+---+
+        |20000101|  1|1.0|  x|  a|
+        |20000102|  1|3.0|  x|  a|
+        |20000101|  2|2.0|  y|  b|
+        |20000102|  2|4.0|  y|  b|
+        +--------+---+---+---+---+
         Notes
         -----
         This function requires a full shuffle. All the data of a cogroup will be loaded
