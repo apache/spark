@@ -143,14 +143,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {
-    val message = intercept[AnalysisException] {
-      sql(
-        s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      val message = intercept[AnalysisException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
-    }.getMessage
-    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
-    )
+      }.getMessage
+      assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
+      )
+    }
   }
 
   test("INSERT OVERWRITE a JSONRelation multiple times") {
