@@ -157,12 +157,12 @@ object FileFormatWriter extends Logging {
 
     val finalStatsTrackers = if (writeFilesOpt.isDefined) {
       val writeFilesMetrics = writeFilesOpt.get.metrics
-      val finalMetrics = statsTrackers match {
-        case Seq(tracker: BasicWriteJobStatsTracker) =>
-          writeFilesMetrics ++ tracker.writeCommitMetrics()
-        case _ => writeFilesMetrics
+      statsTrackers.map {
+        case tracker: BasicWriteJobStatsTracker =>
+          val finalMetrics = writeFilesMetrics ++ tracker.writeCommitMetrics()
+          DataWritingCommand.basicWriteJobStatsTracker(finalMetrics, hadoopConf)
+        case other => other
       }
-      DataWritingCommand.basicWriteJobStatsTracker(finalMetrics, hadoopConf) :: Nil
     } else {
       statsTrackers
     }

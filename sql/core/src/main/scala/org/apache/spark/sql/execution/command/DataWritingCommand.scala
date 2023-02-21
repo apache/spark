@@ -53,8 +53,8 @@ trait DataWritingCommand extends UnaryCommand {
 
   lazy val metrics: Map[String, SQLMetric] = {
     // If planned write is enable, we have pulled out write files metrics from `V1WriteCommand`
-    // from `V1WriteCommand` to `WriteFiles`. `DataWritingCommand` should only holds the
-    // task commit metric and driver commit metric.
+    // to `WriteFiles`. `DataWritingCommand` should only holds the task commit metric and driver
+    // commit metric.
     if (conf.getConf(SQLConf.PLANNED_WRITE_ENABLED)) {
       BasicWriteJobStatsTracker.writeCommitMetrics
     } else {
