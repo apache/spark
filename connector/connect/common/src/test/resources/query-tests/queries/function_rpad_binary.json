@@ -1,0 +1,27 @@
+{
+  "project": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,bytes:binary\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "rpad",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "bytes"
+          }
+        }, {
+          "literal": {
+            "integer": 5
+          }
+        }, {
+          "literal": {
+            "binary": "CwoLDg=="
+          }
+        }]
+      }
+    }]
+  }
+}

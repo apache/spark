@@ -28,6 +28,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -117,7 +118,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       val planner = new SparkConnectPlanner(spark)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual = normalizeExprIds(catalystPlan).treeString
+      val actual = normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.

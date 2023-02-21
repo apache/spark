@@ -150,6 +150,36 @@ class FunctionTestSuite extends ConnectFunSuite {
   testEquals("degrees", toDegrees(a), toDegrees("a"), degrees(a), degrees("a"))
   testEquals("radians", toRadians(a), toRadians("a"), radians(a), radians("a"))
 
+  testEquals(
+    "regexp_replace",
+    regexp_replace(a, lit("foo"), lit("bar")),
+    regexp_replace(a, "foo", "bar"))
+  testEquals("add_months", add_months(a, lit(1)), add_months(a, 1))
+  testEquals("date_add", date_add(a, lit(2)), date_add(a, 2))
+  testEquals("date_sub", date_sub(a, lit(2)), date_sub(a, 2))
+  testEquals("next_day", next_day(a, lit("Mon")), next_day(a, lit("Mon")))
+  testEquals("unix_timestamp", unix_timestamp(), unix_timestamp(current_timestamp()))
+  testEquals(
+    "from_utc_timestamp",
+    from_utc_timestamp(a, "GMT"),
+    from_utc_timestamp(a, lit("GMT")))
+  testEquals("to_utc_timestamp", to_utc_timestamp(a, "GMT"), to_utc_timestamp(a, lit("GMT")))
+  testEquals(
+    "window",
+    window(a, "10 seconds", "10 seconds", "0 second"),
+    window(a, "10 seconds", "10 seconds"),
+    window(a, "10 seconds"))
+  testEquals("session_window", session_window(a, "1 second"), session_window(a, lit("1 second")))
+
+  test("assert_true no message") {
+    val e = assert_true(a).expr
+    assert(e.hasUnresolvedFunction)
+    val fn = e.getUnresolvedFunction
+    assert(fn.getFunctionName == "assert_true")
+    assert(fn.getArgumentsCount == 1)
+    assert(fn.getArguments(0) == a.expr)
+  }
+
   test("rand no seed") {
     val e = rand().expr
     assert(e.hasUnresolvedFunction)
