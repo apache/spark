@@ -319,7 +319,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   }
 
   /**
-   * This is a helper for the addMissingDefaultValuesForInsertFromInlineTable methods above.
+   * This is a helper for the addMissingDefaultValuesForInsert* methods above.
    */
   private def getDefaultExpressionsForInsert(
       numQueryOutputs: Int,
