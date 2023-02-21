@@ -3592,6 +3592,64 @@ object functions {
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Partition Transforms functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * A transform for timestamps and dates to partition data into years.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def years(e: Column): Column =
+    Column.fn("years", e)
+
+  /**
+   * A transform for timestamps and dates to partition data into months.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def months(e: Column): Column =
+    Column.fn("months", e)
+
+  /**
+   * A transform for timestamps and dates to partition data into days.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def days(e: Column): Column =
+    Column.fn("days", e)
+
+  /**
+   * A transform for timestamps to partition data into hours.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def hours(e: Column): Column =
+    Column.fn("hours", e)
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def bucket(numBuckets: Column, e: Column): Column =
+    Column.fn("bucket", numBuckets, e)
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def bucket(numBuckets: Int, e: Column): Column =
+    Column.fn("bucket", lit(numBuckets), e)
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 

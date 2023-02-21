@@ -1386,6 +1386,26 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.upper(fn.col("g"))
   }
 
+  functionTest("years") {
+    fn.years(Column("a"))
+  }
+
+  functionTest("months") {
+    fn.months(Column("a"))
+  }
+
+  functionTest("days") {
+    fn.days(Column("a"))
+  }
+
+  functionTest("hours") {
+    fn.hours(Column("a"))
+  }
+
+  functionTest("bucket") {
+    fn.bucket(3, Column("a"))
+  }
+
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
     test("function " + name) {
       temporals.select(f)
