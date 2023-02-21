@@ -30,6 +30,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
   implicit class TableHelper(table: Table) {
+    def isReadable: Boolean = table match {
+      case _: SupportsRead => true
+      case _ => false
+    }
+
     def asReadable: SupportsRead = {
       table match {
         case support: SupportsRead =>

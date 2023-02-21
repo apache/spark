@@ -123,7 +123,9 @@ case class ShowTablesExec(
         field => quoteIdentifier(field.name)).mkString(", "))
     }
 
-    if (table.schema().nonEmpty) results.put("Schema", table.schema().treeString)
+    if (table.isReadable) {
+      if (table.schema().nonEmpty) results.put("Schema", table.schema().treeString)
+    }
 
     results.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
@@ -140,14 +142,8 @@ case class ShowTablesExec(
     val partitionSchema = partitionTable.partitionSchema()
     val (names, ident) = (resolvedPartitionSpec.names, resolvedPartitionSpec.ident)
     val partitionIdentifiers = partitionTable.listPartitionIdentifiers(names.toArray, ident)
-    partitionIdentifiers.length match {
-      case 0 =>
-        throw QueryExecutionErrors.notExistPartitionError(
-          identifier.toString, ident, partitionSchema)
-      case len if len > 1 =>
-        throw QueryExecutionErrors.showTableExtendedMultiPartitionUnsupportedError(
-          identifier.toString)
-      case _ => // do nothing
+    if (partitionIdentifiers.length == 0) {
+      throw QueryExecutionErrors.notExistPartitionError(identifier.toString, ident, partitionSchema)
     }
     val row = partitionIdentifiers.head
     val len = partitionSchema.length

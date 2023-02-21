@@ -2792,11 +2792,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "identifier" -> toSQLId(tableId.nameParts)))
   }
 
-  def showTableExtendedMultiPartitionUnsupportedError(tableName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"The table $tableName does not support show table extended of multiple partition.")
-  }
-
   def notExistPartitionError(
       tableName: String,
       partitionIdent: InternalRow,
