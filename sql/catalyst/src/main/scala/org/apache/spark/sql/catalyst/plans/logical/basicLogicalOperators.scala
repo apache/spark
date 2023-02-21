@@ -1230,6 +1230,22 @@ case class Window(
     copy(child = newChild)
 }
 
+case class WindowGroupLimit(
+    partitionSpec: Seq[Expression],
+    orderSpec: Seq[SortOrder],
+    rankLikeFunction: Expression,
+    limit: Int,
+    child: LogicalPlan) extends UnaryNode {
+  assert(orderSpec.nonEmpty && limit > 0)
+
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW_GROUP_LIMIT)
+  override protected def withNewChildInternal(newChild: LogicalPlan): WindowGroupLimit =
+    copy(child = newChild)
+}
+
 object Expand {
   /**
    * Build bit mask from attributes of selected grouping set. A bit in the bitmask is corresponding
