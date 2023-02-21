@@ -1251,59 +1251,60 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         assert(intercept[AnalysisException] {
           sql("insert into t (i, q) select true from (select 1)")
         }.getMessage.contains(addTwoColButExpectedThree))
-      // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
-      // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
-      // values than expected, the INSERT INTO command fails to execute.
-      withTable("t") {
-        sql("create table t(i boolean, s bigint) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (i) values (true)")
-        }.getMessage.contains(addOneColButExpectedTwo))
+        // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
+        // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
+        // values than expected, the INSERT INTO command fails to execute.
+        withTable("t") {
+          sql("create table t(i boolean, s bigint) using parquet")
+          assert(intercept[AnalysisException] {
+            sql("insert into t (i) values (true)")
+          }.getMessage.contains(addOneColButExpectedTwo))
+        }
+        withTable("t") {
+          sql("create table t(i boolean default true, s bigint) using parquet")
+          assert(intercept[AnalysisException] {
+            sql("insert into t (i) values (default)")
+          }.getMessage.contains(addOneColButExpectedTwo))
+        }
+        withTable("t") {
+          sql("create table t(i boolean, s bigint default 42) using parquet")
+          assert(intercept[AnalysisException] {
+            sql("insert into t (s) values (default)")
+          }.getMessage.contains(addOneColButExpectedTwo))
+        }
+        withTable("t") {
+          sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
+          assert(intercept[AnalysisException] {
+            sql("insert into t partition(i='true') (s) values(5)")
+          }.getMessage.contains(addTwoColButExpectedThree))
+        }
+        withTable("t") {
+          sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
+          assert(intercept[AnalysisException] {
+            sql("insert into t partition(i='false') (q) select 43")
+          }.getMessage.contains(addTwoColButExpectedThree))
+        }
+        withTable("t") {
+          sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
+          assert(intercept[AnalysisException] {
+            sql("insert into t partition(i='false') (q) select default")
+          }.getMessage.contains(addTwoColButExpectedThree))
+        }
       }
-      withTable("t") {
-        sql("create table t(i boolean default true, s bigint) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (i) values (default)")
-        }.getMessage.contains(addOneColButExpectedTwo))
-      }
-      withTable("t") {
-        sql("create table t(i boolean, s bigint default 42) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (s) values (default)")
-        }.getMessage.contains(addOneColButExpectedTwo))
-      }
-      withTable("t") {
-        sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
-        assert(intercept[AnalysisException] {
-          sql("insert into t partition(i='true') (s) values(5)")
-        }.getMessage.contains(addTwoColButExpectedThree))
-      }
-      withTable("t") {
-        sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
-        assert(intercept[AnalysisException] {
-          sql("insert into t partition(i='false') (q) select 43")
-        }.getMessage.contains(addTwoColButExpectedThree))
-      }
-      withTable("t") {
-        sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
-        assert(intercept[AnalysisException] {
-          sql("insert into t partition(i='false') (q) select default")
-        }.getMessage.contains(addTwoColButExpectedThree))
-      }
-    }
-    // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required
-    // and provided column names results in an analysis error.
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      withTable("t") {
-        sql("create table t(i boolean default true, s bigint default 42) using parquet")
-        checkError(
-          exception =
-            intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
-          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-          sqlState = None,
-          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
-          context = ExpectedContext(
-            fragment = "insert into t (I)", start = 0, stop = 16))
+      // When the CASE_SENSITIVE configuration is enabled, then using different cases for the
+      // required and provided column names results in an analysis error.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        withTable("t") {
+          sql("create table t(i boolean default true, s bigint default 42) using parquet")
+          checkError(
+            exception =
+              intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            sqlState = None,
+            parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
+            context = ExpectedContext(
+              fragment = "insert into t (I)", start = 0, stop = 16))
+        }
       }
     }
   }
