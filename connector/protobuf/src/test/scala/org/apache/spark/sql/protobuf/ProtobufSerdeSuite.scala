@@ -21,11 +21,11 @@ import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.NoopFilters
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
  * Tests for [[ProtobufSerializer]] and [[ProtobufDeserializer]] with a more specific focus on
@@ -64,6 +64,28 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
       assert(
         serializer.serialize(deserializer.deserialize(dynamicMessage).get) === dynamicMessage)
     }
+  }
+
+  test("Optional fields can be dropped from input SQL schema for the serializer") {
+    // This test verifies that optional fields can be missing from input Catalyst schema
+    // while serializing rows to protobuf.
+
+    val desc = ProtobufUtils.buildDescriptor(proto2Desc, "FoobarWithRequiredFieldBar")
+
+    // Confirm desc contains optional field 'foo' and required field bar.
+    assert(desc.getFields.size() == 2)
+    assert(desc.findFieldByName("foo").isOptional)
+
+    // Use catalyst type without optional "foo".
+    val sqlType = structFromDDL("struct<bar int>")
+    val serializer = new ProtobufSerializer(sqlType, desc, nullable = false) // Should work fine.
+
+    // Should be able to deserialize a row.
+    val protoMessage = serializer.serialize(InternalRow(22)).asInstanceOf[DynamicMessage]
+
+    // Verify the descriptor and the value.
+    assert(protoMessage.getDescriptorForType == desc)
+    assert(protoMessage.getField(desc.findFieldByName("bar")).asInstanceOf[Int] == 22)
   }
 
   test("Fail to convert with field type mismatch") {
@@ -146,9 +168,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   test("Fail to convert with missing Catalyst fields") {
     val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
 
-    val foobarSQLType = DataType.fromDDL(
-      "struct<foo string>" // "bar" is missing.
-    ).asInstanceOf[StructType]
+    val foobarSQLType = structFromDDL("struct<foo string>") // "bar" is missing.
 
     assertFailedConversionMessage(
       ProtobufUtils.buildDescriptor(proto2Desc, "FoobarWithRequiredFieldBar"),
@@ -168,9 +188,9 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
     val protoNestedFile = ProtobufUtils
       .buildDescriptor(proto2Desc, "NestedFoobarWithRequiredFieldBar")
 
-    val nestedFoobarSQLType = DataType.fromDDL(
+    val nestedFoobarSQLType = structFromDDL(
       "struct<nested_foobar: struct<foo string>>" // "bar" field is missing.
-    ).asInstanceOf[StructType]
+    )
     // serializing with extra fails if required field is missing in inner struct
     assertFailedConversionMessage(
       ProtobufUtils.buildDescriptor(proto2Desc, "NestedFoobarWithRequiredFieldBar"),
