@@ -648,16 +648,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "columns as the target table: target table has 2 column(s)" +
           " but the inserted data has 3 column(s)"))
 
-        msg = intercept[AnalysisException] {
-          sql("insert into t select 1")
-        }.getMessage
-        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
-          "columns as the target table: target table has 2 column(s)" +
-          " but the inserted data has 1 column(s)"))
+        withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+          msg = intercept[AnalysisException] {
+            sql("insert into t select 1")
+          }.getMessage
+          assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+            "columns as the target table: target table has 2 column(s)" +
+            " but the inserted data has 1 column(s)"))
 
-        // Insert into table successfully.
-        sql("insert into t select 1, 2.0D")
-        checkAnswer(sql("select * from t"), Row(1, 2.0D))
+          // Insert into table successfully.
+          sql("insert into t select 1, 2.0D")
+          checkAnswer(sql("select * from t"), Row(1, 2.0D))
+        }
       }
     }
   }
