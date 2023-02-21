@@ -1187,6 +1187,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.radians("b")
   }
 
+  functionTest("array_contains") {
+    fn.array_contains(Column("e"), 3)
+  }
+
   test("groupby agg") {
     simple
       .groupBy(Column("id"))
@@ -1263,6 +1267,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
       fn.lit(java.time.LocalDate.of(2020, 10, 10)))
   }
+
+
 
   /* Window API */
 }

@@ -19,13 +19,17 @@ package org.apache.spark.sql
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.LocalDate
 
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Expression.{UnresolvedAttribute, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -2237,6 +2241,1188 @@ object functions {
    * @since 3.4.0
    */
   def radians(columnName: String): Column = radians(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Collection functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns null if the array is null, true if the array contains `value`, and false otherwise.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_contains(column: Column, value: Any): Column =
+    Column.fn("array_contains", column, lit(value))
+
+  /**
+   * Returns an ARRAY containing all elements from the source ARRAY as well as the new element.
+   * The new element/column is located at end of the ARRAY.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_append(column: Column, element: Any): Column =
+    Column.fn("array_append", column, lit(element))
+
+  /**
+   * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
+   * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
+   * `false` otherwise.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def arrays_overlap(a1: Column, a2: Column): Column =
+    Column.fn("arrays_overlap", a1, a2)
+
+  /**
+   * Returns an array containing all the elements in `x` from index `start` (or starting from the
+   * end if `start` is negative) with the specified `length`.
+   *
+   * @param x      the array column to be sliced
+   * @param start  the starting index
+   * @param length the length of the slice
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def slice(x: Column, start: Int, length: Int): Column =
+    slice(x, lit(start), lit(length))
+
+  /**
+   * Returns an array containing all the elements in `x` from index `start` (or starting from the
+   * end if `start` is negative) with the specified `length`.
+   *
+   * @param x      the array column to be sliced
+   * @param start  the starting index
+   * @param length the length of the slice
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def slice(x: Column, start: Column, length: Column): Column =
+    Column.fn("slice", x, start, length)
+
+  /**
+   * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
+   * `nullReplacement`.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_join(column: Column, delimiter: String, nullReplacement: String): Column =
+    Column.fn("array_join", column, lit(delimiter), lit(nullReplacement))
+
+  /**
+   * Concatenates the elements of `column` using the `delimiter`.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_join(column: Column, delimiter: String): Column =
+    Column.fn("array_join", column, lit(delimiter))
+
+  /**
+   * Concatenates multiple input columns together into a single column.
+   * The function works with strings, binary and compatible array columns.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column =
+    Column.fn("array_join", exprs: _*)
+
+  /**
+   * Locates the position of the first occurrence of the value in the given array as long.
+   * Returns null if either of the arguments are null.
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if value
+   *       could not be found in array.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_position(column: Column, value: Any): Column =
+    Column.fn("array_position", column, lit(value))
+
+  /**
+   * Returns element of array at given index in value if column is array. Returns value for
+   * the given key in value if column is map.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def element_at(column: Column, value: Any): Column =
+    Column.fn("element_at", column, lit(value))
+
+  /**
+   * Returns element of array at given (0-based) index. If the index points
+   * outside of the array boundaries, then this function returns NULL.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def get(column: Column, index: Column): Column =
+    Column.fn("get", column, index)
+
+  /**
+   * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * NaN is greater than any non-NaN elements for double/float type.
+   * Null elements will be placed at the end of the returned array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_sort(e: Column): Column =
+    Column.fn("array_sort", e)
+
+  /**
+   * Sorts the input array based on the given comparator function. The comparator will take two
+   * arguments representing two elements of the array. It returns a negative integer, 0, or a
+   * positive integer as the first element is less than, equal to, or greater than the second
+   * element. If the comparator function returns null, the function will fail and raise an error.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_sort(e: Column, comparator: (Column, Column) => Column): Column =
+    Column.fn("array_sort", e, createLambda(comparator))
+
+  /**
+   * Remove all elements that equal to element from the given array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_remove(column: Column, element: Any): Column =
+    Column.fn("array_remove", column, lit(element))
+
+  /**
+   * Remove all null elements from the given array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_compact(column: Column): Column =
+    Column.fn("array_compact", column)
+
+  /**
+   * Removes duplicate values from the array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_distinct(e: Column): Column =
+    Column.fn("array_distinct", e)
+
+  /**
+   * Returns an array of the elements in the intersection of the given two arrays,
+   * without duplicates.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_intersect(col1: Column, col2: Column): Column =
+    Column.fn("array_intersect", col1, col2)
+
+  /**
+   * Adds an item into a given array at a specified position
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_insert(arr: Column, pos: Column, value: Column): Column =
+    Column.fn("array_insert", arr, pos, value)
+
+  /**
+   * Returns an array of the elements in the union of the given two arrays, without duplicates.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_union(col1: Column, col2: Column): Column =
+    Column.fn("array_union", col1, col2)
+
+  /**
+   * Returns an array of the elements in the first array but not in the second array,
+   * without duplicates. The order of elements in the result is not determined
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_except(col1: Column, col2: Column): Column =
+    Column.fn("array_except", col1, col2)
+
+  private def createLambda(f: Column => Column): Column = Column { builder =>
+    builder.getLambdaFunctionBuilder
+      .setFunction(f(Column("x")).expr)
+      .addArguments(builder.getUnresolvedNamedLambdaVariableBuilder.addNameParts("x"))
+  }
+
+  private def createLambda(f: (Column, Column) => Column): Column =
+    Column { builder =>
+      builder.getLambdaFunctionBuilder
+        .setFunction(f(Column("x"), Column("y")).expr)
+        .addArguments(builder.getUnresolvedNamedLambdaVariableBuilder.addNameParts("x"))
+        .addArguments(builder.getUnresolvedNamedLambdaVariableBuilder.addNameParts("y"))
+    }
+
+  private def createLambda(f: (Column, Column, Column) => Column): Column =
+    Column { builder =>
+      builder.getLambdaFunctionBuilder
+        .setFunction(f(Column("x"), Column("y"), Column("z")).expr)
+        .addArguments(builder.getUnresolvedNamedLambdaVariableBuilder.addNameParts("x"))
+        .addArguments(builder.getUnresolvedNamedLambdaVariableBuilder.addNameParts("y"))
+        .addArguments(builder.getUnresolvedNamedLambdaVariableBuilder.addNameParts("z"))
+    }
+
+  /**
+   * Returns an array of elements after applying a transformation to each element
+   * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), x => x + 1))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f      col => transformed_col, the lambda function to transform the input column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def transform(column: Column, f: Column => Column): Column =
+    Column.fn("transform", column, createLambda(f))
+
+  /**
+   * Returns an array of elements after applying a transformation to each element
+   * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), (x, i) => x + i))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f      (col, index) => transformed_col, the lambda function to filter the input column
+   *               given the index. Indices start at 0.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def transform(column: Column, f: (Column, Column) => Column): Column =
+    Column.fn("transform", column, createLambda(f))
+
+  /**
+   * Returns whether a predicate holds for one or more elements in the array.
+   * {{{
+   *   df.select(exists(col("i"), _ % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f      col => predicate, the Boolean predicate to check the input column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def exists(column: Column, f: Column => Column): Column =
+    Column.fn("exists", column, createLambda(f))
+
+  /**
+   * Returns whether a predicate holds for every element in the array.
+   * {{{
+   *   df.select(forall(col("i"), x => x % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f      col => predicate, the Boolean predicate to check the input column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def forall(column: Column, f: Column => Column): Column =
+    Column.fn("forall", column, createLambda(f))
+
+  /**
+   * Returns an array of elements for which a predicate holds in a given array.
+   * {{{
+   *   df.select(filter(col("s"), x => x % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f      col => predicate, the Boolean predicate to filter the input column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def filter(column: Column, f: Column => Column): Column =
+    Column.fn("filter", column, createLambda(f))
+
+  /**
+   * Returns an array of elements for which a predicate holds in a given array.
+   * {{{
+   *   df.select(filter(col("s"), (x, i) => i % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f      (col, index) => predicate, the Boolean predicate to filter the input column
+   *               given the index. Indices start at 0.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def filter(column: Column, f: (Column, Column) => Column): Column =
+    Column.fn("filter", column, createLambda(f))
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state. The final state is converted into the final result
+   * by applying a finish function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr         the input array column
+   * @param initialValue the initial value
+   * @param merge        (combined_value, input_value) => combined_value, the merge
+   *                     function to merge an input value to the combined_value
+   * @param finish       combined_value => final_value, the lambda function to
+   *                     convert the combined value of all inputs to final result
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def aggregate(
+      expr: Column,
+      initialValue: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column =
+    Column.fn("aggregate", expr, initialValue, createLambda(merge), createLambda(finish))
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
+   *
+   * @param expr         the input array column
+   * @param initialValue the initial value
+   * @param merge        (combined_value, input_value) => combined_value, the merge function
+   *                     to merge an input value to the combined_value
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, initialValue, merge, c => c)
+
+  /**
+   * Merge two given arrays, element-wise, into a single array using a function.
+   * If one array is shorter, nulls are appended at the end to match the length of the longer
+   * array, before applying the function.
+   * {{{
+   *   df.select(zip_with(df1("val1"), df1("val2"), (x, y) => x + y))
+   * }}}
+   *
+   * @param left  the left input array column
+   * @param right the right input array column
+   * @param f     (lCol, rCol) => col, the lambda function to merge
+   *              two input columns into one column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def zip_with(left: Column, right: Column, f: (Column, Column) => Column): Column =
+    Column.fn("zip_with", left, right, createLambda(f))
+
+  /**
+   * Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new keys for the pairs.
+   * {{{
+   *   df.select(transform_keys(col("i"), (k, v) => k + v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f    (key, value) => new_key, the lambda function to transform
+   *             the key of input map column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def transform_keys(expr: Column, f: (Column, Column) => Column): Column =
+    Column.fn("transform_keys", expr, createLambda(f))
+
+  /**
+   * Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new values for the pairs.
+   * {{{
+   *   df.select(transform_values(col("i"), (k, v) => k + v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f    (key, value) => new_value, the lambda function to transform the value of input map
+   *             column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def transform_values(expr: Column, f: (Column, Column) => Column): Column =
+    Column.fn("transform_values", expr, createLambda(f))
+
+  /**
+   * Returns a map whose key-value pairs satisfy a predicate.
+   * {{{
+   *   df.select(map_filter(col("m"), (k, v) => k * 10 === v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f    (key, value) => predicate, the Boolean predicate to filter the input map column
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def map_filter(expr: Column, f: (Column, Column) => Column): Column =
+    Column.fn("map_filter", expr, createLambda(f))
+
+  /**
+   * Merge two given maps, key-wise into a single map using a function.
+   * {{{
+   *   df.select(map_zip_with(df("m1"), df("m2"), (k, v1, v2) => k === v1 + v2))
+   * }}}
+   *
+   * @param left  the left input map column
+   * @param right the right input map column
+   * @param f     (key, value1, value2) => new_value, the lambda function to merge the map values
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def map_zip_with(
+      left: Column,
+      right: Column,
+      f: (Column, Column, Column) => Column): Column =
+    Column.fn("map_zip_with", left, right, createLambda(f))
+
+  /**
+   * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def explode(e: Column): Column =
+    Column.fn("explode", e)
+
+  /**
+   * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
+   * Unlike explode, if the array/map is null or empty then null is produced.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def explode_outer(e: Column): Column =
+    Column.fn("explode_outer", e)
+
+  /**
+   * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def posexplode(e: Column): Column =
+    Column.fn("posexplode", e)
+
+  /**
+   * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
+   * Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def posexplode_outer(e: Column): Column =
+    Column.fn("posexplode_outer", e)
+
+  /**
+   * Creates a new row for each element in the given array of structs.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline(e: Column): Column =
+    Column.fn("inline", e)
+
+  /**
+   * Creates a new row for each element in the given array of structs.
+   * Unlike inline, if the array is null or empty then null is produced for each nested column.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline_outer(e: Column): Column =
+    Column.fn("inline_outer", e)
+
+  /**
+   * Extracts json object from a json string based on json path specified, and returns json string
+   * of the extracted json object. It will return null if the input json string is invalid.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def get_json_object(e: Column, path: String): Column =
+    Column.fn("get_json_object", e, lit(path))
+
+  /**
+   * Creates a new row for a json column according to the given field names.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def json_tuple(json: Column, fields: String*): Column =
+    Column.fn("json_tuple", json +: fields.map(Column.apply): _*)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing JSON data.
+   * @param schema  the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. Accepts the same options as the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: StructType, options: Map[String, String]): Column =
+    Column.fn("from_json", e, lit(schema.json), createOptionsMap(options))
+
+  private def createOptionsMap(options: Map[String, String]): Column = {
+    val cols = ArrayBuffer.empty[Column]
+    options.foreach {
+      case (k, v) =>
+        cols.append(lit(k))
+        cols.append(lit(v))
+    }
+    Column.fn("map", cols: _*)
+  }
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing JSON data.
+   * @param schema  the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: DataType, options: Map[String, String]): Column =
+    Column.fn("from_json", e, lit(schema.json), createOptionsMap(options))
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing JSON data.
+   * @param schema  the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
+    Column.fn("from_json", e, lit(schema.json), createOptionsMap(options.asScala.toMap))
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing JSON data.
+   * @param schema  the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column =
+    Column.fn("from_json", e, lit(schema.json), createOptionsMap(options.asScala.toMap))
+
+  /**
+   * Parses a column containing a JSON string into a `StructType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e      a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def from_json(e: Column, schema: StructType): Column =
+    from_json(e, schema, Map.empty[String, String])
+
+  /**
+   * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
+   * `StructType` or `ArrayType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e      a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def from_json(e: Column, schema: DataType): Column =
+    from_json(e, schema, Map.empty[String, String])
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing JSON data.
+   * @param schema  the schema as a DDL-formatted string.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    from_json(e, schema, options.asScala.toMap)
+  }
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing JSON data.
+   * @param schema  the schema as a DDL-formatted string.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: String, options: Map[String, String]): Column =
+    Column.fn("from_json", e, lit(schema), createOptionsMap(options))
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e      a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def from_json(e: Column, schema: Column): Column = {
+    from_json(e, schema, Map.empty[String, String].asJava)
+  }
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing JSON data.
+   * @param schema  the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
+    Column.fn("from_json", e, lit(schema), createOptionsMap(options.asScala.toMap))
+
+  /**
+   * Parses a JSON string and infers its schema in DDL format.
+   *
+   * @param json a JSON string.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def schema_of_json(json: String): Column = schema_of_json(lit(json))
+
+  /**
+   * Parses a JSON string and infers its schema in DDL format.
+   *
+   * @param json a foldable string column containing a JSON string.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def schema_of_json(json: Column): Column =
+    Column.fn("schema_of_json", json)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Parses a JSON string and infers its schema in DDL format using options.
+   *
+   * @param json    a foldable string column containing JSON data.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @return a column with string literal containing schema in DDL format.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_json(json: Column, options: java.util.Map[String, String]): Column =
+    Column.fn("schema_of_json", json, createOptionsMap(options.asScala.toMap))
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
+   * a `MapType` into a JSON string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e       a column containing a struct, an array or a map.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   *                Additionally the function supports the `pretty` option which enables
+   *                pretty JSON generation.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def to_json(e: Column, options: Map[String, String]): Column =
+    Column.fn("to_json", e, createOptionsMap(options))
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Converts a column containing a `StructType`, `ArrayType` or
+   * a `MapType` into a JSON string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e       a column containing a struct, an array or a map.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   *                Additionally the function supports the `pretty` option which enables
+   *                pretty JSON generation.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def to_json(e: Column, options: java.util.Map[String, String]): Column =
+    to_json(e, options.asScala.toMap)
+
+  /**
+   * Converts a column containing a `StructType`, `ArrayType` or
+   * a `MapType` into a JSON string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct, an array or a map.
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column): Column =
+    to_json(e, Map.empty[String, String])
+
+  /**
+   * Returns length of array or map.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def size(e: Column): Column =
+    Column.fn("size", e)
+
+  /**
+   * Sorts the input array for the given column in ascending order,
+   * according to the natural ordering of the array elements.
+   * Null elements will be placed at the beginning of the returned array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def sort_array(e: Column): Column = sort_array(e, asc = true)
+
+  /**
+   * Sorts the input array for the given column in ascending or descending order,
+   * according to the natural ordering of the array elements. NaN is greater than any non-NaN
+   * elements for double/float type. Null elements will be placed at the beginning of the returned
+   * array in ascending order or
+   * at the end of the returned array in descending order.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def sort_array(e: Column, asc: Boolean): Column =
+    Column.fn("sort_array", e, lit(asc))
+
+  /**
+   * Returns the minimum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_min(e: Column): Column =
+    Column.fn("array_min", e)
+
+  /**
+   * Returns the maximum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_max(e: Column): Column =
+    Column.fn("array_max", e)
+
+  /**
+   * Returns a random permutation of the given array.
+   *
+   * @note The function is non-deterministic.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def shuffle(e: Column): Column =
+    Column.fn("shuffle", e)
+
+  /**
+   * Returns a reversed string or an array with reverse order of elements.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def reverse(e: Column): Column =
+    Column.fn("reverse", e)
+
+  /**
+   * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
+   * two levels, only one level of nesting is removed.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def flatten(e: Column): Column =
+    Column.fn("flatten", e)
+
+  /**
+   * Generate a sequence of integers from start to stop, incrementing by step.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def sequence(start: Column, stop: Column, step: Column): Column =
+    Column.fn("sequence", start, stop, step)
+
+  /**
+   * Generate a sequence of integers from start to stop,
+   * incrementing by 1 if start is less than or equal to stop, otherwise -1.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def sequence(start: Column, stop: Column): Column =
+    Column.fn("sequence", start, stop)
+
+  /**
+   * Creates an array containing the left argument repeated the number of times given by the
+   * right argument.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_repeat(left: Column, right: Column): Column =
+    Column.fn("array_repeat", left, right)
+
+  /**
+   * Creates an array containing the left argument repeated the number of times given by the
+   * right argument.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
+
+  /**
+   * Returns true if the map contains the key.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def map_contains_key(column: Column, key: Any): Column =
+    Column.fn("map_contains_key", column, lit(key))
+
+  /**
+   * Returns an unordered array containing the keys of the map.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def map_keys(e: Column): Column =
+    Column.fn("map_keys", e)
+
+  /**
+   * Returns an unordered array containing the values of the map.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def map_values(e: Column): Column =
+    Column.fn("map_values", e)
+
+  /**
+   * Returns an unordered array of all entries in the given map.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def map_entries(e: Column): Column =
+    Column.fn("map_entries", e)
+
+  /**
+   * Returns a map created from the given array of entries.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def map_from_entries(e: Column): Column =
+    Column.fn("map_from_entries", e)
+
+  /**
+   * Returns a merged array of structs in which the N-th struct contains all N-th values of input
+   * arrays.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def arrays_zip(e: Column*): Column =
+    Column.fn("arrays_zip", e: _*)
+
+  /**
+   * Returns the union of all the given maps.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def map_concat(cols: Column*): Column =
+    Column.fn("map_concat", cols: _*)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Parses a column containing a CSV string into a `StructType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing CSV data.
+   * @param schema  the schema to use when parsing the CSV string
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column =
+    Column.fn("from_csv", e, lit(schema.json), createOptionsMap(options))
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a CSV string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing CSV data.
+   * @param schema  the schema to use when parsing the CSV string
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
+    Column.fn("from_csv", e, schema, createOptionsMap(options.asScala.toMap))
+
+  /**
+   * Parses a CSV string and infers its schema in DDL format.
+   *
+   * @param csv a CSV string.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def schema_of_csv(csv: String): Column = schema_of_csv(lit(csv))
+
+  /**
+   * Parses a CSV string and infers its schema in DDL format.
+   *
+   * @param csv a foldable string column containing a CSV string.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def schema_of_csv(csv: Column): Column =
+    Column.fn("schema_of_csv", csv)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Parses a CSV string and infers its schema in DDL format using options.
+   *
+   * @param csv     a foldable string column containing a CSV string.
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @return a column with string literal containing schema in DDL format.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column =
+    Column.fn("schema_of_csv", csv, createOptionsMap(options.asScala.toMap))
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Converts a column containing a `StructType` into a CSV string with
+   * the specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e       a column containing a struct.
+   * @param options options to control how the struct column is converted into a CSV string.
+   *                It accepts the same options and the CSV data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def to_csv(e: Column, options: java.util.Map[String, String]): Column =
+    Column.fn("to_csv", e, createOptionsMap(options.asScala.toMap))
+
+  /**
+   * Converts a column containing a `StructType` into a CSV string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
+
+  /**
+   * A transform for timestamps and dates to partition data into years.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def years(e: Column): Column =
+    Column.fn("years", e)
+
+  /**
+   * A transform for timestamps and dates to partition data into months.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def months(e: Column): Column =
+    Column.fn("months", e)
+
+  /**
+   * A transform for timestamps and dates to partition data into days.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def days(e: Column): Column =
+    Column.fn("days", e)
+
+  /**
+   * A transform for timestamps to partition data into hours.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def hours(e: Column): Column =
+    Column.fn("hours", e)
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def bucket(numBuckets: Column, e: Column): Column =
+    Column.fn("bucket", numBuckets, e)
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.4.0
+   */
+  def bucket(numBuckets: Int, e: Column): Column =
+    Column.fn("bucket", lit(numBuckets), e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions
