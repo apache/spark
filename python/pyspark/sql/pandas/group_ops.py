@@ -433,7 +433,8 @@ class PandasCogroupedOps:
         >>> def asof_join_multiple(_, *dfs):
         ...     return functools.reduce(lambda df1, df2: pd.merge(df1, df2, on=["id", "k"]), dfs)
         >>> df1.groupby("id").cogroup(df2.groupby("id"), df3.groupby("id")).applyInPandas(
-        ...     asof_join_multiple, "time int, id int, v1 double, v2 string, v3 string").show() # doctest: +SKIP
+        ...     asof_join_multiple,
+        ...     "time int, id int, v1 double, v2 string, v3 string").show() # doctest: +SKIP
         +--------+---+---+---+---+
         |    time| id| v1| v2| v3|
         +--------+---+---+---+---+
