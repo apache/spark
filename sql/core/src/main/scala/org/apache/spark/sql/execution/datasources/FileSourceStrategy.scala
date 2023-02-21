@@ -234,7 +234,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // For constant metadata columns, we create these attributes as non-nullable
       //  when passing to readers, since the values are always available.
       // For generated metadata columns, they are set as nullable when passed to readers,
-      //  as their values are generated on the fly when reading and could be null.
+      //  as the values will be null when trying to read the missing column from the file. They are then replaced by the actual values later in the process.
       //  After reading, values will be replaced.
       // So all metadata columns will be non-null in the returned output.
       // We then change the nullability to non-nullable in the metadata projection node below.
