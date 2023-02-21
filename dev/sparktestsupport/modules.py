@@ -516,6 +516,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions",
         # unittests
+        "pyspark.sql.tests.connect.test_client",
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
@@ -529,6 +530,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_types",
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
+        "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_pandas_udf",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -622,8 +625,10 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_base",
         "pyspark.ml.tests.test_evaluation",
         "pyspark.ml.tests.test_feature",
+        "pyspark.ml.tests.test_functions",
         "pyspark.ml.tests.test_image",
         "pyspark.ml.tests.test_linalg",
+        "pyspark.ml.tests.test_model_cache",
         "pyspark.ml.tests.test_param",
         "pyspark.ml.tests.test_persistence",
         "pyspark.ml.tests.test_pipeline",
@@ -633,6 +638,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
         "pyspark.ml.torch.tests.test_distributor",
+        "pyspark.ml.torch.tests.test_log_communication",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -743,9 +749,12 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.indexes.test_base",
         "pyspark.pandas.tests.indexes.test_datetime",
         "pyspark.pandas.tests.test_dataframe",
+        "pyspark.pandas.tests.test_dataframe_slow",
         "pyspark.pandas.tests.test_groupby",
+        "pyspark.pandas.tests.test_groupby_slow",
         "pyspark.pandas.tests.test_indexing",
         "pyspark.pandas.tests.test_ops_on_diff_frames",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_slow",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
         "pyspark.pandas.tests.test_series",
         "pyspark.pandas.tests.test_stats",
@@ -821,7 +830,7 @@ kubernetes = Module(
     name="kubernetes",
     dependencies=[],
     source_file_regexes=["resource-managers/kubernetes"],
-    build_profile_flags=["-Pkubernetes"],
+    build_profile_flags=["-Pkubernetes", "-Pvolcano"],
     sbt_test_goals=["kubernetes/test"],
 )
 

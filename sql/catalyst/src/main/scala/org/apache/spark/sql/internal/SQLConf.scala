@@ -240,6 +240,15 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
+    buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
+      .internal()
+      .doc("The minimum number of operands in a commutative expression tree to" +
+        " invoke the MultiCommutativeOp memory optimization during canonicalization.")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(3)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -303,6 +312,14 @@ object SQLConf {
     .version("3.1.0")
     .stringConf
     .createOptional
+
+  val PLAN_CHANGE_VALIDATION = buildConf("spark.sql.planChangeValidation")
+    .internal()
+    .doc("If true, Spark will validate all the plan changes made by analyzer/optimizer and other " +
+      "catalyst rules, to make sure every rule returns a valid plan")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
@@ -434,6 +451,16 @@ object SQLConf {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
+    buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
+      .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
+        " It can preserve the output partitioning and ordering." +
+        " Negative value means disable this optimization.")
+      .internal()
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(100)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
@@ -796,7 +823,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+  val ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
     buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
       .doc(s"A partition will be merged during splitting if its size is small than this factor " +
         s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
@@ -1084,7 +1111,7 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-   val PARQUET_FIELD_ID_WRITE_ENABLED =
+  val PARQUET_FIELD_ID_WRITE_ENABLED =
     buildConf("spark.sql.parquet.fieldId.write.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, " +
         "Parquet writers will populate the field Id " +
@@ -1111,13 +1138,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PARQUET_TIMESTAMP_NTZ_ENABLED =
-    buildConf("spark.sql.parquet.timestampNTZ.enabled")
-      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
-        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
-        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
-        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
-        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
+  val PARQUET_INFER_TIMESTAMP_NTZ_ENABLED =
+    buildConf("spark.sql.parquet.inferTimestampNTZ.enabled")
+      .doc("When enabled, Parquet timestamp columns with annotation isAdjustedToUTC = false " +
+        "are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet " +
+        "timestamp columns are inferred as TIMESTAMP_LTZ types. Note that Spark writes the " +
+        "output schema into Parquet's footer metadata on file writing and leverages it on file " +
+        "reading. Thus this configuration only affects the schema inference on Parquet files " +
+        "which are not written by Spark.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -1420,6 +1448,19 @@ object SQLConf {
         "values, Spark will calculate a superset of partition values and pushdown that info to " +
         "scan nodes, which will use empty partitions for the missing partition values on either " +
         "side. This could help to eliminate unnecessary shuffles")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
+      .doc("During a storage-partitioned join, whether to allow input partitions to be " +
+        "partially clustered, when both sides of the join are of KeyGroupedPartitioning. At " +
+        "planning time, Spark will pick the side with less data size based on table " +
+        "statistics, group and replicate them to match the other side. This is an optimization " +
+        "on skew join and can help to reduce data skewness when certain partitions are assigned " +
+        s"large amount of data. This config requires both ${V2_BUCKETING_ENABLED.key} and " +
+        s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be enabled")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -2757,7 +2798,7 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
-  val PYSPARK_SIMPLIFIEID_TRACEBACK =
+  val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
       .doc(
         "When true, the traceback from Python UDFs is simplified. It hides " +
@@ -3167,6 +3208,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_SET_OPS_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateSetOps.enabled")
+      .internal()
+      .doc("Decorrelate subqueries with correlation under set operators.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZE_ONE_ROW_RELATION_SUBQUERY =
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery")
       .internal()
@@ -3309,6 +3358,16 @@ object SQLConf {
         "text representation, e.g., string 'null', when the partition column is string type. " +
         "Otherwise, it is always parsed as a null literal in the partition spec.")
       .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL =
+    buildConf("spark.sql.legacy.keepPartitionSpecAsStringLiteral")
+      .internal()
+      .doc("If it is set to true, `PARTITION(col=05)` is parsed as a string literal of its " +
+        "text representation, e.g., string '05', when the partition column is string type. " +
+        "Otherwise, it is always parsed as a numeric literal in the partition spec.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -3469,8 +3528,9 @@ object SQLConf {
 
   val TIMESTAMP_TYPE =
     buildConf("spark.sql.timestampType")
-      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause " +
-        s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
+      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause, " +
+        "type literal and the schema inference of data sources. " +
+        s"Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
         "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
         s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
         "Before the 3.4.0 release, Spark only supports the TIMESTAMP WITH " +
@@ -3710,7 +3770,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-   val LEGACY_INTEGER_GROUPING_ID =
+  val LEGACY_INTEGER_GROUPING_ID =
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
@@ -3718,7 +3778,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-   val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
+  val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
     buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
       .internal()
       .doc("When true, grouping_id() returns values based on grouping set columns plus " +
@@ -3726,6 +3786,13 @@ object SQLConf {
       .version("3.2.3")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_PARQUET_NANOS_AS_LONG = buildConf("spark.sql.legacy.parquet.nanosAsLong")
+    .internal()
+    .doc("When true, the Parquet's nanos precision timestamps are converted to SQL long values.")
+    .version("3.2.4")
+    .booleanConf
+    .createWithDefault(false)
 
   val PARQUET_INT96_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.parquet.int96RebaseModeInWrite")
@@ -4583,6 +4650,9 @@ class SQLConf extends Serializable with Logging {
   def v2BucketingPushPartValuesEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
 
+  def v2BucketingPartiallyClusteredDistributionEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -4712,7 +4782,7 @@ class SQLConf extends Serializable with Logging {
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
-  def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIEID_TRACEBACK)
+  def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
@@ -4894,7 +4964,9 @@ class SQLConf extends Serializable with Logging {
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
-  def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
+  def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
+
+  def parquetInferTimestampNTZEnabled: Boolean = getConf(PARQUET_INFER_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

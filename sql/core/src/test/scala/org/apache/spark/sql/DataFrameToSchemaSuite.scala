@@ -262,7 +262,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
-      errorClass = "NULLABLE_ARRAY_OR_MAP_ELEMENT",
+      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.ARRAY_ELEMENT",
       parameters = Map("columnPath" -> "`arr`"))
   }
 
@@ -319,5 +319,17 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
       .to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Map("a" -> Row("b", "a"))))
+  }
+
+  test("map value: incompatible map nullability") {
+    val m = MapType(StringType, StringType, valueContainsNull = false)
+    val schema = new StructType().add("map", m, nullable = false)
+    val data = Seq("a" -> null).toDF("i", "j").select(map($"i", $"j").as("map"))
+    assert(data.schema.fields(0).dataType.asInstanceOf[MapType].valueContainsNull)
+    val e = intercept[SparkThrowable](data.to(schema))
+    checkError(
+      exception = e,
+      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.MAP_VALUE",
+      parameters = Map("columnPath" -> "`map`"))
   }
 }

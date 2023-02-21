@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -173,4 +174,29 @@ private case object OracleDialect extends JdbcDialect {
     val nullable = if (isNullable) "NULL" else "NOT NULL"
     s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
   }
+
+  override def getLimitClause(limit: Integer): String = {
+    // Oracle doesn't support LIMIT clause.
+    // We can use rownum <= n to limit the number of rows in the result set.
+    if (limit > 0) s"WHERE rownum <= $limit" else ""
+  }
+
+  class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
+    override def build(): String = {
+      val selectStmt = s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s" $whereClause $groupByClause $orderByClause"
+      if (limit > 0) {
+        val limitClause = dialect.getLimitClause(limit)
+        options.prepareQuery + s"SELECT tab.* FROM ($selectStmt) tab $limitClause"
+      } else {
+        options.prepareQuery + selectStmt
+      }
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new OracleSQLQueryBuilder(this, options)
 }

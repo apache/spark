@@ -445,3 +445,51 @@ SELECT bround(-9223372036854775808L, -1)
 struct<bround(-9223372036854775808, -1):bigint>
 -- !query output
 9223372036854775806
+
+
+-- !query
+SELECT conv('100', 2, 10)
+-- !query schema
+struct<conv(100, 2, 10):string>
+-- !query output
+4
+
+
+-- !query
+SELECT conv(-10, 16, -10)
+-- !query schema
+struct<conv(-10, 16, -10):string>
+-- !query output
+-16
+
+
+-- !query
+SELECT conv('9223372036854775808', 10, 16)
+-- !query schema
+struct<conv(9223372036854775808, 10, 16):string>
+-- !query output
+8000000000000000
+
+
+-- !query
+SELECT conv('92233720368547758070', 10, 16)
+-- !query schema
+struct<conv(92233720368547758070, 10, 16):string>
+-- !query output
+FFFFFFFFFFFFFFFF
+
+
+-- !query
+SELECT conv('9223372036854775807', 36, 10)
+-- !query schema
+struct<conv(9223372036854775807, 36, 10):string>
+-- !query output
+18446744073709551615
+
+
+-- !query
+SELECT conv('-9223372036854775807', 36, 10)
+-- !query schema
+struct<conv(-9223372036854775807, 36, 10):string>
+-- !query output
+18446744073709551615

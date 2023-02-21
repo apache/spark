@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import java.io._
+import java.lang.invoke.SerializedLambda
 import java.nio.ByteBuffer
 import java.util.Locale
 import javax.annotation.Nullable
@@ -45,7 +46,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, SerializableConfiguration, SerializableJobConf, Utils}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
@@ -487,7 +488,9 @@ private[serializer] object KryoSerializer {
     classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf],
-    classOf[TaskCommitMessage]
+    classOf[TaskCommitMessage],
+    classOf[SerializedLambda],
+    classOf[BitSet]
   )
 
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
@@ -507,6 +510,10 @@ private[serializer] object KryoSerializer {
   // SQL / ML / MLlib classes once and then re-use that filtered list in newInstance() calls.
   private lazy val loadableSparkClasses: Seq[Class[_]] = {
     Seq(
+      "org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation",
+      "[Lorg.apache.spark.util.HadoopFSUtils$SerializableBlockLocation;",
+      "org.apache.spark.util.HadoopFSUtils$SerializableFileStatus",
+
       "org.apache.spark.sql.catalyst.expressions.BoundReference",
       "org.apache.spark.sql.catalyst.expressions.SortOrder",
       "[Lorg.apache.spark.sql.catalyst.expressions.SortOrder;",
@@ -523,6 +530,8 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.types.IntegerType",
       "org.apache.spark.sql.types.IntegerType$",
       "org.apache.spark.sql.types.LongType$",
+      "org.apache.spark.sql.types.DoubleType",
+      "org.apache.spark.sql.types.DoubleType$",
       "org.apache.spark.sql.types.Metadata",
       "org.apache.spark.sql.types.StringType$",
       "org.apache.spark.sql.types.StructField",
@@ -533,6 +542,10 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.types.DecimalType",
       "org.apache.spark.sql.types.Decimal$DecimalAsIfIntegral$",
       "org.apache.spark.sql.types.Decimal$DecimalIsFractional$",
+      "org.apache.spark.sql.execution.command.PartitionStatistics",
+      "org.apache.spark.sql.execution.datasources.BasicWriteTaskStats",
+      "org.apache.spark.sql.execution.datasources.ExecutedWriteSummary",
+      "org.apache.spark.sql.execution.datasources.WriteTaskResult",
       "org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTaskResult",
       "org.apache.spark.sql.execution.joins.EmptyHashedRelation$",
       "org.apache.spark.sql.execution.joins.LongHashedRelation",

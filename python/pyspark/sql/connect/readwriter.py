@@ -14,23 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
 
+check_dependencies(__name__, __file__)
 
 from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Any
 from typing import TYPE_CHECKING
 
-from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation
+from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 from pyspark.sql.readwriter import (
     DataFrameWriter as PySparkDataFrameWriter,
     DataFrameReader as PySparkDataFrameReader,
+    DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
@@ -418,7 +421,7 @@ class DataFrameWriter(OptionUtils):
             raise TypeError("all names should be `str`")
 
         self._write.num_buckets = numBuckets
-        self._write.bucket_cols = cast(List[str], cols)
+        self._write.bucket_cols = cast(List[str], [col, *cols])
         return self
 
     bucketBy.__doc__ = PySparkDataFrameWriter.bucketBy.__doc__
@@ -443,7 +446,7 @@ class DataFrameWriter(OptionUtils):
         if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
-        self._write.sort_cols = cast(List[str], cols)
+        self._write.sort_cols = cast(List[str], [col, *cols])
         return self
 
     sortBy.__doc__ = PySparkDataFrameWriter.sortBy.__doc__
@@ -469,7 +472,9 @@ class DataFrameWriter(OptionUtils):
     def insertInto(self, tableName: str, overwrite: Optional[bool] = None) -> None:
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
-        self.saveAsTable(tableName)
+        self._write.table_name = tableName
+        self._write.table_save_method = "insert_into"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
 
@@ -487,6 +492,7 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.table_name = name
+        self._write.table_save_method = "save_as_table"
         self._spark.client.execute_command(self._write.command(self._spark.client))
 
     saveAsTable.__doc__ = PySparkDataFrameWriter.saveAsTable.__doc__
@@ -601,53 +607,112 @@ class DataFrameWriter(OptionUtils):
         raise NotImplementedError("jdbc() not supported for DataFrameWriter")
 
 
+class DataFrameWriterV2(OptionUtils):
+    def __init__(self, plan: "LogicalPlan", session: "SparkSession", table: str):
+        self._df: "LogicalPlan" = plan
+        self._spark: "SparkSession" = session
+        self._table_name: str = table
+        self._write: "WriteOperationV2" = WriteOperationV2(self._df, self._table_name)
+
+    def using(self, provider: str) -> "DataFrameWriterV2":
+        self._write.provider = provider
+        return self
+
+    using.__doc__ = PySparkDataFrameWriterV2.using.__doc__
+
+    def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriterV2":
+        self._write.options[key] = to_str(value)
+        return self
+
+    option.__doc__ = PySparkDataFrameWriterV2.option.__doc__
+
+    def options(self, **options: "OptionalPrimitiveType") -> "DataFrameWriterV2":
+        for k in options:
+            self._write.options[k] = to_str(options[k])
+        return self
+
+    options.__doc__ = PySparkDataFrameWriterV2.options.__doc__
+
+    def tableProperty(self, property: str, value: str) -> "DataFrameWriterV2":
+        self._write.table_properties[property] = value
+        return self
+
+    tableProperty.__doc__ = PySparkDataFrameWriterV2.tableProperty.__doc__
+
+    def partitionedBy(self, col: "ColumnOrName", *cols: "ColumnOrName") -> "DataFrameWriterV2":
+        self._write.partitioning_columns = [col]
+        self._write.partitioning_columns.extend(cols)
+        return self
+
+    partitionedBy.__doc__ = PySparkDataFrameWriterV2.partitionedBy.__doc__
+
+    def create(self) -> None:
+        self._write.mode = "create"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    create.__doc__ = PySparkDataFrameWriterV2.create.__doc__
+
+    def replace(self) -> None:
+        self._write.mode = "replace"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    replace.__doc__ = PySparkDataFrameWriterV2.replace.__doc__
+
+    def createOrReplace(self) -> None:
+        self._write.mode = "create_or_replace"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    createOrReplace.__doc__ = PySparkDataFrameWriterV2.createOrReplace.__doc__
+
+    def append(self) -> None:
+        self._write.mode = "append"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    append.__doc__ = PySparkDataFrameWriterV2.append.__doc__
+
+    def overwrite(self, condition: "ColumnOrName") -> None:
+        self._write.mode = "overwrite"
+        self._write.overwrite_condition = condition
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    overwrite.__doc__ = PySparkDataFrameWriterV2.overwrite.__doc__
+
+    def overwritePartitions(self) -> None:
+        self._write.mode = "overwrite_partitions"
+        self._spark.client.execute_command(self._write.command(self._spark.client))
+
+    overwritePartitions.__doc__ = PySparkDataFrameWriterV2.overwritePartitions.__doc__
+
+
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.readwriter
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.readwriter.__dict__.copy()
 
-    if should_test_connect:
-        import pyspark.sql.connect.readwriter
+    # TODO(SPARK-42458): createDataFrame should support DDL string as schema
+    del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
 
-        globs = pyspark.sql.connect.readwriter.__dict__.copy()
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.readwriter tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
 
-        # TODO(SPARK-41817): Support reading with schema
-        del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.readwriter,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        # TODO(SPARK-41818): Support saveAsTable
-        del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
+    globs["spark"].stop()
 
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.readwriter tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
-
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.readwriter,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.readwriter doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

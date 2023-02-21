@@ -1,0 +1,14 @@
+â
+Z‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>OM
+when
+<
+a
+0
+
+jlow
+<
+a
+0
+
+jmedium
+jhigh

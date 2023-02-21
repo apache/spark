@@ -79,6 +79,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"BINARY\"",
@@ -110,6 +111,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"TIMESTAMP\"",
@@ -133,6 +135,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"DATE\"",
@@ -220,6 +223,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"BINARY\"",
@@ -251,6 +255,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"TIMESTAMP\"",
@@ -274,6 +279,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"DATE\"",
@@ -361,6 +367,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BINARY\"",
     "right" : "\"BOOLEAN\"",
@@ -392,6 +399,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
     "right" : "\"BOOLEAN\"",
@@ -415,6 +423,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"DATE\"",
     "right" : "\"BOOLEAN\"",
@@ -502,6 +511,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BINARY\"",
     "right" : "\"BOOLEAN\"",
@@ -533,6 +543,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
     "right" : "\"BOOLEAN\"",
@@ -556,6 +567,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"DATE\"",
     "right" : "\"BOOLEAN\"",
@@ -643,6 +655,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"BINARY\"",
@@ -674,6 +687,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"TIMESTAMP\"",
@@ -697,6 +711,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"DATE\"",
@@ -784,6 +799,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"BINARY\"",
@@ -815,6 +831,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"TIMESTAMP\"",
@@ -838,6 +855,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BOOLEAN\"",
     "right" : "\"DATE\"",
@@ -925,6 +943,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BINARY\"",
     "right" : "\"BOOLEAN\"",
@@ -956,6 +975,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
     "right" : "\"BOOLEAN\"",
@@ -979,6 +999,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"DATE\"",
     "right" : "\"BOOLEAN\"",
@@ -1066,6 +1087,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"BINARY\"",
     "right" : "\"BOOLEAN\"",
@@ -1097,6 +1119,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
     "right" : "\"BOOLEAN\"",
@@ -1120,6 +1143,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"DATE\"",
     "right" : "\"BOOLEAN\"",

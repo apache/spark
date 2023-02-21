@@ -27,6 +27,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -458,7 +459,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df3.selectExpr("""from_json(value, 'time InvalidType')""")
       },
       errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
+      sqlState = "42601",
       parameters = Map(
         "error" -> "'InvalidType'",
         "hint" -> ": extra input 'InvalidType'"
@@ -748,9 +749,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
       val exception1 = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
-      assert(exception1.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      }.getCause
+      checkError(
+        exception = exception1.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map(
+          "badRecord" -> "[null,null,{\"a\" 1, \"b\": 11}]",
+          "failFastMode" -> "FAILFAST")
+      )
 
       val exception2 = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
@@ -777,15 +783,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
       val exception = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }
+      }.getCause
 
-      assert(exception.getMessage.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      checkError(
+        exception = exception.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map(
+          "badRecord" -> "[null,11,{\"a\": \"1\", \"b\": 11}]",
+          "failFastMode" -> "FAILFAST")
+      )
       checkError(
         exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
         errorClass = "CANNOT_PARSE_JSON_FIELD",
         parameters = Map(
-          "fieldName" -> "a",
+          "fieldName" -> toSQLValue("a", StringType),
           "fieldValue" -> "1",
           "jsonType" -> "VALUE_STRING",
           "dataType" -> "\"INT\"")
@@ -1106,15 +1117,25 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
         val exception1 = intercept[SparkException] {
           df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
-        }.getMessage
-        assert(exception1.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        }.getCause
+        checkError(
+          exception = exception1.asInstanceOf[SparkException],
+          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          parameters = Map(
+            "badRecord" -> "[null,null]",
+            "failFastMode" -> "FAILFAST")
+        )
 
         val exception2 = intercept[SparkException] {
           df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
-        }.getMessage
-        assert(exception2.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        }.getCause
+        checkError(
+          exception = exception2.asInstanceOf[SparkException],
+          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          parameters = Map(
+            "badRecord" -> "[null,null]",
+            "failFastMode" -> "FAILFAST")
+        )
       }
     }
   }
@@ -1130,15 +1151,25 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
         val exception1 = intercept[SparkException] {
           df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
-        }.getMessage
-        assert(exception1.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        }.getCause
+        checkError(
+          exception = exception1.asInstanceOf[SparkException],
+          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          parameters = Map(
+            "badRecord" -> "[null]",
+            "failFastMode" -> "FAILFAST")
+        )
 
         val exception2 = intercept[SparkException] {
           df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
-        }.getMessage
-        assert(exception2.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        }.getCause
+        checkError(
+          exception = exception2.asInstanceOf[SparkException],
+          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          parameters = Map(
+            "badRecord" -> "[null]",
+            "failFastMode" -> "FAILFAST")
+        )
       }
     }
   }

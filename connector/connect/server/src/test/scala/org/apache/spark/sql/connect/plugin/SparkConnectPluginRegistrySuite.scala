@@ -25,8 +25,9 @@ import org.apache.spark.connect.proto.Relation
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.planner.{InvalidPlanInput, SparkConnectPlanner, SparkConnectPlanTest}
+import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DummyPlugin extends RelationPlugin {
@@ -89,6 +90,7 @@ class ExampleCommandPlugin extends CommandPlugin {
       return None
     }
     val cmd = command.unpack(classOf[proto.ExamplePluginCommand])
+    assert(planner.session != null)
     SparkContext.getActive.get.setLocalProperty("testingProperty", cmd.getCustomField)
     Some()
   }

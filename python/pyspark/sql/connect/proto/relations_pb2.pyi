@@ -79,8 +79,8 @@ class Relation(google.protobuf.message.Message):
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     REPARTITION_FIELD_NUMBER: builtins.int
-    RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
-    RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
+    TO_DF_FIELD_NUMBER: builtins.int
+    WITH_COLUMNS_RENAMED_FIELD_NUMBER: builtins.int
     SHOW_STRING_FIELD_NUMBER: builtins.int
     DROP_FIELD_NUMBER: builtins.int
     TAIL_FIELD_NUMBER: builtins.int
@@ -138,9 +138,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition(self) -> global___Repartition: ...
     @property
-    def rename_columns_by_same_length_names(self) -> global___RenameColumnsBySameLengthNames: ...
+    def to_df(self) -> global___ToDF: ...
     @property
-    def rename_columns_by_name_to_name_map(self) -> global___RenameColumnsByNameToNameMap: ...
+    def with_columns_renamed(self) -> global___WithColumnsRenamed: ...
     @property
     def show_string(self) -> global___ShowString: ...
     @property
@@ -211,8 +211,8 @@ class Relation(google.protobuf.message.Message):
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
         repartition: global___Repartition | None = ...,
-        rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
-        rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
+        to_df: global___ToDF | None = ...,
+        with_columns_renamed: global___WithColumnsRenamed | None = ...,
         show_string: global___ShowString | None = ...,
         drop: global___Drop | None = ...,
         tail: global___Tail | None = ...,
@@ -287,10 +287,6 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
-            "rename_columns_by_name_to_name_map",
-            b"rename_columns_by_name_to_name_map",
-            "rename_columns_by_same_length_names",
-            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "repartition_by_expression",
@@ -315,6 +311,8 @@ class Relation(google.protobuf.message.Message):
             b"summary",
             "tail",
             b"tail",
+            "to_df",
+            b"to_df",
             "to_schema",
             b"to_schema",
             "unknown",
@@ -323,6 +321,8 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
+            "with_columns_renamed",
+            b"with_columns_renamed",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -376,10 +376,6 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
-            "rename_columns_by_name_to_name_map",
-            b"rename_columns_by_name_to_name_map",
-            "rename_columns_by_same_length_names",
-            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "repartition_by_expression",
@@ -404,6 +400,8 @@ class Relation(google.protobuf.message.Message):
             b"summary",
             "tail",
             b"tail",
+            "to_df",
+            b"to_df",
             "to_schema",
             b"to_schema",
             "unknown",
@@ -412,6 +410,8 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
+            "with_columns_renamed",
+            b"with_columns_renamed",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -433,8 +433,8 @@ class Relation(google.protobuf.message.Message):
         "range",
         "subquery_alias",
         "repartition",
-        "rename_columns_by_same_length_names",
-        "rename_columns_by_name_to_name_map",
+        "to_df",
+        "with_columns_renamed",
         "show_string",
         "drop",
         "tail",
@@ -478,16 +478,29 @@ class RelationCommon(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     SOURCE_INFO_FIELD_NUMBER: builtins.int
+    PLAN_ID_FIELD_NUMBER: builtins.int
     source_info: builtins.str
     """(Required) Shared relation metadata."""
+    plan_id: builtins.int
+    """(Optional) A per-client globally unique id for a given connect plan."""
     def __init__(
         self,
         *,
         source_info: builtins.str = ...,
+        plan_id: builtins.int | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"]
+    ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["source_info", b"source_info"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_plan_id", b"_plan_id", "plan_id", b"plan_id", "source_info", b"source_info"
+        ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+    ) -> typing_extensions.Literal["plan_id"] | None: ...
 
 global___RelationCommon = RelationCommon
 
@@ -496,15 +509,39 @@ class SQL(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class ArgsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
     QUERY_FIELD_NUMBER: builtins.int
+    ARGS_FIELD_NUMBER: builtins.int
     query: builtins.str
     """(Required) The SQL query."""
+    @property
+    def args(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """(Optional) A map of parameter names to literal values."""
     def __init__(
         self,
         *,
         query: builtins.str = ...,
+        args: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["query", b"query"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["args", b"args", "query", b"query"]
+    ) -> None: ...
 
 global___SQL = SQL
 
@@ -2250,7 +2287,7 @@ class NAReplace(google.protobuf.message.Message):
 
 global___NAReplace = NAReplace
 
-class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
+class ToDF(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2283,9 +2320,9 @@ class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
         field_name: typing_extensions.Literal["column_names", b"column_names", "input", b"input"],
     ) -> None: ...
 
-global___RenameColumnsBySameLengthNames = RenameColumnsBySameLengthNames
+global___ToDF = ToDF
 
-class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
+class WithColumnsRenamed(google.protobuf.message.Message):
     """Rename columns on the input relation by a map with name to name mapping."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2339,7 +2376,7 @@ class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___RenameColumnsByNameToNameMap = RenameColumnsByNameToNameMap
+global___WithColumnsRenamed = WithColumnsRenamed
 
 class WithColumns(google.protobuf.message.Message):
     """Adding columns or replacing the existing columns that have the same names."""
@@ -2435,6 +2472,26 @@ class Unpivot(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class Values(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        VALUES_FIELD_NUMBER: builtins.int
+        @property
+        def values(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]: ...
+        def __init__(
+            self,
+            *,
+            values: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["values", b"values"]
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     IDS_FIELD_NUMBER: builtins.int
     VALUES_FIELD_NUMBER: builtins.int
@@ -2451,11 +2508,7 @@ class Unpivot(google.protobuf.message.Message):
     ]:
         """(Required) Id columns."""
     @property
-    def values(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression
-    ]:
+    def values(self) -> global___Unpivot.Values:
         """(Optional) Value columns to unpivot."""
     variable_column_name: builtins.str
     """(Required) Name of the variable column."""
@@ -2467,17 +2520,21 @@ class Unpivot(google.protobuf.message.Message):
         input: global___Relation | None = ...,
         ids: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
         | None = ...,
-        values: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        values: global___Unpivot.Values | None = ...,
         variable_column_name: builtins.str = ...,
         value_column_name: builtins.str = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_values", b"_values", "input", b"input", "values", b"values"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_values",
+            b"_values",
             "ids",
             b"ids",
             "input",
@@ -2490,6 +2547,9 @@ class Unpivot(google.protobuf.message.Message):
             b"variable_column_name",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_values", b"_values"]
+    ) -> typing_extensions.Literal["values"] | None: ...
 
 global___Unpivot = Unpivot
 

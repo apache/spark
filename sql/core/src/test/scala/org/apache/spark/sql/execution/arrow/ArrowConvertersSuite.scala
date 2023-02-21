@@ -28,7 +28,7 @@ import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
 import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -1269,9 +1269,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val e = intercept[SparkException] {
       calendarIntervalData.toDF().toArrowBatchRdd.collect()
     }
-
-    assert(e.getCause.isInstanceOf[UnsupportedOperationException])
-    assert(e.getCause.getMessage.contains("Unsupported data type: interval"))
+    checkError(
+      exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"INTERVAL\"")
+    )
   }
 
   test("test Arrow Validator") {

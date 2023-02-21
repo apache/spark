@@ -50,8 +50,8 @@ message Relation {
     Range range = 15;
     SubqueryAlias subquery_alias = 16;
     Repartition repartition = 17;
-    RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
-    RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
+    ToDF to_df = 18;
+    WithColumnsRenamed with_columns_renamed = 19;
     ShowString show_string = 20;
     Drop drop = 21;
     Tail tail = 22;
@@ -93,12 +93,18 @@ message Unknown {}
 message RelationCommon {
   // (Required) Shared relation metadata.
   string source_info = 1;
+
+  // (Optional) A per-client globally unique id for a given connect plan.
+  optional int64 plan_id = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
 message SQL {
   // (Required) The SQL query.
   string query = 1;
+
+  // (Optional) A map of parameter names to literal values.
+  map<string, string> args = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -660,7 +666,7 @@ message NAReplace {
 
 
 // Rename columns on the input relation by the same length of names.
-message RenameColumnsBySameLengthNames {
+message ToDF {
   // (Required) The input relation of RenameColumnsBySameLengthNames.
   Relation input = 1;
 
@@ -673,7 +679,7 @@ message RenameColumnsBySameLengthNames {
 
 
 // Rename columns on the input relation by a map with name to name mapping.
-message RenameColumnsByNameToNameMap {
+message WithColumnsRenamed {
   // (Required) The input relation.
   Relation input = 1;
 
@@ -729,13 +735,17 @@ message Unpivot {
   repeated Expression ids = 2;
 
   // (Optional) Value columns to unpivot.
-  repeated Expression values = 3;
+  optional Values values = 3;
 
   // (Required) Name of the variable column.
   string variable_column_name = 4;
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+
+  message Values {
+    repeated Expression values = 1;
+  }
 }
 
 message ToSchema {
@@ -748,7 +758,7 @@ message ToSchema {
   DataType schema = 2;
 }
 
-  message RepartitionByExpression {
+message RepartitionByExpression {
   // (Required) The input relation.
   Relation input = 1;
 

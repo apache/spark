@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 import datetime
 import decimal
@@ -269,20 +272,32 @@ class Column:
     def asc(self) -> "Column":
         return self.asc_nulls_first()
 
+    asc.__doc__ = PySparkColumn.asc.__doc__
+
     def asc_nulls_first(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=True, nullsFirst=True))
+
+    asc_nulls_first.__doc__ = PySparkColumn.asc_nulls_first.__doc__
 
     def asc_nulls_last(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=True, nullsFirst=False))
 
+    asc_nulls_last.__doc__ = PySparkColumn.asc_nulls_last.__doc__
+
     def desc(self) -> "Column":
         return self.desc_nulls_last()
+
+    desc.__doc__ = PySparkColumn.desc.__doc__
 
     def desc_nulls_first(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=True))
 
+    desc_nulls_first.__doc__ = PySparkColumn.desc_nulls_first.__doc__
+
     def desc_nulls_last(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
+
+    desc_nulls_last.__doc__ = PySparkColumn.desc_nulls_last.__doc__
 
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         if isinstance(dataType, (DataType, str)):
@@ -421,44 +436,28 @@ Column.__doc__ = PySparkColumn.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.column
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.column.__dict__.copy()
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.column tests").remote("local[4]").getOrCreate()
+    )
 
-    if should_test_connect:
-        import pyspark.sql.connect.column
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.column,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        globs = pyspark.sql.connect.column.__dict__.copy()
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.column tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    globs["spark"].stop()
 
-        # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
-        del pyspark.sql.connect.column.Column.withField.__doc__
-
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.column,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.column doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -974,7 +974,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("continuous mode allows unspecified distribution and empty ordering") {
-    catalog.createTable(ident, schema, Array.empty, emptyProps)
+    catalog.createTable(ident, schema, Array.empty[Transform], emptyProps)
 
     withTempDir { checkpointDir =>
       val inputData = ContinuousMemoryStream[(Long, String)]

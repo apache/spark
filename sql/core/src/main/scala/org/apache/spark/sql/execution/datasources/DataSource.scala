@@ -70,7 +70,8 @@ import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
  *
  * @param paths A list of file system paths that hold data. These will be globbed before if
  *              the "__globPaths__" option is true, and will be qualified. This option only works
- *              when reading from a [[FileFormat]].
+ *              when reading from a [[FileFormat]]. These paths are expected to be hadoop [[Path]]
+ *              strings.
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
  * @param partitionColumns A list of column names that the relation is partitioned by. This list is

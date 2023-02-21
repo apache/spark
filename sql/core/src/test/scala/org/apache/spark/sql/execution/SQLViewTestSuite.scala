@@ -584,8 +584,17 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         val e = intercept[AnalysisException] {
           sql(s"SELECT * FROM test_view")
         }
-        assert(e.getMessage.contains("re-create the view by running: CREATE OR REPLACE"))
-        val ddl = e.getMessage.split(": ").last
+        checkError(
+          exception = e,
+          errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+          parameters = Map(
+            "viewName" -> "`spark_catalog`.`default`.`test_view`",
+            "suggestion" ->
+              "CREATE OR REPLACE VIEW spark_catalog.default.test_view  AS SELECT * FROM t",
+            "actualCols" -> "[]", "colName" -> "col_j",
+            "expectedNum" -> "1")
+        )
+        val ddl = e.getMessageParameters.get("suggestion")
         sql(ddl)
         checkAnswer(sql("select * FROM test_view"), Row(1))
       }
@@ -600,22 +609,30 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         withTempView("v2") {
           sql("CREATE VIEW v1 AS SELECT * FROM t")
           sql("CREATE TEMPORARY VIEW v2 AS  SELECT * FROM t")
-          var e = intercept[AnalysisException] {
-            sql("ALTER VIEW v1 AS SELECT * FROM v2")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`v1` by " +
-            "referencing a temporary view v2"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("ALTER VIEW v1 AS SELECT * FROM v2")
+            },
+            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "view",
+              "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+              "tempObj" -> "view",
+              "tempObjName" -> "`v2`"))
           val tempFunctionName = "temp_udf"
           val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
           withUserDefinedFunction(tempFunctionName -> true) {
             sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
-            e = intercept[AnalysisException] {
-              sql(s"ALTER VIEW v1 AS SELECT $tempFunctionName(id) from t")
-            }.getMessage
-            assert(e.contains("Not allowed to create a permanent view " +
-              s"`$SESSION_CATALOG_NAME`.`default`.`v1` by " +
-              s"referencing a temporary function `$tempFunctionName`"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"ALTER VIEW v1 AS SELECT $tempFunctionName(id) from t")
+              },
+              errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+              parameters = Map(
+                "obj" -> "view",
+                "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+                "tempObj" -> "function",
+                "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
       }

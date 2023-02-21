@@ -39,11 +39,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_apply_schema_with_udt(self):
         super().test_apply_schema_with_udt()
 
-    # TODO(SPARK-42021): createDataFrame with array.array
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_array_types(self):
-        super().test_array_types()
-
     # TODO(SPARK-42020): createDataFrame with UDT
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_cast_to_string_with_udt(self):
@@ -58,11 +53,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_complex_nested_udt_in_df(self):
         super().test_complex_nested_udt_in_df()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_objects(self):
-        super().test_create_dataframe_from_objects()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_create_dataframe_schema_mismatch(self):
@@ -105,7 +95,7 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_infer_schema_not_enough_names(self):
         super().test_infer_schema_not_enough_names()
 
-    # TODO(SPARK-42021): createDataFrame with array.array
+    # TODO(SPARK-42020): createDataFrame with UDT
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_infer_schema_specification(self):
         super().test_infer_schema_specification()
@@ -113,16 +103,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_schema_to_local(self):
         super().test_infer_schema_to_local()
-
-    # TODO(SPARK-42023): createDataFrame should corse types of string false to bool false
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_infer_schema_upcast_boolean_to_string(self):
-        super().test_infer_schema_upcast_boolean_to_string()
-
-    # TODO(SPARK-42024): createDataFrame should corse types of string float to float
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_infer_schema_upcast_float_to_string(self):
-        super().test_infer_schema_upcast_float_to_string()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_schema_upcast_int_to_string(self):

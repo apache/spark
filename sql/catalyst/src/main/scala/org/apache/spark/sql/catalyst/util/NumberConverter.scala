@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
 object NumberConverter {
@@ -47,7 +49,12 @@ object NumberConverter {
    * @param fromPos is the first element that should be considered
    * @return the result should be treated as an unsigned 64-bit integer.
    */
-  private def encode(radix: Int, fromPos: Int, value: Array[Byte]): Long = {
+  private def encode(
+      radix: Int,
+      fromPos: Int,
+      value: Array[Byte],
+      ansiEnabled: Boolean,
+      context: SQLQueryContext): Long = {
     var v: Long = 0L
     // bound will always be positive since radix >= 2
     // Note that: -1 is equivalent to 11111111...1111 which is the largest unsigned long value
@@ -57,7 +64,11 @@ object NumberConverter {
       // if v < 0, which mean its bit presentation starts with 1, so v * radix will cause
       // overflow since radix is greater than 2
       if (v < 0) {
-        return -1
+        if (ansiEnabled) {
+          throw QueryExecutionErrors.overflowInConvError(context)
+        } else {
+          return -1
+        }
       }
       // check if v greater than bound
       // if v is greater than bound, v * radix + radix will cause overflow.
@@ -67,7 +78,11 @@ object NumberConverter {
         // will start with 0) and we can easily checking for overflow by checking
         // (-1 - value(i)) / radix < v or not
         if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v) {
-          return -1
+          if (ansiEnabled) {
+            throw QueryExecutionErrors.overflowInConvError(context)
+          } else {
+            return -1
+          }
         }
       }
       v = v * radix + value(i)
@@ -114,7 +129,12 @@ object NumberConverter {
    * unsigned, otherwise it is signed.
    * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
    */
-  def convert(n: Array[Byte], fromBase: Int, toBase: Int ): UTF8String = {
+  def convert(
+      n: Array[Byte],
+      fromBase: Int,
+      toBase: Int,
+      ansiEnabled: Boolean,
+      context: SQLQueryContext): UTF8String = {
     if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
         || Math.abs(toBase) < Character.MIN_RADIX
         || Math.abs(toBase) > Character.MAX_RADIX) {
@@ -135,7 +155,7 @@ object NumberConverter {
     char2byte(fromBase, temp.length - n.length + first, temp)
 
     // Do the conversion by going through a 64 bit integer
-    v = encode(fromBase, temp.length - n.length + first, temp)
+    v = encode(fromBase, temp.length - n.length + first, temp, ansiEnabled, context)
 
     if (negative && toBase > 0) {
       if (v < 0) {

@@ -735,7 +735,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
@@ -761,7 +761,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
@@ -807,7 +807,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"DOUBLE\"",
@@ -854,6 +854,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FAILED_FUNCTION_CALL",
+  "sqlState" : "38000",
   "messageParameters" : {
     "funcName" : "`range`"
   },
@@ -895,7 +896,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",

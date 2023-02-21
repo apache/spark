@@ -560,7 +560,7 @@ class CliSuite extends SparkFunSuite {
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("JsonParseException"))(
-      ("", "SparkException: Malformed records are detected in record parsing"),
+      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING]"),
       ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
@@ -568,7 +568,7 @@ class CliSuite extends SparkFunSuite {
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("SparkException"))(
-      ("", "SparkException: Malformed records are detected in record parsing"))
+      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -641,7 +641,7 @@ class CliSuite extends SparkFunSuite {
 
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
-      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'(line 1, pos 7)")
+      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'.(line 1, pos 7)")
   }
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {

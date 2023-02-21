@@ -304,9 +304,12 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
       val exception1 = intercept[SparkException] {
         df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
-      assert(exception1.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      }.getCause
+      checkError(
+        exception = exception1.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
+      )
 
       val exception2 = intercept[SparkException] {
         df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED")))

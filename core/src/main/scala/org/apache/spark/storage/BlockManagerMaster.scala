@@ -132,7 +132,7 @@ class BlockManagerMaster(
    * those blocks that are reported to block manager master.
    */
   def contains(blockId: BlockId): Boolean = {
-    !getLocations(blockId).isEmpty
+    getLocations(blockId).nonEmpty
   }
 
   /** Get ids of other nodes in the cluster from the driver */
@@ -246,7 +246,6 @@ class BlockManagerMaster(
     val response = driverEndpoint.
       askSync[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
     val (blockManagerIds, futures) = response.unzip
-    implicit val sameThread = ThreadUtils.sameThread
     val cbf =
       implicitly[
         CanBuildFrom[Iterable[Future[Option[BlockStatus]]],

@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -76,7 +77,10 @@ abstract class PartitioningAwareFileIndex(
     // be applied to files.
     val fileMetadataFilterOpt = dataFilters.filter { f =>
       f.references.nonEmpty && f.references.forall {
-        case FileSourceConstantMetadataAttribute(_) => true
+        case FileSourceConstantMetadataAttribute(metadataAttr) =>
+          // we only know block start and length after splitting files, so skip it here
+          metadataAttr.name != FileFormat.FILE_BLOCK_START &&
+            metadataAttr.name != FileFormat.FILE_BLOCK_LENGTH
         case _ => false
       }
     }.reduceOption(expressions.And)
@@ -137,7 +141,7 @@ abstract class PartitioningAwareFileIndex(
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
-    allFiles().map(_.getPath.toUri.toString).toArray
+    allFiles().map(fs => SparkPath.fromFileStatus(fs).urlEncoded).toArray
 
   override def sizeInBytes: Long = allFiles().map(_.getLen).sum
 

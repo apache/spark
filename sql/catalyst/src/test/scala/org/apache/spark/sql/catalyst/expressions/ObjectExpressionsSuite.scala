@@ -496,10 +496,11 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
       (Array(3, 2, 1), ArrayType(IntegerType))
     ).foreach { case (input, dt) =>
+      val enc = RowEncoder.encoderForDataType(dt, lenient = false)
       val validateType = ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         dt,
-        lenient = false)
+        ScalaReflection.lenientExternalDataTypeFor(enc))
       checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
     }
 
@@ -507,7 +508,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         DoubleType,
-        lenient = false),
+        DoubleType),
       InternalRow.fromSeq(Seq(Row(1))),
       "java.lang.Integer is not a valid external type for schema of double")
   }
@@ -559,10 +560,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     ExternalMapToCatalyst(
       inputObject,
-      ScalaReflection.dataTypeFor(keyEnc),
+      ScalaReflection.externalDataTypeFor(keyEnc),
       kvSerializerFor(keyEnc),
       keyNullable = keyEnc.nullable,
-      ScalaReflection.dataTypeFor(valueEnc),
+      ScalaReflection.externalDataTypeFor(valueEnc),
       kvSerializerFor(valueEnc),
       valueNullable = valueEnc.nullable
     )

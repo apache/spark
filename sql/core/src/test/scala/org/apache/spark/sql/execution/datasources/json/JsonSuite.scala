@@ -35,6 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -1072,9 +1073,14 @@ abstract class JsonSuite
         .schema("a string")
         .json(corruptRecords)
         .collect()
-    }.getMessage
-    assert(exceptionTwo.contains(
-      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+    }.getCause
+    checkError(
+      exception = exceptionTwo.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      parameters = Map(
+        "badRecord" -> "[null]",
+        "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1988,9 +1994,14 @@ abstract class JsonSuite
           .schema(schema)
           .json(path)
           .collect()
-      }
-      assert(exceptionTwo.getMessage.contains("Malformed records are detected in record " +
-        "parsing. Parse Mode: FAILFAST."))
+      }.getCause
+      checkError(
+        exception = exceptionTwo.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map(
+          "badRecord" -> "[null]",
+          "failFastMode" -> "FAILFAST")
+      )
     }
   }
 
@@ -2608,11 +2619,12 @@ abstract class JsonSuite
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
       .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-    val errMessage = intercept[SparkException] {
-      df.collect()
-    }.getMessage
-    assert(errMessage.contains(
-      s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+    val e = intercept[SparkException] {df.collect()}
+    checkError(
+      exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "EMPTY_JSON_FIELD_VALUE",
+      parameters = Map("dataType" -> toSQLType(dataType))
+    )
   }
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {
@@ -2835,7 +2847,7 @@ abstract class JsonSuite
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
         SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
 
-      for (timestampType <- timestampTypes) {
+      timestampTypes.foreach { timestampType =>
         withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
           val res = spark.read.option("inferTimestamp", "true").json(path.getAbsolutePath)
 

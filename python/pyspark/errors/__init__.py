@@ -18,9 +18,33 @@
 """
 PySpark exceptions.
 """
-from pyspark.errors.exceptions import PySparkException
+from pyspark.errors.exceptions.base import (  # noqa: F401
+    PySparkException,
+    AnalysisException,
+    TempTableAlreadyExistsException,
+    ParseException,
+    IllegalArgumentException,
+    StreamingQueryException,
+    QueryExecutionException,
+    PythonException,
+    UnknownException,
+    SparkUpgradeException,
+    PySparkTypeError,
+    PySparkValueError,
+)
 
 
 __all__ = [
     "PySparkException",
+    "AnalysisException",
+    "TempTableAlreadyExistsException",
+    "ParseException",
+    "IllegalArgumentException",
+    "StreamingQueryException",
+    "QueryExecutionException",
+    "PythonException",
+    "UnknownException",
+    "SparkUpgradeException",
+    "PySparkTypeError",
+    "PySparkValueError",
 ]

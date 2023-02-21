@@ -60,7 +60,8 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred, to_str
+from pyspark.errors.exceptions.captured import install_exception_handler
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -217,6 +218,9 @@ class SparkSession(SparkConversionMixin):
 
             .. versionadded:: 2.0.0
 
+            .. versionchanged:: 3.4.0
+                Support Spark Connect.
+
             Parameters
             ----------
             key : str, optional
@@ -347,6 +351,9 @@ class SparkSession(SparkConversionMixin):
 
             .. versionadded:: 2.0.0
 
+            .. versionchanged:: 3.4.0
+                Support Spark Connect.
+
             Parameters
             ----------
             name : str
@@ -386,6 +393,8 @@ class SparkSession(SparkConversionMixin):
 
             .. versionadded:: 2.0.0
 
+            .. versionchanged:: 3.4.0
+                Support Spark Connect.
 
             Returns
             -------
@@ -435,7 +444,7 @@ class SparkSession(SparkConversionMixin):
 
                             if url.startswith("local"):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
-                                RemoteSparkSession._start_connect_server(url)
+                                RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
 
                             os.environ["SPARK_REMOTE"] = url
@@ -708,15 +717,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Returns
         -------
         :class:`UDFRegistration`
 
         Examples
         --------
-        >>> spark.udf
-        <pyspark.sql.udf.UDFRegistration object ...>
-
         Register a Python UDF, and use it in SQL.
 
         >>> strlen = spark.udf.register("strlen", lambda x: len(x))
@@ -1307,7 +1316,7 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str, args: Dict[str, str] = {}, **kwargs: Any) -> DataFrame:
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None, **kwargs: Any) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
         standard formatter. The method binds named parameters to SQL literals from `args`.
@@ -1415,7 +1424,7 @@ class SparkSession(SparkConversionMixin):
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            return DataFrame(self._jsparkSession.sql(sqlQuery, args), self)
+            return DataFrame(self._jsparkSession.sql(sqlQuery, args or {}), self)
         finally:
             if len(kwargs) > 0:
                 formatter.clear()

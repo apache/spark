@@ -874,14 +874,15 @@ class FileBasedDataSourceSuite extends QueryTest
           })
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _, _) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
           assert(fileScan.get.dataFilters.nonEmpty)
           assert(fileScan.get.planInputPartitions().forall { partition =>
             partition.asInstanceOf[FilePartition].files.forall { file =>
-              file.filePath.contains("p1=1") && file.filePath.contains("p2=2")
+              file.urlEncodedPath.contains("p1=1") &&
+                file.urlEncodedPath.contains("p2=2")
             }
           })
           checkAnswer(df, Row("b", 1, 2))
@@ -914,7 +915,7 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(filterCondition.isDefined)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _, _) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)

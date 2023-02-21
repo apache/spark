@@ -25,7 +25,8 @@ import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -199,6 +200,7 @@ package object dsl {
           format: Option[String] = None,
           path: Option[String] = None,
           tableName: Option[String] = None,
+          tableSaveMethod: Option[String] = None,
           mode: Option[String] = None,
           sortByColumns: Seq[String] = Seq.empty,
           partitionByCols: Seq[String] = Seq.empty,
@@ -209,11 +211,17 @@ package object dsl {
 
         mode
           .map(SaveMode.valueOf(_))
-          .map(DataTypeProtoConverter.toSaveModeProto(_))
+          .map(SaveModeConverter.toSaveModeProto)
           .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
-          tableName.foreach(writeOp.setTableName(_))
+          tableName.foreach { tn =>
+            val saveTable = WriteOperation.SaveTable.newBuilder().setTableName(tn)
+            tableSaveMethod
+              .map(TableSaveMethodConverter.toTableSaveMethodProto(_))
+              .foreach(saveTable.setSaveMethod(_))
+            writeOp.setTable(saveTable.build())
+          }
         } else {
           path.foreach(writeOp.setPath(_))
         }
@@ -241,6 +249,44 @@ package object dsl {
               .setReplace(replace)
               .setInput(logicalPlan))
           .build()
+      }
+
+      def writeV2(
+          tableName: Option[String] = None,
+          provider: Option[String] = None,
+          options: Map[String, String] = Map.empty,
+          tableProperties: Map[String, String] = Map.empty,
+          partitionByCols: Seq[Expression] = Seq.empty,
+          mode: Option[String] = None,
+          overwriteCondition: Option[Expression] = None): Command = {
+        val writeOp = WriteOperationV2.newBuilder()
+        writeOp.setInput(logicalPlan)
+        tableName.foreach(writeOp.setTableName)
+        provider.foreach(writeOp.setProvider)
+        partitionByCols.foreach(writeOp.addPartitioningColumns)
+        options.foreach { case (k, v) =>
+          writeOp.putOptions(k, v)
+        }
+        tableProperties.foreach { case (k, v) =>
+          writeOp.putTableProperties(k, v)
+        }
+        mode.foreach { m =>
+          if (m == "MODE_CREATE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE)
+          } else if (m == "MODE_OVERWRITE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE)
+            overwriteCondition.foreach(writeOp.setOverwriteCondition)
+          } else if (m == "MODE_OVERWRITE_PARTITIONS") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS)
+          } else if (m == "MODE_APPEND") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_APPEND)
+          } else if (m == "MODE_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_REPLACE)
+          } else if (m == "MODE_CREATE_OR_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
+          }
+        }
+        Command.newBuilder().setWriteOperationV2(writeOp.build()).build()
       }
     }
   }
@@ -294,7 +340,7 @@ package object dsl {
             proto.NAFill
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllCols(cols.toSeq.asJava)
+              .addAllCols(cols.asJava)
               .addAllValues(Seq(toConnectProtoValue(value)).asJava)
               .build())
           .build()
@@ -615,7 +661,7 @@ package object dsl {
           .build()
       }
 
-      def createDefaultSortField(col: String): Expression.SortOrder = {
+      private def createDefaultSortField(col: String): Expression.SortOrder = {
         Expression.SortOrder
           .newBuilder()
           .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
@@ -893,8 +939,8 @@ package object dsl {
       def toDF(columnNames: String*): Relation =
         Relation
           .newBuilder()
-          .setRenameColumnsBySameLengthNames(
-            RenameColumnsBySameLengthNames
+          .setToDf(
+            ToDF
               .newBuilder()
               .setInput(logicalPlan)
               .addAllColumnNames(columnNames.asJava))
@@ -903,8 +949,8 @@ package object dsl {
       def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
         Relation
           .newBuilder()
-          .setRenameColumnsByNameToNameMap(
-            RenameColumnsByNameToNameMap
+          .setWithColumnsRenamed(
+            WithColumnsRenamed
               .newBuilder()
               .setInput(logicalPlan)
               .putAllRenameColumnsMap(renameColumnsMap.asJava))
@@ -952,7 +998,10 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .addAllIds(ids.asJava)
-              .addAllValues(values.asJava)
+              .setValues(Unpivot.Values
+                .newBuilder()
+                .addAllValues(values.asJava)
+                .build())
               .setVariableColumnName(variableColumnName)
               .setValueColumnName(valueColumnName))
           .build()

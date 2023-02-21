@@ -486,6 +486,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "function" : "sum(DISTINCT (outer(a.four) + b.four))"
   },
@@ -509,7 +510,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`o`.`unique1`",
     "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`"
