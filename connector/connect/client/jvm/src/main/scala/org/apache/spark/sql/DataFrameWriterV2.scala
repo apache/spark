@@ -24,12 +24,13 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 
 /**
- * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2 API.
+ * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2
+ * API.
  *
  * @since 3.4.0
  */
 @Experimental
-final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
+final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     extends CreateTableWriter[T] {
 
   private var provider: Option[String] = None
@@ -53,9 +54,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   override def options(options: scala.collection.Map[String, String]): DataFrameWriterV2[T] = {
-    options.foreach {
-      case (key, value) =>
-        this.options.put(key, value)
+    options.foreach { case (key, value) =>
+      this.options.put(key, value)
     }
     this
   }
@@ -89,7 +89,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
   }
 
-
   /**
    * Append the contents of the data frame to the output table.
    *
@@ -97,21 +96,23 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
    * validated to ensure it is compatible with the existing table.
    *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
   def append(): Unit = {
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_APPEND)
   }
 
   /**
-   * Overwrite rows matching the given filter condition with the contents of the data frame in
-   * the output table.
+   * Overwrite rows matching the given filter condition with the contents of the data frame in the
+   * output table.
    *
    * If the output table does not exist, this operation will fail with
-   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]].
-   * The data frame will be validated to ensure it is compatible with the existing table.
+   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
+   * validated to ensure it is compatible with the existing table.
    *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
   def overwrite(condition: Column): Unit = {
     overwriteCondition = Some(condition.expr)
@@ -129,7 +130,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
    * validated to ensure it is compatible with the existing table.
    *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
   def overwritePartitions(): Unit = {
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS)
@@ -147,9 +149,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     options.foreach { case (k, v) =>
       builder.putOptions(k, v)
     }
-    properties.foreach {
-      case (k, v) =>
-        builder.putTableProperties(k, v)
+    properties.foreach { case (k, v) =>
+      builder.putTableProperties(k, v)
     }
 
     builder.setMode(mode)
@@ -162,10 +163,12 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
 /**
  * Configuration methods common to create/replace operations and insert/overwrite operations.
- * @tparam R builder type to return
+ * @tparam R
+ *   builder type to return
  * @since 3.4.0
  */
 trait WriteConfigMethods[R] {
+
   /**
    * Add a write option.
    *
@@ -215,17 +218,18 @@ trait WriteConfigMethods[R] {
  * @since 3.4.0
  */
 trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
+
   /**
    * Create a new table from the contents of the data frame.
    *
-   * The new table's schema, partition layout, properties, and other configuration will be
-   * based on the configuration set on this writer.
+   * The new table's schema, partition layout, properties, and other configuration will be based
+   * on the configuration set on this writer.
    *
    * If the output table exists, this operation will fail with
    * [[org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException]].
    *
    * @throws org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-   *         If the table already exists
+   *   If the table already exists
    */
   def create(): Unit
 
@@ -239,35 +243,32 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * [[org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException]].
    *
    * @throws org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
-   *         If the table does not exist
+   *   If the table does not exist
    */
   def replace(): Unit
 
   /**
    * Create a new table or replace an existing table with the contents of the data frame.
    *
-   * The output table's schema, partition layout, properties, and other configuration will be based
-   * on the contents of the data frame and the configuration set on this writer. If the table
-   * exists, its configuration and data will be replaced.
+   * The output table's schema, partition layout, properties, and other configuration will be
+   * based on the contents of the data frame and the configuration set on this writer. If the
+   * table exists, its configuration and data will be replaced.
    */
   def createOrReplace(): Unit
 
   /**
-   * Partition the output table created by `create`, `createOrReplace`, or `replace` using
-   * the given columns or transforms.
+   * Partition the output table created by `create`, `createOrReplace`, or `replace` using the
+   * given columns or transforms.
    *
    * When specified, the table data will be stored by these values for efficient reads.
    *
    * For example, when a table is partitioned by day, it may be stored in a directory layout like:
-   * <ul>
-   * <li>`table/day=2019-06-01/`</li>
-   * <li>`table/day=2019-06-02/`</li>
-   * </ul>
+   * <ul> <li>`table/day=2019-06-01/`</li> <li>`table/day=2019-06-02/`</li> </ul>
    *
-   * Partitioning is one of the most widely used techniques to optimize physical data layout.
-   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
-   * predicates on the partitioned columns. In order for partitioning to work well, the number
-   * of distinct values in each column should typically be less than tens of thousands.
+   * Partitioning is one of the most widely used techniques to optimize physical data layout. It
+   * provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number of
+   * distinct values in each column should typically be less than tens of thousands.
    *
    * @since 3.4.0
    */

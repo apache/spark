@@ -140,7 +140,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("write table") {
-    try {
+    withTable("myTable") {
       val df = spark.range(10).limit(3)
       df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
       spark.range(2).write.insertInto("myTable")
@@ -151,21 +151,20 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       assert(result(2).getLong(0) == 1)
       assert(result(3).getLong(0) == 1)
       assert(result(4).getLong(0) == 2)
-    } finally {
-      spark.sql("drop table if exists myTable").collect()
     }
   }
 
-  test("write v2") {
-    try {
+  test("writeTo with create") {
+    withTable("myTableV2") {
+      // TODO (SPARK-42519): test more cases after we can set configs. See more WriteTo test cases
+      //  in SparkConnectProtoSuite.
+      //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
       spark.range(3).writeTo("myTableV2").using("parquet").create()
       val result = spark.sql("select * from myTableV2").sort("id").collect()
       assert(result.length == 3)
       assert(result(0).getLong(0) == 0)
       assert(result(1).getLong(0) == 1)
       assert(result(2).getLong(0) == 2)
-    } finally {
-      spark.sql("drop table if exists myTableV2").collect()
     }
   }
 
