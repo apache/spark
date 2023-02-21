@@ -1408,7 +1408,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         parameters = Map("dataSourceType" -> "hive"),
         context = ExpectedContext(s"hive.`${f.getCanonicalPath}`",
-          15, 23 + f.getCanonicalPath.length)
+          15, 21 + f.getCanonicalPath.length)
       )
 
       // data source type is case insensitive
@@ -1419,7 +1419,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         parameters = Map("dataSourceType" -> "HIVE"),
         context = ExpectedContext(s"HIVE.`${f.getCanonicalPath}`",
-          15, 23 + f.getCanonicalPath.length)
+          15, 21 + f.getCanonicalPath.length)
       )
     })
   }
