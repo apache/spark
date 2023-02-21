@@ -1233,6 +1233,22 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @since 3.4.0
    */
   def bitwiseXOR(other: Any): Column = fn("^", other)
+
+  /**
+   * Defines a windowing column.
+   *
+   * {{{
+   *   val w = Window.partitionBy("name").orderBy("id")
+   *   df.select(
+   *     sum("price").over(w.rangeBetween(Window.unboundedPreceding, 2)),
+   *     avg("price").over(w.rowsBetween(Window.currentRow, 4))
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
 }
 
 private[sql] object Column {
