@@ -232,7 +232,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       // We divide metadata columns into two categories: constant and generated.
       // For constant metadata columns, we create these attributes as non-nullable
-      //  when passing to readers, since the values remain persistent in the files.
+      //  when passing to readers, since the values are always available.
       // For generated metadata columns, they are set as nullable when passed to readers,
       //  as their values are generated on the fly when reading and could be null.
       //  After reading, values will be replaced.
