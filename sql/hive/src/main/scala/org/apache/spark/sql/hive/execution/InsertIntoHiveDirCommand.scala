@@ -59,6 +59,8 @@ case class InsertIntoHiveDirCommand(
     overwrite: Boolean,
     outputColumnNames: Seq[String]) extends SaveAsHiveFile with V1WritesHiveUtils {
 
+  // We did not pull out `InsertIntoHiveDirCommand` to `V1WriteCommand`,
+  // so there is no `WriteFiles`. It should always hold all metrics by itself.
   override lazy val metrics: Map[String, SQLMetric] =
     BasicWriteJobStatsTracker.metrics
 
