@@ -236,7 +236,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // For generated metadata columns, they are set as nullable when passed to readers,
       //  as the values will be null when trying to read the missing column from the file. They are then replaced by the actual values later in the process.
       //  After reading, values will be replaced.
-      // So all metadata columns will be non-null in the returned output.
+      // All metadata columns will be non-null in the returned output.
       // We then change the nullability to non-nullable in the metadata projection node below.
       val constantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
       val generatedMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
