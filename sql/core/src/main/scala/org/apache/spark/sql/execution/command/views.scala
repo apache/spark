@@ -354,6 +354,10 @@ object ViewHelper extends SQLConfHelper with Logging {
     SQLConf.DISABLE_HINTS.key
   )
 
+  private val alwaysCapturedConfigs = Seq(
+    SQLConf.SESSION_LOCAL_TIMEZONE.key
+  )
+
   /**
    * Capture view config either of:
    * 1. exists in allowList
@@ -398,8 +402,16 @@ object ViewHelper extends SQLConfHelper with Logging {
     val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
       conf.isModifiable(k) && shouldCaptureConfig(k)
     }
+    // Get the default value of always captured config if it is not set
+    lazy val allDefinedConfigs = conf.getAllDefinedConfs
+    val alwaysCapturedDefaults = alwaysCapturedConfigs
+      .filter(!modifiedConfs.contains(_))
+      .flatMap(key => allDefinedConfigs.find(_._1 == key))
+      .map { case (key, defaultValue, _, _) => (key, defaultValue) }
+      .toMap
+
     val props = new mutable.HashMap[String, String]
-    for ((key, value) <- modifiedConfs) {
+    for ((key, value) <- modifiedConfs ++ alwaysCapturedDefaults) {
       props.put(s"$VIEW_SQL_CONFIG_PREFIX$key", value)
     }
     props.toMap
