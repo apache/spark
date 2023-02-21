@@ -57,6 +57,19 @@ public interface StagingTableCatalog extends TableCatalog {
   /**
    * Stage the creation of a table, preparing it to be committed into the metastore.
    * <p>
+   * This is deprecated. Please override
+   * {@link #stageCreate(Identifier, Column[], Transform[], Map)} instead.
+   */
+  @Deprecated
+  StagedTable stageCreate(
+      Identifier ident,
+      StructType schema,
+      Transform[] partitions,
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+
+  /**
+   * Stage the creation of a table, preparing it to be committed into the metastore.
+   * <p>
    * When the table is committed, the contents of any writes performed by the Spark planner are
    * committed along with the metadata about the table passed into this method's arguments. If the
    * table exists when this method is called, the method should throw an exception accordingly. If
@@ -64,7 +77,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * committed, an exception should be thrown by {@link StagedTable#commitStagedChanges()}.
    *
    * @param ident a table identifier
-   * @param schema the schema of the new table, as a struct type
+   * @param columns the column of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
@@ -72,11 +85,26 @@ public interface StagingTableCatalog extends TableCatalog {
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
-  StagedTable stageCreate(
+  default StagedTable stageCreate(
+      Identifier ident,
+      Column[] columns,
+      Transform[] partitions,
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return stageCreate(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties);
+  }
+
+  /**
+   * Stage the replacement of a table, preparing it to be committed into the metastore when the
+   * returned table's {@link StagedTable#commitStagedChanges()} is called.
+   * <p>
+   * This is deprecated, please override
+   * {@link #stageReplace(Identifier, StructType, Transform[], Map)} instead.
+   */
+  StagedTable stageReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException;
 
   /**
    * Stage the replacement of a table, preparing it to be committed into the metastore when the
@@ -97,7 +125,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * operation.
    *
    * @param ident a table identifier
-   * @param schema the schema of the new table, as a struct type
+   * @param columns the columns of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
@@ -105,11 +133,27 @@ public interface StagingTableCatalog extends TableCatalog {
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws NoSuchTableException If the table does not exist
    */
-  StagedTable stageReplace(
+  default StagedTable stageReplace(
+      Identifier ident,
+      Column[] columns,
+      Transform[] partitions,
+      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException {
+    return stageReplace(
+      ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties);
+  }
+
+  /**
+   * Stage the creation or replacement of a table, preparing it to be committed into the metastore
+   * when the returned table's {@link StagedTable#commitStagedChanges()} is called.
+   * <p>
+   * This is deprecated, please override
+   * {@link #stageCreateOrReplace(Identifier, Column[], Transform[], Map)} instead.
+   */
+  StagedTable stageCreateOrReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException;
+      Map<String, String> properties) throws NoSuchNamespaceException;
 
   /**
    * Stage the creation or replacement of a table, preparing it to be committed into the metastore
@@ -129,16 +173,19 @@ public interface StagingTableCatalog extends TableCatalog {
    * the staged changes are committed but the table doesn't exist at commit time.
    *
    * @param ident a table identifier
-   * @param schema the schema of the new table, as a struct type
+   * @param columns the columns of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
-  StagedTable stageCreateOrReplace(
+  default StagedTable stageCreateOrReplace(
       Identifier ident,
-      StructType schema,
+      Column[] columns,
       Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException;
+      Map<String, String> properties) throws NoSuchNamespaceException {
+    return stageCreateOrReplace(
+      ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties);
+  }
 }

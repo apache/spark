@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -1354,6 +1354,7 @@ class WriteOperation(LogicalPlan):
         self.source: Optional[str] = None
         self.path: Optional[str] = None
         self.table_name: Optional[str] = None
+        self.table_save_method: Optional[str] = None
         self.mode: Optional[str] = None
         self.sort_cols: List[str] = []
         self.partitioning_cols: List[str] = []
@@ -1382,12 +1383,26 @@ class WriteOperation(LogicalPlan):
                 plan.write_operation.options[k] = cast(str, self.options[k])
 
         if self.table_name is not None:
-            plan.write_operation.table_name = self.table_name
+            plan.write_operation.table.table_name = self.table_name
+            if self.table_save_method is not None:
+                tsm = self.table_save_method.lower()
+                if tsm == "save_as_table":
+                    plan.write_operation.table.save_method = (
+                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE  # noqa: E501
+                    )
+                elif tsm == "insert_into":
+                    plan.write_operation.table.save_method = (
+                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
+                    )
+                else:
+                    raise ValueError(
+                        f"Unknown TestSaveMethod value for DataFrame: {self.table_save_method}"
+                    )
         elif self.path is not None:
             plan.write_operation.path = self.path
         else:
             raise AssertionError(
-                "Invalid configuration of WriteCommand, neither path or table_name present."
+                "Invalid configuration of WriteCommand, neither path or table present."
             )
 
         if self.mode is not None:
@@ -1411,6 +1426,7 @@ class WriteOperation(LogicalPlan):
             f"<WriteOperation source='{self.source}' "
             f"path='{self.path} "
             f"table_name='{self.table_name}' "
+            f"table_save_method='{self.table_save_method}' "
             f"mode='{self.mode}' "
             f"sort_cols='{self.sort_cols}' "
             f"partitioning_cols='{self.partitioning_cols}' "
@@ -1424,6 +1440,7 @@ class WriteOperation(LogicalPlan):
             f"<uL><li>WriteOperation <br />source='{self.source}'<br />"
             f"path: '{self.path}<br />"
             f"table_name: '{self.table_name}' <br />"
+            f"table_save_method: '{self.table_save_method}' <br />"
             f"mode: '{self.mode}' <br />"
             f"sort_cols: '{self.sort_cols}' <br />"
             f"partitioning_cols: '{self.partitioning_cols}' <br />"

@@ -51,8 +51,19 @@ public interface Table {
   /**
    * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
    * empty schema can be returned here.
+   * <p>
+   * This is deprecated. Please override {@link #columns} instead.
    */
+  @Deprecated
   StructType schema();
+
+  /**
+   * Returns the columns of this table. If the table is not readable and doesn't have a schema, an
+   * empty array can be returned here.
+   */
+  default Column[] columns() {
+    return CatalogV2Util.structTypeToV2Columns(schema());
+  }
 
   /**
    * Returns the physical partitioning of this table.

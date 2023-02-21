@@ -1184,16 +1184,17 @@ class FunctionsTestsMixin:
         from pyspark.sql.functions import lit
 
         dtype_to_spark_dtypes = [
-            (np.int8, [("CAST(1 AS TINYINT)", "tinyint")]),
-            (np.int16, [("CAST(1 AS SMALLINT)", "smallint")]),
-            (np.int32, [("CAST(1 AS INT)", "int")]),
-            (np.int64, [("CAST(1 AS BIGINT)", "bigint")]),
-            (np.float32, [("CAST(1.0 AS FLOAT)", "float")]),
-            (np.float64, [("CAST(1.0 AS DOUBLE)", "double")]),
+            (np.int8, [("1", "tinyint")]),
+            (np.int16, [("1", "smallint")]),
+            (np.int32, [("1", "int")]),
+            (np.int64, [("1", "bigint")]),
+            (np.float32, [("1.0", "float")]),
+            (np.float64, [("1.0", "double")]),
             (np.bool_, [("true", "boolean")]),
         ]
         for dtype, spark_dtypes in dtype_to_spark_dtypes:
-            self.assertEqual(self.spark.range(1).select(lit(dtype(1))).dtypes, spark_dtypes)
+            with self.subTest(dtype):
+                self.assertEqual(self.spark.range(1).select(lit(dtype(1))).dtypes, spark_dtypes)
 
     @unittest.skipIf(not have_numpy, "NumPy not installed")
     def test_np_scalar_input(self):

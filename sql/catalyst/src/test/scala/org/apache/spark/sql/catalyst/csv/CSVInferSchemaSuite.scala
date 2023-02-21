@@ -249,10 +249,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     // inferField should infer a column as string type if it contains mixing dates and timestamps
     assert(inferSchema.inferField(DateType, "2003|01|01") == StringType)
     // SQL configuration must be set to default to TimestampNTZ
-    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
-      assert(inferSchema.inferField(DateType, "2003/02/05") == StringType)
-    }
-    withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
       assert(inferSchema.inferField(DateType, "2003/02/05") == StringType)
     }
     assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == StringType)

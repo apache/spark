@@ -181,7 +181,7 @@ object ResolvedTable {
       catalog: TableCatalog,
       identifier: Identifier,
       table: Table): ResolvedTable = {
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
     ResolvedTable(catalog, identifier, table, schema.toAttributes)
   }
 }

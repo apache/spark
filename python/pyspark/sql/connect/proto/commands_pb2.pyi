@@ -223,6 +223,48 @@ class WriteOperation(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    class SaveTable(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class _TableSaveMethod:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _TableSaveMethodEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                WriteOperation.SaveTable._TableSaveMethod.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 0
+            TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 1
+            TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 2
+
+        class TableSaveMethod(_TableSaveMethod, metaclass=_TableSaveMethodEnumTypeWrapper): ...
+        TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 0
+        TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 1
+        TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 2
+
+        TABLE_NAME_FIELD_NUMBER: builtins.int
+        SAVE_METHOD_FIELD_NUMBER: builtins.int
+        table_name: builtins.str
+        """(Required) The table name."""
+        save_method: global___WriteOperation.SaveTable.TableSaveMethod.ValueType
+        """(Required) The method to be called to write to the table."""
+        def __init__(
+            self,
+            *,
+            table_name: builtins.str = ...,
+            save_method: global___WriteOperation.SaveTable.TableSaveMethod.ValueType = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "save_method", b"save_method", "table_name", b"table_name"
+            ],
+        ) -> None: ...
+
     class BucketBy(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -249,7 +291,7 @@ class WriteOperation(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
-    TABLE_NAME_FIELD_NUMBER: builtins.int
+    TABLE_FIELD_NUMBER: builtins.int
     MODE_FIELD_NUMBER: builtins.int
     SORT_COLUMN_NAMES_FIELD_NUMBER: builtins.int
     PARTITIONING_COLUMNS_FIELD_NUMBER: builtins.int
@@ -261,7 +303,8 @@ class WriteOperation(google.protobuf.message.Message):
     source: builtins.str
     """(Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta."""
     path: builtins.str
-    table_name: builtins.str
+    @property
+    def table(self) -> global___WriteOperation.SaveTable: ...
     mode: global___WriteOperation.SaveMode.ValueType
     """(Required) the save mode."""
     @property
@@ -288,7 +331,7 @@ class WriteOperation(google.protobuf.message.Message):
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         source: builtins.str | None = ...,
         path: builtins.str = ...,
-        table_name: builtins.str = ...,
+        table: global___WriteOperation.SaveTable | None = ...,
         mode: global___WriteOperation.SaveMode.ValueType = ...,
         sort_column_names: collections.abc.Iterable[builtins.str] | None = ...,
         partitioning_columns: collections.abc.Iterable[builtins.str] | None = ...,
@@ -310,8 +353,8 @@ class WriteOperation(google.protobuf.message.Message):
             b"save_type",
             "source",
             b"source",
-            "table_name",
-            b"table_name",
+            "table",
+            b"table",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -337,8 +380,8 @@ class WriteOperation(google.protobuf.message.Message):
             b"sort_column_names",
             "source",
             b"source",
-            "table_name",
-            b"table_name",
+            "table",
+            b"table",
         ],
     ) -> None: ...
     @typing.overload
@@ -348,7 +391,7 @@ class WriteOperation(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["save_type", b"save_type"]
-    ) -> typing_extensions.Literal["path", "table_name"] | None: ...
+    ) -> typing_extensions.Literal["path", "table"] | None: ...
 
 global___WriteOperation = WriteOperation
 

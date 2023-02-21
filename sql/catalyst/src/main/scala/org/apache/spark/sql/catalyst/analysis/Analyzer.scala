@@ -1249,7 +1249,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
             SubqueryAlias(
               catalog.name +: ident.asMultipartIdentifier,
-              StreamingRelationV2(None, table.name, table, options, table.schema.toAttributes,
+              StreamingRelationV2(None, table.name, table, options, table.columns.toAttributes,
                 Some(catalog), Some(ident), v1Fallback))
           } else {
             SubqueryAlias(
@@ -3722,7 +3722,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           colsToAdd(resolvedParentName) = fieldsAdded :+ col.colName
           resolvedPosition
         }
-        val schema = r.table.schema
+        val schema = r.table.columns.asSchema
         val resolvedCols = cols.map { col =>
           col.path match {
             case Some(parent: UnresolvedFieldName) =>

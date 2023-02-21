@@ -174,8 +174,6 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> from pyspark.sql import SparkSession
-        >>> spark = SparkSession.builder.master("local").getOrCreate()
         >>> spark.read.option("key", "value")
         <...readwriter.DataFrameReader object ...>
 

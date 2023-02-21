@@ -30,8 +30,8 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
@@ -370,7 +370,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan5, sparkPlan5)
 
     val connectPlan6 = connectTestRelation.union(connectTestRelation, isAll = false)
-    val sparkPlan6 = sparkTestRelation.union(sparkTestRelation).distinct()
+    val sparkPlan6 = Distinct(sparkTestRelation.union(sparkTestRelation).logicalPlan)
     comparePlans(connectPlan6, sparkPlan6)
 
     val connectPlan7 =
@@ -380,7 +380,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     val connectPlan8 =
       connectTestRelation.union(connectTestRelation2, isAll = false, byName = true)
-    val sparkPlan8 = sparkTestRelation.unionByName(sparkTestRelation2).distinct()
+    val sparkPlan8 = Distinct(sparkTestRelation.unionByName(sparkTestRelation2).logicalPlan)
     comparePlans(connectPlan8, sparkPlan8)
   }
 
@@ -570,6 +570,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   test("Write with partitions") {
     val cmd = localRelation.write(
       tableName = Some("testtable"),
+      tableSaveMethod = Some("save_as_table"),
       format = Some("parquet"),
       partitionByCols = Seq("noid"))
     assertThrows[AnalysisException] {
@@ -614,6 +615,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(
         localRelation.write(
           tableName = Some("testtable"),
+          tableSaveMethod = Some("save_as_table"),
           format = Some("parquet"),
           sortByColumns = Seq("id"),
           bucketByCols = Seq("id"),
@@ -626,6 +628,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         localRelation
           .write(
             tableName = Some("testtable"),
+            tableSaveMethod = Some("save_as_table"),
             format = Some("parquet"),
             sortByColumns = Seq("noid"),
             bucketByCols = Seq("id"),
@@ -634,7 +637,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Write to Table") {
     withTable("testtable") {
-      val cmd = localRelation.write(format = Some("parquet"), tableName = Some("testtable"))
+      val cmd = localRelation.write(
+        format = Some("parquet"),
+        tableName = Some("testtable"),
+        tableSaveMethod = Some("save_as_table"))
       transform(cmd)
       // Check that we can find and drop the table.
       spark.sql(s"select count(*) from testtable").collect()
@@ -643,7 +649,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("SaveMode conversion tests") {
     assertThrows[IllegalArgumentException](
-      DataTypeProtoConverter.toSaveMode(proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED))
+      SaveModeConverter.toSaveMode(proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED))
 
     val combinations = Seq(
       (SaveMode.Append, proto.WriteOperation.SaveMode.SAVE_MODE_APPEND),
@@ -651,8 +657,24 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       (SaveMode.Overwrite, proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE),
       (SaveMode.ErrorIfExists, proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS))
     combinations.foreach { a =>
-      assert(DataTypeProtoConverter.toSaveModeProto(a._1) == a._2)
-      assert(DataTypeProtoConverter.toSaveMode(a._2) == a._1)
+      assert(SaveModeConverter.toSaveModeProto(a._1) == a._2)
+      assert(SaveModeConverter.toSaveMode(a._2) == a._1)
+    }
+  }
+
+  test("TableSaveMethod conversion tests") {
+    assertThrows[IllegalArgumentException](
+      TableSaveMethodConverter.toTableSaveMethodProto("unknown"))
+
+    val combinations = Seq(
+      (
+        "save_as_table",
+        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE),
+      (
+        "insert_into",
+        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO))
+    combinations.foreach { a =>
+      assert(TableSaveMethodConverter.toTableSaveMethodProto(a._1) == a._2)
     }
   }
 
@@ -963,7 +985,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with DataFrame.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: DataFrame): Unit = {
+    comparePlans(connectPlan, sparkPlan.queryExecution.analyzed)
+  }
+
+  // Compares proto plan with LogicalPlan.
+  private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
     val connectAnalyzed = analyzePlan(transform(connectPlan))
-    comparePlans(connectAnalyzed, sparkPlan.queryExecution.analyzed, false)
+    comparePlans(connectAnalyzed, sparkPlan, false)
   }
 }

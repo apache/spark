@@ -84,6 +84,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     invalidatedTables.add(ident)
   }
 
+  // TODO: remove it when no tests calling this deprecated method.
   override def createTable(
       ident: Identifier,
       schema: StructType,
@@ -91,6 +92,15 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       properties: util.Map[String, String]): Table = {
     createTable(ident, schema, partitions, properties, Distributions.unspecified(),
       Array.empty, None)
+  }
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
+    createTable(ident, schema, partitions, properties)
   }
 
   def createTable(

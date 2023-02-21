@@ -630,13 +630,14 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         p = wo.command(None)
         self.assertIsNotNone(p)
         self.assertTrue(p.write_operation.HasField("path"))
-        self.assertFalse(p.write_operation.HasField("table_name"))
+        self.assertFalse(p.write_operation.HasField("table"))
 
         wo.path = None
         wo.table_name = "table"
+        wo.table_save_method = "save_as_table"
         p = wo.command(None)
         self.assertFalse(p.write_operation.HasField("path"))
-        self.assertTrue(p.write_operation.HasField("table_name"))
+        self.assertTrue(p.write_operation.HasField("table"))
 
         wo.bucket_cols = ["a", "b", "c"]
         p = wo.command(None)

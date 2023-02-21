@@ -1,0 +1,12 @@
+{
+  "sample": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "upperBound": 0.43,
+    "withReplacement": false,
+    "seed": "9890823"
+  }
+}

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -1703,9 +1703,6 @@ def _test() -> None:
 
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
-    # TODO(SPARK-41818): Support saveAsTable
-    del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

@@ -16,6 +16,7 @@
 #
 import unittest
 
+from pyspark.sql.connect.readwriter import DataFrameWriterV2
 from pyspark.sql.tests.test_readwriter import ReadwriterTestsMixin, ReadwriterV2TestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -33,15 +34,11 @@ class ReadwriterParityTests(ReadwriterTestsMixin, ReusedConnectTestCase):
 
 
 class ReadwriterV2ParityTests(ReadwriterV2TestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-42002): Implement writeTo()
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_api(self):
-        super().test_api()
+        self.check_api(DataFrameWriterV2)
 
-    # TODO(SPARK-42002): Implement writeTo()
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_partitioning_functions(self):
-        super().test_partitioning_functions()
+        self.check_partitioning_functions(DataFrameWriterV2)
 
 
 if __name__ == "__main__":

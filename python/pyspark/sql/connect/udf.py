@@ -17,7 +17,7 @@
 """
 User-defined function related classes and functions
 """
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -172,6 +172,8 @@ class UserDefinedFunction:
     def asNondeterministic(self) -> "UserDefinedFunction":
         """
         Updates UserDefinedFunction to nondeterministic.
+
+        .. versionadded:: 3.4.0
         """
         self.deterministic = False
         return self

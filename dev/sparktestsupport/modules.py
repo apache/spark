@@ -516,6 +516,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions",
         # unittests
+        "pyspark.sql.tests.connect.test_client",
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",

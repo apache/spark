@@ -1000,7 +1000,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(transformed === expected)
   }
 
-  test("multiTransformDown is lazy") {
+  test("multiTransformDown alternatives are accessed only if needed") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
       case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
@@ -1079,5 +1079,71 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq.empty
     }
     assert(transformed2.isEmpty)
+  }
+
+  test("multiTransformDown alternatives are generated only if needed") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") => newErrorAfterStream()
+      case StringLiteral("b") => Seq.empty
+    }
+    assert(transformed.isEmpty)
+  }
+
+  test("multiTransformDown can do non-cartesian transformations") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    // Suppose that we want to transform both `a` and `b` to `1` and `2`, but we want to have only
+    // those alternatives where these 2 are transformed equal. The first encounter with `a` or `b`
+    // will keep track of the current alternative in a "global" `a_or_b` cache. If we encounter `a`
+    // or `b` again at other places we can return the cached value to keep the transformations in
+    // sync.
+    var a_or_b = Option.empty[Seq[Expression]]
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") | StringLiteral("b") =>
+        // Return alternatives from cache if this is not the first encounter
+        a_or_b.getOrElse(
+          // Besides returning the alternatives for the first encounter, also set up a mechanism to
+          // update the cache when the new alternatives are requested.
+          Stream(Literal(1), Literal(2)).map { x =>
+            a_or_b = Some(Seq(x))
+            x
+          }.append {
+            a_or_b = None
+            Seq.empty
+          })
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200))
+    }
+    val expected = for {
+      cd <- Seq(Literal(100), Literal(200))
+      a_or_b <- Seq(Literal(1), Literal(2))
+    } yield Add(Add(a_or_b, a_or_b), cd)
+    assert(transformed == expected)
+
+    var c_or_d = Option.empty[Seq[Expression]]
+    val transformed2 = e.multiTransformDown {
+      case StringLiteral("a") | StringLiteral("b") =>
+        a_or_b.getOrElse(
+          Stream(Literal(1), Literal(2)).map { x =>
+            a_or_b = Some(Seq(x))
+            x
+          }.append {
+            a_or_b = None
+            Seq.empty
+          })
+      case StringLiteral("c") | StringLiteral("d") =>
+        c_or_d.getOrElse(
+          Stream(Literal(10), Literal(20)).map { x =>
+            c_or_d = Some(Seq(x))
+            x
+          }.append {
+            c_or_d = None
+            Seq.empty
+          })
+    }
+    val expected2 = for {
+      c_or_d <- Seq(Literal(10), Literal(20))
+      a_or_b <- Seq(Literal(1), Literal(2))
+    } yield Add(Add(a_or_b, a_or_b), Add(c_or_d, c_or_d))
+    assert(transformed2 == expected2)
   }
 }
