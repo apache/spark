@@ -1,0 +1,6 @@
+ƒ
+YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>&$
+date_format
+d
+j
+yyyy-MM-dd

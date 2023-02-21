@@ -1,0 +1,6 @@
+Ž
+YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>1/
+months_between
+current_date
+d
+

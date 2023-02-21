@@ -628,6 +628,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object WindowGroupLimit extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child) =>
+        val partialWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec,
+          orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
+        val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
+          rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
+        finalWindowGroupLimit :: Nil
+      case _ => Nil
+    }
+  }
+
   protected lazy val singleRowRdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
 
   object InMemoryScans extends Strategy {
