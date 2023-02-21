@@ -21,12 +21,11 @@ import java.time.LocalDate
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Expression.{UnresolvedAttribute, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
