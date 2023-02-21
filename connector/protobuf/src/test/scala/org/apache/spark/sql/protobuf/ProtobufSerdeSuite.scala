@@ -19,6 +19,7 @@ package org.apache.spark.sql.protobuf
 
 import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
@@ -168,7 +169,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
       .buildDescriptor(proto2Desc, "NestedFoobarWithRequiredFieldBar")
 
     val nestedFoobarSQLType = DataType.fromDDL(
-      "struct<nested_foobar: struct<foo string>>", // "bar" field is missing.
+      "struct<nested_foobar: struct<foo string>>" // "bar" field is missing.
     ).asInstanceOf[StructType]
     // serializing with extra fails if required field is missing in inner struct
     assertFailedConversionMessage(
