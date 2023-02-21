@@ -21,6 +21,7 @@ check_dependencies(__name__, __file__)
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import json
+import sys
 from threading import Lock
 from inspect import signature, isclass
 
@@ -30,12 +31,20 @@ from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import SortOrder, ColumnReference, LiteralExpression
+from pyspark.sql.connect.expressions import (
+    SortOrder,
+    ColumnReference,
+    LiteralExpression,
+    PythonUDF,
+    CommonInlineUserDefinedFunction,
+)
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.serializers import CloudPickleSerializer
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark.sql.connect.udf import UserDefinedFunction
 
 
 class InputValidationError(Exception):
@@ -1846,3 +1855,36 @@ class ListCatalogs(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
+
+
+class FrameMap(LogicalPlan):
+    """Logical plan object for a Frame Map API: mapInPandas, mapInArrow."""
+
+    def __init__(self, child: Optional["LogicalPlan"], function: "UserDefinedFunction") -> None:
+        super().__init__(child)
+
+        # Construct a CommonInlineUserDefinedFunction from function
+        data_type_str = (
+            function._returnType.json()
+            if isinstance(function._returnType, DataType)
+            else function._returnType
+        )
+        py_udf = PythonUDF(
+            output_type=data_type_str,
+            eval_type=function.evalType,
+            command=CloudPickleSerializer().dumps((function.func, function._returnType)),
+            python_ver="%d.%d" % sys.version_info[:2],
+        )
+        self._func = CommonInlineUserDefinedFunction(
+            function_name=function._name,
+            deterministic=function.deterministic,
+            arguments=[],
+            function=py_udf,
+        )
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.frame_map.input.CopyFrom(self._child.plan(session))
+        plan.frame_map.func.CopyFrom(self._func.to_command(session))
+        return plan
