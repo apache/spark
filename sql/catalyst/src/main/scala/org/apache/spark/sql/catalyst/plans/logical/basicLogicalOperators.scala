@@ -925,7 +925,7 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = {
-    if (global) maxRows else child.maxRowsPerPartition
+    if (global) maxRows.orElse(child.maxRowsPerPartition) else child.maxRowsPerPartition
   }
   override def outputOrdering: Seq[SortOrder] = order
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
