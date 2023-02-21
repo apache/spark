@@ -2258,10 +2258,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-36980: Insert support query with CTE") {
-    withTable("t") {
-      sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
-      sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
-      checkAnswer(spark.table("t"), Row(1, 2, 3))
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t") {
+        sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
+        sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
+        checkAnswer(spark.table("t"), Row(1, 2, 3))
+      }
     }
   }
 
