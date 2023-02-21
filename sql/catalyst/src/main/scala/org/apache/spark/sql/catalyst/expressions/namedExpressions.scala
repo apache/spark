@@ -582,7 +582,10 @@ object FileSourceGeneratedMetadataAttribute {
    * We keep generated metadata attributes nullability configurable here:
    * 1. Before passing to readers, we create generated metadata attributes as nullable;
    *    Because, for row_index, the readers do not consider the column required.
+   *    row_index can be generated with null in the process by readers.
    * 2. When applying the projection, we change the nullability back to not-nullable;
+   *    For row_index, it is generated with nulls which are then replaced,
+   *    so it will not be null in the returned output.
    *    See `FileSourceStrategy` for more information
    */
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
