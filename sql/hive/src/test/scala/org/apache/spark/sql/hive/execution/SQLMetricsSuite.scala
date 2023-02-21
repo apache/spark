@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, V1WriteCommand}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, WriteFilesExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -43,21 +43,22 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
   }
 
   test("SPARK-34567: Add metrics for CTAS operator") {
+    withPlannedWrite {
+      checkWriteMetrics()
+    }
+  }
+
+  private def checkWriteMetrics(): Unit = {
     Seq(false, true).foreach { canOptimized =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> canOptimized.toString) {
         withTable("t") {
-          var v1WriteCommand: V1WriteCommand = null
+          var dataWriting: DataWritingCommandExec = null
           val listener = new QueryExecutionListener {
             override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
             override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
               qe.executedPlan match {
                 case dataWritingCommandExec: DataWritingCommandExec =>
-                  val createTableAsSelect = dataWritingCommandExec.cmd
-                  v1WriteCommand = if (canOptimized) {
-                    createTableAsSelect.asInstanceOf[InsertIntoHadoopFsRelationCommand]
-                  } else {
-                    createTableAsSelect.asInstanceOf[InsertIntoHiveTable]
-                  }
+                  dataWriting = dataWritingCommandExec
                 case _ =>
               }
             }
@@ -66,13 +67,24 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
           try {
             sql(s"CREATE TABLE t STORED AS PARQUET AS SELECT 1 as a")
             sparkContext.listenerBus.waitUntilEmpty()
-            assert(v1WriteCommand != null)
-            assert(v1WriteCommand.metrics.contains("numFiles"))
-            assert(v1WriteCommand.metrics("numFiles").value == 1)
-            assert(v1WriteCommand.metrics.contains("numOutputBytes"))
-            assert(v1WriteCommand.metrics("numOutputBytes").value > 0)
-            assert(v1WriteCommand.metrics.contains("numOutputRows"))
-            assert(v1WriteCommand.metrics("numOutputRows").value == 1)
+            assert(dataWriting != null)
+            val v1WriteCommand = if (canOptimized) {
+              dataWriting.cmd.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+            } else {
+              dataWriting.cmd.asInstanceOf[InsertIntoHiveTable]
+            }
+            val metrics = if (conf.plannedWriteEnabled) {
+              dataWriting.child.asInstanceOf[WriteFilesExec].metrics
+            } else {
+              v1WriteCommand.metrics
+            }
+
+            assert(metrics.contains("numFiles"))
+            assert(metrics("numFiles").value == 1)
+            assert(metrics.contains("numOutputBytes"))
+            assert(metrics("numOutputBytes").value > 0)
+            assert(metrics.contains("numOutputRows"))
+            assert(metrics("numOutputRows").value == 1)
           } finally {
             spark.listenerManager.unregister(listener)
           }
