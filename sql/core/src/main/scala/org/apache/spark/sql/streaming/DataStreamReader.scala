@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, VersionUnresolvedRelation}
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -153,6 +153,15 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     } else {
       extraOptions + ("path" -> path.get)
     }
+
+    Dataset.ofRows(
+      sparkSession,
+      VersionUnresolvedRelation(
+        sparkSession,
+        userSpecifiedSchema,
+        source,
+        optionsWithPath,
+        isStreaming = true))
 
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
       getConstructor().newInstance()
