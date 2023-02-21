@@ -126,6 +126,10 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(sort2.maxRows === Some(100))
     assert(sort2.maxRowsPerPartition === Some(100))
 
+    val sortLimit = Sort(Seq($"a".asc), true, LocalLimit(Literal(5), LocalRelation($"a".int)))
+    assert(sortLimit.maxRows === None)
+    assert(sortLimit.maxRowsPerPartition === Some(5))
+
     val c1 = Literal(1).as('a).toAttribute.newInstance().withNullability(true)
     val c2 = Literal(2).as('b).toAttribute.newInstance().withNullability(true)
     val expand = Expand(
