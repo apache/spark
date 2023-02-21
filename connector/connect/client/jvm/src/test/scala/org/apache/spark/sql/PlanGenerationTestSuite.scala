@@ -1273,6 +1273,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.min("id").over(Window.orderBy(Column("a"), Column("b"))),
       fn.min("id").over(Window.orderBy("a", "b")),
       fn.min("id").over(Window.orderBy("a").rowsBetween(2L, 3L)),
-      fn.min("id").over(Window.orderBy("a").rangeBetween(2L, 3L)))
+      fn.min("id").over(Window.orderBy("a").rangeBetween(2L, 3L)),
+      fn.count(Column("id")).over())
   }
 }

@@ -181,6 +181,19 @@
           }
         }
       }
+    }, {
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "count",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        }
+      }
     }]
   }
 }

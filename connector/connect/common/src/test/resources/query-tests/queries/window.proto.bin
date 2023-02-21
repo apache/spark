@@ -1,4 +1,4 @@
-ª
+Á
 $Z" struct<id:bigint,a:int,b:double>!Z
 
 min
@@ -37,4 +37,7 @@ $Z" struct<id:bigint,a:int,b:double>!Z
 
 a"
 0
-0
+0Z
+
+count
+id
