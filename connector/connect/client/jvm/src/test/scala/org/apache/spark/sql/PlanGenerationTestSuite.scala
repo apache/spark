@@ -1230,10 +1230,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.xxhash64(fn.col("id"), fn.col("a"), fn.col("d"), fn.col("g"))
   }
 
-  functionTest("assert_true") {
-    fn.assert_true(fn.col("id") > 0)
-  }
-
   functionTest("assert_true with message") {
     fn.assert_true(fn.col("id") > 0, lit("id negative!"))
   }

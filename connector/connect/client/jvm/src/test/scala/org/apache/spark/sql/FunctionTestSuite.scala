@@ -171,6 +171,15 @@ class FunctionTestSuite extends ConnectFunSuite {
     window(a, "10 seconds"))
   testEquals("session_window", session_window(a, "1 second"), session_window(a, lit("1 second")))
 
+  test("assert_true no message") {
+    val e = assert_true(a).expr
+    assert(e.hasUnresolvedFunction)
+    val fn = e.getUnresolvedFunction
+    assert(fn.getFunctionName == "assert_true")
+    assert(fn.getArgumentsCount == 1)
+    assert(fn.getArguments(0) == a.expr)
+  }
+
   test("rand no seed") {
     val e = rand().expr
     assert(e.hasUnresolvedFunction)
