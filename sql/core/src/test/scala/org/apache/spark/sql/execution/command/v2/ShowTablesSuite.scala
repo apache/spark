@@ -271,7 +271,6 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      
       val table1 = "tbl1"
       val table2 = "tbl2"
       withTable(table1, table2) {
@@ -285,7 +284,6 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
         assert(result.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         assert(result.collect().length == 3)
-
         assert(result.collect()(0).length == 4)
         assert(result.collect()(0)(1) === "tbl")
         assert(result.collect()(0)(3) ===
@@ -301,7 +299,6 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
              | |-- data: string (nullable = true)
              |
              |""".stripMargin)
-
         assert(result.collect()(1).length == 4)
         assert(result.collect()(1)(1) === "tbl1")
         assert(result.collect()(1)(3) ===
@@ -317,7 +314,6 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
              | |-- data1: string (nullable = true)
              |
              |""".stripMargin)
-
         assert(result.collect()(2).length == 4)
         assert(result.collect()(2)(1) === "tbl2")
         assert(result.collect()(2)(3) ===
