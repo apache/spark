@@ -41,7 +41,7 @@ if have_pandas:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class MapInPandasTests(ReusedSQLTestCase):
+class MapInPandasTestsMixin:
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
@@ -201,6 +201,10 @@ class MapInPandasTests(ReusedSQLTestCase):
                     )
         finally:
             shutil.rmtree(path)
+
+
+class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):
+    pass
 
 
 if __name__ == "__main__":
