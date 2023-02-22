@@ -1416,7 +1416,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   functionTest("lag") {
-    fn.lag(Column("g"), 1, "dv", ignoreNulls = true)
+    fn.lag(Column("g"), 1, null, ignoreNulls = true)
       .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
   }
 

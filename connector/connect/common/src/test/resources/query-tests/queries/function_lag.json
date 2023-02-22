@@ -20,7 +20,10 @@
               }
             }, {
               "literal": {
-                "string": "dv"
+                "null": {
+                  "null": {
+                  }
+                }
               }
             }, {
               "literal": {
