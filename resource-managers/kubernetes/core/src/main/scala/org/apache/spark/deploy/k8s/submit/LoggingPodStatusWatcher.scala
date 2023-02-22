@@ -105,9 +105,15 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
       val driverContainerName = conf.get(KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME)
         .getOrElse(DEFAULT_DRIVER_CONTAINER_NAME)
       pod.foreach { p =>
-        return Some(p.getStatus.getContainerStatuses.asScala
-          .filter(driverContainerName == _.getName)
-          .head.getState.getTerminated.getExitCode)
+        try {
+          return Some(p.getStatus.getContainerStatuses.asScala
+            .filter(driverContainerName == _.getName)
+            .head.getState.getTerminated.getExitCode)
+        } catch {
+          case _: NullPointerException =>
+            logError("Fail to find completed driver container exit code")
+            return None
+        }
       }
       throw new SparkException("Fail to get driver exit code, when the application completed")
     } else {
