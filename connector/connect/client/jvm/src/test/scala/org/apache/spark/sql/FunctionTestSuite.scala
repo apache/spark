@@ -171,6 +171,20 @@ class FunctionTestSuite extends ConnectFunSuite {
     window(a, "10 seconds"))
   testEquals("session_window", session_window(a, "1 second"), session_window(a, lit("1 second")))
   testEquals("bucket", bucket(lit(3), a), bucket(3, a))
+  testEquals(
+    "lag",
+    lag(a, 1),
+    lag("a", 1),
+    lag(a, 1, null),
+    lag("a", 1, null),
+    lag(a, 1, null, false))
+  testEquals(
+    "lead",
+    lead(a, 2),
+    lead("a", 2),
+    lead(a, 2, null),
+    lead("a", 2, null),
+    lead(a, 2, null, false))
 
   test("assert_true no message") {
     val e = assert_true(a).expr
