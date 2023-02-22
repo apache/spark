@@ -1919,10 +1919,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.1.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.2.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.1.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.2.0 on an existing Kubernetes cluster.
 
 ##### Get started
 
@@ -1932,11 +1932,11 @@ Submit Spark jobs with the following extra options:
 --conf spark.kubernetes.scheduler.name=yunikorn
 --conf spark.kubernetes.driver.label.queue=root.default
 --conf spark.kubernetes.executor.label.queue=root.default
---conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={{APP_ID}}
---conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={{APP_ID}}
+--conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={% raw %}{{APP_ID}}{% endraw %}
+--conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={% raw %}{{APP_ID}}{% endraw %}
 ```
 
-Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
+Note that {% raw %}{{APP_ID}}{% endraw %} is the built-in variable that will be substituted with Spark job ID automatically.
 With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
 
 ### Stage Level Scheduling Overview
