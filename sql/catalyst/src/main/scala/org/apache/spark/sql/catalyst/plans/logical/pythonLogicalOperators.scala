@@ -99,7 +99,8 @@ case class FlatMapCoGroupsInPandas(
 
   override def childrenNodes: Seq[LogicalPlan] = plans
 
-  override protected def withNewChildrenInternal(newChildren: List[LogicalPlan]): LogicalPlan =
+  override protected def withNewChildrenInternal(newChildren: List[LogicalPlan])
+  : FlatMapCoGroupsInPandas =
     copy(
       groupingLens = groupingLens,
       functionExpr = functionExpr,

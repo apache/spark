@@ -368,8 +368,8 @@ class PandasCogroupedOps:
     This API is experimental.
     """
 
-    def __init__(self, gd1: "GroupedData", *gds: "GroupedData"):
-        self._gd1 = gd1
+    def __init__(self, *gds: "GroupedData"):
+        assert len(gds) >= 2, "Must pass 2 or more GroupedData"
         self._gds = gds
 
     def applyInPandas(
@@ -462,14 +462,16 @@ class PandasCogroupedOps:
             functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )  # type: ignore[call-overload]
 
-        all_cols = [self._extract_cols(gd) for gd in [self._gd1] + self._gds]
+        all_cols = [self._extract_cols(gd) for gd in self._gds]
         udf_column_expr = udf(*all_cols)._jc.expr()
-        assert self._gd1.session.sparkContext._jvm is not None
-        jgds = self._gd1.session.sparkContext._jvm.PythonUtils.toSeq(
-            [gd._jgd for gd in self._gds]
+
+        gd1 = self._gds[0]
+        assert gd1.session.sparkContext._jvm is not None
+        jgds = gd1.session.sparkContext._jvm.PythonUtils.toSeq(
+            [gd._jgd for gd in self._gds[1:]]
         )
-        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(jgds, udf_column_expr)
-        return DataFrame(jdf, self._gd1.session)
+        jdf = gd1._jgd.flatMapCoGroupsInPandas(jgds, udf_column_expr)
+        return DataFrame(jdf, gd1.session)
 
     @staticmethod
     def _extract_cols(gd: "GroupedData") -> List[Column]:

@@ -599,7 +599,8 @@ class RelationalGroupedDataset protected[sql](
     val groupingExprLengthEquals = rs.map(_.groupingExprs.length).
       forall(_ == this.groupingExprs.length)
 
-    require(groupingExprLengthEquals, s"Cogroup keys must have same size.")
+    require(groupingExprLengthEquals, "Cogroup keys must have same size. " +
+      s"Sizes: ${(this +: rs).map(_.groupingExprs.length).mkString(", ")}")
 
     require(expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
