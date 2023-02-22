@@ -15,27 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.protobuf
+syntax = "proto2";
 
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{DataType, StructType}
+package org.apache.spark.sql.protobuf.protos;
+option java_outer_classname = "Proto2Messages";
 
-trait ProtobufTestBase extends SQLTestUtils {
 
-  /**
-   * Returns full path to the given file in the resource folder,
-   * if the first choice throw NPE, try to return the full path of alternative.
-   * The result path doesn't contain the `file:/` protocol part.
-   */
-  protected def testFile(fileName: String, alternateFileName: String): String = {
-    val ret = try {
-      testFile(fileName)
-    } catch {
-      case _: NullPointerException => testFile(alternateFileName)
-    }
-    ret.replace("file:/", "/")
-  }
+// Used to test missing required field bar in top level schema.
+message FoobarWithRequiredFieldBar {
+  optional string foo = 1;
+  required int32 bar = 2;
+}
 
-  protected def structFromDDL(ddl: String): StructType =
-    DataType.fromDDL(ddl).asInstanceOf[StructType]
+// Used to test missing required field bar in nested struct.
+message NestedFoobarWithRequiredFieldBar {
+  optional FoobarWithRequiredFieldBar nested_foobar = 1;
 }

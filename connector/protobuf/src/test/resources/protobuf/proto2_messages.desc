@@ -1,0 +1,8 @@
+
+ù
+proto2_messages.proto$org.apache.spark.sql.protobuf.protos"@
+FoobarWithRequiredFieldBar
+foo (	Rfoo
+bar (Rbar"â
+ NestedFoobarWithRequiredFieldBare
+nested_foobar (2@.org.apache.spark.sql.protobuf.protos.FoobarWithRequiredFieldBarRnestedFoobarBBProto2Messages
