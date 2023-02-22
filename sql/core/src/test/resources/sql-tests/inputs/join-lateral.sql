@@ -203,6 +203,44 @@ SELECT * FROM t1 JOIN LATERAL
   FROM   t4
   WHERE  t4.c1 > t1.c2);
 
+-- INTERSECT
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  INTERSECT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- EXCEPT
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
 -- COUNT bug with UNION in subquery
 SELECT * FROM t1 JOIN LATERAL
   (SELECT COUNT(t2.c2)
@@ -239,6 +277,46 @@ SELECT * FROM t1 JOIN LATERAL
   SELECT t4.c2
   FROM   t4);
 
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  UNION DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4);
+  
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  INTERSECT DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4);
+  
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  EXCEPT DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
 -- Correlation under group by
 SELECT * FROM t1 JOIN LATERAL
   (SELECT t2.c2
@@ -272,28 +350,88 @@ SELECT * FROM t1 JOIN LATERAL
   FROM   t4);
 
 -- lateral join under union
-(SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1))
+SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1)
 UNION ALL
-(SELECT * FROM t1 JOIN t4);
+SELECT * FROM t1 JOIN t4;
 
 -- union above and below lateral join
-(SELECT * FROM t1 JOIN LATERAL
+SELECT * FROM t1 JOIN LATERAL
   (SELECT t2.c2
   FROM   t2
   WHERE  t2.c1 = t1.c1
   UNION ALL
   SELECT t4.c2
   FROM   t4
-  WHERE  t4.c1 = t1.c1))
+  WHERE  t4.c1 = t1.c1)
 UNION ALL
-(SELECT * FROM t2 JOIN LATERAL
+SELECT * FROM t2 JOIN LATERAL
   (SELECT t1.c2
   FROM   t1
   WHERE  t2.c1 <= t1.c1
   UNION ALL
   SELECT t4.c2
   FROM   t4
-  WHERE  t4.c1 < t2.c1));
+  WHERE  t4.c1 < t2.c1);
+
+-- Combinations of set ops
+SELECT * FROM t1 JOIN LATERAL
+  ((SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2)
+  UNION DISTINCT
+  (SELECT t4.c1
+  FROM   t4
+  WHERE  t4.c1 <= t1.c2
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 <> t1.c1)
+);
+
+SELECT * FROM t1 JOIN LATERAL
+  ((SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2)
+  INTERSECT DISTINCT
+  (SELECT t4.c1
+  FROM   t4
+  WHERE  t4.c1 <= t1.c2
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 <> t1.c1)
+);
+
+-- Semi join with correlation on left side - supported
+SELECT * FROM t1 JOIN LATERAL (SELECT sum(c1) FROM
+  (SELECT *
+  FROM   t2
+  WHERE  t2.c1 <= t1.c1) lhs
+  LEFT SEMI JOIN
+  (SELECT *
+  FROM   t4) rhs
+  ON lhs.c1 <=> rhs.c1 and lhs.c2 <=> rhs.c2
+);
+
+-- Semi join with correlation on right side - unsupported
+SELECT * FROM t1 JOIN LATERAL (SELECT sum(c1) FROM
+  (SELECT *
+  FROM   t2
+  WHERE  t2.c1 <= t1.c1) lhs
+  LEFT SEMI JOIN
+  (SELECT *
+  FROM   t4
+  WHERE t4.c1 > t1.c2) rhs
+  ON lhs.c1 <=> rhs.c1 and lhs.c2 <=> rhs.c2
+);
 
 -- SPARK-41961: lateral join with table-valued functions
 SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2));
