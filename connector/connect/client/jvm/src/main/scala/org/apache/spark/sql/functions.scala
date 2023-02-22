@@ -920,10 +920,10 @@ object functions {
    * Window function: returns the rank of rows within a window partition, without any gaps.
    *
    * The difference between rank and dense_rank is that denseRank leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
-   * and had three people tie for second place, you would say that all three were in second
-   * place and that the next person came in third. Rank would give me sequential numbers, making
-   * the person that came in third place (after the ties) would register as coming in fifth.
+   * sequence when there are ties. That is, if you were ranking a competition using dense_rank and
+   * had three people tie for second place, you would say that all three were in second place and
+   * that the next person came in third. Rank would give me sequential numbers, making the person
+   * that came in third place (after the ties) would register as coming in fifth.
    *
    * This is equivalent to the DENSE_RANK function in SQL.
    *
@@ -933,9 +933,9 @@ object functions {
   def dense_rank(): Column = Column.fn("dense_rank")
 
   /**
-   * Window function: returns the value that is `offset` rows before the current row, and
-   * `null` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
+   * Window function: returns the value that is `offset` rows before the current row, and `null`
+   * if there is less than `offset` rows before the current row. For example, an `offset` of one
+   * will return the previous row at any given point in the window partition.
    *
    * This is equivalent to the LAG function in SQL.
    *
@@ -945,9 +945,9 @@ object functions {
   def lag(e: Column, offset: Int): Column = lag(e, offset, null)
 
   /**
-   * Window function: returns the value that is `offset` rows before the current row, and
-   * `null` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
+   * Window function: returns the value that is `offset` rows before the current row, and `null`
+   * if there is less than `offset` rows before the current row. For example, an `offset` of one
+   * will return the previous row at any given point in the window partition.
    *
    * This is equivalent to the LAG function in SQL.
    *
@@ -958,8 +958,8 @@ object functions {
 
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
-   * `defaultValue` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
+   * `defaultValue` if there is less than `offset` rows before the current row. For example, an
+   * `offset` of one will return the previous row at any given point in the window partition.
    *
    * This is equivalent to the LAG function in SQL.
    *
@@ -972,8 +972,8 @@ object functions {
 
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
-   * `defaultValue` if there is less than `offset` rows before the current row. For example,
-   * an `offset` of one will return the previous row at any given point in the window partition.
+   * `defaultValue` if there is less than `offset` rows before the current row. For example, an
+   * `offset` of one will return the previous row at any given point in the window partition.
    *
    * This is equivalent to the LAG function in SQL.
    *
@@ -987,9 +987,9 @@ object functions {
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
    * `defaultValue` if there is less than `offset` rows before the current row. `ignoreNulls`
-   * determines whether null values of row are included in or eliminated from the calculation.
-   * For example, an `offset` of one will return the previous row at any given point in the
-   * window partition.
+   * determines whether null values of row are included in or eliminated from the calculation. For
+   * example, an `offset` of one will return the previous row at any given point in the window
+   * partition.
    *
    * This is equivalent to the LAG function in SQL.
    *
@@ -1000,9 +1000,9 @@ object functions {
     Column.fn("lag", e, lit(offset), lit(defaultValue), lit(ignoreNulls))
 
   /**
-   * Window function: returns the value that is `offset` rows after the current row, and
-   * `null` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
+   * Window function: returns the value that is `offset` rows after the current row, and `null` if
+   * there is less than `offset` rows after the current row. For example, an `offset` of one will
+   * return the next row at any given point in the window partition.
    *
    * This is equivalent to the LEAD function in SQL.
    *
@@ -1014,9 +1014,9 @@ object functions {
   }
 
   /**
-   * Window function: returns the value that is `offset` rows after the current row, and
-   * `null` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
+   * Window function: returns the value that is `offset` rows after the current row, and `null` if
+   * there is less than `offset` rows after the current row. For example, an `offset` of one will
+   * return the next row at any given point in the window partition.
    *
    * This is equivalent to the LEAD function in SQL.
    *
@@ -1029,8 +1029,8 @@ object functions {
 
   /**
    * Window function: returns the value that is `offset` rows after the current row, and
-   * `defaultValue` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
+   * `defaultValue` if there is less than `offset` rows after the current row. For example, an
+   * `offset` of one will return the next row at any given point in the window partition.
    *
    * This is equivalent to the LEAD function in SQL.
    *
@@ -1043,8 +1043,8 @@ object functions {
 
   /**
    * Window function: returns the value that is `offset` rows after the current row, and
-   * `defaultValue` if there is less than `offset` rows after the current row. For example,
-   * an `offset` of one will return the next row at any given point in the window partition.
+   * `defaultValue` if there is less than `offset` rows after the current row. For example, an
+   * `offset` of one will return the next row at any given point in the window partition.
    *
    * This is equivalent to the LEAD function in SQL.
    *
@@ -1058,9 +1058,9 @@ object functions {
   /**
    * Window function: returns the value that is `offset` rows after the current row, and
    * `defaultValue` if there is less than `offset` rows after the current row. `ignoreNulls`
-   * determines whether null values of row are included in or eliminated from the calculation.
-   * The default value of `ignoreNulls` is false. For example, an `offset` of one will return
-   * the next row at any given point in the window partition.
+   * determines whether null values of row are included in or eliminated from the calculation. The
+   * default value of `ignoreNulls` is false. For example, an `offset` of one will return the next
+   * row at any given point in the window partition.
    *
    * This is equivalent to the LEAD function in SQL.
    *
@@ -1071,11 +1071,11 @@ object functions {
     Column.fn("lead", e, lit(offset), lit(defaultValue), lit(ignoreNulls))
 
   /**
-   * Window function: returns the value that is the `offset`th row of the window frame
-   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   * Window function: returns the value that is the `offset`th row of the window frame (counting
+   * from 1), and `null` if the size of window frame is less than `offset` rows.
    *
-   * It will return the `offset`th non-null value it sees when ignoreNulls is set to true.
-   * If all values are null, then null is returned.
+   * It will return the `offset`th non-null value it sees when ignoreNulls is set to true. If all
+   * values are null, then null is returned.
    *
    * This is equivalent to the nth_value function in SQL.
    *
@@ -1086,8 +1086,8 @@ object functions {
     Column.fn("nth_value", e, lit(offset), lit(ignoreNulls))
 
   /**
-   * Window function: returns the value that is the `offset`th row of the window frame
-   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   * Window function: returns the value that is the `offset`th row of the window frame (counting
+   * from 1), and `null` if the size of window frame is less than `offset` rows.
    *
    * This is equivalent to the nth_value function in SQL.
    *
@@ -1099,8 +1099,8 @@ object functions {
 
   /**
    * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
-   * partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
-   * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
+   * partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the
+   * second quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
    *
    * This is equivalent to the NTILE function in SQL.
    *
@@ -1110,7 +1110,8 @@ object functions {
   def ntile(n: Int): Column = Column.fn("ntile", lit(n))
 
   /**
-   * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+   * Window function: returns the relative rank (i.e. percentile) of rows within a window
+   * partition.
    *
    * This is computed by:
    * {{{
@@ -1128,10 +1129,10 @@ object functions {
    * Window function: returns the rank of rows within a window partition.
    *
    * The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
-   * and had three people tie for second place, you would say that all three were in second
-   * place and that the next person came in third. Rank would give me sequential numbers, making
-   * the person that came in third place (after the ties) would register as coming in fifth.
+   * sequence when there are ties. That is, if you were ranking a competition using dense_rank and
+   * had three people tie for second place, you would say that all three were in second place and
+   * that the next person came in third. Rank would give me sequential numbers, making the person
+   * that came in third place (after the ties) would register as coming in fifth.
    *
    * This is equivalent to the RANK function in SQL.
    *
