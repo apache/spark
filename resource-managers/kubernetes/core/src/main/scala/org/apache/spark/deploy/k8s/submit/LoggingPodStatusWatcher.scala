@@ -16,11 +16,15 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants.DEFAULT_DRIVER_CONTAINER_NAME
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
@@ -28,6 +32,7 @@ import org.apache.spark.internal.Logging
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
   def reset(): Unit
+  def getDriverExitCode(): Option[Int]
 }
 
 /**
@@ -69,7 +74,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   override def onClose(e: WatcherException): Unit = {
     logDebug(s"Stopping watching application $appId with last-observed phase $phase")
-    if(e != null && e.isHttpGone) {
+    if (e != null && e.isHttpGone) {
       resourceTooOldReceived = true
       logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
     } else {
@@ -95,6 +100,21 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
     this.notifyAll()
   }
 
+  override def getDriverExitCode(): Option[Int] = synchronized {
+    if (hasCompleted()) {
+      val driverContainerName = conf.get(KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME)
+        .getOrElse(DEFAULT_DRIVER_CONTAINER_NAME)
+      pod.foreach { p =>
+        return Some(p.getStatus.getContainerStatuses.asScala
+          .filter(driverContainerName == _.getName)
+          .head.getState.getTerminated.getExitCode)
+      }
+      throw new SparkException("Fail to get driver exit code, when the application completed")
+    } else {
+      throw new SparkException("Call getDriverExitCode() when the application has not completed")
+    }
+  }
+
   override def watchOrStop(sId: String): Boolean = {
     logInfo(s"Waiting for application ${conf.appName} with application ID ${conf.appId} " +
       s"and submission ID $sId to finish...")
@@ -106,7 +126,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
       }
     }
 
-    if(podCompleted) {
+    if (podCompleted) {
       logInfo(
         pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
           .getOrElse("No containers were found in the driver pod."))

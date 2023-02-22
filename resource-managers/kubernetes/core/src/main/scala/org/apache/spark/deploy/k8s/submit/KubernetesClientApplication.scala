@@ -202,9 +202,11 @@ private[spark] class Client(
           }
         }
       }
-    } else {
-      logInfo(s"Deployed Spark application ${conf.appName} with application ID ${conf.appId} " +
-        s"and submission ID $sId into Kubernetes")
+      // exit with the driver's exit code
+      watcher.getDriverExitCode().foreach { exitCode =>
+        logInfo(s"Driver pod $driverPodName exited with code $exitCode.")
+        System.exit(exitCode)
+      }
     }
   }
 }
