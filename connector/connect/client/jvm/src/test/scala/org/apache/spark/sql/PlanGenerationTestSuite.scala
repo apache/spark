@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -1645,4 +1646,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   /* Window API */
+  test("window") {
+    simple.select(
+      fn.min("id").over(Window.partitionBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.partitionBy("a", "b")),
+      fn.min("id").over(Window.orderBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.orderBy("a", "b")),
+      fn.min("id").over(Window.orderBy("a").rowsBetween(2L, 3L)),
+      fn.min("id").over(Window.orderBy("a").rangeBetween(2L, 3L)),
+      fn.count(Column("id")).over())
+  }
 }
