@@ -37,16 +37,25 @@ import org.apache.spark.connect.proto
  */
 class RelationalGroupedDataset protected[sql] (
     private[sql] val df: DataFrame,
-    private[sql] val groupingExprs: Seq[proto.Expression]) {
+    private[sql] val groupingExprs: Seq[proto.Expression],
+    groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
-    // TODO: support other GroupByType such as Rollup, Cube, Pivot.
     df.session.newDataset { builder =>
       builder.getAggregateBuilder
-        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         .setInput(df.plan.getRoot)
         .addAllGroupingExpressions(groupingExprs.asJava)
         .addAllAggregateExpressions(aggExprs.map(e => e.expr).asJava)
+
+      // TODO: support Pivot.
+      groupType match {
+        case RelationalGroupedDataset.RollupType =>
+          builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+        case RelationalGroupedDataset.CubeType =>
+          builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+        case _ =>
+          builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+      }
     }
   }
 
@@ -224,4 +233,29 @@ class RelationalGroupedDataset protected[sql] (
   def sum(colNames: String*): DataFrame = {
     toDF(colNames.map(colName => functions.sum(colName)))
   }
+}
+
+private[sql] object RelationalGroupedDataset {
+
+  /**
+   * The Grouping Type
+   */
+  private[sql] trait GroupType {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$").stripSuffix("Type")
+  }
+
+  /**
+   * To indicate it's the GroupBy
+   */
+  private[sql] object GroupByType extends GroupType
+
+  /**
+   * To indicate it's the CUBE
+   */
+  private[sql] object CubeType extends GroupType
+
+  /**
+   * To indicate it's the ROLLUP
+   */
+  private[sql] object RollupType extends GroupType
 }
