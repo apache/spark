@@ -154,17 +154,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       extraOptions + ("path" -> path.get)
     }
 
-    Dataset.ofRows(
-      sparkSession,
-      VersionUnresolvedRelation(
-        sparkSession,
-        userSpecifiedSchema,
-        source,
-        optionsWithPath,
-        isStreaming = true))
-
-    val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
-      getConstructor().newInstance()
     // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
     // We can't be sure at this point whether we'll actually want to use V2, since we don't know the
     // writer or whether the query is continuous.
@@ -173,6 +162,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
       options = optionsWithPath.originalMap)
+
+    Dataset.ofRows(
+      sparkSession,
+      VersionUnresolvedRelation(v1DataSource, isStreaming = true)(sparkSession))
+
+    val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
+      getConstructor().newInstance() // TableProvider or Source
+
     val v1Relation = ds match {
       case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
       case _ => None

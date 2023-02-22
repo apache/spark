@@ -18,14 +18,23 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, Expression, GetStructField, IsNotNull, LessThan, Literal, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{SESSION_WINDOW, TIME_WINDOW, WINDOW_TIME}
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{CalendarIntervalType, DataType, LongType, Metadata, MetadataBuilder, StructType}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.catalyst.trees.TreePattern.RESOLVE_VERSION
+import org.apache.spark.sql.execution.datasources.VersionUnresolvedRelation
 
 object ResolveDataSourceVersion extends Rule[LogicalPlan] {
 
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(RESOLVE_VERSION), ruleId) {
+
+    case p if !p.childrenResolved => p
+    case p if p.resolved => p
+
+    case p => p.transformExpressionsWithPruning(
+      _.containsPattern(RESOLVE_VERSION), ruleId) {
+      case VersionUnresolvedRelation(dataSource, output, isStreaming) =>
+
+
+  }
 }
