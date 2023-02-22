@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -1386,6 +1387,65 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.upper(fn.col("g"))
   }
 
+  functionTest("years") {
+    fn.years(Column("a"))
+  }
+
+  functionTest("months") {
+    fn.months(Column("a"))
+  }
+
+  functionTest("days") {
+    fn.days(Column("a"))
+  }
+
+  functionTest("hours") {
+    fn.hours(Column("a"))
+  }
+
+  functionTest("bucket") {
+    fn.bucket(3, Column("a"))
+  }
+
+  functionTest("cume_dist") {
+    fn.cume_dist().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("dense_rank") {
+    fn.dense_rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("lag") {
+    fn.lag(Column("g"), 1, null, ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("lead") {
+    fn.lead(Column("g"), 2, "dv", ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("nth_value") {
+    fn.nth_value(Column("g"), 3, ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("ntile") {
+    fn.ntile(4).over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("percent_rank") {
+    fn.percent_rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("rank") {
+    fn.rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("row_number") {
+    fn.row_number().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
     test("function " + name) {
       temporals.select(f)
@@ -1625,4 +1685,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   /* Window API */
+  test("window") {
+    simple.select(
+      fn.min("id").over(Window.partitionBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.partitionBy("a", "b")),
+      fn.min("id").over(Window.orderBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.orderBy("a", "b")),
+      fn.min("id").over(Window.orderBy("a").rowsBetween(2L, 3L)),
+      fn.min("id").over(Window.orderBy("a").rangeBetween(2L, 3L)),
+      fn.count(Column("id")).over())
+  }
 }
