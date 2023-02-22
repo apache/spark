@@ -547,4 +547,18 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       )
     }
   }
+
+  test("constraint projection test") {
+    val r = LocalRelation ($"c".int).where($"c" + $"c" > 10)
+      .select($"c".as ("c1"), $"c".as("c2") )
+    val analyzed = r.analyze
+    println(analyzed.constraints)
+
+    val r1 = LocalRelation($"c1".int).where($"c1" + $"c1" > 10).as("r1")
+    val r2 = LocalRelation($"c2".int).as("r2")
+    val rr = r1.join(r2, Inner, Some($"r1.c1" === $"r2.c2"))
+
+    val analyzed2 = rr.analyze
+    println(analyzed2.constraints)
+  }
 }
