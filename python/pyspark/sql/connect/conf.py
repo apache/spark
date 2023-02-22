@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from typing import Any, Optional, Union, cast
+import warnings
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -34,7 +35,9 @@ class RuntimeConf:
             value = "true" if value else "false"
         elif isinstance(value, int):
             value = str(value)
-        self._client.config("set", keys=[key], optional_values=[value])
+        result = self._client.config("set", keys=[key], optional_values=[value])
+        for warn in result.warnings:
+            warnings.warn(warn)
 
     set.__doc__ = PySparkRuntimeConfig.set.__doc__
 
@@ -54,7 +57,9 @@ class RuntimeConf:
     get.__doc__ = PySparkRuntimeConfig.get.__doc__
 
     def unset(self, key: str) -> None:
-        self._client.config("unset", keys=[key])
+        result = self._client.config("unset", keys=[key])
+        for warn in result.warnings:
+            warnings.warn(warn)
 
     unset.__doc__ = PySparkRuntimeConfig.unset.__doc__
 
