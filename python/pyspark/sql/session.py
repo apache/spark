@@ -458,7 +458,7 @@ class SparkSession(SparkConversionMixin):
                         else:
                             raise RuntimeError(
                                 "Cannot start a remote Spark session because there "
-                                "is a regular Spark Connect already running."
+                                "is a regular Spark session already running."
                             )
 
                 session = SparkSession._instantiatedSession

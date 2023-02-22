@@ -177,11 +177,24 @@ class FunctionTestSuite extends ConnectFunSuite {
     window(a, "10 seconds"))
   testEquals("session_window", session_window(a, "1 second"), session_window(a, lit("1 second")))
   testEquals("slice", slice(a, 1, 2), slice(a, lit(1), lit(2)))
-  /* THIS IS A PROBLEM FOR PlanGenerationSuite
+  testEquals("bucket", bucket(lit(3), a), bucket(3, a))
+  testEquals(
+    "lag",
+    lag(a, 1),
+    lag("a", 1),
+    lag(a, 1, null),
+    lag("a", 1, null),
+    lag(a, 1, null, false))
+  testEquals(
+    "lead",
+    lead(a, 2),
+    lead("a", 2),
+    lead(a, 2, null),
+    lead("a", 2, null),
+    lead(a, 2, null, false))
   testEquals("aggregate",
     aggregate(a, lit(0), (l, r) => l + r),
     aggregate(a, lit(0), (l, r) => l + r, id => id))
-   */
   testEquals("from_json",
     from_json(a, schema.asInstanceOf[DataType]),
     from_json(a, schema),
@@ -212,7 +225,6 @@ class FunctionTestSuite extends ConnectFunSuite {
   testEquals("to_csv",
     to_csv(a),
     to_csv(a, Collections.emptyMap[String, String]))
-  testEquals("bucket", bucket(10, a), bucket(lit(10), a))
 
   test("assert_true no message") {
     val e = assert_true(a).expr

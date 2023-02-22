@@ -32,9 +32,13 @@ class DecorrelateInnerQuerySuite extends PlanTest {
   val x = AttributeReference("x", IntegerType)()
   val y = AttributeReference("y", IntegerType)()
   val z = AttributeReference("z", IntegerType)()
+  val a3 = AttributeReference("a3", IntegerType)()
+  val b3 = AttributeReference("b3", IntegerType)()
+  val c3 = AttributeReference("c3", IntegerType)()
   val t0 = OneRowRelation()
   val testRelation = LocalRelation(a, b, c)
   val testRelation2 = LocalRelation(x, y, z)
+  val testRelation3 = LocalRelation(a3, b3, c3)
 
   private def hasOuterReferences(plan: LogicalPlan): Boolean = {
     plan.exists(_.expressions.exists(SubExprUtils.containsOuter))
@@ -283,7 +287,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     check(innerPlan, outerPlan, correctAnswer, Seq(y <=> y, x === a, y === z))
   }
 
-  test("union in correlation path") {
+  test("SPARK-36124: union in correlation path") {
     val outerPlan = testRelation2
     val innerPlan =
       Union(
@@ -305,7 +309,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
   }
 
-  test("another union in correlation path") {
+  test("SPARK-36124: another union in correlation path") {
     val outerPlan = testRelation2
     val innerPlan =
       Union(Seq(
@@ -331,6 +335,110 @@ class DecorrelateInnerQuerySuite extends PlanTest {
               testRelation)))
       ))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y, z <=> z))
+  }
+
+  test("SPARK-36124: INTERSECT ALL in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Intersect(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b3, c3 === 6),
+          testRelation3),
+        isAll = true)
+    val x2 = x.newInstance()
+    val y2 = y.newInstance()
+    val correctAnswer =
+      Intersect(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a3, b3, c3, x2, y2),
+          Filter(And(y2 === b3, c3 === 6),
+            DomainJoin(Seq(x2, y2),
+              testRelation3))),
+        isAll = true
+      )
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
+  }
+
+    test("SPARK-36124: INTERSECT DISTINCT in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Intersect(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b3, c3 === 6),
+          testRelation3),
+        isAll = false)
+    val x2 = x.newInstance()
+    val y2 = y.newInstance()
+    val correctAnswer =
+      Intersect(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a3, b3, c3, x2, y2),
+          Filter(And(y2 === b3, c3 === 6),
+            DomainJoin(Seq(x2, y2),
+              testRelation3))),
+        isAll = false
+      )
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
+  }
+
+  test("SPARK-36124: EXCEPT ALL in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Except(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b3, c3 === 6),
+          testRelation3),
+        isAll = true)
+    val x2 = x.newInstance()
+    val y2 = y.newInstance()
+    val correctAnswer =
+      Except(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a3, b3, c3, x2, y2),
+          Filter(And(y2 === b3, c3 === 6),
+            DomainJoin(Seq(x2, y2),
+              testRelation3))),
+        isAll = true
+      )
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
+  }
+
+  test("SPARK-36124: EXCEPT DISTINCT in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Except(
+        Filter(And(OuterReference(x) === a, c === 3),
+          testRelation),
+        Filter(And(OuterReference(y) === b3, c3 === 6),
+          testRelation3),
+        isAll = false)
+    val x2 = x.newInstance()
+    val y2 = y.newInstance()
+    val correctAnswer =
+      Except(
+        Project(Seq(a, b, c, x, y),
+          Filter(And(x === a, c === 3),
+            DomainJoin(Seq(x, y),
+              testRelation))),
+        Project(Seq(a3, b3, c3, x2, y2),
+          Filter(And(y2 === b3, c3 === 6),
+            DomainJoin(Seq(x2, y2),
+              testRelation3))),
+        isAll = false
+      )
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
   }
 
   test("SPARK-38155: distinct with non-equality correlated predicates") {

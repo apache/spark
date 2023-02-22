@@ -974,6 +974,26 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         Some(NthValue(children(0), children(1), ignoreNulls))
 
+      case "lag" if fun.getArgumentsCount == 4 =>
+        // Lag does not have a constructor which accepts Expression typed 'ignoreNulls'
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val ignoreNulls = children.last match {
+          case Literal(bool: Boolean, BooleanType) => bool
+          case other =>
+            throw InvalidPlanInput(s"ignoreNulls should be a literal boolean, but got $other")
+        }
+        Some(Lag(children.head, children(1), children(2), ignoreNulls))
+
+      case "lead" if fun.getArgumentsCount == 4 =>
+        // Lead does not have a constructor which accepts Expression typed 'ignoreNulls'
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val ignoreNulls = children.last match {
+          case Literal(bool: Boolean, BooleanType) => bool
+          case other =>
+            throw InvalidPlanInput(s"ignoreNulls should be a literal boolean, but got $other")
+        }
+        Some(Lead(children.head, children(1), children(2), ignoreNulls))
+
       case "window" if 2 <= fun.getArgumentsCount && fun.getArgumentsCount <= 4 =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         val timeCol = children.head
