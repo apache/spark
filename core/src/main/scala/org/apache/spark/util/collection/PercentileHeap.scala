@@ -25,7 +25,7 @@ import scala.collection.mutable.PriorityQueue
  * Insertion is O(log n), Lookup is O(1).
  *
  * The implementation keeps two heaps: a bottom heap (`botHeap`) and a top heap (`topHeap`). The
- * bottom heap stores all the numbers below the percentile and the top heap the ones above the
+ * bottom heap stores all the numbers below the percentile and the top heap stores the ones above the
  * percentile. During insertion the relative sizes of the heaps are adjusted to match the
  * target percentile.
  */
