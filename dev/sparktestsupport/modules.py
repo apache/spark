@@ -508,6 +508,7 @@ pyspark_connect = Module(
     python_test_goals=[
         # doctests
         "pyspark.sql.connect.catalog",
+        "pyspark.sql.connect.conf",
         "pyspark.sql.connect.group",
         "pyspark.sql.connect.session",
         "pyspark.sql.connect.window",
@@ -523,6 +524,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_column",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_catalog",
+        "pyspark.sql.tests.connect.test_parity_conf",
         "pyspark.sql.tests.connect.test_parity_serde",
         "pyspark.sql.tests.connect.test_parity_functions",
         "pyspark.sql.tests.connect.test_parity_group",

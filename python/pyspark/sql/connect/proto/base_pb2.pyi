@@ -571,6 +571,30 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
 global___ExecutePlanResponse = ExecutePlanResponse
 
+class OptionalValue(google.protobuf.message.Message):
+    """The placeholder for the config request and response when the values can be optional."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VALUE_FIELD_NUMBER: builtins.int
+    value: builtins.str
+    def __init__(
+        self,
+        *,
+        value: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_value", b"_value"]
+    ) -> typing_extensions.Literal["value"] | None: ...
+
+global___OptionalValue = OptionalValue
+
 class ConfigRequest(google.protobuf.message.Message):
     """Request to update or fetch the configurations."""
 
@@ -610,7 +634,7 @@ class ConfigRequest(google.protobuf.message.Message):
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     OPERATION_FIELD_NUMBER: builtins.int
     KEYS_FIELD_NUMBER: builtins.int
-    VALUES_FIELD_NUMBER: builtins.int
+    OPTIONAL_VALUES_FIELD_NUMBER: builtins.int
     PREFIX_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     """(Required)
@@ -633,9 +657,11 @@ class ConfigRequest(google.protobuf.message.Message):
         'CONTAINS', 'IS_MODIFIABLE'.
         """
     @property
-    def values(
+    def optional_values(
         self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___OptionalValue
+    ]:
         """(Optional)
 
         Corresponding values to the keys.
@@ -656,7 +682,7 @@ class ConfigRequest(google.protobuf.message.Message):
         user_context: global___UserContext | None = ...,
         operation: global___ConfigRequest.Operation.ValueType = ...,
         keys: collections.abc.Iterable[builtins.str] | None = ...,
-        values: collections.abc.Iterable[builtins.str] | None = ...,
+        optional_values: collections.abc.Iterable[global___OptionalValue] | None = ...,
         prefix: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
@@ -676,12 +702,12 @@ class ConfigRequest(google.protobuf.message.Message):
             b"keys",
             "operation",
             b"operation",
+            "optional_values",
+            b"optional_values",
             "prefix",
             b"prefix",
             "user_context",
             b"user_context",
-            "values",
-            b"values",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -691,27 +717,9 @@ class ConfigRequest(google.protobuf.message.Message):
 global___ConfigRequest = ConfigRequest
 
 class ConfigResponse(google.protobuf.message.Message):
+    """Response to the config request."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class OptionalValue(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        VALUE_FIELD_NUMBER: builtins.int
-        value: builtins.str
-        def __init__(
-            self,
-            *,
-            value: builtins.str | None = ...,
-        ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_value", b"_value"]
-        ) -> typing_extensions.Literal["value"] | None: ...
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
     KEYS_FIELD_NUMBER: builtins.int
@@ -734,17 +742,19 @@ class ConfigResponse(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional)
 
-        Available when the operation is 'GET', 'GET_ALL'.
+        Available when the operation is 'GET_ALL'.
+        Optional when the 'operation' is 'GET' without the default values.
         """
     @property
     def optional_values(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___ConfigResponse.OptionalValue
+        global___OptionalValue
     ]:
         """(Optional)
 
         Available when the operation is 'GET_OPTION'.
+        Optional when the operation is 'GET' with the default values.
         """
     @property
     def bools(
@@ -768,8 +778,7 @@ class ConfigResponse(google.protobuf.message.Message):
         client_id: builtins.str = ...,
         keys: collections.abc.Iterable[builtins.str] | None = ...,
         values: collections.abc.Iterable[builtins.str] | None = ...,
-        optional_values: collections.abc.Iterable[global___ConfigResponse.OptionalValue]
-        | None = ...,
+        optional_values: collections.abc.Iterable[global___OptionalValue] | None = ...,
         bools: collections.abc.Iterable[builtins.bool] | None = ...,
         warnings: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...

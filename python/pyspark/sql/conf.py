@@ -40,7 +40,9 @@ class RuntimeConfig:
         self._jconf.set(key, value)
 
     @since(2.0)
-    def get(self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue) -> str:
+    def get(
+        self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue
+    ) -> Optional[str]:
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
         """

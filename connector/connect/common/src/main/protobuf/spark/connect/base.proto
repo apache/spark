@@ -183,6 +183,11 @@ message ExecutePlanResponse {
   }
 }
 
+// The placeholder for the config request and response when the values can be optional.
+message OptionalValue {
+  optional string value = 1;
+}
+
 // Request to update or fetch the configurations.
 message ConfigRequest {
   // (Required)
@@ -209,7 +214,7 @@ message ConfigRequest {
   // Required when the 'operation' is 'SET'.
   // Optional when the 'operation' is 'GET', the values here will be used
   // as the default values.
-  repeated string values = 5;
+  repeated OptionalValue optional_values = 5;
 
   // (Optional)
   //
@@ -229,6 +234,7 @@ message ConfigRequest {
   }
 }
 
+// Response to the config request.
 message ConfigResponse {
   string client_id = 1;
 
@@ -239,12 +245,14 @@ message ConfigResponse {
 
   // (Optional)
   //
-  // Available when the operation is 'GET', 'GET_ALL'.
+  // Available when the operation is 'GET_ALL'.
+  // Optional when the 'operation' is 'GET' without the default values.
   repeated string values = 3;
 
   // (Optional)
   //
   // Available when the operation is 'GET_OPTION'.
+  // Optional when the operation is 'GET' with the default values.
   repeated OptionalValue optional_values = 4;
 
   // (Optional)
@@ -256,10 +264,6 @@ message ConfigResponse {
   //
   // Warning messages for deprecated or unsupported configurations.
   repeated string warnings = 6;
-
-  message OptionalValue {
-    optional string value = 1;
-  }
 }
 
 // Main interface for the SparkConnect service.

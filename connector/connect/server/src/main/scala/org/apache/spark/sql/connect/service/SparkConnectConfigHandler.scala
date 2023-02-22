@@ -47,44 +47,40 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
     request.getOperation match {
       case proto.ConfigRequest.Operation.OPERATION_SET =>
-        if (request.getKeysCount != request.getValuesCount) {
+        if (request.getKeysCount != request.getOptionalValuesCount) {
           throw new UnsupportedOperationException("Keys and values should have the same length!")
         }
         request.getKeysList.asScala.iterator
-          .zip(request.getValuesList.asScala.iterator)
-          .foreach { case (key, value) =>
-            conf.set(key, value)
+          .zip(request.getOptionalValuesList.asScala.iterator)
+          .foreach { case (key, optional_value) =>
+            conf.set(key, SparkConnectConfigHandler.toOption(optional_value).orNull)
             getWarning(key).foreach(builder.addWarnings)
           }
 
       case proto.ConfigRequest.Operation.OPERATION_GET =>
-        if (request.getValuesCount == 0) {
+        if (request.getOptionalValuesCount == 0) {
           request.getKeysList.asScala.iterator.foreach { key =>
             builder.addValues(conf.get(key))
             getWarning(key).foreach(builder.addWarnings)
           }
         } else {
-          if (request.getKeysCount != request.getValuesCount) {
+          if (request.getKeysCount != request.getOptionalValuesCount) {
             throw new UnsupportedOperationException(
               "Keys and values should have the same length!")
           }
           request.getKeysList.asScala.iterator
-            .zip(request.getValuesList.asScala.iterator)
-            .foreach { case (key, value) =>
-              builder.addValues(conf.get(key, value))
+            .zip(request.getOptionalValuesList.asScala.iterator)
+            .foreach { case (key, optional_value) =>
+              builder.addOptionalValues(SparkConnectConfigHandler.toOptionalValue(
+                Option(conf.get(key, SparkConnectConfigHandler.toOption(optional_value).orNull))))
               getWarning(key).foreach(builder.addWarnings)
             }
         }
 
       case proto.ConfigRequest.Operation.OPERATION_GET_OPTION =>
         request.getKeysList.asScala.iterator.foreach { key =>
-          conf.getOption(key) match {
-            case Some(value) =>
-              builder.addOptionalValues(
-                proto.ConfigResponse.OptionalValue.newBuilder().setValue(value).build())
-            case _ =>
-              builder.addOptionalValues(proto.ConfigResponse.OptionalValue.newBuilder().build())
-          }
+          builder.addOptionalValues(
+            SparkConnectConfigHandler.toOptionalValue(conf.getOption(key)))
           getWarning(key).foreach(builder.addWarnings)
         }
 
@@ -139,4 +135,20 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 object SparkConnectConfigHandler {
 
   private[connect] val unsupportedConfigurations = Set("spark.sql.execution.arrow.enabled")
+
+  def toOption(value: proto.OptionalValue): Option[String] = {
+    if (value.hasValue) {
+      Some(value.getValue)
+    } else {
+      None
+    }
+  }
+
+  def toOptionalValue(value: Option[String]): proto.OptionalValue = {
+    val builder = proto.OptionalValue.newBuilder()
+    if (value.isDefined) {
+      builder.setValue(value.get)
+    }
+    builder.build()
+  }
 }

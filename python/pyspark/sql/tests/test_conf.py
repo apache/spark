@@ -18,7 +18,7 @@
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class ConfTests(ReusedSQLTestCase):
+class ConfTestsMixin:
     def test_conf(self):
         spark = self.spark
         spark.conf.set("bogo", "sipeo")
@@ -41,6 +41,10 @@ class ConfTests(ReusedSQLTestCase):
         # This returns None because 'spark.sql.sources.partitionOverwriteMode' is unset, but
         # `defaultValue` in `spark.conf.get` is set to None.
         self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode", None), None)
+
+
+class ConfTests(ConfTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
