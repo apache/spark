@@ -26,6 +26,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
+import org.apache.spark.sql.functions._
 
 // Add sample tests.
 // - sample fraction: simple.sample(0.1)
@@ -144,6 +145,34 @@ class DatasetSuite
       .partitionBy("col99")
       .bucketBy(2, "col1", "col2")
       .parquet("my/test/path")
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
+
+  test("write V2") {
+    val df = ss.newDataset(_ => ()).limit(10)
+
+    val builder = proto.WriteOperationV2.newBuilder()
+    builder
+      .setInput(df.plan.getRoot)
+      .setTableName("t1")
+      .addPartitioningColumns(col("col99").expr)
+      .setProvider("json")
+      .putTableProperties("key", "value")
+      .putOptions("key2", "value2")
+      .setMode(proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
+
+    val expectedPlan = proto.Plan
+      .newBuilder()
+      .setCommand(proto.Command.newBuilder().setWriteOperationV2(builder))
+      .build()
+
+    df.writeTo("t1")
+      .partitionedBy(col("col99"))
+      .using("json")
+      .tableProperty("key", "value")
+      .options(Map("key2" -> "value2"))
+      .createOrReplace()
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }
