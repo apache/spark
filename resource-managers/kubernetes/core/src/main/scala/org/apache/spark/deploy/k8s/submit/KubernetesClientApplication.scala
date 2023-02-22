@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.Utils
 
 /**
@@ -202,10 +203,12 @@ private[spark] class Client(
           }
         }
       }
-      // exit with the driver's exit code
-      watcher.getDriverExitCode().foreach { exitCode =>
-        logInfo(s"Driver pod $driverPodName exited with code $exitCode.")
-        System.exit(exitCode)
+      // no-test case exit with the driver's exit code
+      if (!sys.props.get(IS_TESTING.key).getOrElse("false").toBoolean) {
+        watcher.getDriverExitCode().foreach { exitCode =>
+          logInfo(s"Driver pod $driverPodName exited with code $exitCode.")
+          System.exit(exitCode)
+        }
       }
     }
   }
