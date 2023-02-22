@@ -30,7 +30,7 @@ class PercentileHeapSuite extends SparkFunSuite {
     }
   }
 
-  private def testPercentileFor(nums: Seq[Double], percentage: Double) = {
+  private def testPercentileFor(nums: Seq[Int], percentage: Double) = {
     val h = new PercentileHeap(percentage)
     Random.shuffle(nums).foreach(h.insert(_))
     assert(h.size == nums.length)
@@ -39,11 +39,11 @@ class PercentileHeapSuite extends SparkFunSuite {
   }
 
   private val tests = Seq(
-    0d until 1d by 1d,
-    0d until 2d by 1d,
-    0d until 11d by 1d,
-    0d until 42d by 1d,
-    0d until 100d by 1d
+    0 until 1,
+    0 until 2,
+    0 until 11,
+    0 until 42,
+    0 until 100
   )
 
   for (t <- tests) {
