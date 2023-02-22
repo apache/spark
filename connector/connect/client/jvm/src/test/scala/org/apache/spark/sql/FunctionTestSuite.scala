@@ -192,10 +192,12 @@ class FunctionTestSuite extends ConnectFunSuite {
     lead(a, 2, null),
     lead("a", 2, null),
     lead(a, 2, null, false))
-  testEquals("aggregate",
+  testEquals(
+    "aggregate",
     aggregate(a, lit(0), (l, r) => l + r),
     aggregate(a, lit(0), (l, r) => l + r, id => id))
-  testEquals("from_json",
+  testEquals(
+    "from_json",
     from_json(a, schema.asInstanceOf[DataType]),
     from_json(a, schema),
     from_json(a, lit(schema.json)),
@@ -206,25 +208,24 @@ class FunctionTestSuite extends ConnectFunSuite {
     from_json(a, schema, Map.empty[String, String]),
     from_json(a, schema, Collections.emptyMap[String, String]),
     from_json(a, lit(schema.json), Collections.emptyMap[String, String]))
-  testEquals("schema_of_json",
-    schema_of_json(lit("x,y")),
-    schema_of_json("x,y"))
-  testEquals("to_json",
+  testEquals("schema_of_json", schema_of_json(lit("x,y")), schema_of_json("x,y"))
+  testEquals(
+    "to_json",
     to_json(a),
     to_json(a, Collections.emptyMap[String, String]),
     to_json(a, Map.empty[String, String]))
   testEquals("sort_array", sort_array(a), sort_array(a, asc = true))
   testEquals("sequence", sequence(lit(1), lit(10)), sequence(lit(1), lit(10), lit(1L)))
-  testEquals("from_csv",
+  testEquals(
+    "from_csv",
     from_csv(a, lit(schema.toDDL), Collections.emptyMap[String, String]),
     from_csv(a, schema, Map.empty[String, String]))
-  testEquals("schema_of_csv",
+  testEquals(
+    "schema_of_csv",
     schema_of_csv(lit("x,y")),
     schema_of_csv("x,y"),
     schema_of_csv(lit("x,y"), Collections.emptyMap()))
-  testEquals("to_csv",
-    to_csv(a),
-    to_csv(a, Collections.emptyMap[String, String]))
+  testEquals("to_csv", to_csv(a), to_csv(a, Collections.emptyMap[String, String]))
 
   test("assert_true no message") {
     val e = assert_true(a).expr

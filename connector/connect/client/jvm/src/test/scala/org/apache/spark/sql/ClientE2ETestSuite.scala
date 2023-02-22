@@ -337,21 +337,30 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     checkSample(datasets.get(3), 6.0 / 10.0, 1.0, 9L)
   }
 
-  test("Lambda functions") {
+  test("lambda functions") {
     // This test is mostly to validate lambda variables are properly resolved.
     import org.apache.spark.sql.functions._
-    val result = spark.range(3)
+    val result = spark
+      .range(3)
       .select(
         col("id"),
         array(sequence(col("id"), lit(10)), sequence(col("id") * 2, lit(10))).as("data"))
-      .select(
-        col("id"),
-        transform(col("data"), x => transform(x, x => x + 1)).as("data"))
+      .select(col("id"), transform(col("data"), x => transform(x, x => x + 1)).as("data"))
       .select(
         col("id"),
         transform(col("data"), x => aggregate(x, lit(0L), (x, y) => x + y)).as("summaries"))
       .collect()
     val expected = Array(Row(0L, Seq(66L, 66L)), Row(1L, Seq(65L, 63L)), Row(2L, Seq(63L, 56L)))
     assert(result === expected)
+  }
+
+  test("shuffle array") {
+    import org.apache.spark.sql.functions._
+    val result = spark
+      .sql("select 1")
+      .select(shuffle(array(lit(1), lit(2), lit(3), lit(74))))
+      .head()
+      .getSeq[Int](0)
+    assert(result.toSet === Set(1, 2, 3, 74))
   }
 }

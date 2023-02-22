@@ -1,0 +1,8 @@
+Ç
+ŽZ‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>42
+array_except
+e
+array
+0
+0
+0

@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
+import java.util.Collections
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -1607,272 +1608,258 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.timestamp_seconds(fn.col("x"))
   }
 
+  // Array of Long
+  // Array of Long
+  // Array of Array of Long
+  // Map string, Long
+  // Map string, Long
+
   functionTest("array_contains") {
-    lit(null)
+    fn.array_contains(fn.col("e"), lit(1))
   }
 
   functionTest("array_append") {
-    lit(null)
+    fn.array_append(fn.col("e"), lit(1))
   }
 
   functionTest("arrays_overlap") {
-    lit(null)
+    fn.arrays_overlap(fn.col("e"), fn.array(lit(1), lit(2)))
   }
 
   functionTest("slice") {
-    lit(null)
+    fn.slice(fn.col("e"), 0, 5)
   }
 
   functionTest("array_join") {
-    lit(null)
+    fn.array_join(fn.col("e"), ";")
   }
 
   functionTest("array_join with null replacement") {
-    lit(null)
+    fn.array_join(fn.col("e"), ";", "null")
   }
 
   functionTest("concat") {
-    lit(null)
+    fn.concat(fn.col("e"), fn.array(lit(1), lit(2)), fn.sequence(lit(33), lit(40)))
   }
 
   functionTest("array_position") {
-    lit(null)
+    fn.array_position(fn.col("e"), 10)
   }
 
   functionTest("element_at") {
-    lit(null)
+    fn.element_at(fn.col("f"), "bob")
   }
 
   functionTest("get") {
-    lit(null)
+    fn.get(fn.col("e"), lit(2))
   }
 
   functionTest("array_sort") {
-    lit(null)
+    fn.array_sort(fn.col("e"))
   }
 
   functionTest("array_sort with comparator") {
-    lit(null)
+    fn.array_sort(fn.col("e"), (l, r) => l - r)
   }
 
   functionTest("array_remove") {
-    lit(null)
+    fn.array_remove(fn.col("e"), 314)
   }
 
   functionTest("array_compact") {
-    lit(null)
+    fn.array_compact(fn.col("e"))
   }
 
   functionTest("array_distinct") {
-    lit(null)
+    fn.array_distinct(fn.col("e"))
   }
 
   functionTest("array_intersect") {
-    lit(null)
+    fn.array_intersect(fn.col("e"), fn.array(lit(10), lit(4)))
   }
 
   functionTest("array_insert") {
-    lit(null)
+    fn.array_insert(fn.col("e"), lit(0), lit(1))
   }
 
   functionTest("array_union") {
-    lit(null)
+    fn.array_union(fn.col("e"), fn.array(lit(1), lit(2), lit(3)))
   }
 
   functionTest("array_except") {
-    lit(null)
+    fn.array_except(fn.col("e"), fn.array(lit(1), lit(2), lit(4)))
   }
 
   functionTest("transform") {
-    lit(null)
+    fn.transform(fn.col("e"), x => x + 1)
   }
 
-  functionTest("transform with pair input") {
-    lit(null)
+  functionTest("transform with index") {
+    fn.transform(fn.col("e"), (x, i) => x + i)
   }
 
   functionTest("exists") {
-    lit(null)
+    fn.exists(fn.col("e"), x => x > 10)
   }
 
   functionTest("forall") {
-    lit(null)
+    fn.forall(fn.col("e"), x => x > 10)
   }
 
   functionTest("filter") {
-    lit(null)
+    fn.filter(fn.col("e"), x => x > 10)
   }
 
   functionTest("filter with pair input") {
-    lit(null)
+    fn.filter(fn.col("e"), (x, i) => x > 10 && i > 2)
   }
 
   functionTest("aggregate") {
-    lit(null)
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
   functionTest("zip_with") {
-    lit(null)
+    fn.zip_with(fn.col("e"), fn.col("e"), (x, y) => x + y)
   }
 
   functionTest("transform_keys") {
-    lit(null)
+    fn.transform_keys(fn.col("f"), (k, v) => fn.concat(k, v.getItem("id")))
   }
 
   functionTest("transform_values") {
-    lit(null)
+    fn.transform_values(fn.col("f"), (k, v) => v.withField("key", k))
   }
 
   functionTest("map_filter") {
-    lit(null)
+    fn.map_filter(fn.col("f"), (k, _) => k.contains(lit("baz")))
   }
 
   functionTest("map_zip_with") {
-    lit(null)
+    fn.map_zip_with(fn.col("f"), fn.col("f"), (_, v1, v2) => v1.getItem("id") + v2.getItem("id"))
   }
 
   functionTest("explode") {
-    lit(null)
+    fn.explode(fn.col("e"))
   }
 
   functionTest("explode_outer") {
-    lit(null)
+    fn.explode_outer(fn.col("e"))
   }
 
   functionTest("posexplode") {
-    lit(null)
+    fn.posexplode(fn.col("e"))
   }
 
   functionTest("posexplode_outer") {
-    lit(null)
+    fn.posexplode_outer(fn.col("e"))
   }
 
   functionTest("inline") {
-    lit(null)
+    fn.inline(fn.map_values(fn.col("f")))
   }
 
   functionTest("inline_outer") {
-    lit(null)
+    fn.inline_outer(fn.map_values(fn.col("f")))
   }
 
   functionTest("get_json_object") {
-    lit(null)
+    fn.get_json_object(fn.col("g"), "$.device_type")
   }
 
   functionTest("json_tuple") {
-    lit(null)
+    fn.json_tuple(fn.col("g"), "a", "b", "id")
   }
 
   functionTest("from_json") {
-    lit(null)
+    fn.from_json(fn.col("g"), simpleSchema)
   }
 
   functionTest("schema_of_json") {
-    lit(null)
+    fn.schema_of_json(lit("""[{"col":01}]"""))
   }
 
   functionTest("schema_of_json with options") {
-    lit(null)
+    fn.schema_of_json(
+      lit("""[{"col":01}]"""),
+      Collections.singletonMap("allowNumericLeadingZeros", "true"))
   }
 
   functionTest("to_json") {
-    lit(null)
+    fn.to_json(fn.col("d"), Map(("timestampFormat", "dd/MM/yyyy")))
   }
 
   functionTest("size") {
-    lit(null)
+    fn.size(fn.col("f"))
   }
 
   functionTest("sort_array") {
-    lit(null)
+    fn.sort_array(fn.col("e"))
   }
 
   functionTest("array_min") {
-    lit(null)
+    fn.array_min(fn.col("e"))
   }
 
   functionTest("array_max") {
-    lit(null)
-  }
-
-  functionTest("shuffle") {
-    lit(null)
+    fn.array_max(fn.col("e"))
   }
 
   functionTest("reverse") {
-    lit(null)
+    fn.reverse(fn.col("e"))
   }
 
   functionTest("flatten") {
-    lit(null)
+    fn.flatten(fn.array(fn.col("e"), fn.sequence(fn.lit(1), fn.lit(10))))
   }
 
   functionTest("sequence") {
-    lit(null)
+    fn.sequence(fn.lit(1), fn.lit(10))
   }
 
   functionTest("array_repeat") {
-    lit(null)
+    fn.array_repeat(fn.col("a"), 10)
   }
 
   functionTest("map_contains_key") {
-    lit(null)
+    fn.map_contains_key(fn.col("f"), "xyz")
   }
 
   functionTest("map_keys") {
-    lit(null)
+    fn.map_keys(fn.col("f"))
   }
 
   functionTest("map_values") {
-    lit(null)
+    fn.map_values(fn.col("f"))
   }
 
   functionTest("map_entries") {
-    lit(null)
+    fn.map_entries(fn.col("f"))
   }
 
   functionTest("map_from_entries") {
-    lit(null)
+    fn.map_from_entries(fn.transform(fn.col("e"), (x, i) => fn.struct(i, x)))
   }
 
   functionTest("arrays_zip") {
-    lit(null)
+    fn.arrays_zip(fn.col("e"), fn.sequence(lit(1), lit(20)))
   }
 
   functionTest("map_concat") {
-    lit(null)
+    fn.map_concat(
+      fn.col("f"),
+      fn.map(lit("foo"), fn.struct(lit(12L).as("id"), lit(68).as("a"), lit(Math.E).as("b"))))
   }
 
   functionTest("from_csv") {
-    lit(null)
+    fn.from_csv(fn.col("g"), simpleSchema, Map(("mode", "FAILFAST")))
   }
 
   functionTest("schema_of_csv") {
-    lit(null)
+    fn.schema_of_csv(lit("1|abc"), Collections.singletonMap("sep", "|"))
   }
 
   functionTest("to_csv") {
-    lit(null)
-  }
-
-  functionTest("years") {
-    lit(null)
-  }
-
-  functionTest("months") {
-    lit(null)
-  }
-
-  functionTest("days") {
-    lit(null)
-  }
-
-  functionTest("hours") {
-    lit(null)
-  }
-
-  functionTest("bucket") {
-    lit(null)
+    fn.to_csv(fn.col("d"), Collections.singletonMap("sep", "|"))
   }
 
   test("groupby agg") {

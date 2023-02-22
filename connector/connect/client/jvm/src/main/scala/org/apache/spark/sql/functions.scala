@@ -3673,10 +3673,10 @@ object functions {
    * @since 3.4.0
    */
   def window(
-              timeColumn: Column,
-              windowDuration: String,
-              slideDuration: String,
-              startTime: String): Column =
+      timeColumn: Column,
+      windowDuration: String,
+      slideDuration: String,
+      startTime: String): Column =
     Column.fn("window", timeColumn, lit(windowDuration), lit(slideDuration), lit(startTime))
 
   /**
@@ -4642,18 +4642,30 @@ object functions {
     from_json(e, schema, options.asScala.iterator)
   }
 
-  private def optionsToMap(options: Iterator[(String, String)]): Column = {
-    val flattenedKeyValueIterator = options.flatMap { case (k, v) =>
-      Iterator(lit(k), lit(v))
+  /**
+   * Invoke a function with an options map as its last argument. If there are no options, its
+   * column is dropped.
+   */
+  private def fnWithOptions(
+      name: String,
+      options: Iterator[(String, String)],
+      arguments: Column*): Column = {
+    val augmentedArguments = if (options.hasNext) {
+      val flattenedKeyValueIterator = options.flatMap { case (k, v) =>
+        Iterator(lit(k), lit(v))
+      }
+      arguments :+ map(flattenedKeyValueIterator.toSeq: _*)
+    } else {
+      arguments
     }
-    map(flattenedKeyValueIterator.toSeq: _*)
+    Column.fn(name, augmentedArguments: _*)
   }
 
   private def from_json(
       e: Column,
       schema: Column,
       options: Iterator[(String, String)]): Column = {
-    Column.fn("from_json", e, schema, optionsToMap(options))
+    fnWithOptions("from_json", options, e, schema)
   }
 
   /**
@@ -4697,7 +4709,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_json(json: Column, options: java.util.Map[String, String]): Column =
-    Column.fn("schema_of_json", json, optionsToMap(options.asScala.iterator))
+    fnWithOptions("schema_of_json", options.asScala.iterator, json)
 
   // scalastyle:off line.size.limit
   /**
@@ -4719,7 +4731,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_json(e: Column, options: Map[String, String]): Column =
-    Column.fn("to_json", e, optionsToMap(options.iterator))
+    fnWithOptions("to_json", options.iterator, e)
 
   // scalastyle:off line.size.limit
   /**
@@ -4966,9 +4978,8 @@ object functions {
   def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
     from_csv(e, schema, options.asScala.iterator)
 
-  private def from_csv(e: Column, schema: Column, options: Iterator[(String, String)]): Column = {
-    Column.fn("from_csv", e, schema, optionsToMap(options))
-  }
+  private def from_csv(e: Column, schema: Column, options: Iterator[(String, String)]): Column =
+    fnWithOptions("from_csv", options, e, schema)
 
   /**
    * Parses a CSV string and infers its schema in DDL format.
@@ -5011,7 +5022,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column =
-    Column.fn("schema_of_csv", csv, optionsToMap(options.asScala.iterator))
+    fnWithOptions("schema_of_csv", options.asScala.iterator, csv)
 
   // scalastyle:off line.size.limit
   /**
@@ -5031,7 +5042,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_csv(e: Column, options: java.util.Map[String, String]): Column =
-    Column.fn("to_csv", e, optionsToMap(options.asScala.iterator))
+    fnWithOptions("to_csv", options.asScala.iterator, e)
 
   /**
    * Converts a column containing a `StructType` into a CSV string with the specified schema.
