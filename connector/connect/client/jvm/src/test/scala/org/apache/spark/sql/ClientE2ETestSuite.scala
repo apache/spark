@@ -154,17 +154,42 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
-  test("writeTo with create") {
+  test("writeTo with create and using") {
+    // TODO (SPARK-42519): Add more test after we can set configs. See more WriteTo test cases
+    //  in SparkConnectProtoSuite.
+    //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     withTable("myTableV2") {
-      // TODO (SPARK-42519): test more cases after we can set configs. See more WriteTo test cases
-      //  in SparkConnectProtoSuite.
-      //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
       spark.range(3).writeTo("myTableV2").using("parquet").create()
       val result = spark.sql("select * from myTableV2").sort("id").collect()
       assert(result.length == 3)
       assert(result(0).getLong(0) == 0)
       assert(result(1).getLong(0) == 1)
       assert(result(2).getLong(0) == 2)
+    }
+  }
+
+  // TODO (SPARK-42519): Revisit this test after we can set configs.
+  //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+  test("writeTo with create and append") {
+    withTable("myTableV2") {
+      spark.range(3).writeTo("myTableV2").using("parquet").create()
+      withTable("myTableV2") {
+        assertThrows[StatusRuntimeException] {
+          // Failed to append as Cannot write into v1 table: `spark_catalog`.`default`.`mytablev2`.
+          spark.range(3).writeTo("myTableV2").append()
+        }
+      }
+    }
+  }
+
+  // TODO (SPARK-42519): Revisit this test after we can set configs.
+  //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+  test("writeTo with create") {
+    withTable("myTableV2") {
+      assertThrows[StatusRuntimeException] {
+        // Failed to create as Hive support is required.
+        spark.range(3).writeTo("myTableV2").create()
+      }
     }
   }
 
