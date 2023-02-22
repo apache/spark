@@ -683,7 +683,8 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
+ * 1. Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
+ * 2. Pushes down topK beneath joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -723,6 +724,32 @@ object LimitPushDown extends Rule[LogicalPlan] {
           right = maybePushLocalLimit(limitExpr, join.right))
       case LeftSemi | LeftAnti if join.condition.isEmpty =>
         join.copy(left = maybePushLocalLimit(limitExpr, join.left))
+      case _ => join
+    }
+  }
+
+  private def canPushTopK(limit: Int, sortExprs: Seq[Expression], plan: LogicalPlan): Boolean = {
+    plan.maxRows.forall(_ > limit) && limit < conf.topKSortFallbackThreshold &&
+      sortExprs.forall(_.references.subsetOf(plan.outputSet))
+  }
+
+  private def pushTopK(limit: Int, sort: Sort, plan: LogicalPlan): LogicalPlan = {
+    Limit(Literal(limit, IntegerType), Sort(sort.order, true, plan))
+  }
+
+  private def maybePushTopKThroughJoin(limit: Int, sort: Sort, join: Join): Join = {
+    val sortExprs = sort.order.map(_.child)
+    join.joinType match {
+      case LeftOuter if canPushTopK(limit, sortExprs, join.left) =>
+        join.copy(left = pushTopK(limit, sort, join.left))
+      case RightOuter if canPushTopK(limit, sortExprs, join.right) =>
+        join.copy(right = pushTopK(limit, sort, join.right))
+      case _: InnerLike | FullOuter | LeftSemi | LeftAnti
+          if join.condition.isEmpty && canPushTopK(limit, sortExprs, join.left) =>
+        join.copy(left = pushTopK(limit, sort, join.left))
+      case _: InnerLike | FullOuter
+          if join.condition.isEmpty && canPushTopK(limit, sortExprs, join.right) =>
+        join.copy(right = pushTopK(limit, sort, join.right))
       case _ => join
     }
   }
@@ -775,6 +802,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+    // Push down topK through join
+    case Limit(le @ IntegerLiteral(limit), s @ Sort(_, true, join: Join)) =>
+      Limit(le, s.copy(child = maybePushTopKThroughJoin(limit, s, join)))
+    case Limit(le @ IntegerLiteral(limit), s @ Sort(_, true, project @ Project(_, join: Join))) =>
+      Limit(le, s.copy(child = project.copy(child = maybePushTopKThroughJoin(limit, s, join))))
   }
 }
 

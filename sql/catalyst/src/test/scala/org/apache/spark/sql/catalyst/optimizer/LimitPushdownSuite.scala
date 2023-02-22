@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Add
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 class LimitPushdownSuite extends PlanTest {
 
@@ -350,6 +351,70 @@ class LimitPushdownSuite extends PlanTest {
 
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
+    }
+  }
+
+  test("SPARK-42513: Push down topK through join") {
+    // Join condition is empty
+    Seq(Inner, Cross, LeftOuter, FullOuter).foreach { jt =>
+      comparePlans(
+        Optimize.execute(x.join(y, jt).orderBy("x.a".attr.asc).limit(2).analyze),
+        x.orderBy("a".attr.asc).limit(2).join(y, jt).orderBy("x.a".attr.asc).limit(2).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { jt =>
+      comparePlans(
+        Optimize.execute(x.join(y, jt).orderBy("x.a".attr.asc).limit(2).analyze),
+        x.orderBy("a".attr.asc).limit(2).join(LocalLimit(1, y), jt).orderBy("x.a".attr.asc).analyze)
+    }
+
+    Seq(Inner, Cross, RightOuter, FullOuter).foreach { jt =>
+      comparePlans(
+        Optimize.execute(x.join(y, jt).orderBy("y.a".attr.asc).limit(2).analyze),
+        x.join(y.orderBy("a".attr.asc).limit(2), jt).orderBy("y.a".attr.asc).limit(2).analyze)
+    }
+
+    // Join condition is not empty
+    comparePlans(
+      Optimize.execute(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+        .orderBy(("x.a".attr + 1).asc).limit(2).analyze),
+      x.orderBy(("x.a".attr + 1).asc).limit(2).join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+        .orderBy(("x.a".attr + 1).asc).limit(2).analyze)
+
+    comparePlans(
+      Optimize.execute(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
+        .orderBy("y.a".attr.asc).limit(2).analyze),
+      x.join(y.orderBy("a".attr.asc).limit(2), RightOuter, Some("x.a".attr === "y.a".attr))
+        .orderBy("y.a".attr.asc).limit(2).analyze)
+
+    // There is a project between sort and join
+    comparePlans(
+      Optimize.execute(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+        .select("x.a".attr, "x.c".attr, "y.b".attr)
+        .orderBy(("x.a".attr + 1).asc).limit(2).analyze),
+      x.orderBy(("x.a".attr + 1).asc).limit(2).join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+        .select("x.a".attr, "x.c".attr, "y.b".attr)
+        .orderBy(("x.a".attr + 1).asc).limit(2).analyze)
+
+    // unsupported cases
+    Seq(Inner, Cross, LeftOuter, RightOuter, FullOuter).foreach { jt =>
+      val order = x.join(y, jt).orderBy("x.a".attr.asc)
+      assert(order.maxRows === Some(36))
+      comparePlans(
+        Optimize.execute(order.limit(200).analyze),
+        order.analyze)
+    }
+
+    Seq(Inner, Cross, LeftOuter, RightOuter, FullOuter).foreach { jt =>
+      val plan = x.join(y, jt).orderBy("x.a".attr.asc, "y.a".attr.asc).limit(2)
+      comparePlans(Optimize.execute(plan.analyze), plan.analyze)
+    }
+
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "-1") {
+      Seq(Inner, Cross, LeftOuter, RightOuter, FullOuter).foreach { jt =>
+        val plan = x.join(y, jt).orderBy("x.a".attr.asc).limit(2)
+        comparePlans(Optimize.execute(plan.analyze), plan.analyze)
+      }
     }
   }
 }
