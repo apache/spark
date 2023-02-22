@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.window
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, GenerateOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{BlockingOperatorWithCodegen, CodegenSupport, SparkPlan, UnaryExecNode}
 
 sealed trait WindowGroupLimitMode
 
@@ -46,7 +46,7 @@ case class WindowGroupLimitExec(
     rankLikeFunction: Expression,
     limit: Int,
     mode: WindowGroupLimitMode,
-    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+    child: SparkPlan) extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -92,13 +92,20 @@ case class WindowGroupLimitExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  override protected def doProduce(ctx: CodegenContext): String = {
-    val thisPlan = ctx.addReferenceObj("plan", this)
+  // Name of list variable used in codegen.
+  private var listVariable: String = _
 
-    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
+  protected override def doProduce(ctx: CodegenContext): String = {
+    val needToLimit =
+      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToLimit", v => s"$v = true;")
+
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    listVariable = ctx.addMutableState("java.util.List<UnsafeRow>", "listVariable",
+      v => s"$v = new java.util.ArrayList<UnsafeRow>();", forceInline = true)
+    val inputIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "inputIter",
       forceInline = true)
     val limitIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "limitIter",
-      v => s"$v = $thisPlan.createIterator($input);", forceInline = true)
+      forceInline = true)
 
     val addToInput = ctx.freshName("addToInput")
     val addToInputFuncName = ctx.addNewFunction(addToInput,
@@ -110,8 +117,16 @@ case class WindowGroupLimitExec(
 
     val outputRow = ctx.freshName("outputRow")
     s"""
-       | $addToInputFuncName();
-       | while ($limitIterator.hasNext()) {
+       | if ($needToLimit) {
+       |   $addToInputFuncName();
+       |   $inputIterator =
+       |     scala.collection.JavaConverters.asScalaIterator($listVariable.iterator());
+       |   $limitIterator =
+       |     $thisPlan.createIterator($inputIterator);
+       |   $needToLimit = false;
+       | }
+       |
+       | while ($limitNotReachedCond $limitIterator.hasNext()) {
        |   UnsafeRow $outputRow = (UnsafeRow)$limitIterator.next();
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;
@@ -120,7 +135,10 @@ case class WindowGroupLimitExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    consume(ctx, input)
+    s"""
+       |${row.code}
+       |$listVariable.add((UnsafeRow)${row.value}.copy());
+     """.stripMargin
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): WindowGroupLimitExec =
