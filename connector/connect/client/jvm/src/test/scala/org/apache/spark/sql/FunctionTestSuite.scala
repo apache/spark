@@ -16,9 +16,12 @@
  */
 package org.apache.spark.sql
 
+import java.util.Collections
+
 import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ignore funsuite
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Tests for client local function behavior.
@@ -37,6 +40,10 @@ class FunctionTestSuite extends ConnectFunSuite {
   private val a = col("a")
   private val b = col("b")
   private val c = col("c")
+
+  private val schema = new StructType()
+    .add("key", "long")
+    .add("value", "string")
 
   testEquals("col/column", a, column("a"))
   testEquals("asc/asc_nulls_first", asc("a"), asc_nulls_first("a"))
@@ -169,18 +176,43 @@ class FunctionTestSuite extends ConnectFunSuite {
     window(a, "10 seconds", "10 seconds"),
     window(a, "10 seconds"))
   testEquals("session_window", session_window(a, "1 second"), session_window(a, lit("1 second")))
-
-  // slice
-  // aggregate
-  // from_json
-  // schema_of_json
-  // to_json
-  // sort_array
-  // sequence
-  // from_csv
-  // schema_of_csv
-  // to_csv
-  // bucket
+  testEquals("slice", slice(a, 1, 2), slice(a, lit(1), lit(2)))
+  /* THIS IS A PROBLEM FOR PlanGenerationSuite
+  testEquals("aggregate",
+    aggregate(a, lit(0), (l, r) => l + r),
+    aggregate(a, lit(0), (l, r) => l + r, id => id))
+   */
+  testEquals("from_json",
+    from_json(a, schema.asInstanceOf[DataType]),
+    from_json(a, schema),
+    from_json(a, lit(schema.json)),
+    from_json(a, schema.json, Map.empty[String, String]),
+    from_json(a, schema.json, Collections.emptyMap[String, String]),
+    from_json(a, schema.asInstanceOf[DataType], Map.empty[String, String]),
+    from_json(a, schema.asInstanceOf[DataType], Collections.emptyMap[String, String]),
+    from_json(a, schema, Map.empty[String, String]),
+    from_json(a, schema, Collections.emptyMap[String, String]),
+    from_json(a, lit(schema.json), Collections.emptyMap[String, String]))
+  testEquals("schema_of_json",
+    schema_of_json(lit("x,y")),
+    schema_of_json("x,y"))
+  testEquals("to_json",
+    to_json(a),
+    to_json(a, Collections.emptyMap[String, String]),
+    to_json(a, Map.empty[String, String]))
+  testEquals("sort_array", sort_array(a), sort_array(a, asc = true))
+  testEquals("sequence", sequence(lit(1), lit(10)), sequence(lit(1), lit(10), lit(1L)))
+  testEquals("from_csv",
+    from_csv(a, lit(schema.toDDL), Collections.emptyMap[String, String]),
+    from_csv(a, schema, Map.empty[String, String]))
+  testEquals("schema_of_csv",
+    schema_of_csv(lit("x,y")),
+    schema_of_csv("x,y"),
+    schema_of_csv(lit("x,y"), Collections.emptyMap()))
+  testEquals("to_csv",
+    to_csv(a),
+    to_csv(a, Collections.emptyMap[String, String]))
+  testEquals("bucket", bucket(10, a), bucket(lit(10), a))
 
   test("assert_true no message") {
     val e = assert_true(a).expr
