@@ -100,6 +100,9 @@ object functions {
         .setValue(value)
     }
 
+  private val nullType =
+    proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
+
   /**
    * Creates a [[Column]] of literal value.
    *
@@ -129,7 +132,7 @@ object functions {
       case v: Array[Byte] => createLiteral(_.setBinary(ByteString.copyFrom(v)))
       case v: collection.mutable.WrappedArray[_] => lit(v.array)
       case v: LocalDate => createLiteral(_.setDate(v.toEpochDay.toInt))
-      case null => unsupported("Null literals not supported yet.")
+      case null => createLiteral(_.setNull(nullType))
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
   }
