@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.TimeUnit
 
-import io.grpc.Server
+import io.grpc.{Server, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
@@ -65,10 +65,11 @@ class SparkConnectClientSuite
     assert(client.userId == "abc123")
   }
 
-  private def testClientConnection(
-      client: SparkConnectClient,
-      serverPort: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT): Unit = {
+  // Use 0 to start the server at a random port
+  private def testClientConnection(serverPort: Int = 0)(
+      clientBuilder: Int => SparkConnectClient): Unit = {
     startDummyServer(serverPort)
+    client = clientBuilder(server.getPort)
     val request = AnalyzePlanRequest
       .newBuilder()
       .setClientId("abc123")
@@ -79,15 +80,28 @@ class SparkConnectClientSuite
   }
 
   test("Test connection") {
-    val testPort = 16001
-    client = SparkConnectClient.builder().port(testPort).build()
-    testClientConnection(client, testPort)
+    testClientConnection() { testPort => SparkConnectClient.builder().port(testPort).build() }
   }
 
   test("Test connection string") {
-    val testPort = 16000
-    client = SparkConnectClient.builder().connectionString("sc://localhost:16000").build()
-    testClientConnection(client, testPort)
+    testClientConnection() { testPort =>
+      SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
+    }
+  }
+
+  test("Test encryption") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
+      .build()
+
+    val request = AnalyzePlanRequest.newBuilder().setClientId("abc123").build()
+
+    // Failed the ssl handshake as the dummy server does not have any server credentials installed.
+    assertThrows[StatusRuntimeException] {
+      client.analyze(request)
+    }
   }
 
   private case class TestPackURI(
@@ -97,12 +111,18 @@ class SparkConnectClientSuite
 
   private val URIs = Seq[TestPackURI](
     TestPackURI("sc://host", isCorrect = true),
-    TestPackURI("sc://localhost/", isCorrect = true, client => testClientConnection(client)),
+    TestPackURI(
+      "sc://localhost/",
+      isCorrect = true,
+      client => testClientConnection(ConnectCommon.CONNECT_GRPC_BINDING_PORT)(_ => client)),
     TestPackURI(
       "sc://localhost:1234/",
       isCorrect = true,
-      client => testClientConnection(client, 1234)),
-    TestPackURI("sc://localhost/;", isCorrect = true, client => testClientConnection(client)),
+      client => testClientConnection(1234)(_ => client)),
+    TestPackURI(
+      "sc://localhost/;",
+      isCorrect = true,
+      client => testClientConnection(ConnectCommon.CONNECT_GRPC_BINDING_PORT)(_ => client)),
     TestPackURI("sc://host:123", isCorrect = true),
     TestPackURI(
       "sc://host:123/;user_id=a94",
@@ -116,7 +136,14 @@ class SparkConnectClientSuite
     TestPackURI("sc://host:123;user_id=a94", isCorrect = false),
     TestPackURI("sc:///user_id=123", isCorrect = false),
     TestPackURI("sc://host:-4", isCorrect = false),
-    TestPackURI("sc://:123/", isCorrect = false))
+    TestPackURI("sc://:123/", isCorrect = false),
+    TestPackURI("sc://host:123/;use_ssl=true", isCorrect = true),
+    TestPackURI("sc://host:123/;token=mySecretToken", isCorrect = true),
+    TestPackURI("sc://host:123/;token=", isCorrect = false),
+    TestPackURI("sc://host:123/;use_ssl=true;token=mySecretToken", isCorrect = true),
+    TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
+    TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),
+    TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=false", isCorrect = false))
 
   private def checkTestPack(testPack: TestPackURI): Unit = {
     val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()
@@ -133,19 +160,9 @@ class SparkConnectClientSuite
     }
   }
 
-  // TODO(SPARK-41917): Remove test once SSL and Auth tokens are supported.
-  test("Non user-id parameters throw unsupported errors") {
-    assertThrows[UnsupportedOperationException] {
-      SparkConnectClient.builder().connectionString("sc://host/;use_ssl=true").build()
-    }
-
-    assertThrows[UnsupportedOperationException] {
-      SparkConnectClient.builder().connectionString("sc://host/;token=abc").build()
-    }
-
+  test("Unknown parameters throw unsupported errors") {
     assertThrows[UnsupportedOperationException] {
       SparkConnectClient.builder().connectionString("sc://host/;xyz=abc").build()
-
     }
   }
 }

@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.connect.client
 
-import scala.language.existentials
-
-import io.grpc.{ManagedChannel, ManagedChannelBuilder}
+import io.grpc.{CallCredentials, ChannelCredentials, CompositeChannelCredentials, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, Status, TlsChannelCredentials}
 import java.net.URI
 import java.util.UUID
+import java.util.concurrent.Executor
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -29,7 +28,7 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 /**
  * Conceptually the remote spark session that communicates with the server.
  */
-class SparkConnectClient(
+private[sql] class SparkConnectClient(
     private val userContext: proto.UserContext,
     private val channel: ManagedChannel) {
 
@@ -89,7 +88,14 @@ class SparkConnectClient(
   }
 }
 
-object SparkConnectClient {
+private[sql] object SparkConnectClient {
+  private val AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG: String =
+    "Authentication token cannot be passed over insecure connections. " +
+      "Either remove 'token' or set 'use_ssl=true'"
+
+  private val META_DATA_KEY: Metadata.Key[String] =
+    Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
+
   def builder(): Builder = new Builder()
 
   /**
@@ -100,6 +106,9 @@ object SparkConnectClient {
     private val userContextBuilder = proto.UserContext.newBuilder()
     private var host: String = "localhost"
     private var port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
+    private var token: Option[String] = None
+    // If no value specified for isSslEnabled, default to false
+    private var isSslEnabled: Option[Boolean] = None
 
     def userId(id: String): Builder = {
       userContextBuilder.setUserId(id)
@@ -114,6 +123,53 @@ object SparkConnectClient {
 
     def port(inputPort: Int): Builder = {
       port = inputPort
+      this
+    }
+
+    /**
+     * Setting the token implicitly sets the use_ssl=true. All the following examples yield the
+     * same results:
+     *
+     * {{{
+     * sc://localhost/;token=aaa
+     * sc://localhost/;use_ssl=true;token=aaa
+     * sc://localhost/;token=aaa;use_ssl=true
+     * }}}
+     *
+     * Throws exception if the token is set but use_ssl=false.
+     *
+     * @param inputToken
+     *   the user token.
+     * @return
+     *   this builder.
+     */
+    def token(inputToken: String): Builder = {
+      require(inputToken != null && inputToken.nonEmpty)
+      token = Some(inputToken)
+      // Only set the isSSlEnabled if it is not yet set
+      isSslEnabled match {
+        case None => isSslEnabled = Some(true)
+        case Some(false) =>
+          throw new IllegalArgumentException(AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
+        case Some(true) => // Good, the ssl is enabled
+      }
+      this
+    }
+
+    def enableSsl(): Builder = {
+      isSslEnabled = Some(true)
+      this
+    }
+
+    /**
+     * Disables the SSL. Throws exception if the token has been set.
+     *
+     * @return
+     *   this builder.
+     */
+    def disableSsl(): Builder = {
+      require(token.isEmpty, AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
+      isSslEnabled = Some(false)
       this
     }
 
@@ -158,13 +214,14 @@ object SparkConnectClient {
           }
           (arr(0), arr(1))
         }
-        if (key == URIParams.PARAM_USER_ID) {
-          userContextBuilder.setUserId(value)
-        } else {
-          // TODO(SPARK-41917): Support SSL and Auth tokens.
-          throw new UnsupportedOperationException(
-            "Parameters apart from user_id" +
-              " are currently unsupported.")
+        key match {
+          case URIParams.PARAM_USER_ID => userContextBuilder.setUserId(value)
+          case URIParams.PARAM_TOKEN => token(value)
+          case URIParams.PARAM_USE_SSL =>
+            if (true.toString.equalsIgnoreCase(value)) enableSsl() else disableSsl()
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Unknown key value pair provided: key=$key, value=$value")
         }
       }
     }
@@ -176,7 +233,6 @@ object SparkConnectClient {
      * Note: The connection string, if used, will override any previous host/port settings.
      */
     def connectionString(connectionString: String): Builder = {
-      // TODO(SPARK-41917): Support SSL and Auth tokens.
       val uri = new URI(connectionString)
       verifyURI(uri)
       parseURIParams(uri)
@@ -189,9 +245,54 @@ object SparkConnectClient {
     }
 
     def build(): SparkConnectClient = {
-      val channelBuilder = ManagedChannelBuilder.forAddress(host, port).usePlaintext()
-      val channel: ManagedChannel = channelBuilder.build()
+      def insecureCredentials(): ChannelCredentials = {
+        InsecureChannelCredentials.create()
+      }
+      val creds = isSslEnabled match {
+        case None => insecureCredentials()
+        case Some(false) => insecureCredentials()
+        case Some(true) =>
+          token match {
+            case Some(t) =>
+              // With access token added in the http header.
+              CompositeChannelCredentials.create(
+                TlsChannelCredentials.create,
+                new AccessTokenCallCredentials(t))
+            case None =>
+              TlsChannelCredentials.create
+          }
+      }
+      val channel: ManagedChannel = Grpc.newChannelBuilderForAddress(host, port, creds).build()
       new SparkConnectClient(userContextBuilder.build(), channel)
+    }
+  }
+
+  /**
+   * A [[CallCredentials]] created from an access token.
+   *
+   * @param token
+   *   A string to place directly in the http request authorization header, for example
+   *   "authorization: Bearer <access_token>".
+   */
+  private[client] class AccessTokenCallCredentials(token: String) extends CallCredentials {
+    override def applyRequestMetadata(
+        requestInfo: CallCredentials.RequestInfo,
+        appExecutor: Executor,
+        applier: CallCredentials.MetadataApplier): Unit = {
+      appExecutor.execute(() => {
+        try {
+          val headers = new Metadata()
+          headers.put(META_DATA_KEY, s"Bearer $token");
+          applier.apply(headers)
+        } catch {
+          case e: Throwable =>
+            applier.fail(Status.UNAUTHENTICATED.withCause(e));
+        }
+      })
+    }
+
+    override def thisUsesUnstableApi(): Unit = {
+      // Marks this API is not stable. Left empty on purpose.
     }
   }
 }
