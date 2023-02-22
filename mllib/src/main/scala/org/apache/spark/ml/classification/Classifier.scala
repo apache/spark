@@ -56,6 +56,25 @@ abstract class Classifier[
     M <: ClassificationModel[FeaturesType, M]]
   extends Predictor[FeaturesType, E, M] with ClassifierParams {
 
+  /**
+   * Get the number of classes.  This looks in column metadata first, and if that is missing,
+   * then this assumes classes are indexed 0,1,...,numClasses-1 and computes numClasses
+   * by finding the maximum label value.
+   *
+   * Label validation (ensuring all labels are integers >= 0) needs to be handled elsewhere,
+   * such as in `extractLabeledPoints()`.
+   *
+   * @param dataset       Dataset which contains a column [[labelCol]]
+   * @param maxNumClasses Maximum number of classes allowed when inferred from data.  If numClasses
+   *                      is specified in the metadata, then maxNumClasses is ignored.
+   * @return number of classes
+   * @throws IllegalArgumentException if metadata does not specify numClasses, and the
+   *                                  actual numClasses exceeds maxNumClasses
+   */
+  protected def getNumClasses(dataset: Dataset[_], maxNumClasses: Int = 100): Int = {
+    DatasetUtils.getNumClasses(dataset, $(labelCol), maxNumClasses)
+  }
+
   /** @group setParam */
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
 
