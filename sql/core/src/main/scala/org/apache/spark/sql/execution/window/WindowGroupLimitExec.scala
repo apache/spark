@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.window
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryExecNode}
 
 sealed trait WindowGroupLimitMode
 
@@ -46,7 +46,7 @@ case class WindowGroupLimitExec(
     rankLikeFunction: Expression,
     limit: Int,
     mode: WindowGroupLimitMode,
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
 
@@ -67,22 +67,60 @@ case class WindowGroupLimitExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  protected override def doExecute(): RDD[InternalRow] = rankLikeFunction match {
-    case _: RowNumber if partitionSpec.isEmpty =>
-      child.execute().mapPartitionsInternal(SimpleLimitIterator(_, limit))
-    case _: RowNumber =>
-      child.execute().mapPartitionsInternal(new GroupedLimitIterator(_, output, partitionSpec,
-        (input: Iterator[InternalRow]) => SimpleLimitIterator(input, limit)))
-    case _: Rank if partitionSpec.isEmpty =>
-      child.execute().mapPartitionsInternal(RankLimitIterator(output, _, orderSpec, limit))
-    case _: Rank =>
-      child.execute().mapPartitionsInternal(new GroupedLimitIterator(_, output, partitionSpec,
-        (input: Iterator[InternalRow]) => RankLimitIterator(output, input, orderSpec, limit)))
-    case _: DenseRank if partitionSpec.isEmpty =>
-   child.execute().mapPartitionsInternal(DenseRankLimitIterator(output, _, orderSpec, limit))
-    case _: DenseRank =>
-      child.execute().mapPartitionsInternal(new GroupedLimitIterator(_, output, partitionSpec,
-        (input: Iterator[InternalRow]) => DenseRankLimitIterator(output, input, orderSpec, limit)))
+  def createIterator(input: Iterator[InternalRow]): Iterator[InternalRow] =
+    rankLikeFunction match {
+      case _: RowNumber if partitionSpec.isEmpty => SimpleLimitIterator(input, limit)
+      case _: RowNumber =>
+        new GroupedLimitIterator(input, output, partitionSpec,
+          (input: Iterator[InternalRow]) => SimpleLimitIterator(input, limit))
+      case _: Rank if partitionSpec.isEmpty =>
+        RankLimitIterator(output, input, orderSpec, limit)
+      case _: Rank =>
+        new GroupedLimitIterator(input, output, partitionSpec,
+          (input: Iterator[InternalRow]) => RankLimitIterator(output, input, orderSpec, limit))
+      case _: DenseRank if partitionSpec.isEmpty =>
+        DenseRankLimitIterator(output, input, orderSpec, limit)
+      case _: DenseRank =>
+        new GroupedLimitIterator(input, output, partitionSpec,
+          (input: Iterator[InternalRow]) => DenseRankLimitIterator(output, input, orderSpec, limit))
+    }
+
+  protected override def doExecute(): RDD[InternalRow] =
+    child.execute().mapPartitionsInternal(createIterator(_))
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    val thisPlan = ctx.addReferenceObj("plan", this)
+
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
+      forceInline = true)
+    val limitIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "limitIter",
+      v => s"$v = $thisPlan.createIterator($input);", forceInline = true)
+
+    val addToInput = ctx.freshName("addToInput")
+    val addToInputFuncName = ctx.addNewFunction(addToInput,
+      s"""
+         | private void $addToInput() throws java.io.IOException {
+         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+         | }
+      """.stripMargin.trim)
+
+    val outputRow = ctx.freshName("outputRow")
+    s"""
+       | $addToInputFuncName();
+       | while ($limitIterator.hasNext()) {
+       |   UnsafeRow $outputRow = (UnsafeRow)$limitIterator.next();
+       |   ${consume(ctx, null, outputRow)}
+       |   if (shouldStop()) return;
+       | }
+     """.stripMargin.trim
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    consume(ctx, input)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): WindowGroupLimitExec =
