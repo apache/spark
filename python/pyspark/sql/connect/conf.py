@@ -29,7 +29,11 @@ class RuntimeConf:
 
     __init__.__doc__ = PySparkRuntimeConfig.__init__.__doc__
 
-    def set(self, key: str, value: str) -> None:
+    def set(self, key: str, value: Union[str, int, bool]) -> None:
+        if isinstance(value, bool):
+            value = "true" if value else "false"
+        elif isinstance(value, int):
+            value = str(value)
         self._client.config("set", keys=[key], optional_values=[value])
 
     set.__doc__ = PySparkRuntimeConfig.set.__doc__

@@ -35,7 +35,7 @@ class RuntimeConfig:
         self._jconf = jconf
 
     @since(2.0)
-    def set(self, key: str, value: str) -> None:
+    def set(self, key: str, value: Union[str, int, bool]) -> None:
         """Sets the given Spark runtime configuration property."""
         self._jconf.set(key, value)
 

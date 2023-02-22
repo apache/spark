@@ -191,7 +191,7 @@ class SQLContext:
 
         .. versionadded:: 1.3.0
         """
-        self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
+        self.sparkSession.conf.set(key, value)
 
     def getConf(
         self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue

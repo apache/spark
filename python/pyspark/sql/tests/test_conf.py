@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from decimal import Decimal
 
+from pyspark.errors import IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -41,6 +43,22 @@ class ConfTestsMixin:
         # This returns None because 'spark.sql.sources.partitionOverwriteMode' is unset, but
         # `defaultValue` in `spark.conf.get` is set to None.
         self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode", None), None)
+
+    def test_conf_with_python_objects(self):
+        spark = self.spark
+
+        for value, expected in [(True, "true"), (False, "false")]:
+            spark.conf.set("foo", value)
+            self.assertEqual(spark.conf.get("foo"), expected)
+
+        spark.conf.set("foo", 1)
+        self.assertEqual(spark.conf.get("foo"), "1")
+
+        with self.assertRaises(IllegalArgumentException):
+            spark.conf.set("foo", None)
+
+        with self.assertRaises(Exception):
+            spark.conf.set("foo", Decimal(1))
 
 
 class ConfTests(ConfTestsMixin, ReusedSQLTestCase):
