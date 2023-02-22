@@ -85,6 +85,12 @@ object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     /**
+     * If [[SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE]] is false (by default), there would be possible
+     * to appear some adjacent [[Project]] nodes. This pattern is used to prune the below one.
+     */
+    case p @ Project(projectList, _: Project) if SQLConf.get.nestedSchemaPruningEnabled =>
+      rewritePlanIfSubsetFieldsUsed(p, projectList, Nil)
+    /**
      * This pattern is needed to support [[Filter]] plan cases like
      * [[Project]]->[[Filter]]->listed plan in [[canProjectPushThrough]] (e.g., [[Window]]).
      * The reason why we don't simply add [[Filter]] in [[canProjectPushThrough]] is that
@@ -177,19 +183,48 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Replace the grandchildren of a plan with [[Project]]s of the nested fields as aliases,
-   * and replace the [[ExtractValue]] expressions with aliased attributes.
+   * If the child is [[Project]], this method will replace the nested fields as aliases without
+   * an extra [[Project]].
+   * Otherwise, replace the grandchildren of a plan with [[Project]]s of the nested fields as
+   * aliases, and replace the [[ExtractValue]] expressions with aliased attributes.
    */
   def replaceWithAliases(
       plan: LogicalPlan,
       nestedFieldToAlias: Map[Expression, Alias],
       attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = {
-    plan.withNewChildren(plan.children.map { plan =>
-      Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
-    }).transformExpressions {
-      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
-        nestedFieldToAlias(f.canonicalized).toAttribute
+    plan match {
+      case p: Project =>
+        // This pattern happens only if there are tow adjacent projects, and the current project
+        // is the below one. So it would not exist any nest field which can be replaced.
+        replaceProjectWithAliases(p, attrToAliases)
+      case _ =>
+        plan.withNewChildren(plan.children.map { plan =>
+          Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
+        }).transformExpressions {
+          case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+            nestedFieldToAlias(f.canonicalized).toAttribute
+        }
     }
+  }
+
+  private def replaceProjectWithAliases(
+      p: Project, attrToAliases: AttributeMap[Seq[Alias]]): Project = {
+    val newProjectList = p.projectList.flatMap {
+      case a @ Alias(e: Expression, _) =>
+        // Merge `ExtractValue`, for example:
+        // Project(x.y.z) as z              Project(_extract_z as z)
+        //   Project(c.x as x) (current)  =>  Project(c.x.y.z as _extract_z)
+        //     LeafNode(c)                      LeafNode(c)
+        attrToAliases.get(a.toAttribute).map(_.map(_.transform {
+            case attr: Attribute if attr.semanticEquals(a.toAttribute) => e
+          }.asInstanceOf[Alias]
+        )).getOrElse(a :: Nil)
+      case attr =>
+        attrToAliases.getOrElse(attr.toAttribute, attr :: Nil)
+    }
+    val replaced = p.copy(projectList = newProjectList)
+    replaced.copyTagsFrom(p)
+    replaced
   }
 
   /**

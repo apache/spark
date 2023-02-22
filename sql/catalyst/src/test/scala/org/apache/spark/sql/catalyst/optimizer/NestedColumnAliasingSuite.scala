@@ -861,6 +861,48 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     // The plan is expected to be unchanged.
     comparePlans(plan, RemoveNoopOperators.apply(optimized.get))
   }
+
+  test("SPARK-42504: NestedColumnAliasing support pruning adjacent projects") {
+    val nestedType = StructType.fromDDL(
+      "name string, age int, address struct<id: int, location string>")
+    val relation = LocalRelation($"people".struct(nestedType))
+
+    val query = relation
+      .select(
+        $"people",
+        ($"people".getField("age") + 1) as "x")
+      .select(
+        $"people".getField("age") as "y",
+        ($"x" + 2) as "x1",
+        ($"x" + 3) as "x2")
+    val expected = relation
+      .select(
+        $"people".getField("age") as "_extract_age",
+        ($"people".getField("age") + 1) as "x")
+      .select(
+        $"_extract_age" as "y",
+        ($"x" + 2) as "x1",
+        ($"x" + 3) as "x2")
+    comparePlans(Optimize.execute(query.analyze), expected.analyze)
+
+    val query2 = relation
+      .select(
+        $"people".getField("address").as("address"),
+        ($"people".getField("age") + 1) as "x")
+      .select(
+        $"address".getField("id").as("id"),
+        ($"x" + 2) as "x1",
+        ($"x" + 3) as "x2")
+    val expected2 = relation
+      .select(
+        $"people".getField("address").getField("id").as("_extract_id"),
+        ($"people".getField("age") + 1) as "x")
+      .select(
+        $"_extract_id".as("id"),
+        ($"x" + 2) as "x1",
+        ($"x" + 3) as "x2")
+    comparePlans(Optimize.execute(query2.analyze), expected2.analyze)
+  }
 }
 
 object NestedColumnAliasingSuite {

@@ -1161,4 +1161,14 @@ abstract class SchemaPruningSuite
     checkAnswer(mapQuery, Row(0, null) :: Row(1, null) ::
       Row(null, null) :: Row(null, null) :: Nil)
   }
+
+  testSchemaPruning("SPARK-42504: NestedColumnAliasing support pruning adjacent projects") {
+    val query = spark.sql(
+      "SELECT employer.id + 1, employer.id + 1 as x, x + 2 as y FROM departments")
+    checkScan(query, "struct<employer: struct<id:int>>")
+    checkAnswer(query,
+      Row(1, 1, 3) ::
+        Row(2, 2, 4) ::
+        Row(3, 3, 5) :: Nil)
+  }
 }
