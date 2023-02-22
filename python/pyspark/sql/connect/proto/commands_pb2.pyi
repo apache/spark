@@ -506,7 +506,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         *,
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         table_name: builtins.str = ...,
-        provider: builtins.str = ...,
+        provider: builtins.str | None = ...,
         partitioning_columns: collections.abc.Iterable[
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
@@ -519,12 +519,21 @@ class WriteOperationV2(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "input", b"input", "overwrite_condition", b"overwrite_condition"
+            "_provider",
+            b"_provider",
+            "input",
+            b"input",
+            "overwrite_condition",
+            b"overwrite_condition",
+            "provider",
+            b"provider",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_provider",
+            b"_provider",
             "input",
             b"input",
             "mode",
@@ -543,5 +552,8 @@ class WriteOperationV2(google.protobuf.message.Message):
             b"table_properties",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_provider", b"_provider"]
+    ) -> typing_extensions.Literal["provider"] | None: ...
 
 global___WriteOperationV2 = WriteOperationV2

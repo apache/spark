@@ -1614,7 +1614,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     writeOperation.getMode match {
       case proto.WriteOperationV2.Mode.MODE_CREATE =>
-        if (writeOperation.getProvider != null) {
+        if (writeOperation.hasProvider) {
           w.using(writeOperation.getProvider).create()
         } else {
           w.create()
@@ -1626,13 +1626,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.WriteOperationV2.Mode.MODE_APPEND =>
         w.append()
       case proto.WriteOperationV2.Mode.MODE_REPLACE =>
-        if (writeOperation.getProvider != null) {
+        if (writeOperation.hasProvider) {
           w.using(writeOperation.getProvider).replace()
         } else {
           w.replace()
         }
       case proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE =>
-        if (writeOperation.getProvider != null) {
+        if (writeOperation.hasProvider) {
           w.using(writeOperation.getProvider).createOrReplace()
         } else {
           w.createOrReplace()

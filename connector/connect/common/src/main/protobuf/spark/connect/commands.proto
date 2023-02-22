@@ -128,7 +128,7 @@ message WriteOperationV2 {
 
   // (Optional) A provider for the underlying output data source. Spark's default catalog supports
   // "parquet", "json", etc.
-  string provider = 3;
+  optional string provider = 3;
 
   // (Optional) List of columns for partitioning for output table created by `create`,
   // `createOrReplace`, or `replace`
