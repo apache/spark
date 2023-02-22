@@ -402,8 +402,6 @@ class PandasCogroupedOps:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        pass_key : : bool
-             Used to pass key to the UDF when cogrouped over more than 2 dataframes.
 
         Examples
         --------
@@ -430,7 +428,7 @@ class PandasCogroupedOps:
         >>> df3 = spark.createDataFrame(
         ...     [(20000101, 1, "x"), (20000101, 2, "y")],
         ...     ("time", "id", "v3"))
-        >>> def asof_join_multiple(_, *dfs):
+        >>> def asof_join_multiple(key, *dfs):
         ...     return functools.reduce(lambda df1, df2: pd.merge(df1, df2, on=["id", "k"]), dfs)
         >>> df1.groupby("id").cogroup(df2.groupby("id"), df3.groupby("id")).applyInPandas(
         ...     asof_join_multiple,
@@ -464,15 +462,13 @@ class PandasCogroupedOps:
             functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )  # type: ignore[call-overload]
 
-        all_cols = self._extract_cols(self._gd1)
-        for gd in self._gds:
-            all_cols.extend(self._extract_cols(gd))
+        all_cols = [self._extract_cols(gd) for gd in [self._gd1] + self._gds]
         udf_column_expr = udf(*all_cols)._jc.expr()
         assert self._gd1.session.sparkContext._jvm is not None
-        all_jgds = self._gd1.session.sparkContext._jvm.PythonUtils.toSeq(
+        jgds = self._gd1.session.sparkContext._jvm.PythonUtils.toSeq(
             [gd._jgd for gd in self._gds]
         )
-        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(all_jgds, udf_column_expr)
+        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(jgds, udf_column_expr)
         return DataFrame(jdf, self._gd1.session)
 
     @staticmethod

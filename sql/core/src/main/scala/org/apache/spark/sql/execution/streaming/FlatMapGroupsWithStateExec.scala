@@ -304,7 +304,7 @@ trait FlatMapGroupsWithStateExecBase
           // We apply the values for the key after applying the initial state.
           callFunctionAndUpdateState(
             stateManager.getState(store, keyUnsafeRow),
-            coGroupedIterators.head,
+              coGroupedIterators.head,
               hasTimedOut = false
           )
       }

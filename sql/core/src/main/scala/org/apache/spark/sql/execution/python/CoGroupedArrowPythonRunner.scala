@@ -39,13 +39,13 @@ import org.apache.spark.util.Utils
  * groups them in Python, and receive it back in JVM as batches of single DataFrame.
  */
 class CoGroupedArrowPythonRunner(
-                                       funcs: Seq[ChainedPythonFunctions],
-                                       evalType: Int,
-                                       argOffsets: Array[Array[Int]],
-                                       schemas: List[StructType],
-                                       timeZoneId: String,
-                                       conf: Map[String, String],
-                                       val pythonMetrics: Map[String, SQLMetric])
+    funcs: Seq[ChainedPythonFunctions],
+    evalType: Int,
+    argOffsets: Array[Array[Int]],
+    schemas: List[StructType],
+    timeZoneId: String,
+    conf: Map[String, String],
+    val pythonMetrics: Map[String, SQLMetric])
   extends BasePythonRunner[List[Iterator[InternalRow]], ColumnarBatch](funcs, evalType, argOffsets)
     with BasicPythonArrowOutput {
 
