@@ -166,6 +166,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       "spark.app.id" -> conf.appId,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> defaultOverheadFactor.toString)
+    // set app id in sparkConf as it is required for creating the upload directory
+    conf.sparkConf.set("spark.app.id", conf.appId)
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
       val (localUris, remoteUris) =

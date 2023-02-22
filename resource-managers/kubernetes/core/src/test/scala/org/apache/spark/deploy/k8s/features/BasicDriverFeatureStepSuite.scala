@@ -372,6 +372,30 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       path.startsWith(FILE_UPLOAD_PATH) && path.endsWith("some-local-jar.jar")))
   }
 
+  test("SPARK-42466: Check that all files are uploaded in a single directory under upload path") {
+    val FILE_UPLOAD_PATH = "s3a://some-bucket/upload-path"
+    val FILE_1_URI = "/tmp/test1.csv"
+    val FILE_2_URI = "/tmp/test2.csv"
+
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(FILES, Seq(FILE_1_URI, FILE_2_URI))
+      .set(KUBERNETES_FILE_UPLOAD_PATH, FILE_UPLOAD_PATH)
+      .set("spark.hadoop.fs.s3a.impl", classOf[TestFileSystem].getCanonicalName)
+      .set("spark.hadoop.fs.s3a.impl.disable.cache", "true")
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+
+    val sparkFiles = featureStep.getAdditionalPodSystemProperties()(FILES.key).split(",")
+
+    assert(sparkFiles.size == 2)
+    // appId is the spark application id in this test.
+    assert(sparkFiles.exists(path =>
+      path.equals(FILE_UPLOAD_PATH + "/spark-upload-appId/test1.csv")))
+    assert(sparkFiles.exists(path =>
+      path.equals(FILE_UPLOAD_PATH + "/spark-upload-appId/test2.csv")))
+  }
+
   def containerPort(name: String, portNumber: Int): ContainerPort =
     new ContainerPortBuilder()
       .withName(name)
@@ -393,4 +417,6 @@ private class TestFileSystem extends LocalFileSystem {
     dst: Path): Unit = {}
 
   override def mkdirs(path: Path): Boolean = true
+
+  override def exists(path: Path): Boolean = false
 }

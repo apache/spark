@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.SparkConf
+import org.apache.spark.UploadDirManager
 import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
@@ -143,6 +144,9 @@ private[spark] class Client(
         logError("Please check \"kubectl auth can-i create [resource]\" first." +
           " It should be yes. And please also check your feature step implementation.")
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        // register shutdownhook for cleaning up the upload dir only
+        // in case of app failure otherwise it will be cleaned in driver.
+        UploadDirManager.init(conf.sparkConf, conf.appId)
         throw e
     }
 
@@ -155,6 +159,9 @@ private[spark] class Client(
       case NonFatal(e) =>
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
         logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
+        // register shutdownhook for cleaning up the upload dir only
+        // in case of app failure otherwise it will be cleaned in driver.
+        UploadDirManager.init(conf.sparkConf, conf.appId)
         throw e
     }
 
@@ -166,6 +173,9 @@ private[spark] class Client(
       case NonFatal(e) =>
         kubernetesClient.pods().resource(createdDriverPod).delete()
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        // register shutdownhook for cleaning up the upload dir only
+        // in case of app failure otherwise it will be cleaned in driver.
+        UploadDirManager.init(conf.sparkConf, conf.appId)
         throw e
     }
 
@@ -177,6 +187,9 @@ private[spark] class Client(
     } catch {
       case NonFatal(e) =>
         kubernetesClient.pods().resource(createdDriverPod).delete()
+        // register shutdownhook for cleaning up the upload dir only
+        // in case of app failure otherwise it will be cleaned in driver.
+        UploadDirManager.init(conf.sparkConf, conf.appId)
         throw e
     }
 

@@ -398,6 +398,10 @@ private[spark] class SparkSubmit extends Logging {
       }.orNull
 
       if (isKubernetesClusterModeDriver) {
+        // register shutdownhook for cleaning up the upload dir
+        if (sparkConf.contains("spark.app.id")) {
+          UploadDirManager.init(sparkConf, sparkConf.get("spark.app.id"))
+        }
         // SPARK-33748: this mimics the behaviour of Yarn cluster mode. If the driver is running
         // in cluster mode, the archives should be available in the driver's current working
         // directory too.

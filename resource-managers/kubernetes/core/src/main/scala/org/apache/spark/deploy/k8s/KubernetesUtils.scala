@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s
 import java.io.{File, IOException}
 import java.net.URI
 import java.security.SecureRandom
-import java.util.{Collections, UUID}
+import java.util.{Collections}
 
 import scala.collection.JavaConverters._
 
@@ -310,15 +310,25 @@ object KubernetesUtils extends Logging {
   def uploadFileUri(uri: String, conf: Option[SparkConf] = None): String = {
     conf match {
       case Some(sConf) =>
-        if (sConf.get(KUBERNETES_FILE_UPLOAD_PATH).isDefined) {
+        if (sConf.get(KUBERNETES_FILE_UPLOAD_PATH).isDefined && sConf.contains("spark.app.id")) {
           val fileUri = Utils.resolveURI(uri)
           try {
             val hadoopConf = SparkHadoopUtil.get.newConfiguration(sConf)
             val uploadPath = sConf.get(KUBERNETES_FILE_UPLOAD_PATH).get
             val fs = getHadoopFileSystem(Utils.resolveURI(uploadPath), hadoopConf)
-            val randomDirName = s"spark-upload-${UUID.randomUUID()}"
-            fs.mkdirs(new Path(s"${uploadPath}/${randomDirName}"))
-            val targetUri = s"${uploadPath}/${randomDirName}/${fileUri.getPath.split("/").last}"
+            // SPARK-42466: Instead of creating multiple sub directories in k8s upload directory
+            // for each file to be uploaded, create a single subdirectory to be used for all file
+            // uploads of a specific application.This directory will be named using the spark
+            // application id.
+            val uploadDirName = s"${uploadPath}/spark-upload-${sConf.get("spark.app.id")}"
+            val uploadDirPath = new Path(uploadDirName)
+            if (!fs.exists(uploadDirPath)) {
+              log.info(s"creating upload dir: ${uploadDirName}")
+              fs.mkdirs(uploadDirPath)
+            } else {
+              log.info(s"upload dir already exists: ${uploadDirName}")
+            }
+            val targetUri = s"${uploadDirName}/${fileUri.getPath.split("/").last}"
             log.info(s"Uploading file: ${fileUri.getPath} to dest: $targetUri...")
             uploadFileToHadoopCompatibleFS(new Path(fileUri), new Path(targetUri), fs)
             targetUri

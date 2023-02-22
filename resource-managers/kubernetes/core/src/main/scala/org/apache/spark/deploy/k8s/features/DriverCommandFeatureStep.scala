@@ -96,7 +96,8 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
             .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))
             .orNull))
     }
-
+    // set app id in sparkConf as it is required for creating the upload directory
+    conf.sparkConf.set("spark.app.id", conf.appId)
     // re-write primary resource to be the remote one and upload the related file
     val newResName = KubernetesUtils
       .renameMainAppResource(res, Option(conf.sparkConf), true)
