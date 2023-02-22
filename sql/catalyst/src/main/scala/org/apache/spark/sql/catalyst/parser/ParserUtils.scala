@@ -24,7 +24,7 @@ import scala.collection.mutable.StringBuilder
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.TerminalNode
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -258,5 +258,49 @@ object ParserUtils {
         plan
       }
     }
+  }
+
+  private def stripGap(sb: StringBuilder): Unit = {
+    if (sb.length > 0 && sb.charAt(sb.length - 1) == ' ') {
+      sb.setLength(sb.length - 1)
+    }
+  }
+
+  /**
+   * Adds a gap after every term node except of '(', ')', '[', ']',
+   * and removes a gap before '(', ')', '[', ']', ','. For example:
+   *   ( columnA + 1 ) -> (columnA + 1)
+   *   map ( 1 , a ) [ 1 ] -> map(1, a)[1]
+   */
+  private def toExprAlias(ctx: ParseTree, sb: StringBuilder): Unit = {
+    val childCount = ctx.getChildCount
+    var i = 0
+    while (i < childCount) {
+      ctx.getChild(i) match {
+        case term: TerminalNodeImpl =>
+          val s = term.getText
+          s match {
+            case "(" | "[" | "," | "." | "]" | ")" => stripGap(sb)
+            case _ =>
+          }
+          sb.append(s)
+          s match {
+            case "(" | "[" | "." | "]" | ")" =>
+            case _ => sb.append(" ")
+          }
+        case child => toExprAlias(child, sb)
+      }
+      i = i + 1
+    }
+  }
+
+  /**
+   * Gets a stable column alias for the given expression.
+   */
+  def toExprAlias(pt: ParseTree): String = {
+    val sb = new StringBuilder
+    toExprAlias(pt, sb)
+    stripGap(sb)
+    sb.toString
   }
 }
