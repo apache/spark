@@ -69,18 +69,7 @@ class WindowSpec private[sql] (
    */
   @scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
-    val sortOrder: Seq[proto.Expression.SortOrder] = cols.map { col =>
-      col.expr match {
-        case expr if expr.hasSortOrder =>
-          expr.getSortOrder
-        case expr =>
-          proto.Expression.SortOrder
-            .newBuilder()
-            .setChild(expr)
-            .setDirection(proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
-            .build()
-      }
-    }
+    val sortOrder: Seq[proto.Expression.SortOrder] = cols.map(_.sortOrder)
     new WindowSpec(partitionSpec, sortOrder, frame)
   }
 
@@ -135,7 +124,11 @@ class WindowSpec private[sql] (
       partitionSpec,
       orderSpec,
       Some(
-        toWindowFrame(proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_ROW, start, end)))
+        toWindowFrame(
+          proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_ROW,
+          start,
+          end,
+          true)))
   }
 
   /**
@@ -194,14 +187,15 @@ class WindowSpec private[sql] (
         toWindowFrame(
           proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE,
           start,
-          end)))
+          end,
+          false)))
   }
 
   /**
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
-    Column({ builder =>
+    Column { builder =>
       val windowBuilder = builder.getWindowBuilder
       windowBuilder.setWindowFunction(aggregate.expr)
       if (frame.isDefined) {
@@ -209,31 +203,36 @@ class WindowSpec private[sql] (
       }
       windowBuilder.addAllPartitionSpec(partitionSpec.asJava)
       windowBuilder.addAllOrderSpec(orderSpec.asJava)
-    })
+    }
   }
 
   private[sql] def toWindowFrame(
       frameType: proto.Expression.Window.WindowFrame.FrameType,
       start: Long,
-      end: Long): proto.Expression.Window.WindowFrame = {
+      end: Long,
+      isRowBetween: Boolean): proto.Expression.Window.WindowFrame = {
     val windowFrameBuilder = proto.Expression.Window.WindowFrame.newBuilder()
     windowFrameBuilder.setFrameType(frameType)
     start match {
       case 0 => windowFrameBuilder.getLowerBuilder.setCurrentRow(true)
       case Long.MinValue => windowFrameBuilder.getLowerBuilder.setUnbounded(true)
-      case x if Int.MinValue <= x && x <= Int.MaxValue =>
+      case x if isRowBetween && Int.MinValue <= x && x <= Int.MaxValue =>
         windowFrameBuilder.getLowerBuilder.getValueBuilder.getLiteralBuilder
           .setInteger(start.toInt)
-      case x => throw new UnsupportedOperationException()
+      case _ if !isRowBetween =>
+        windowFrameBuilder.getLowerBuilder.getValueBuilder.getLiteralBuilder.setLong(start)
+      case _ => throw new UnsupportedOperationException()
     }
 
     end match {
       case 0 => windowFrameBuilder.getUpperBuilder.setCurrentRow(true)
       case Long.MaxValue => windowFrameBuilder.getUpperBuilder.setUnbounded(true)
-      case x if Int.MinValue <= x && x <= Int.MaxValue =>
+      case x if isRowBetween && Int.MinValue <= x && x <= Int.MaxValue =>
         windowFrameBuilder.getUpperBuilder.getValueBuilder.getLiteralBuilder
-          .setInteger(start.toInt)
-      case x => throw new UnsupportedOperationException()
+          .setInteger(end.toInt)
+      case _ if !isRowBetween =>
+        windowFrameBuilder.getUpperBuilder.getValueBuilder.getLiteralBuilder.setLong(end)
+      case _ => throw new UnsupportedOperationException()
     }
 
     windowFrameBuilder.build()

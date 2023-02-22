@@ -67,14 +67,16 @@
               "unparsedIdentifier": "a"
             }
           },
-          "direction": "SORT_DIRECTION_ASCENDING"
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
         }, {
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "b"
             }
           },
-          "direction": "SORT_DIRECTION_ASCENDING"
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
         }]
       }
     }, {
@@ -95,14 +97,16 @@
               "unparsedIdentifier": "a"
             }
           },
-          "direction": "SORT_DIRECTION_ASCENDING"
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
         }, {
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "b"
             }
           },
-          "direction": "SORT_DIRECTION_ASCENDING"
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
         }]
       }
     }, {
@@ -123,7 +127,8 @@
               "unparsedIdentifier": "a"
             }
           },
-          "direction": "SORT_DIRECTION_ASCENDING"
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
         }],
         "frameSpec": {
           "frameType": "FRAME_TYPE_ROW",
@@ -137,7 +142,7 @@
           "upper": {
             "value": {
               "literal": {
-                "integer": 2
+                "integer": 3
               }
             }
           }
@@ -161,21 +166,22 @@
               "unparsedIdentifier": "a"
             }
           },
-          "direction": "SORT_DIRECTION_ASCENDING"
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
         }],
         "frameSpec": {
           "frameType": "FRAME_TYPE_RANGE",
           "lower": {
             "value": {
               "literal": {
-                "integer": 2
+                "long": "2"
               }
             }
           },
           "upper": {
             "value": {
               "literal": {
-                "integer": 2
+                "long": "3"
               }
             }
           }
