@@ -23,9 +23,9 @@ import org.apache.spark.SparkFunSuite
 
 class PercentileHeapSuite extends SparkFunSuite {
 
-  test("When PercentileHeap is empty, IndexOutOfBoundsException is thrown.") {
+  test("When PercentileHeap is empty, NoSuchElementException is thrown.") {
     val medianHeap = new PercentileHeap(0.5)
-    intercept[IndexOutOfBoundsException] {
+    intercept[NoSuchElementException] {
       medianHeap.percentile
     }
   }

@@ -25,8 +25,8 @@ import scala.collection.mutable.PriorityQueue
  * Insertion is O(log n), Lookup is O(1).
  *
  * The implementation keeps two heaps: a bottom heap (`botHeap`) and a top heap (`topHeap`). The
- * bottom heap stores all the numbers below the percentile and the top heap stores the ones above the
- * percentile. During insertion the relative sizes of the heaps are adjusted to match the
+ * bottom heap stores all the numbers below the percentile and the top heap stores the ones above
+ * the percentile. During insertion the relative sizes of the heaps are adjusted to match the
  * target percentile.
  */
 private[spark] class PercentileHeap(percentage: Double = 0.5) {
@@ -44,7 +44,7 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
    * returned `sorted((sorted.length * percentage).toInt)`.
    */
   def percentile(): Double = {
-    if (isEmpty) throw new IndexOutOfBoundsException("empty")
+    if (isEmpty) throw new NoSuchElementException("empty")
     topHeap.head
   }
 
