@@ -517,6 +517,10 @@ case class Lead(
     input: Expression, offset: Expression, default: Expression, ignoreNulls: Boolean)
     extends FrameLessOffsetWindowFunction with TernaryLike[Expression] {
 
+  def this(
+      input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, inputOffset, default, ignoreNulls.eval(null).asInstanceOf[Boolean])
+
   def this(input: Expression, offset: Expression, default: Expression) =
     this(input, offset, default, false)
 
@@ -570,6 +574,10 @@ case class Lead(
 case class Lag(
     input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Boolean)
     extends FrameLessOffsetWindowFunction with TernaryLike[Expression] {
+
+  def this(
+      input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, inputOffset, default, ignoreNulls.eval(null).asInstanceOf[Boolean])
 
   def this(input: Expression, inputOffset: Expression, default: Expression) =
     this(input, inputOffset, default, false)
