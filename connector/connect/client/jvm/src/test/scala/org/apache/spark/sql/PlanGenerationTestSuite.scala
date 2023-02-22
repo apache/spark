@@ -1407,41 +1407,44 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.bucket(3, Column("a"))
   }
 
-//  functionTest("cume_dist") {
-//    fn.cume_dist()
-//  }
-//
-//  functionTest("dense_rank") {
-//    fn.dense_rank()
-//  }
-//
-//  functionTest("lag") {
-//    fn.lag(Column("g"), 1, "dv", ignoreNulls = true)
-//  }
-//
-//  functionTest("lead") {
-//    fn.lead(Column("g"), 2, "dv", ignoreNulls = true)
-//  }
-//
-//  functionTest("nth_value") {
-//    fn.nth_value(Column("g"), 3, ignoreNulls = true)
-//  }
-//
-//  functionTest("ntile") {
-//    fn.ntile(4)
-//  }
-//
-//  functionTest("percent_rank") {
-//    fn.percent_rank()
-//  }
-//
-//  functionTest("rank") {
-//    fn.rank()
-//  }
-//
-//  functionTest("row_number") {
-//    fn.row_number()
-//  }
+  functionTest("cume_dist") {
+    fn.cume_dist().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("dense_rank") {
+    fn.dense_rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("lag") {
+    fn.lag(Column("g"), 1, "dv", ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("lead") {
+    fn.lead(Column("g"), 2, "dv", ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("nth_value") {
+    fn.nth_value(Column("g"), 3, ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("ntile") {
+    fn.ntile(4).over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("percent_rank") {
+    fn.percent_rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("rank") {
+    fn.rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("row_number") {
+    fn.row_number().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
 
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
     test("function " + name) {
