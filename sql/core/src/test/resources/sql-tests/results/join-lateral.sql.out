@@ -1569,6 +1569,60 @@ struct<>
 
 
 -- !query
+SELECT t.* FROM t1, LATERAL stack(2, 'Key', c1, 'Value', c2) t
+-- !query schema
+struct<col0:string,col1:int>
+-- !query output
+Key	0
+Key	1
+Value	1
+Value	2
+
+
+-- !query
+SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t(x, y)
+-- !query schema
+struct<x:int,y:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1 JOIN LATERAL stack(1, t1.c2, t3.c2) t
+-- !query schema
+struct<col0:int,col1:array<int>>
+-- !query output
+1	[0,1]
+2	[2]
+
+
+-- !query
+SELECT t.* FROM t1, LATERAL stack(c1, c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"outer(spark_catalog.default.t1.c1)\"",
+    "inputName" : "n",
+    "inputType" : "\"INT\"",
+    "sqlExpr" : "\"stack(outer(spark_catalog.default.t1.c1), outer(spark_catalog.default.t1.c2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 41,
+    "fragment" : "stack(c1, c2)"
+  } ]
+}
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

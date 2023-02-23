@@ -464,6 +464,13 @@ SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k;
 SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr);
 DROP VIEW array_struct;
 
+-- SPARK-42122: lateral join with table-valued function stack
+SELECT t.* FROM t1, LATERAL stack(2, 'Key', c1, 'Value', c2) t;
+SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t(x, y);
+SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1 JOIN LATERAL stack(1, t1.c2, t3.c2) t;
+-- expect error
+SELECT t.* FROM t1, LATERAL stack(c1, c2);
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;

@@ -73,3 +73,17 @@ select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c);
 -- inline_outer
 select * from inline_outer(array(struct(1, 'a'), struct(2, 'b')));
 select * from inline_outer(array_remove(array(struct(1, 'a')), struct(1, 'a')));
+
+-- stack
+select * from stack(1, 1, 2, 3);
+select * from stack(2, 1, 2, 3);
+select * from stack(3, 1, 2, 3) t(x);
+select * from stack(4, 1, 2, 3) t(x);
+select * from stack(2, 1, 1.1, 'a', 2, 2.2, 'b') t(a, b, c);
+select * from stack(2, 1, 1.1, null, 2, null, 'b') t(a, b, c);
+
+-- stack with erroneous input
+select * from stack();
+select * from stack(2, 1, 2, 3) t(a, b, c);
+select * from stack(2, 1, '1.1', 'a', 2, 2.2, 'b');
+select * from stack(2, explode(array(1, 2, 3)));
