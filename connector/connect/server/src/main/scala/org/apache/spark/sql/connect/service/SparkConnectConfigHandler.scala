@@ -101,7 +101,8 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     val warnings = operation.getPairsList.asScala.flatMap { pair =>
       val key = pair.getKey
       val value = SparkConnectConfigHandler.toOption(pair.getValue).orNull
-      response.addValues(SparkConnectConfigHandler.toOptionalValue(Option(conf.get(key, value))))
+      response.addValues(
+        SparkConnectConfigHandler.toProtoOptionalValue(Option(conf.get(key, value))))
       getWarning(key)
     }
     builder.setGetWithDefault(response.build())
@@ -114,7 +115,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     val builder = proto.ConfigResponse.Operation.newBuilder()
     val response = proto.ConfigResponse.GetOption.newBuilder()
     val warnings = operation.getKeysList.asScala.flatMap { key =>
-      response.addValues(SparkConnectConfigHandler.toOptionalValue(conf.getOption(key)))
+      response.addValues(SparkConnectConfigHandler.toProtoOptionalValue(conf.getOption(key)))
       getWarning(key)
     }
     builder.setGetOption(response.build())
@@ -202,11 +203,9 @@ object SparkConnectConfigHandler {
     }
   }
 
-  def toOptionalValue(value: Option[String]): proto.OptionalValue = {
+  def toProtoOptionalValue(value: Option[String]): proto.OptionalValue = {
     val builder = proto.OptionalValue.newBuilder()
-    if (value.isDefined) {
-      builder.setValue(value.get)
-    }
+    value.foreach(builder.setValue(_))
     builder.build()
   }
 }
