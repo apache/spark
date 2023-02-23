@@ -24,20 +24,20 @@ import scala.collection.mutable.PriorityQueue
  *
  * Insertion is O(log n), Lookup is O(1).
  *
- * The implementation keeps two heaps: a bottom heap (`botHeap`) and a top heap (`topHeap`). The
- * bottom heap stores all the numbers below the percentile and the top heap stores the ones above
- * the percentile. During insertion the relative sizes of the heaps are adjusted to match the
- * target percentile.
+ * The implementation keeps two heaps: a small heap (`smallHeap`) and a large heap (`largeHeap`).
+ * The small heap stores all the numbers below the percentile and the large heap stores the ones
+ * above the percentile. During insertion the relative sizes of the heaps are adjusted to match
+ * the target percentile.
  */
 private[spark] class PercentileHeap(percentage: Double = 0.5) {
   assert(percentage > 0 && percentage < 1)
 
-  private[this] val topHeap = PriorityQueue.empty[Double](Ordering[Double].reverse)
-  private[this] val botHeap = PriorityQueue.empty[Double](Ordering[Double])
+  private[this] val largeHeap = PriorityQueue.empty[Double](Ordering[Double].reverse)
+  private[this] val smallHeap = PriorityQueue.empty[Double](Ordering[Double])
 
-  def isEmpty(): Boolean = botHeap.isEmpty && topHeap.isEmpty
+  def isEmpty(): Boolean = smallHeap.isEmpty && largeHeap.isEmpty
 
-  def size(): Int = botHeap.size + topHeap.size
+  def size(): Int = smallHeap.size + largeHeap.size
 
   /**
    * Returns percentile of the inserted elements as if the inserted elements were sorted and we
@@ -45,28 +45,28 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
    */
   def percentile(): Double = {
     if (isEmpty) throw new NoSuchElementException("empty")
-    topHeap.head
+    largeHeap.head
   }
 
   def insert(x: Double): Unit = {
     if (isEmpty) {
-      topHeap.enqueue(x)
+      largeHeap.enqueue(x)
     } else {
-      val p = topHeap.head
-      val growBot = ((size + 1) * percentage).toInt > botHeap.size
+      val p = largeHeap.head
+      val growBot = ((size + 1) * percentage).toInt > smallHeap.size
       if (growBot) {
         if (x < p) {
-          botHeap.enqueue(x)
+          smallHeap.enqueue(x)
         } else {
-          topHeap.enqueue(x)
-          botHeap.enqueue(topHeap.dequeue)
+          largeHeap.enqueue(x)
+          smallHeap.enqueue(largeHeap.dequeue)
         }
       } else {
         if (x < p) {
-          botHeap.enqueue(x)
-          topHeap.enqueue(botHeap.dequeue())
+          smallHeap.enqueue(x)
+          largeHeap.enqueue(smallHeap.dequeue())
         } else {
-          topHeap.enqueue(x)
+          largeHeap.enqueue(x)
         }
       }
     }
