@@ -34,8 +34,6 @@ from pyspark.sql.connect.expressions import (
     SortOrder,
     ColumnReference,
     LiteralExpression,
-    PythonUDF,
-    CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 

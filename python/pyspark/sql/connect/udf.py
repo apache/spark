@@ -23,7 +23,7 @@ check_dependencies(__name__, __file__)
 
 import sys
 import functools
-from typing import cast, Callable, Any, TYPE_CHECKING, List, Optional, Union
+from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import CloudPickleSerializer
