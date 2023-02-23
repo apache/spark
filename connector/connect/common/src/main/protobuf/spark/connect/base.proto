@@ -183,14 +183,14 @@ message ExecutePlanResponse {
   }
 }
 
-// Request to transfer client-local artifacts (JARs and class files).
+// Request to transfer client-local artifacts.
 message AddArtifactsRequest {
 
   // Definition of an Artifact.
   message Artifact {
     // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
     // sequence of directories and the final file element.
-    // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar"
+    // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
     // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
     // The relative path of the file on the server's filesystem will be the same as the name of
     // the provided artifact)
