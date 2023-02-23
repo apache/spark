@@ -184,8 +184,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
           throw QueryCompilationErrors.generatedColumnsUnsupported(ident.asMultipartIdentifier)
         }
-        newSchema = GeneratedColumn.verifyAndConvertToV2ExpressionSQL(
-          session, newSchema, "CREATE TABLE")
+        GeneratedColumn.verifyGeneratedColumns(newSchema, "CREATE TABLE")
       }
 
       CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema), // todo
@@ -217,8 +216,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
           throw QueryCompilationErrors.generatedColumnsUnsupported(ident.asMultipartIdentifier)
         }
-        newSchema = GeneratedColumn.verifyAndConvertToV2ExpressionSQL(
-          session, newSchema, "CREATE TABLE")
+        GeneratedColumn.verifyGeneratedColumns(newSchema, "CREATE TABLE")
       }
 
       val v2Columns = structTypeToV2Columns(newSchema) // todo

@@ -1425,7 +1425,6 @@ class DataSourceV2SQLSuiteV1Filter
   test("SPARK-41290: Generated columns only allowed with TableCatalogs that " +
     "SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS") {
     val tblName = "my_tab"
-    val testCatalog = catalog("testcat").asTableCatalog
     val tableDefinition =
       s"$tblName(eventDate DATE, eventYear INT GENERATED ALWAYS AS (year(eventDate)))"
     for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
@@ -1436,15 +1435,6 @@ class DataSourceV2SQLSuiteV1Filter
         }
         // Can create table with a generated column
         spark.sql(s"$statement testcat.$tableDefinition USING foo")
-
-        // Column metadata is updated to V2 SQL
-        val table = testCatalog.loadTable(Identifier.of(Array(), tblName))
-        val eventYearMetadata = table.schema.collectFirst {
-          case f @ StructField("eventYear", _, _, _) => f.metadata
-        }
-        assert(eventYearMetadata.exists(
-          _.getString(Table.GENERATION_EXPRESSION_METADATA_KEY) == "EXTRACT(YEAR FROM eventDate)"
-        ))
       }
       // BasicInMemoryTableCatalog.capabilities() = {}
       withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
@@ -1459,7 +1449,32 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-41290: Generated column expression must be valid V2 expression") {
+  test("SPARK-41290: Column cannot have both a generation expression and a default value") {
+    val tblName = "my_tab"
+    val tableDefinition =
+      s"$tblName(eventDate DATE, eventYear INT GENERATED ALWAYS AS (year(eventDate)) DEFAULT 0)"
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo") {
+      for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
+        withTable(s"testcat.$tblName") {
+          if (statement == "REPLACE TABLE") {
+            spark.sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.sql(s"$statement testcat.$tableDefinition USING foo")
+            },
+            errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+            parameters = Map(
+              "colName" -> "eventYear",
+              "defaultValue" -> "0",
+              "genExpr" -> "year(eventDate)")
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-41290: Generated column expression must be valid generation expression") {
     // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -1468,7 +1483,8 @@ class DataSourceV2SQLSuiteV1Filter
         spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
           s"b DATE GENERATED ALWAYS AS (not_a_function(a))) USING foo")
       }
-      assert(e.getMessage.contains("fails to resolve as a valid expression"))
+      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
+      assert(e.getMessage.contains("failed to resolve `not_a_function` to a built-in function"))
 
       // Expression cannot be resolved since it's not a built-in function
       spark.udf.register("timesTwo", (x: Int) => x * 2)
@@ -1476,28 +1492,24 @@ class DataSourceV2SQLSuiteV1Filter
         spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
           s"b INT GENERATED ALWAYS AS (timesTwo(a))) USING foo")
       }
-      assert(e.getMessage.contains("fails to resolve as a valid expression"))
+      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
+      assert(e.getMessage.contains("failed to resolve `timesTwo` to a built-in function"))
 
       // Generated column can't reference itself
       e = intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
           s"b INT GENERATED ALWAYS AS (b + 1)) USING foo")
       }
-      assert(e.getMessage.contains("fails to resolve as a valid expression"))
-      assert(e.getMessage.contains("given columns [a]"))
+      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
+      assert(e.getMessage.contains("generation expression cannot reference itself"))
 
-      // Invalid V2 expression
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
-            s"b DATE GENERATED ALWAYS AS (current_date())) USING foo")
-        },
-        errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-        parameters = Map(
-          "fieldName" -> "b",
-          "expressionStr" -> "current_date()"
-        )
-      )
+      // Generated column can't reference non-existent column
+      e = intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
+          s"b INT GENERATED ALWAYS AS (c + 1)) USING foo")
+      }
+      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
+      assert(e.getMessage.contains("fails to resolve as a valid expression"))
     }
   }
 
