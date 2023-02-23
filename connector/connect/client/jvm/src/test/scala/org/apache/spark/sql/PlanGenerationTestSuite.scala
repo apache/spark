@@ -111,7 +111,7 @@ class PlanGenerationTestSuite
   }
 
   override protected def beforeEach(): Unit = {
-    session.planIdGenerator.set(0L)
+    session.resetPlanIdGenerator()
   }
 
   override protected def afterAll(): Unit = {

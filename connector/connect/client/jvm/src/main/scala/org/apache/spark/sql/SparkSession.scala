@@ -51,7 +51,7 @@ import org.apache.spark.sql.connect.client.util.Cleaner
 class SparkSession(
     private val client: SparkConnectClient,
     private val cleaner: Cleaner,
-    private[sql] val planIdGenerator: AtomicLong)
+    private val planIdGenerator: AtomicLong)
     extends Serializable
     with Closeable
     with Logging {
@@ -172,6 +172,15 @@ class SparkSession(
   private[sql] def execute(command: proto.Command): Unit = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     client.execute(plan).asScala.foreach(_ => ())
+  }
+
+  /**
+   * This resets the plan id generator so we can produce plans that are comparable.
+   *
+   * For testing only!
+   */
+  private[sql] def resetPlanIdGenerator(): Unit = {
+    planIdGenerator.set(0)
   }
 
   override def close(): Unit = {
