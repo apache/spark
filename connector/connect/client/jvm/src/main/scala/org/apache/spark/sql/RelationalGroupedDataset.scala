@@ -37,16 +37,26 @@ import org.apache.spark.connect.proto
  */
 class RelationalGroupedDataset protected[sql] (
     private[sql] val df: DataFrame,
-    private[sql] val groupingExprs: Seq[proto.Expression]) {
+    private[sql] val groupingExprs: Seq[proto.Expression],
+    groupType: proto.Aggregate.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
-    // TODO: support other GroupByType such as Rollup, Cube, Pivot.
     df.session.newDataset { builder =>
       builder.getAggregateBuilder
-        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         .setInput(df.plan.getRoot)
         .addAllGroupingExpressions(groupingExprs.asJava)
         .addAllAggregateExpressions(aggExprs.map(e => e.expr).asJava)
+
+      // TODO: support Pivot.
+      groupType match {
+        case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
+          builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+        case proto.Aggregate.GroupType.GROUP_TYPE_CUBE =>
+          builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+        case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
+          builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+        case g => throw new UnsupportedOperationException(g.toString)
+      }
     }
   }
 
