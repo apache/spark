@@ -29,10 +29,12 @@ import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ign
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // scalastyle:off
 /**
@@ -1697,7 +1699,33 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.lit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.lit(Array.tabulate(23)(i => (i + 120).toByte)),
       fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
-      fn.lit(java.time.LocalDate.of(2020, 10, 10)))
+      fn.lit(null),
+      fn.lit(java.time.LocalDate.of(2020, 10, 10)),
+      fn.lit(UTF8String.fromString("connect-utf8")),
+      fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
+      fn.lit(java.time.Instant.ofEpochMilli(1677155519808L)),
+      fn.lit(java.sql.Timestamp.valueOf("2023-02-23 09:20:00.0")),
+      fn.lit(java.time.LocalDateTime.of(2023, 2, 23, 20, 36)),
+      fn.lit(java.sql.Date.valueOf("2023-02-23")),
+      fn.lit(java.time.Duration.ofSeconds(200L)),
+      fn.lit(java.time.Period.ofDays(100)),
+      fn.lit(new CalendarInterval(2, 20, 100L)),
+      fn.lit(Literal(1, IntegerType)),
+      fn.lit(Literal(2L, LongType)),
+      fn.lit(Literal(3.toDouble, DoubleType)),
+      fn.lit(Literal(4.toFloat, FloatType)),
+      fn.lit(Literal(5.toByte, ByteType)),
+      fn.lit(Literal(UTF8String.fromString("connect-lit"), StringType)),
+      fn.lit(Literal(true, BooleanType)),
+      fn.lit(Literal(Decimal.apply(9), DecimalType(10, 0))),
+      fn.lit(Literal(150L, TimestampType)),
+      fn.lit(Literal(250L, TimestampNTZType)),
+      fn.lit(Literal(300, DateType)),
+      fn.lit(Literal(400L, DayTimeIntervalType())),
+      fn.lit(Literal(500, YearMonthIntervalType())),
+      fn.lit(Literal("connect".getBytes, BinaryType)),
+      fn.lit(Literal(new CalendarInterval(2, 3, 1000L), CalendarIntervalType)),
+      fn.lit(Literal(null, NullType)))
   }
 
   /* Window API */

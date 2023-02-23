@@ -169,7 +169,7 @@ object functions {
       case Literal(d, DoubleType) => createLiteral(_.setDouble(d.asInstanceOf[Double]))
       case Literal(f, FloatType) => createLiteral(_.setFloat(f.asInstanceOf[Float]))
       case Literal(b, ByteType) => createLiteral(_.setByte(b.asInstanceOf[Byte]))
-      case Literal(s, StringType) => createLiteral(_.setString(s.asInstanceOf[String]))
+      case Literal(s, StringType) => createLiteral(_.setString(s.asInstanceOf[UTF8String].toString))
       case Literal(b, BooleanType) => createLiteral(_.setBoolean(b.asInstanceOf[Boolean]))
       case Literal(d, dt: DecimalType) => createDecimalLiteral(dt.precision, dt.scale, d.toString)
       case Literal(i, TimestampType) => createLiteral(_.setTimestamp(i.asInstanceOf[Long]))
