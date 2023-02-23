@@ -1,0 +1,4 @@
+©
+Z‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>
+map_entries
+f

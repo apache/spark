@@ -1,0 +1,5 @@
+ÿ
+ŽZ‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>ëè
+	from_json
+gÓ
+ÐjÍ{"type":"struct","fields":[{"name":"id","type":"long","nullable":true,"metadata":{}},{"name":"a","type":"integer","nullable":true,"metadata":{}},{"name":"b","type":"double","nullable":true,"metadata":{}}]}

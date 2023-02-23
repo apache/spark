@@ -1,0 +1,9 @@
+È
+ŽZ‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>53
+
+arrays_zip
+e
+sequence
+0
+0
+8
