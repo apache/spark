@@ -1,0 +1,27 @@
+{
+  "project": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "months_between",
+        "arguments": [{
+          "unresolvedFunction": {
+            "functionName": "current_date"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "d"
+          }
+        }, {
+          "literal": {
+            "boolean": true
+          }
+        }]
+      }
+    }]
+  }
+}

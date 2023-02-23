@@ -1,0 +1,4 @@
+p
+YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
+last_day
+t

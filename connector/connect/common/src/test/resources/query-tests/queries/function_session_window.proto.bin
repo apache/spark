@@ -1,0 +1,7 @@
+š
+YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>=2;
+)'
+session_window
+t
+j
+10 minutessession_window

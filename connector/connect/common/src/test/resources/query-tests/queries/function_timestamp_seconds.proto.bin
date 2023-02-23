@@ -1,0 +1,4 @@
+y
+YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
+timestamp_seconds
+x

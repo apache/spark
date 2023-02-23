@@ -181,7 +181,7 @@ def lit(col: Any) -> Column:
         if has_numpy and isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is not None:
-                return _invoke_function("lit", col).astype(dt)
+                return _invoke_function("lit", col).astype(dt).alias(str(col))
         return _invoke_function("lit", col)
 
 
@@ -4907,6 +4907,9 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 
     .. versionadded:: 1.5.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     date1 : :class:`~pyspark.sql.Column` or str
@@ -5424,6 +5427,9 @@ def window(
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     timeColumn : :class:`~pyspark.sql.Column`
@@ -5500,6 +5506,9 @@ def window_time(
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     windowColumn : :class:`~pyspark.sql.Column`
@@ -5554,6 +5563,9 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
 
     .. versionadded:: 3.2.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -6298,6 +6310,9 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     with HALF_EVEN round mode, and returns the result as a string.
 
     .. versionadded:: 1.5.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -7826,6 +7841,9 @@ def array_compact(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -9083,6 +9101,9 @@ def sequence(
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     start : :class:`~pyspark.sql.Column` or str
@@ -9816,6 +9837,9 @@ def years(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -9887,6 +9911,9 @@ def days(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -9921,6 +9948,9 @@ def hours(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -9954,6 +9984,9 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     by a hash of the input column.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------

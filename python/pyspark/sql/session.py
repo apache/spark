@@ -218,6 +218,9 @@ class SparkSession(SparkConversionMixin):
 
             .. versionadded:: 2.0.0
 
+            .. versionchanged:: 3.4.0
+                Support Spark Connect.
+
             Parameters
             ----------
             key : str, optional
@@ -348,6 +351,9 @@ class SparkSession(SparkConversionMixin):
 
             .. versionadded:: 2.0.0
 
+            .. versionchanged:: 3.4.0
+                Support Spark Connect.
+
             Parameters
             ----------
             name : str
@@ -387,6 +393,8 @@ class SparkSession(SparkConversionMixin):
 
             .. versionadded:: 2.0.0
 
+            .. versionchanged:: 3.4.0
+                Support Spark Connect.
 
             Returns
             -------
@@ -450,7 +458,7 @@ class SparkSession(SparkConversionMixin):
                         else:
                             raise RuntimeError(
                                 "Cannot start a remote Spark session because there "
-                                "is a regular Spark Connect already running."
+                                "is a regular Spark session already running."
                             )
 
                 session = SparkSession._instantiatedSession

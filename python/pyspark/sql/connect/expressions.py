@@ -281,6 +281,8 @@ class LiteralExpression(Expression):
                 dt = _from_numpy_type(value.dtype)
                 if dt is not None:
                     return dt
+                elif isinstance(value, np.bool_):
+                    return BooleanType()
             raise TypeError(f"Unsupported Data Type {type(value).__name__}")
 
     @classmethod

@@ -19,6 +19,8 @@ package org.apache.spark.sql
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
+
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.connect.proto
@@ -163,6 +165,11 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     val result = new SparkResult(value, allocator)
     cleaner.register(result)
     result
+  }
+
+  private[sql] def execute(command: proto.Command): Unit = {
+    val plan = proto.Plan.newBuilder().setCommand(command).build()
+    client.execute(plan).asScala.foreach(_ => ())
   }
 
   override def close(): Unit = {

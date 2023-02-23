@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.Futures.timeout
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{LocalSparkSession, SparkSession}
 
@@ -44,13 +48,14 @@ class BasicWriteJobStatsTrackerMetricSuite extends SparkFunSuite with LocalSpark
       // but the executionId is indeterminate in maven test,
       // so the `statusStore.execution(executionId)` API is not used.
       assert(statusStore.executionsCount() == 2)
-      val executionData = statusStore.executionsList()(1)
-      val accumulatorIdOpt =
-        executionData.metrics.find(_.name == "number of dynamic part").map(_.accumulatorId)
-      assert(accumulatorIdOpt.isDefined)
-      val numPartsOpt = executionData.metricValues.get(accumulatorIdOpt.get)
-      assert(numPartsOpt.isDefined && numPartsOpt.get == partitions)
-
+      eventually(timeout(10.seconds)) {
+        val executionData = statusStore.executionsList()(1)
+        val accumulatorIdOpt =
+          executionData.metrics.find(_.name == "number of dynamic part").map(_.accumulatorId)
+        assert(accumulatorIdOpt.isDefined)
+        val numPartsOpt = executionData.metricValues.get(accumulatorIdOpt.get)
+        assert(numPartsOpt.isDefined && numPartsOpt.get == partitions)
+      }
     } finally {
       spark.sql("drop table if exists dynamic_partition")
       spark.stop()

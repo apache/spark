@@ -91,12 +91,9 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
 
-  @transient
-  private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
-
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
-    val inputs = wrap(children.map(_.eval(input)), wrappers, cached, inputDataTypes)
+    val inputs = wrap(children.map(_.eval(input)), wrappers, cached)
     val ret = FunctionRegistry.invoke(
       method,
       function,

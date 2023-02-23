@@ -1,0 +1,22 @@
+================================================================================================
+Top-K Computation
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+Benchmark Top-K:                                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ROW_NUMBER (PARTITION: , WindowGroupLimit: false)                        10711          11068         363          2.0         510.8       1.0X
+ROW_NUMBER (PARTITION: , WindowGroupLimit: true)                          2611           2929         210          8.0         124.5       4.1X
+ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: false)          23829          24085         178          0.9        1136.2       0.4X
+ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: true)            6381           6515          97          3.3         304.3       1.7X
+RANK (PARTITION: , WindowGroupLimit: false)                              11459          11798         223          1.8         546.4       0.9X
+RANK (PARTITION: , WindowGroupLimit: true)                                2588           2837         162          8.1         123.4       4.1X
+RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)                24560          24707         108          0.9        1171.1       0.4X
+RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)                  6395           6530         109          3.3         304.9       1.7X
+DENSE_RANK (PARTITION: , WindowGroupLimit: false)                        11563          11740         124          1.8         551.3       0.9X
+DENSE_RANK (PARTITION: , WindowGroupLimit: true)                          2563           2819         168          8.2         122.2       4.2X
+DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)          24482          24578          64          0.9        1167.4       0.4X
+DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)            6368           6511         122          3.3         303.7       1.7X
+
+

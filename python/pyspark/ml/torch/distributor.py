@@ -263,9 +263,23 @@ class TorchDistributor(Distributor):
 
     .. versionadded:: 3.4.0
 
+    Parameters
+    ----------
+    num_processes : int, optional
+        An integer that determines how many different concurrent
+        tasks are allowed. We expect spark.task.gpus = 1 for GPU-enabled training. Default
+        should be 1; we don't want to invoke multiple cores/gpus without explicit mention.
+    local_mode : bool, optional
+        A boolean that determines whether we are using the driver
+        node for training. Default should be false; we don't want to invoke executors without
+        explicit mention.
+    use_gpu : bool, optional
+        A boolean that indicates whether or not we are doing training
+        on the GPU. Note that there are differences in how GPU-enabled code looks like and
+        how CPU-specific code looks like.
+
     Examples
     --------
-
     Run PyTorch Training locally on GPU (using a PyTorch native function)
 
     >>> def train(learning_rate):

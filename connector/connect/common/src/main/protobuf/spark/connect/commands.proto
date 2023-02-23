@@ -123,12 +123,12 @@ message WriteOperationV2 {
   // (Required) The output of the `input` relation will be persisted according to the options.
   Relation input = 1;
 
-  // The destination of the write operation must be either a path or a table.
+  // (Required) The destination of the write operation must be either a path or a table.
   string table_name = 2;
 
-  // A provider for the underlying output data source. Spark's default catalog supports
+  // (Optional) A provider for the underlying output data source. Spark's default catalog supports
   // "parquet", "json", etc.
-  string provider = 3;
+  optional string provider = 3;
 
   // (Optional) List of columns for partitioning for output table created by `create`,
   // `createOrReplace`, or `replace`
@@ -140,6 +140,7 @@ message WriteOperationV2 {
   // (Optional) A list of table properties.
   map<string, string> table_properties = 6;
 
+  // (Required) Write mode.
   Mode mode = 7;
 
   enum Mode {

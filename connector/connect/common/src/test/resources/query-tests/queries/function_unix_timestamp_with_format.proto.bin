@@ -1,0 +1,5 @@
+”
+YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>75
+unix_timestamp
+s
+jyyyy-MM-dd HH:mm:ss.SSSS

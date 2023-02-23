@@ -48,11 +48,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_lit_list(self):
         super().test_lit_list()
 
-    # TODO(SPARK-41283): Different column names of `lit(np.int8(1))`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lit_np_scalar(self):
-        super().test_lit_np_scalar()
-
     def test_raise_error(self):
         self.check_raise_error(SparkConnectException)
 
