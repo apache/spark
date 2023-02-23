@@ -128,6 +128,10 @@ class SparkConnectClientSuite
       "sc://host:123/;user_id=a94",
       isCorrect = true,
       client => assert(client.userId == "a94")),
+    TestPackURI(
+      "sc://host:123/;user_agent=a945",
+      isCorrect = true,
+      client => assert(client.userAgent == "a945")),
     TestPackURI("scc://host:12", isCorrect = false),
     TestPackURI("http://host", isCorrect = false),
     TestPackURI("sc:/host:1234/path", isCorrect = false),
@@ -143,7 +147,8 @@ class SparkConnectClientSuite
     TestPackURI("sc://host:123/;use_ssl=true;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),
-    TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=false", isCorrect = false))
+    TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=false", isCorrect = false),
+    TestPackURI("sc://host:123/;param1=value1;param2=value2", isCorrect = true))
 
   private def checkTestPack(testPack: TestPackURI): Unit = {
     val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()
@@ -157,12 +162,6 @@ class SparkConnectClientSuite
       } else {
         checkTestPack(testPack)
       }
-    }
-  }
-
-  test("Unknown parameters throw unsupported errors") {
-    assertThrows[UnsupportedOperationException] {
-      SparkConnectClient.builder().connectionString("sc://host/;xyz=abc").build()
     }
   }
 }
