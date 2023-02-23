@@ -17,15 +17,20 @@
 package org.apache.spark.sql
 
 import java.math.{BigDecimal => JBigDecimal}
-import java.time.LocalDate
+import java.sql.{Date, Timestamp}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -100,6 +105,15 @@ object functions {
         .setValue(value)
     }
 
+  private def createCalendarIntervalLiteral(months: Int, days: Int, microseconds: Long): Column =
+    createLiteral { builder =>
+      builder.getCalendarIntervalBuilder
+        .setMonths(months)
+        .setDays(days)
+        .setMicroseconds(microseconds)
+    }
+
+
   private val nullType =
     proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
 
@@ -117,25 +131,38 @@ object functions {
     literal match {
       case c: Column => c
       case s: Symbol => Column(s.name)
-      case v: Boolean => createLiteral(_.setBoolean(v))
-      case v: Byte => createLiteral(_.setByte(v))
-      case v: Short => createLiteral(_.setShort(v))
       case v: Int => createLiteral(_.setInteger(v))
       case v: Long => createLiteral(_.setLong(v))
-      case v: Float => createLiteral(_.setFloat(v))
       case v: Double => createLiteral(_.setDouble(v))
-      case v: BigDecimal => createDecimalLiteral(v.precision, v.scale, v.toString)
-      case v: JBigDecimal => createDecimalLiteral(v.precision, v.scale, v.toString)
+      case v: Float => createLiteral(_.setFloat(v))
+      case v: Byte => createLiteral(_.setByte(v))
+      case v: Short => createLiteral(_.setShort(v))
       case v: String => createLiteral(_.setString(v))
+      case v: UTF8String => createLiteral(_.setString(v.toString))
       case v: Char => createLiteral(_.setString(v.toString))
       case v: Array[Char] => createLiteral(_.setString(String.valueOf(v)))
+      case v: Boolean => createLiteral(_.setBoolean(v))
+      case v: BigDecimal => createDecimalLiteral(v.precision, v.scale, v.toString)
+      case v: JBigDecimal => createDecimalLiteral(v.precision, v.scale, v.toString)
+      case v: Decimal => createDecimalLiteral(Math.max(v.precision, v.scale), v.scale, v.toString)
+      case v: Instant => createLiteral(_.setTimestamp(DateTimeUtils.instantToMicros(v)))
+      case v: Timestamp => createLiteral(_.setTimestamp(DateTimeUtils.fromJavaTimestamp(v)))
+      case v: LocalDateTime =>
+        createLiteral(_.setTimestampNtz(DateTimeUtils.localDateTimeToMicros(v)))
+      case v: LocalDate => createLiteral(_.setDate(v.toEpochDay.toInt))
+      case v: Date => createLiteral(_.setDate(DateTimeUtils.fromJavaDate(v)))
+      case v: Duration => createLiteral(_.setDayTimeInterval(IntervalUtils.durationToMicros(v)))
+      case v: Period => createLiteral(_.setYearMonthInterval(IntervalUtils.periodToMonths(v)))
       case v: Array[Byte] => createLiteral(_.setBinary(ByteString.copyFrom(v)))
       case v: collection.mutable.WrappedArray[_] => lit(v.array)
-      case v: LocalDate => createLiteral(_.setDate(v.toEpochDay.toInt))
+      case v: CalendarInterval => createCalendarIntervalLiteral(v.months, v.days, v.microseconds)
       case null => createLiteral(_.setNull(nullType))
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
   }
+
+
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Sort functions
   //////////////////////////////////////////////////////////////////////////////////////////////
