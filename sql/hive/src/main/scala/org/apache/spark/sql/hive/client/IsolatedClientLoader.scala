@@ -233,7 +233,7 @@ private[hive] class IsolatedClientLoader(
     val isolatedClassLoader =
       if (isolationOn) {
         if (allJars.isEmpty) {
-          // See HiveUtils; this is the Java 9+ + builtin mode scenario
+          // See HiveUtils; this is the builtin mode scenario
           baseClassLoader
         } else {
           val rootClassLoader: ClassLoader =

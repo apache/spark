@@ -80,7 +80,7 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     }
   }
 
-  test("User-provided JARs should not take precedence over builtin Hive JARs") {
+  test("SPARK-42539 User-provided JARs should not take precedence over builtin Hive JARs") {
     withTempDir { tmpDir =>
         val classFile = TestUtils.createCompiledClass(
           "Hive", tmpDir, packageName = Some("org.apache.hadoop.hive.ql.metadata"))
