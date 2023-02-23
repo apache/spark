@@ -32,7 +32,10 @@ import org.apache.spark.sql.types.{StructField, StructType}
  */
 object GeneratedColumn {
 
-  /** The metadata key for saving a generation expression in a generated column's metadata */
+  /**
+   * The metadata key for saving a generation expression in a generated column's metadata. This is
+   * only used internally and connectors should access generation expressions from the V2 columns.
+   */
   val GENERATION_EXPRESSION_METADATA_KEY = "generationExpression"
 
   /** Parser for parsing generation expression SQL strings */
@@ -142,7 +145,7 @@ object GeneratedColumn {
    */
   def verifyGeneratedColumns(schema: StructType, statementType: String): Unit = {
    schema.foreach { field =>
-      getGenerationExpression(field).map { expressionStr =>
+      getGenerationExpression(field).foreach { expressionStr =>
         analyzeAndVerifyExpression(expressionStr, field.name, schema, statementType)
       }
     }

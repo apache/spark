@@ -39,7 +39,10 @@ public enum TableCatalogCapability {
      * in the table schema will throw an exception during analysis.
      * <p>
      * A generated column is defined with syntax: {@code colName colType GENERATED ALWAYS AS (expr)}
-     * The generation expression is stored in the column metadata with key "generationExpression".
+     * <p>
+     * Generation expression are included in the column definition for APIs like
+     * {@link TableCatalog#createTable}.
+     * See {@link Column#generationExpression()}.
      */
     SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS
 }

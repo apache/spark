@@ -33,6 +33,8 @@ import org.apache.spark.sql.types.DataType;
  * {@link TableCatalog#createTable(Identifier, Column[], Transform[], Map)}, and report it in
  * {@link Table#columns()} by calling the static {@code create} functions of this interface to
  * create it.
+ * <p>
+ * A column cannot have both a default value and a generation expression.
  */
 @Evolving
 public interface Column {
@@ -96,9 +98,11 @@ public interface Column {
   @Nullable
   ColumnDefaultValue defaultValue();
 
-
   /**
    * Returns the generation expression of this table column. Null means no generation expression.
+   * <p>
+   * The generation expression is stored as spark SQL dialect. It is up to the data source to verify
+   * expression compatibility and reject writes as necessary.
    */
   @Nullable
   String generationExpression();

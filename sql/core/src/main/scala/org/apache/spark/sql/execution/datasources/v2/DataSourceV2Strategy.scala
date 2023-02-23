@@ -175,7 +175,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
-      var newSchema: StructType =
+      val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
 
@@ -187,7 +187,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         GeneratedColumn.verifyGeneratedColumns(newSchema, "CREATE TABLE")
       }
 
-      CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema), // todo
+      CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec,
@@ -207,7 +207,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(ResolvedIdentifier(catalog, ident), schema, parts, tableSpec, orCreate) =>
-      var newSchema: StructType =
+      val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
 
@@ -219,7 +219,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         GeneratedColumn.verifyGeneratedColumns(newSchema, "CREATE TABLE")
       }
 
-      val v2Columns = structTypeToV2Columns(newSchema) // todo
+      val v2Columns = structTypeToV2Columns(newSchema)
 
       catalog match {
         case staging: StagingTableCatalog =>
