@@ -1148,7 +1148,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         val jobDescriptions = new ConcurrentLinkedQueue[String]()
         val jobListener = new SparkListener {
           override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-            jobDescriptions.add(jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+            val desc = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+            if (desc != null) jobDescriptions.add(desc)
           }
         }
         sparkContext.addSparkListener(jobListener)

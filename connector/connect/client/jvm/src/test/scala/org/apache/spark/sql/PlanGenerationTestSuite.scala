@@ -31,6 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -193,6 +194,25 @@ class PlanGenerationTestSuite
 
   private val complexSchemaString = complexSchema.catalogString
 
+  private val binarySchema = new StructType()
+    .add("id", "long")
+    .add("bytes", "binary")
+
+  private val binarySchemaString = binarySchema.catalogString
+
+  private val temporalsSchema = new StructType()
+    .add("d", "date")
+    .add("t", "timestamp")
+    .add("s", "string")
+    .add("x", "bigint")
+    .add(
+      "wt",
+      new StructType()
+        .add("start", "timestamp")
+        .add("end", "timestamp"))
+
+  private val temporalsSchemaString = temporalsSchema.catalogString
+
   private def createLocalRelation(schema: String): DataFrame = session.newDataset { builder =>
     // TODO API is not consistent. Now we have two different ways of working with schemas!
     builder.getLocalRelationBuilder.setSchema(schema)
@@ -203,8 +223,8 @@ class PlanGenerationTestSuite
   private def left: DataFrame = simple
   private def right: DataFrame = createLocalRelation(otherSchemaString)
   private def complex = createLocalRelation(complexSchemaString)
-
-  private def select(cs: Column*): DataFrame = simple.select(cs: _*)
+  private def binary = createLocalRelation(binarySchemaString)
+  private def temporals = createLocalRelation(temporalsSchemaString)
 
   /* Spark Session API */
   test("sql") {
@@ -877,7 +897,7 @@ class PlanGenerationTestSuite
   }
 
   test("function max") {
-    select(fn.max("id"))
+    simple.select(fn.max("id"))
   }
 
   functionTest("max_by") {
@@ -1196,6 +1216,406 @@ class PlanGenerationTestSuite
     fn.radians("b")
   }
 
+  functionTest("md5") {
+    fn.md5(fn.col("g").cast("binary"))
+  }
+
+  functionTest("sha1") {
+    fn.sha1(fn.col("g").cast("binary"))
+  }
+
+  functionTest("sha2") {
+    fn.sha2(fn.col("g").cast("binary"), 512)
+  }
+
+  functionTest("crc32") {
+    fn.crc32(fn.col("g").cast("binary"))
+  }
+
+  functionTest("hash") {
+    fn.hash(fn.col("b"), fn.col("id"))
+  }
+
+  functionTest("xxhash64") {
+    fn.xxhash64(fn.col("id"), fn.col("a"), fn.col("d"), fn.col("g"))
+  }
+
+  functionTest("assert_true with message") {
+    fn.assert_true(fn.col("id") > 0, lit("id negative!"))
+  }
+
+  functionTest("raise_error") {
+    fn.raise_error(fn.lit("kaboom"))
+  }
+
+  functionTest("ascii") {
+    fn.ascii(fn.col("g"))
+  }
+
+  functionTest("base64") {
+    fn.base64(fn.col("g").cast("binary"))
+  }
+
+  functionTest("bit_length") {
+    fn.bit_length(fn.col("g"))
+  }
+
+  functionTest("concat_ws") {
+    fn.concat_ws("-", fn.col("b"), lit("world"), fn.col("id"))
+  }
+
+  functionTest("decode") {
+    fn.decode(fn.col("g").cast("binary"), "UTF-8")
+  }
+
+  functionTest("encode") {
+    fn.encode(fn.col("g"), "UTF-8")
+  }
+
+  functionTest("format_number") {
+    fn.format_number(fn.col("b"), 1)
+  }
+
+  functionTest("initcap") {
+    fn.initcap(fn.col("g"))
+  }
+
+  functionTest("length") {
+    fn.length(fn.col("g"))
+  }
+
+  functionTest("lower") {
+    fn.lower(fn.col("g"))
+  }
+
+  functionTest("levenshtein") {
+    fn.levenshtein(fn.col("g"), lit("bob"))
+  }
+
+  functionTest("locate") {
+    fn.locate("jar", fn.col("g"))
+  }
+
+  functionTest("locate with pos") {
+    fn.locate("jar", fn.col("g"), 10)
+  }
+
+  functionTest("lpad") {
+    fn.lpad(fn.col("g"), 10, "-")
+  }
+
+  test("function lpad binary") {
+    binary.select(fn.lpad(fn.col("bytes"), 5, Array(0xc, 0xa, 0xf, 0xe).map(_.toByte)))
+  }
+
+  functionTest("ltrim") {
+    fn.ltrim(fn.col("g"))
+  }
+
+  functionTest("ltrim with pattern") {
+    fn.ltrim(fn.col("g"), "xxx")
+  }
+
+  functionTest("octet_length") {
+    fn.octet_length(fn.col("g"))
+  }
+
+  functionTest("regexp_extract") {
+    fn.regexp_extract(fn.col("g"), "(\\d+)-(\\d+)", 1)
+  }
+
+  functionTest("regexp_replace") {
+    fn.regexp_replace(fn.col("g"), "(\\d+)", "XXX")
+  }
+
+  functionTest("unbase64") {
+    fn.unbase64(fn.col("g"))
+  }
+
+  functionTest("rpad") {
+    fn.rpad(fn.col("g"), 10, "-")
+  }
+
+  test("function rpad binary") {
+    binary.select(fn.rpad(fn.col("bytes"), 5, Array(0xb, 0xa, 0xb, 0xe).map(_.toByte)))
+  }
+
+  functionTest("rtrim") {
+    fn.rtrim(fn.col("g"))
+  }
+
+  functionTest("rtrim with pattern") {
+    fn.rtrim(fn.col("g"), "yyy")
+  }
+
+  functionTest("split") {
+    fn.split(fn.col("g"), ";")
+  }
+
+  functionTest("split with limit") {
+    fn.split(fn.col("g"), ";", 10)
+  }
+
+  functionTest("substring") {
+    fn.substring(fn.col("g"), 4, 5)
+  }
+
+  functionTest("substring_index") {
+    fn.substring_index(fn.col("g"), ";", 5)
+  }
+
+  functionTest("overlay") {
+    fn.overlay(fn.col("b"), lit("foo"), lit(4))
+  }
+
+  functionTest("overlay with len") {
+    fn.overlay(fn.col("b"), lit("foo"), lit(4), lit("3"))
+  }
+
+  functionTest("sentences") {
+    fn.sentences(fn.col("g"))
+  }
+
+  functionTest("sentences with locale") {
+    fn.sentences(fn.col("g"), lit("en"), lit("US"))
+  }
+
+  functionTest("translate") {
+    fn.translate(fn.col("g"), "foo", "bar")
+  }
+
+  functionTest("trim") {
+    fn.trim(fn.col("g"))
+  }
+
+  functionTest("trim with pattern") {
+    fn.trim(fn.col("g"), "---")
+  }
+
+  functionTest("upper") {
+    fn.upper(fn.col("g"))
+  }
+
+  functionTest("years") {
+    fn.years(Column("a"))
+  }
+
+  functionTest("months") {
+    fn.months(Column("a"))
+  }
+
+  functionTest("days") {
+    fn.days(Column("a"))
+  }
+
+  functionTest("hours") {
+    fn.hours(Column("a"))
+  }
+
+  functionTest("bucket") {
+    fn.bucket(3, Column("a"))
+  }
+
+  functionTest("cume_dist") {
+    fn.cume_dist().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("dense_rank") {
+    fn.dense_rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("lag") {
+    fn.lag(Column("g"), 1, null, ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("lead") {
+    fn.lead(Column("g"), 2, "dv", ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("nth_value") {
+    fn.nth_value(Column("g"), 3, ignoreNulls = true)
+      .over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("ntile") {
+    fn.ntile(4).over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("percent_rank") {
+    fn.percent_rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("rank") {
+    fn.rank().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("row_number") {
+    fn.row_number().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  private def temporalFunctionTest(name: String)(f: => Column): Unit = {
+    test("function " + name) {
+      temporals.select(f)
+    }
+  }
+
+  temporalFunctionTest("add_months") {
+    fn.add_months(fn.col("d"), 2)
+  }
+
+  temporalFunctionTest("current_date") {
+    fn.current_date()
+  }
+
+  temporalFunctionTest("current_timestamp") {
+    fn.current_timestamp()
+  }
+
+  temporalFunctionTest("localtimestamp") {
+    fn.localtimestamp()
+  }
+
+  temporalFunctionTest("date_format") {
+    fn.date_format(fn.col("d"), "yyyy-MM-dd")
+  }
+
+  temporalFunctionTest("date_add") {
+    fn.date_add(fn.col("d"), 2)
+  }
+
+  temporalFunctionTest("date_sub") {
+    fn.date_sub(fn.col("d"), 2)
+  }
+
+  temporalFunctionTest("datediff") {
+    fn.datediff(fn.col("d"), fn.make_date(lit(2020), lit(10), lit(10)))
+  }
+
+  temporalFunctionTest("year") {
+    fn.year(fn.col("d"))
+  }
+
+  temporalFunctionTest("quarter") {
+    fn.quarter(fn.col("d"))
+  }
+
+  temporalFunctionTest("month") {
+    fn.month(fn.col("d"))
+  }
+
+  temporalFunctionTest("dayofweek") {
+    fn.dayofweek(fn.col("d"))
+  }
+
+  temporalFunctionTest("dayofmonth") {
+    fn.dayofmonth(fn.col("d"))
+  }
+
+  temporalFunctionTest("dayofyear") {
+    fn.dayofyear(fn.col("d"))
+  }
+
+  temporalFunctionTest("hour") {
+    fn.hour(fn.col("t"))
+  }
+
+  temporalFunctionTest("last_day") {
+    fn.last_day(fn.col("t"))
+  }
+
+  temporalFunctionTest("minute") {
+    fn.minute(fn.col("t"))
+  }
+
+  temporalFunctionTest("make_date") {
+    fn.make_date(fn.lit(2018), fn.lit(5), fn.lit(14))
+  }
+
+  temporalFunctionTest("months_between") {
+    fn.months_between(fn.current_date(), fn.col("d"))
+  }
+
+  temporalFunctionTest("months_between with roundoff") {
+    fn.months_between(fn.current_date(), fn.col("d"), roundOff = true)
+  }
+
+  temporalFunctionTest("next_day") {
+    fn.next_day(fn.col("d"), "Mon")
+  }
+
+  temporalFunctionTest("second") {
+    fn.second(fn.col("t"))
+  }
+
+  temporalFunctionTest("weekofyear") {
+    fn.weekofyear(fn.col("d"))
+  }
+
+  temporalFunctionTest("from_unixtime") {
+    fn.from_unixtime(lit(1L))
+  }
+
+  temporalFunctionTest("unix_timestamp") {
+    fn.unix_timestamp()
+  }
+
+  temporalFunctionTest("unix_timestamp with format") {
+    fn.unix_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS")
+  }
+
+  temporalFunctionTest("to_timestamp") {
+    fn.to_timestamp(fn.col("s"))
+  }
+
+  temporalFunctionTest("to_timestamp with format") {
+    fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS")
+  }
+
+  temporalFunctionTest("to_date") {
+    fn.to_date(fn.col("s"))
+  }
+
+  temporalFunctionTest("to_date with format") {
+    fn.to_date(fn.col("s"), "yyyy-MM-dd")
+  }
+
+  temporalFunctionTest("trunc") {
+    fn.trunc(fn.col("d"), "mm")
+  }
+
+  temporalFunctionTest("date_trunc") {
+    fn.trunc(fn.col("t"), "minute")
+  }
+
+  temporalFunctionTest("from_utc_timestamp") {
+    fn.from_utc_timestamp(fn.col("t"), "-08:00")
+  }
+
+  temporalFunctionTest("to_utc_timestamp") {
+    fn.to_utc_timestamp(fn.col("t"), "-04:00")
+  }
+
+  temporalFunctionTest("window") {
+    fn.window(fn.col("t"), "1 second")
+  }
+
+  test("function window_time") {
+    val metadata = new MetadataBuilder().putBoolean("spark.timeWindow", value = true).build()
+    temporals
+      .withMetadata("wt", metadata)
+      .select(fn.window_time(fn.col("wt")))
+  }
+
+  temporalFunctionTest("session_window") {
+    fn.session_window(fn.col("t"), "10 minutes")
+  }
+
+  temporalFunctionTest("timestamp_seconds") {
+    fn.timestamp_seconds(fn.col("x"))
+  }
+
   test("groupby agg") {
     simple
       .groupBy(Column("id"))
@@ -1252,8 +1672,24 @@ class PlanGenerationTestSuite
       .count()
   }
 
+  test("rollup column") {
+    simple.rollup(Column("a"), Column("b")).count()
+  }
+
+  test("cube column") {
+    simple.cube(Column("a"), Column("b")).count()
+  }
+
+  test("rollup string") {
+    simple.rollup("a", "b").count()
+  }
+
+  test("cube string") {
+    simple.cube("a", "b").count()
+  }
+
   test("function lit") {
-    select(
+    simple.select(
       fn.lit(fn.col("id")),
       fn.lit('id),
       fn.lit(true),
@@ -1274,4 +1710,14 @@ class PlanGenerationTestSuite
   }
 
   /* Window API */
+  test("window") {
+    simple.select(
+      fn.min("id").over(Window.partitionBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.partitionBy("a", "b")),
+      fn.min("id").over(Window.orderBy(Column("a"), Column("b"))),
+      fn.min("id").over(Window.orderBy("a", "b")),
+      fn.min("id").over(Window.orderBy("a").rowsBetween(2L, 3L)),
+      fn.min("id").over(Window.orderBy("a").rangeBetween(2L, 3L)),
+      fn.count(Column("id")).over())
+  }
 }

@@ -272,20 +272,32 @@ class Column:
     def asc(self) -> "Column":
         return self.asc_nulls_first()
 
+    asc.__doc__ = PySparkColumn.asc.__doc__
+
     def asc_nulls_first(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=True, nullsFirst=True))
+
+    asc_nulls_first.__doc__ = PySparkColumn.asc_nulls_first.__doc__
 
     def asc_nulls_last(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=True, nullsFirst=False))
 
+    asc_nulls_last.__doc__ = PySparkColumn.asc_nulls_last.__doc__
+
     def desc(self) -> "Column":
         return self.desc_nulls_last()
+
+    desc.__doc__ = PySparkColumn.desc.__doc__
 
     def desc_nulls_first(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=True))
 
+    desc_nulls_first.__doc__ = PySparkColumn.desc_nulls_first.__doc__
+
     def desc_nulls_last(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
+
+    desc_nulls_last.__doc__ = PySparkColumn.desc_nulls_last.__doc__
 
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         if isinstance(dataType, (DataType, str)):

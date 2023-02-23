@@ -245,7 +245,6 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     case create: V2CreateTablePlan if create.childrenResolved =>
       val schema = create.tableSchema
       val partitioning = create.partitioning
-      val identifier = create.tableName
       val isCaseSensitive = conf.caseSensitiveAnalysis
       // Check that columns are not duplicated in the schema
       val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)

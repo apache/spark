@@ -230,6 +230,14 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         case MetadataStructColumn(attr) => attr
       }
 
+      // We divide metadata columns into two categories: constant and generated.
+      // For constant metadata columns, we create these attributes as non-nullable
+      //  when passing to readers, since the values are always available.
+      // For generated metadata columns, they are set as nullable when passed to readers,
+      //  as the values will be null when trying to read the missing column from the file.
+      //  They are then replaced by the actual values later in the process.
+      // All metadata columns will be non-null in the returned output.
+      // We then change the nullability to non-nullable in the metadata projection node below.
       val constantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
       val generatedMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
 
@@ -313,6 +321,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
         val structColumns = metadataColumns.map { col => col.name match {
             case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
+                 FileFormat.FILE_BLOCK_START | FileFormat.FILE_BLOCK_LENGTH |
                  FileFormat.FILE_MODIFICATION_TIME =>
               col
             case FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME =>

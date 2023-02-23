@@ -59,7 +59,8 @@ case class ShowCreateTableExec(
   }
 
   private def showTableDataColumns(table: Table, builder: StringBuilder): Unit = {
-    val columns = CharVarcharUtils.getRawSchema(table.schema(), conf).fields.map(_.toDDL)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val columns = CharVarcharUtils.getRawSchema(table.columns.asSchema, conf).fields.map(_.toDDL)
     builder ++= concatByMultiLines(columns)
   }
 

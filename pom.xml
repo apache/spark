@@ -124,7 +124,7 @@
     <protobuf.hadoopDependency.version>2.5.0</protobuf.hadoopDependency.version>
     <!-- Actual Protobuf version in Spark modules like Spark Connect, protobuf connector, etc. -->
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>3.21.12</protobuf.version>
+    <protobuf.version>3.22.0</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.3</zookeeper.version>
@@ -211,7 +211,7 @@
     <htmlunit-driver.version>4.7.2</htmlunit-driver.version>
     <htmlunit.version>2.67.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
-    <commons-crypto.version>1.1.0</commons-crypto.version>
+    <commons-crypto.version>1.2.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.7.0</tink.version>
@@ -1119,7 +1119,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-        <version>2.1.1</version>
+        <version>2.2.0</version>
       </dependency>
       <dependency>
         <groupId>jline</groupId>

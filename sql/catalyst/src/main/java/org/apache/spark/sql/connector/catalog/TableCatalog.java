@@ -161,9 +161,22 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
+   * <p>
+   * This is deprecated. Please override
+   * {@link #createTable(Identifier, Column[], Transform[], Map)} instead.
+   */
+  @Deprecated
+  Table createTable(
+      Identifier ident,
+      StructType schema,
+      Transform[] partitions,
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+
+  /**
+   * Create a table in the catalog.
    *
    * @param ident a table identifier
-   * @param schema the schema of the new table, as a struct type
+   * @param columns the columns of the new table.
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
@@ -171,11 +184,13 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
-  Table createTable(
+  default Table createTable(
       Identifier ident,
-      StructType schema,
+      Column[] columns,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties);
+  }
 
   /**
    * Apply a set of {@link TableChange changes} to a table in the catalog.

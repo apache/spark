@@ -1,0 +1,28 @@
+{
+  "project": {
+    "input": {
+      "localRelation": {
+        "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
+      }
+    },
+    "expressions": [{
+      "alias": {
+        "expr": {
+          "unresolvedFunction": {
+            "functionName": "session_window",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "t"
+              }
+            }, {
+              "literal": {
+                "string": "10 minutes"
+              }
+            }]
+          }
+        },
+        "name": ["session_window"]
+      }
+    }]
+  }
+}

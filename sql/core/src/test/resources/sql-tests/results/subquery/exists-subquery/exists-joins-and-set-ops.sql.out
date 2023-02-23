@@ -361,14 +361,14 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT * 
-               FROM   dept 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
                WHERE  dept_id = emp.dept_id and state = "CA"
-               UNION 
-               SELECT * 
-               FROM   dept 
+               UNION
+               SELECT *
+               FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
 struct<>
@@ -383,20 +383,200 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 38,
-    "stopIndex" : 135,
-    "fragment" : "SELECT * \n               FROM   dept \n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+    "startIndex" : 36,
+    "stopIndex" : 131,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
   } ]
 }
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE NOT EXISTS (SELECT * 
-               FROM   dept 
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
                WHERE  dept_id = emp.dept_id and state = "CA"
-               UNION 
+               UNION
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 134,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+  } ]
+}
+
+
+-- !query
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 131,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+  } ]
+}
+
+
+-- !query
+SELECT *
+FROM   emp
+WHERE EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT DISTINCT
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 130,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+  } ]
+}
+
+
+-- !query
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 131,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+  } ]
+}
+
+
+-- !query
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT DISTINCT
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 131,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+  } ]
+}
+
+
+-- !query
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 134,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+  } ]
+}
+
+
+-- !query
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT DISTINCT
                SELECT * 
                FROM   dept 
                WHERE  dept_id = emp.dept_id and state = "TX")
@@ -413,8 +593,8 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 41,
-    "stopIndex" : 138,
-    "fragment" : "SELECT * \n               FROM   dept \n               WHERE  dept_id = emp.dept_id and state = \"CA\""
+    "startIndex" : 39,
+    "stopIndex" : 134,
+    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
   } ]
 }

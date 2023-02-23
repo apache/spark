@@ -869,7 +869,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               |SORTED BY (s1)
               |INTO 200 BUCKETS
               |STORED AS PARQUET
-          """.stripMargin
+              |""".stripMargin
           } else {
             """
               |CREATE TABLE test1(
@@ -880,14 +880,14 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               |CLUSTERED BY (v1)
               |SORTED BY (s1)
               |INTO 200 BUCKETS
-          """.stripMargin
+              |""".stripMargin
           }
 
           val insertString =
             """
               |INSERT INTO test1
               |SELECT * FROM VALUES(1,1,1)
-          """.stripMargin
+              |""".stripMargin
 
           val dropString = "DROP TABLE IF EXISTS test1"
 

@@ -28,8 +28,10 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -67,16 +69,17 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
 
   protected val inputFilePath: Path = baseResourcePath.resolve("queries")
   protected val goldenFilePath: Path = baseResourcePath.resolve("explain-results")
+  private val emptyProps: util.Map[String, String] = util.Collections.emptyMap()
 
   private val analyzer = {
     val inMemoryCatalog = new InMemoryCatalog
     inMemoryCatalog.initialize("primary", CaseInsensitiveStringMap.empty())
-    inMemoryCatalog.createNamespace(Array("tempdb"), util.Collections.emptyMap())
+    inMemoryCatalog.createNamespace(Array("tempdb"), emptyProps)
     inMemoryCatalog.createTable(
       Identifier.of(Array("tempdb"), "myTable"),
       new StructType().add("id", "long"),
-      Array.empty,
-      util.Collections.emptyMap())
+      Array.empty[Transform],
+      emptyProps)
 
     val catalogManager = new CatalogManager(
       inMemoryCatalog,
@@ -115,7 +118,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       val planner = new SparkConnectPlanner(spark)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual = normalizeExprIds(catalystPlan).treeString
+      val actual = normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.

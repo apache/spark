@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -56,6 +58,11 @@ case class InsertIntoHiveDirCommand(
     query: LogicalPlan,
     overwrite: Boolean,
     outputColumnNames: Seq[String]) extends SaveAsHiveFile with V1WritesHiveUtils {
+
+  // We did not pull out `InsertIntoHiveDirCommand` to `V1WriteCommand`,
+  // so there is no `WriteFiles`. It should always hold all metrics by itself.
+  override lazy val metrics: Map[String, SQLMetric] =
+    BasicWriteJobStatsTracker.metrics
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(storage.locationUri.nonEmpty)
