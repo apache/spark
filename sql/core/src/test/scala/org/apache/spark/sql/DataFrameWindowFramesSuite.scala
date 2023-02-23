@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnaryMinus, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
@@ -473,5 +473,23 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
     assert(ws.size === 1)
     checkAnswer(df,
       Row(3, 1.5) :: Row(3, 1.5) :: Row(6, 2.0) :: Row(6, 2.0) :: Row(6, 2.0) :: Nil)
+  }
+
+  test("SPARK-41793: Incorrect result for window frames defined by a range clause on large " +
+    "decimals") {
+    val window = new WindowSpec(Seq($"a".expr), Seq(SortOrder($"b".expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame,
+        UnaryMinus(Literal(BigDecimal(10.2345))), Literal(BigDecimal(6.7890))))
+
+    val df = Seq(
+      1 -> "11342371013783243717493546650944543.47",
+      1 -> "999999999999999999999999999999999999.99"
+    ).toDF("a", "b")
+      .select($"a", $"b".cast("decimal(38, 2)"))
+      .select(count("*").over(window))
+
+    checkAnswer(
+      df,
+      Row(1) :: Row(1) :: Nil)
   }
 }
