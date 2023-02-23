@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.scalatest.matchers.must.Matchers.the
+
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
@@ -532,15 +533,10 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   test("window function with aggregator") {
     val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
       def zero: Long = 0L
-
       def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
-
       def merge(b1: Long, b2: Long): Long = b1 + b2
-
       def finish(r: Long): Long = r
-
       def bufferEncoder: Encoder[Long] = Encoders.scalaLong
-
       def outputEncoder: Encoder[Long] = Encoders.scalaLong
     })
 
@@ -1107,7 +1103,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   test("NaN and -0.0 in window partition keys") {
     val df = Seq(
       (Float.NaN, Double.NaN),
-      (0.0f / 0.0f, 0.0 / 0.0),
+      (0.0f/0.0f, 0.0/0.0),
       (0.0f, 0.0),
       (-0.0f, -0.0)).toDF("f", "d")
 
@@ -1115,7 +1111,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       df.select($"f", count(lit(1)).over(Window.partitionBy("f", "d"))),
       Seq(
         Row(Float.NaN, 2),
-        Row(0.0f / 0.0f, 2),
+        Row(0.0f/0.0f, 2),
         Row(0.0f, 2),
         Row(-0.0f, 2)))
 
@@ -1125,7 +1121,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       df.select($"f", count(lit(1)).over(windowSpec1)),
       Seq(
         Row(Float.NaN, 2),
-        Row(0.0f / 0.0f, 2),
+        Row(0.0f/0.0f, 2),
         Row(0.0f, 2),
         Row(-0.0f, 2)))
 
@@ -1134,21 +1130,21 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       df.select($"f", count(lit(1)).over(windowSpec2)),
       Seq(
         Row(Float.NaN, 2),
-        Row(0.0f / 0.0f, 2),
+        Row(0.0f/0.0f, 2),
         Row(0.0f, 2),
         Row(-0.0f, 2)))
 
     // test with df with complicated-type columns.
     val df2 = Seq(
       (Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))),
-      (Array(0.0f, -0.0f), Tuple2(0.0d, Double.NaN), Seq(Tuple2(0.0d, 0.0 / 0.0)))
+      (Array(0.0f, -0.0f), Tuple2(0.0d, Double.NaN), Seq(Tuple2(0.0d, 0.0/0.0)))
     ).toDF("arr", "stru", "arrOfStru")
     val windowSpec3 = Window.partitionBy("arr", "stru", "arrOfStru")
     checkAnswer(
       df2.select($"arr", $"stru", $"arrOfStru", count(lit(1)).over(windowSpec3)),
       Seq(
         Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
-        Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0 / 0.0)), 2)))
+        Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
   }
 
   test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {
@@ -1185,8 +1181,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     }
 
     def isShuffleExecByRequirement(
-                                    plan: ShuffleExchangeExec,
-                                    desiredClusterColumns: Seq[String]): Boolean = plan match {
+        plan: ShuffleExchangeExec,
+        desiredClusterColumns: Seq[String]): Boolean = plan match {
       case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS) =>
         partitionExpressionsColumns(op.expressions) === desiredClusterColumns
       case _ => false
