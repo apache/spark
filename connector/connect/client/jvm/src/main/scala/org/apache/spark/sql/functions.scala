@@ -30,7 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -160,7 +160,6 @@ object functions {
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
   }
-
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Sort functions
   //////////////////////////////////////////////////////////////////////////////////////////////
