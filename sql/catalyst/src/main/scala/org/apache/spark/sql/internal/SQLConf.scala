@@ -4035,6 +4035,7 @@ object SQLConf {
 
   val LEGACY_EMPTY_CURRENT_DB_IN_CLI =
     buildConf("spark.sql.legacy.emptyCurrentDBInCli")
+      .internal()
       .doc("When false, spark-sql CLI prints the the current database in prompt")
       .version("3.4.0")
       .booleanConf
