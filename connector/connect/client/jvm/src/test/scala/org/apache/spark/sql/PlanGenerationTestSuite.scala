@@ -1715,6 +1715,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.lit(Literal(3.toDouble, DoubleType)),
       fn.lit(Literal(4.toFloat, FloatType)),
       fn.lit(Literal(5.toByte, ByteType)),
+      fn.lit(Literal(6.toShort, ShortType)),
       fn.lit(Literal(UTF8String.fromString("connect-lit"), StringType)),
       fn.lit(Literal(true, BooleanType)),
       fn.lit(Literal(Decimal.apply(9), DecimalType(10, 0))),

@@ -154,6 +154,10 @@
       }
     }, {
       "literal": {
+        "short": 6
+      }
+    }, {
+      "literal": {
         "string": "connect-lit"
       }
     }, {
