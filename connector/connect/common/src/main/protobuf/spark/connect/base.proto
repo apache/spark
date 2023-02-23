@@ -222,8 +222,7 @@ message ConfigRequest {
       GetOption get_option = 4;
       GetAll get_all = 5;
       Unset unset = 6;
-      Contains contains = 7;
-      IsModifiable is_modifiable = 8;
+      IsModifiable is_modifiable = 7;
     }
   }
 
@@ -257,11 +256,6 @@ message ConfigRequest {
     repeated string keys = 1;
   }
 
-  message Contains {
-    // (Required) The config keys to check if the config contains them.
-    repeated string keys = 1;
-  }
-
   message IsModifiable {
     // (Required) The config keys to check the config is modifiable.
     repeated string keys = 1;
@@ -288,8 +282,7 @@ message ConfigResponse {
       GetOption get_option = 4;
       GetAll get_all = 5;
       Unset unset = 6;
-      Contains contains = 7;
-      IsModifiable is_modifiable = 8;
+      IsModifiable is_modifiable = 7;
     }
   }
 
@@ -313,10 +306,6 @@ message ConfigResponse {
   }
 
   message Unset {
-  }
-
-  message Contains {
-    repeated bool bools = 1;
   }
 
   message IsModifiable {

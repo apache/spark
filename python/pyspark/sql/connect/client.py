@@ -428,10 +428,6 @@ class ConfigResult:
     class Unset(Operation):
         pass
 
-    class Contains(Operation):
-        def __init__(self, bools: List[bool]):
-            self.bools = bools
-
     class IsModifiable(Operation):
         def __init__(self, bools: List[bool]):
             self.bools = bools
@@ -477,8 +473,6 @@ class ConfigResult:
             )
         elif op_type == "unset":
             return ConfigResult(ConfigResult.Unset(), warnings)
-        elif op_type == "contains":
-            return ConfigResult(ConfigResult.Contains(list(pb.operation.contains.bools)), warnings)
         elif op_type == "is_modifiable":
             return ConfigResult(
                 ConfigResult.IsModifiable(list(pb.operation.is_modifiable.bools)), warnings

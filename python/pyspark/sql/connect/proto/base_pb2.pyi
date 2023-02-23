@@ -655,7 +655,6 @@ class ConfigRequest(google.protobuf.message.Message):
         GET_OPTION_FIELD_NUMBER: builtins.int
         GET_ALL_FIELD_NUMBER: builtins.int
         UNSET_FIELD_NUMBER: builtins.int
-        CONTAINS_FIELD_NUMBER: builtins.int
         IS_MODIFIABLE_FIELD_NUMBER: builtins.int
         @property
         def set(self) -> global___ConfigRequest.Set: ...
@@ -670,8 +669,6 @@ class ConfigRequest(google.protobuf.message.Message):
         @property
         def unset(self) -> global___ConfigRequest.Unset: ...
         @property
-        def contains(self) -> global___ConfigRequest.Contains: ...
-        @property
         def is_modifiable(self) -> global___ConfigRequest.IsModifiable: ...
         def __init__(
             self,
@@ -682,14 +679,11 @@ class ConfigRequest(google.protobuf.message.Message):
             get_option: global___ConfigRequest.GetOption | None = ...,
             get_all: global___ConfigRequest.GetAll | None = ...,
             unset: global___ConfigRequest.Unset | None = ...,
-            contains: global___ConfigRequest.Contains | None = ...,
             is_modifiable: global___ConfigRequest.IsModifiable | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "contains",
-                b"contains",
                 "get",
                 b"get",
                 "get_all",
@@ -711,8 +705,6 @@ class ConfigRequest(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "contains",
-                b"contains",
                 "get",
                 b"get",
                 "get_all",
@@ -734,14 +726,7 @@ class ConfigRequest(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
         ) -> typing_extensions.Literal[
-            "set",
-            "get",
-            "get_with_default",
-            "get_option",
-            "get_all",
-            "unset",
-            "contains",
-            "is_modifiable",
+            "set", "get", "get_with_default", "get_option", "get_all", "unset", "is_modifiable"
         ] | None: ...
 
     class Set(google.protobuf.message.Message):
@@ -847,22 +832,6 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
-    class Contains(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        KEYS_FIELD_NUMBER: builtins.int
-        @property
-        def keys(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """(Required) The config keys to check if the config contains them."""
-        def __init__(
-            self,
-            *,
-            keys: collections.abc.Iterable[builtins.str] | None = ...,
-        ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
-
     class IsModifiable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -930,7 +899,6 @@ class ConfigResponse(google.protobuf.message.Message):
         GET_OPTION_FIELD_NUMBER: builtins.int
         GET_ALL_FIELD_NUMBER: builtins.int
         UNSET_FIELD_NUMBER: builtins.int
-        CONTAINS_FIELD_NUMBER: builtins.int
         IS_MODIFIABLE_FIELD_NUMBER: builtins.int
         @property
         def set(self) -> global___ConfigResponse.Set: ...
@@ -945,8 +913,6 @@ class ConfigResponse(google.protobuf.message.Message):
         @property
         def unset(self) -> global___ConfigResponse.Unset: ...
         @property
-        def contains(self) -> global___ConfigResponse.Contains: ...
-        @property
         def is_modifiable(self) -> global___ConfigResponse.IsModifiable: ...
         def __init__(
             self,
@@ -957,14 +923,11 @@ class ConfigResponse(google.protobuf.message.Message):
             get_option: global___ConfigResponse.GetOption | None = ...,
             get_all: global___ConfigResponse.GetAll | None = ...,
             unset: global___ConfigResponse.Unset | None = ...,
-            contains: global___ConfigResponse.Contains | None = ...,
             is_modifiable: global___ConfigResponse.IsModifiable | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "contains",
-                b"contains",
                 "get",
                 b"get",
                 "get_all",
@@ -986,8 +949,6 @@ class ConfigResponse(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "contains",
-                b"contains",
                 "get",
                 b"get",
                 "get_all",
@@ -1009,14 +970,7 @@ class ConfigResponse(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
         ) -> typing_extensions.Literal[
-            "set",
-            "get",
-            "get_with_default",
-            "get_option",
-            "get_all",
-            "unset",
-            "contains",
-            "is_modifiable",
+            "set", "get", "get_with_default", "get_option", "get_all", "unset", "is_modifiable"
         ] | None: ...
 
     class Set(google.protobuf.message.Message):
@@ -1104,21 +1058,6 @@ class ConfigResponse(google.protobuf.message.Message):
         def __init__(
             self,
         ) -> None: ...
-
-    class Contains(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        BOOLS_FIELD_NUMBER: builtins.int
-        @property
-        def bools(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bool]: ...
-        def __init__(
-            self,
-            *,
-            bools: collections.abc.Iterable[builtins.bool] | None = ...,
-        ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["bools", b"bools"]) -> None: ...
 
     class IsModifiable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

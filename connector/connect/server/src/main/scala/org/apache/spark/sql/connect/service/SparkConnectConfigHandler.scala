@@ -48,8 +48,6 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
         handleGetAll(request.getOperation.getGetAll, session.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.UNSET =>
         handleUnset(request.getOperation.getUnset, session.conf)
-      case proto.ConfigRequest.Operation.OpTypeCase.CONTAINS =>
-        handleContains(request.getOperation.getContains, session.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.IS_MODIFIABLE =>
         handleIsModifiable(request.getOperation.getIsModifiable, session.conf)
       case _ => throw new UnsupportedOperationException(s"${request.getOperation} not supported.")
@@ -153,19 +151,6 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       getWarning(key)
     }
     builder.setUnset(response.build())
-    (builder.build(), warnings)
-  }
-
-  private def handleContains(
-      operation: proto.ConfigRequest.Contains,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.Contains.newBuilder()
-    val warnings = operation.getKeysList.asScala.flatMap { key =>
-      response.addBools(conf.contains(key))
-      getWarning(key)
-    }
-    builder.setContains(response.build())
     (builder.build(), warnings)
   }
 
