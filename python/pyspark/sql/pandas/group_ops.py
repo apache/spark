@@ -462,14 +462,12 @@ class PandasCogroupedOps:
             functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )  # type: ignore[call-overload]
 
-        all_cols = [self._extract_cols(gd) for gd in self._gds]
+        all_cols = [col for gd in self._gds for col in self._extract_cols(gd)]
         udf_column_expr = udf(*all_cols)._jc.expr()
 
         gd1 = self._gds[0]
         assert gd1.session.sparkContext._jvm is not None
-        jgds = gd1.session.sparkContext._jvm.PythonUtils.toSeq(
-            [gd._jgd for gd in self._gds[1:]]
-        )
+        jgds = gd1.session.sparkContext._jvm.PythonUtils.toSeq([gd._jgd for gd in self._gds[1:]])
         jdf = gd1._jgd.flatMapCoGroupsInPandas(jgds, udf_column_expr)
         return DataFrame(jdf, gd1.session)
 
