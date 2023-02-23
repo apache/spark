@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.window
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, GenerateOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BindReferences, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, ExpressionCanonicalizer, GenerateOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BlockingOperatorWithCodegen, CodegenSupport, SparkPlan, UnaryExecNode}
 
@@ -88,61 +88,66 @@ case class WindowGroupLimitExec(
   protected override def doExecute(): RDD[InternalRow] =
     child.execute().mapPartitionsInternal(createIterator(_))
 
+  override def supportCodegen: Boolean = rankLikeFunction.isInstanceOf[RowNumber]
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  // Name of list variable used in codegen.
-  private var listVariable: String = _
+  protected lazy val countTerm = WindowGroupLimitExec.newCountTerm()
+  private var groupMapVariable: String = _
 
   protected override def doProduce(ctx: CodegenContext): String = {
-    val needToLimit =
-      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToLimit", v => s"$v = true;")
+    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
 
-    val thisPlan = ctx.addReferenceObj("plan", this)
-    listVariable = ctx.addMutableState("java.util.List<UnsafeRow>", "listVariable",
-      v => s"$v = new java.util.ArrayList<UnsafeRow>();", forceInline = true)
-    val inputIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "inputIter",
-      forceInline = true)
-    val limitIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "limitIter",
-      forceInline = true)
+    if (partitionSpec.nonEmpty) {
+      groupMapVariable = ctx.addMutableState("java.util.Map<java.lang.Object, java.lang.Integer>",
+        "groupMapVariable",
+        v => s"$v = new java.util.HashMap<java.lang.Object, java.lang.Integer>();",
+        forceInline = true)
+    }
 
-    val addToInput = ctx.freshName("addToInput")
-    val addToInputFuncName = ctx.addNewFunction(addToInput,
-      s"""
-         | private void $addToInput() throws java.io.IOException {
-         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-         | }
-      """.stripMargin.trim)
-
-    val outputRow = ctx.freshName("outputRow")
-    s"""
-       | if ($needToLimit) {
-       |   $addToInputFuncName();
-       |   $inputIterator =
-       |     scala.collection.JavaConverters.asScalaIterator($listVariable.iterator());
-       |   $limitIterator =
-       |     $thisPlan.createIterator($inputIterator);
-       |   $needToLimit = false;
-       | }
-       |
-       | while ($limitNotReachedCond $limitIterator.hasNext()) {
-       |   UnsafeRow $outputRow = (UnsafeRow)$limitIterator.next();
-       |   ${consume(ctx, null, outputRow)}
-       |   if (shouldStop()) return;
-       | }
-     """.stripMargin.trim
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    s"""
-       |${row.code}
-       |$listVariable.add((UnsafeRow)${row.value}.copy());
-     """.stripMargin
-  }
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String =
+    rankLikeFunction match {
+      case _: RowNumber if partitionSpec.isEmpty =>
+        s"""
+           | if ($countTerm < $limit) {
+           |   $countTerm += 1;
+           |   ${consume(ctx, input)}
+           | }
+         """.stripMargin
+      case _: RowNumber =>
+        val partitionExprs = BindReferences.bindReferences[Expression](partitionSpec, output)
+        val partitionEvs = partitionExprs.map(ExpressionCanonicalizer.execute(_).genCode(ctx))
+        val partitionValues = partitionEvs.map(_.value).mkString("\n")
+        val rankValue = ctx.freshName("rankValue")
+        s"""
+           | int $rankValue = 0;
+           | if ($groupMapVariable.containsKey($partitionValues)) {
+           |   $rankValue = (Integer) $groupMapVariable.get($partitionValues);
+           | }
+           | if ($rankValue < $limit) {
+           |   ${consume(ctx, input)}
+           | }
+           | $rankValue += 1;
+           | $groupMapVariable.put($partitionValues, $rankValue);
+         """.stripMargin
+    }
 
   override protected def withNewChildInternal(newChild: SparkPlan): WindowGroupLimitExec =
     copy(child = newChild)
+}
+
+object WindowGroupLimitExec {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+
+  def newCountTerm(): String = {
+    val id = curId.getAndIncrement()
+    s"_counter_$id"
+  }
 }
 
 abstract class BaseLimitIterator extends Iterator[InternalRow] {
