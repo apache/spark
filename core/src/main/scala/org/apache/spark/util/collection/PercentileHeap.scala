@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.mutable.PriorityQueue
+import java.util.PriorityQueue
 
 /**
  * PercentileHeap tracks the percentile of a collection of numbers.
@@ -32,8 +32,11 @@ import scala.collection.mutable.PriorityQueue
 private[spark] class PercentileHeap(percentage: Double = 0.5) {
   assert(percentage > 0 && percentage < 1)
 
-  private[this] val largeHeap = PriorityQueue.empty[Double](Ordering[Double].reverse)
-  private[this] val smallHeap = PriorityQueue.empty[Double](Ordering[Double])
+  // This is a min-heap so it works out of the box.
+  private[this] val largeHeap = new PriorityQueue[Double]
+  // This is a max-heap. If we pass a comparator things get slower because of function call
+  // overhead (>2x slower on insert). Instead we negate values when we offer/poll/peek.
+  private[this] val smallHeap = new PriorityQueue[Double]
 
   def isEmpty(): Boolean = smallHeap.isEmpty && largeHeap.isEmpty
 
@@ -45,28 +48,28 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
    */
   def percentile(): Double = {
     if (isEmpty) throw new NoSuchElementException("empty")
-    largeHeap.head
+    largeHeap.peek
   }
 
   def insert(x: Double): Unit = {
     if (isEmpty) {
-      largeHeap.enqueue(x)
+      largeHeap.offer(x)
     } else {
-      val p = largeHeap.head
+      val p = largeHeap.peek
       val growBot = ((size + 1) * percentage).toInt > smallHeap.size
       if (growBot) {
         if (x < p) {
-          smallHeap.enqueue(x)
+          smallHeap.offer(-x)
         } else {
-          largeHeap.enqueue(x)
-          smallHeap.enqueue(largeHeap.dequeue)
+          largeHeap.offer(x)
+          smallHeap.offer(-largeHeap.poll)
         }
       } else {
         if (x < p) {
-          smallHeap.enqueue(x)
-          largeHeap.enqueue(smallHeap.dequeue())
+          smallHeap.offer(-x)
+          largeHeap.offer(-smallHeap.poll)
         } else {
-          largeHeap.enqueue(x)
+          largeHeap.offer(x)
         }
       }
     }
