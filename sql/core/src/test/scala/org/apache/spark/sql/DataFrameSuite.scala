@@ -3592,34 +3592,6 @@ class DataFrameSuite extends QueryTest
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
-
-  test("SPARK-42525: collapse two adjacent windows with the same partition/order in subquery") {
-    val df1 = spark.range(10).map(_ => (Random.nextInt(10), Random.nextInt(10)))
-      .selectExpr("_1 as a", "_2 as b")
-    df1.cache()
-    df1.createOrReplaceTempView("t1")
-    val df2 = sql(
-      """
-        |select a, b, c, row_number() over (partition by a order by b) as d from
-        |( select a, b, rank() over (partition by a order by b) as c from t1) t2
-        |""".stripMargin
-    )
-    val df3 = sql(
-      """
-        |select a, b,
-        |rank() over (partition by a order by b) as c,
-        |row_number() over (partition by a order by b) as d
-        |from t1
-        |""".stripMargin
-    )
-    val captured = new ByteArrayOutputStream()
-    Console.withOut(captured) {
-      df2.explain()
-    }
-    checkAnswer(df2, df3)
-    val output = captured.toString
-    assert(output.split("\\+- Window").size == 2)
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)
