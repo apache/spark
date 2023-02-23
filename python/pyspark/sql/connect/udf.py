@@ -109,8 +109,13 @@ class UserDefinedFunction:
         self.deterministic = deterministic
 
     def _build_common_inline_user_defined_function(
-        self, arg_exprs: List[ColumnReference] = []
+        self, *cols: "ColumnOrName"
     ) -> CommonInlineUserDefinedFunction:
+        arg_cols = [
+            col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
+        ]
+        arg_exprs = [col._expr for col in arg_cols]
+
         data_type_str = (
             self._returnType.json() if isinstance(self._returnType, DataType) else self._returnType
         )
@@ -128,11 +133,7 @@ class UserDefinedFunction:
         )
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        arg_cols = [
-            col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
-        ]
-        arg_exprs = [col._expr for col in arg_cols]
-        return Column(self._build_common_inline_user_defined_function(arg_exprs))
+        return Column(self._build_common_inline_user_defined_function(*cols))
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and

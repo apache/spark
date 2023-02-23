@@ -551,6 +551,8 @@ class CommonInlineUserDefinedFunction(Expression):
         expr = proto.CommonInlineUserDefinedFunction()
         expr.function_name = self._function_name
         expr.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            expr.arguments.extend([arg.to_plan(session) for arg in self._arguments])
         expr.python_udf.CopyFrom(self._function.to_plan(session))
         return expr
 

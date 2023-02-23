@@ -1858,10 +1858,12 @@ class ListCatalogs(LogicalPlan):
 class FrameMap(LogicalPlan):
     """Logical plan object for a Frame Map API: mapInPandas, mapInArrow."""
 
-    def __init__(self, child: Optional["LogicalPlan"], function: "UserDefinedFunction") -> None:
+    def __init__(
+        self, child: Optional["LogicalPlan"], function: "UserDefinedFunction", cols: List[str]
+    ) -> None:
         super().__init__(child)
 
-        self._func = function._build_common_inline_user_defined_function()
+        self._func = function._build_common_inline_user_defined_function(*cols)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None

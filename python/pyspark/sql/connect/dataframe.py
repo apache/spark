@@ -1555,7 +1555,8 @@ class DataFrame:
         )
 
         return DataFrame.withPlan(
-            plan.FrameMap(child=self._plan, function=udf_obj), session=self._session
+            plan.FrameMap(child=self._plan, function=udf_obj, cols=self.columns),
+            session=self._session,
         )
 
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
