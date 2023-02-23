@@ -1,0 +1,11 @@
+Û
+ŽZ‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>HF
+concat
+e
+array
+0
+0
+sequence
+0!
+0(
+8

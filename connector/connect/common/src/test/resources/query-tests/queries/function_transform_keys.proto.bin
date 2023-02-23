@@ -1,0 +1,12 @@
+à
+ŽZ‹ˆstruct<id:bigint,a:int,b:double,d:struct<id:bigint,a:int,b:double>,e:array<int>,f:map<string,struct<id:bigint,a:int,b:double>>,g:string>MK
+transform_keys
+f2R0
+$"
+concatr
+xb
+r
+y
+jid
+x
+y
