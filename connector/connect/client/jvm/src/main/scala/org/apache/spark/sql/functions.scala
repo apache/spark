@@ -27,13 +27,12 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -148,7 +147,6 @@ object functions {
       case v: Array[Byte] => createLiteral(_.setBinary(ByteString.copyFrom(v)))
       case v: collection.mutable.WrappedArray[_] => lit(v.array)
       case v: LocalDate => createLiteral(_.setDate(v.toEpochDay.toInt))
-      case v: UTF8String => createLiteral(_.setString(v.toString))
       case v: Decimal => createDecimalLiteral(Math.max(v.precision, v.scale), v.scale, v.toString)
       case v: Instant => createLiteral(_.setTimestamp(DateTimeUtils.instantToMicros(v)))
       case v: Timestamp => createLiteral(_.setTimestamp(DateTimeUtils.fromJavaTimestamp(v)))
@@ -159,36 +157,6 @@ object functions {
       case v: Period => createLiteral(_.setYearMonthInterval(IntervalUtils.periodToMonths(v)))
       case v: CalendarInterval => createCalendarIntervalLiteral(v.months, v.days, v.microseconds)
       case null => createLiteral(_.setNull(nullType))
-      case v: Literal => literalToColumn(v)
-      case _ => unsupported(s"literal $literal not supported (yet).")
-    }
-  }
-
-  private def literalToColumn(literal: Literal): Column = {
-    literal match {
-      case Literal(i, IntegerType) => createLiteral(_.setInteger(i.asInstanceOf[Int]))
-      case Literal(l, LongType) => createLiteral(_.setLong(l.asInstanceOf[Long]))
-      case Literal(d, DoubleType) => createLiteral(_.setDouble(d.asInstanceOf[Double]))
-      case Literal(f, FloatType) => createLiteral(_.setFloat(f.asInstanceOf[Float]))
-      case Literal(b, ByteType) => createLiteral(_.setByte(b.asInstanceOf[Byte]))
-      case Literal(s, ShortType) => createLiteral(_.setShort(s.asInstanceOf[Short]))
-      case Literal(s, StringType) =>
-        createLiteral(_.setString(s.asInstanceOf[UTF8String].toString))
-      case Literal(b, BooleanType) => createLiteral(_.setBoolean(b.asInstanceOf[Boolean]))
-      case Literal(d, dt: DecimalType) => createDecimalLiteral(dt.precision, dt.scale, d.toString)
-      case Literal(i, TimestampType) => createLiteral(_.setTimestamp(i.asInstanceOf[Long]))
-      case Literal(l, TimestampNTZType) => createLiteral(_.setTimestampNtz(l.asInstanceOf[Long]))
-      case Literal(i, DateType) => createLiteral(_.setDate(i.asInstanceOf[Int]))
-      case Literal(d, _: DayTimeIntervalType) =>
-        createLiteral(_.setDayTimeInterval(d.asInstanceOf[Long]))
-      case Literal(p, _: YearMonthIntervalType) =>
-        createLiteral(_.setYearMonthInterval(p.asInstanceOf[Int]))
-      case Literal(a, BinaryType) =>
-        createLiteral(_.setBinary(ByteString.copyFrom(a.asInstanceOf[Array[Byte]])))
-      case Literal(i, CalendarIntervalType) =>
-        val v = i.asInstanceOf[CalendarInterval]
-        createCalendarIntervalLiteral(v.months, v.days, v.microseconds)
-      case Literal(_, NullType) => createLiteral(_.setNull(nullType))
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
   }

@@ -90,10 +90,6 @@
       }
     }, {
       "literal": {
-        "string": "connect-utf8"
-      }
-    }, {
-      "literal": {
         "decimal": {
           "value": "8.997620",
           "precision": 7,
@@ -130,85 +126,6 @@
           "months": 2,
           "days": 20,
           "microseconds": "100"
-        }
-      }
-    }, {
-      "literal": {
-        "integer": 1
-      }
-    }, {
-      "literal": {
-        "long": "2"
-      }
-    }, {
-      "literal": {
-        "double": 3.0
-      }
-    }, {
-      "literal": {
-        "float": 4.0
-      }
-    }, {
-      "literal": {
-        "byte": 5
-      }
-    }, {
-      "literal": {
-        "short": 6
-      }
-    }, {
-      "literal": {
-        "string": "connect-lit"
-      }
-    }, {
-      "literal": {
-        "boolean": true
-      }
-    }, {
-      "literal": {
-        "decimal": {
-          "value": "9",
-          "precision": 10,
-          "scale": 0
-        }
-      }
-    }, {
-      "literal": {
-        "timestamp": "150"
-      }
-    }, {
-      "literal": {
-        "timestampNtz": "250"
-      }
-    }, {
-      "literal": {
-        "date": 300
-      }
-    }, {
-      "literal": {
-        "dayTimeInterval": "400"
-      }
-    }, {
-      "literal": {
-        "yearMonthInterval": 500
-      }
-    }, {
-      "literal": {
-        "binary": "Y29ubmVjdA=="
-      }
-    }, {
-      "literal": {
-        "calendarInterval": {
-          "months": 2,
-          "days": 3,
-          "microseconds": "1000"
-        }
-      }
-    }, {
-      "literal": {
-        "null": {
-          "null": {
-          }
         }
       }
     }]
