@@ -2796,7 +2796,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         for f in (
             "newSession",
-            "conf",
             "sparkContext",
             "streams",
             "readStream",

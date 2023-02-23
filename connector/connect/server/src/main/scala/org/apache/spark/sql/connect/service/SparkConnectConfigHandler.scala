@@ -73,7 +73,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       val value = pair.getValue
       conf.set(key, value)
       getWarning(key)
-    }
+    }.toSeq
     builder.setSet(response.build())
     (builder.build(), warnings)
   }
@@ -86,7 +86,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     val warnings = operation.getKeysList.asScala.flatMap { key =>
       response.addValues(conf.get(key))
       getWarning(key)
-    }
+    }.toSeq
     builder.setGet(response.build())
     (builder.build(), warnings)
   }
@@ -102,7 +102,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       response.addValues(
         SparkConnectConfigHandler.toProtoOptionalValue(Option(conf.get(key, value))))
       getWarning(key)
-    }
+    }.toSeq
     builder.setGetWithDefault(response.build())
     (builder.build(), warnings)
   }
@@ -115,7 +115,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     val warnings = operation.getKeysList.asScala.flatMap { key =>
       response.addValues(SparkConnectConfigHandler.toProtoOptionalValue(conf.getOption(key)))
       getWarning(key)
-    }
+    }.toSeq
     builder.setGetOption(response.build())
     (builder.build(), warnings)
   }
@@ -149,7 +149,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     val warnings = operation.getKeysList.asScala.flatMap { key =>
       conf.unset(key)
       getWarning(key)
-    }
+    }.toSeq
     builder.setUnset(response.build())
     (builder.build(), warnings)
   }
@@ -162,7 +162,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     val warnings = operation.getKeysList.asScala.flatMap { key =>
       response.addBools(conf.isModifiable(key))
       getWarning(key)
-    }
+    }.toSeq
     builder.setIsModifiable(response.build())
     (builder.build(), warnings)
   }
