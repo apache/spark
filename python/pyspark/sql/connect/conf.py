@@ -22,7 +22,7 @@ from pyspark._globals import _NoValueType
 from pyspark.errors import IllegalArgumentException
 from pyspark.sql.conf import RuntimeConfig as PySparkRuntimeConfig
 from pyspark.sql.connect import proto
-from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.client import ConfigResult, SparkConnectClient
 
 
 class RuntimeConf:
@@ -40,6 +40,7 @@ class RuntimeConf:
         op_set = proto.ConfigRequest.Set(pairs=[_key_value(key, value)])
         operation = proto.ConfigRequest.Operation(set=op_set)
         result = self._client.config(operation)
+        assert isinstance(result.operation, ConfigResult.Set)
         for warn in result.warnings:
             warnings.warn(warn)
 
@@ -52,7 +53,9 @@ class RuntimeConf:
         if default is _NoValue:
             op_get = proto.ConfigRequest.Get(keys=[key])
             operation = proto.ConfigRequest.Operation(get=op_get)
-            return self._client.config(operation).values[0]
+            result = self._client.config(operation)
+            assert isinstance(result.operation, ConfigResult.Get)
+            return result.operation.values[0]
         else:
             if default is not None:
                 self._checkType(default, "default")
@@ -60,7 +63,9 @@ class RuntimeConf:
                 pairs=[_optional_key_value(key, cast(Optional[str], default))]
             )
             operation = proto.ConfigRequest.Operation(get_with_default=op_get_with_default)
-            return self._client.config(operation).optional_values[0]
+            result = self._client.config(operation)
+            assert isinstance(result.operation, ConfigResult.GetWithDefault)
+            return result.operation.values[0]
 
     get.__doc__ = PySparkRuntimeConfig.get.__doc__
 
@@ -68,6 +73,7 @@ class RuntimeConf:
         op_unset = proto.ConfigRequest.Unset(keys=[key])
         operation = proto.ConfigRequest.Operation(unset=op_unset)
         result = self._client.config(operation)
+        assert isinstance(result.operation, ConfigResult.Unset)
         for warn in result.warnings:
             warnings.warn(warn)
 
@@ -76,7 +82,9 @@ class RuntimeConf:
     def isModifiable(self, key: str) -> bool:
         op_is_modifiable = proto.ConfigRequest.IsModifiable(keys=[key])
         operation = proto.ConfigRequest.Operation(is_modifiable=op_is_modifiable)
-        return self._client.config(operation).bools[0]
+        result = self._client.config(operation)
+        assert isinstance(result.operation, ConfigResult.IsModifiable)
+        return result.operation.bools[0]
 
     isModifiable.__doc__ = PySparkRuntimeConfig.isModifiable.__doc__
 

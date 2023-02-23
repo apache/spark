@@ -272,32 +272,56 @@ message ConfigRequest {
 message ConfigResponse {
   string client_id = 1;
 
-  // (Optional)
-  //
-  // Available when the operation is 'GET_ALL'.
-  repeated string keys = 2;
-
-  // (Optional)
-  //
-  // Available when the operation is 'GET_ALL'.
-  // Optional when the 'operation' is 'GET' without the default values.
-  repeated string values = 3;
-
-  // (Optional)
-  //
-  // Available when the operation is 'GET_OPTION'.
-  // Optional when the operation is 'GET' with the default values.
-  repeated OptionalValue optional_values = 4;
-
-  // (Optional)
-  //
-  // Available when the operation is 'CONTAINS', 'IS_MODIFIABLE'.
-  repeated bool bools = 5;
+  // (Required) The operation for the config.
+  Operation operation = 2;
 
   // (Optional)
   //
   // Warning messages for deprecated or unsupported configurations.
-  repeated string warnings = 6;
+  repeated string warnings = 3;
+
+  message Operation {
+    oneof op_type {
+      Set set = 1;
+      Get get = 2;
+      GetWithDefault get_with_default = 3;
+      GetOption get_option = 4;
+      GetAll get_all = 5;
+      Unset unset = 6;
+      Contains contains = 7;
+      IsModifiable is_modifiable = 8;
+    }
+  }
+
+  message Set {
+  }
+
+  message Get {
+    repeated string values = 1;
+  }
+
+  message GetWithDefault {
+    repeated OptionalValue values = 1;
+  }
+
+  message GetOption {
+    repeated OptionalValue values = 1;
+  }
+
+  message GetAll {
+    repeated KeyValue pairs = 1;
+  }
+
+  message Unset {
+  }
+
+  message Contains {
+    repeated bool bools = 1;
+  }
+
+  message IsModifiable {
+    repeated bool bools = 1;
+  }
 }
 
 // Main interface for the SparkConnect service.
