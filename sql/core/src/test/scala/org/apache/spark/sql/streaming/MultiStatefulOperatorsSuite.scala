@@ -438,16 +438,19 @@ class MultiStatefulOperatorsSuite
   }
 
   test("stream-stream time interval left outer join -> aggregation, append mode") {
+    // This test performs stream-stream time interval left outer join against two streams, and
+    // applies tumble time window aggregation based on the event time column from the output of
+    // stream-stream join.
     val input1 = MemoryStream[(String, Timestamp)]
     val input2 = MemoryStream[(String, Timestamp)]
 
     val s1 = input1.toDF()
-      .selectExpr("_1 AS id1", "_2 AS timestamp1")
+      .toDF("id1", "timestamp1")
       .withWatermark("timestamp1", "0 seconds")
       .as("s1")
 
     val s2 = input2.toDF()
-      .selectExpr("_1 AS id2", "_2 AS timestamp2")
+      .toDF("id2", "timestamp2")
       .withWatermark("timestamp2", "0 seconds")
       .as("s2")
 
@@ -702,12 +705,12 @@ class MultiStatefulOperatorsSuite
     val input2 = MemoryStream[(String, Timestamp)]
 
     val s1 = input1.toDF()
-      .selectExpr("_1 AS id1", "_2 AS timestamp1")
+      .toDF("id1", "timestamp1")
       .withWatermark("timestamp1", "0 seconds")
       .as("s1")
 
     val s2 = input2.toDF()
-      .selectExpr("_1 AS id2", "_2 AS timestamp2")
+      .toDF("id2", "timestamp2")
       .withWatermark("timestamp2", "0 seconds")
       .as("s2")
 
