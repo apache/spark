@@ -36,6 +36,31 @@ class AlterTableDropPartitionSuite
           sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
           sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
           sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
+          checkHiveClientCalls(expected = if (statsOn) 26 else 18) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
+          }
+          checkHiveClientCalls(expected = if (statsOn) 31 else 18) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+          }
+          sql(s"CACHE TABLE $t")
+          checkHiveClientCalls(expected = if (statsOn) 31 else 18) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-42480: hive client calls when dropPartitionByName enabled") {
+    Seq(false, true).foreach { statsOn =>
+      withSQLConf(
+        SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> statsOn.toString,
+        SQLConf.HIVE_METASTORE_DROP_PARTITION_BY_NAME.key -> "true") {
+        withNamespaceAndTable("ns", "tbl") { t =>
+          sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+          sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+          sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+          sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
           checkHiveClientCalls(expected = if (statsOn) 25 else 17) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
           }
