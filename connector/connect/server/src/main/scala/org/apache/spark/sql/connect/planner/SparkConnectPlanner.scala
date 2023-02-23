@@ -472,10 +472,10 @@ class SparkConnectPlanner(val session: SparkSession) {
     val pythonUdf = transformPythonUDF(commonUdf)
     pythonUdf.evalType match {
       case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
-        Dataset
-          .ofRows(session, transformRelation(rel.getInput))
-          .mapInPandas(pythonUdf)
-          .logicalPlan
+        logical.MapInPandas(
+          pythonUdf,
+          pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+          transformRelation(rel.getInput))
       case _ =>
         throw InvalidPlanInput(
           s"Function with EvalType: ${pythonUdf.evalType} is not supported")
