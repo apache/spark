@@ -474,4 +474,33 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df,
       Row(3, 1.5) :: Row(3, 1.5) :: Row(6, 2.0) :: Row(6, 2.0) :: Row(6, 2.0) :: Nil)
   }
+
+  test("SPARK-41793: Incorrect result for window frames defined by a range clause on large " +
+    "decimals") {
+    withTempView("test_table") {
+      spark.sql(
+        """
+          |create or replace temp view test_table as
+          |select * from values
+          |  (1, cast('11342371013783243717493546650944543.47' as decimal(38,2))),
+          |  (1, cast('999999999999999999999999999999999999.99' as decimal(38,2)))
+          |as data(a, b);
+          |""".stripMargin)
+      val df = spark.sql(
+        """
+          |SELECT
+          |COUNT(1) OVER (
+          |  PARTITION BY a
+          |  ORDER BY b ASC
+          |  RANGE BETWEEN 10.2345 PRECEDING AND 6.7890 FOLLOWING
+          |) AS CNT_1
+          |FROM
+          |test_table
+          |""".stripMargin
+      )
+      checkAnswer(
+        df,
+        Row(1) :: Row(1) :: Nil)
+    }
+  }
 }
