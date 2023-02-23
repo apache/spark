@@ -362,9 +362,9 @@ class RelationalGroupedDataset protected[sql] (
    *   the column to pivot.
    * @param values
    *   List of values that will be translated to columns in the output DataFrame.
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(pivotColumn, values.asScala.toSeq)
+    pivot(pivotColumn, values.asScala)
   }
 }
