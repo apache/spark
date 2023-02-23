@@ -3892,7 +3892,7 @@ object functions {
    *   the length of the slice
    *
    * @group collection_funcs
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def slice(x: Column, start: Int, length: Int): Column =
     slice(x, lit(start), lit(length))
@@ -4776,7 +4776,7 @@ object functions {
    * With the default settings, the function returns -1 for null input.
    *
    * @group collection_funcs
-   * @since 1.5.0
+   * @since 3.4.0
    */
   def size(e: Column): Column = Column.fn("size", e)
 

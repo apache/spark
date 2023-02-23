@@ -27,7 +27,7 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{aggregate, array, col, lit, sequence, shuffle, transform, udf}
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
@@ -376,7 +376,6 @@ class ClientE2ETestSuite extends RemoteSparkSession {
 
   test("lambda functions") {
     // This test is mostly to validate lambda variables are properly resolved.
-    import org.apache.spark.sql.functions._
     val result = spark
       .range(3)
       .select(
@@ -392,7 +391,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("shuffle array") {
-    import org.apache.spark.sql.functions._
+    // We cannot do structural tests for shuffle because its random seed will always change.
     val result = spark
       .sql("select 1")
       .select(shuffle(array(lit(1), lit(2), lit(3), lit(74))))
