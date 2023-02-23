@@ -223,6 +223,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     session.sql("select 1")
   }
 
+  test("parameterized sql") {
+    session.sql("select 1", Map("minId" -> "7", "maxId" -> "20"))
+  }
+
   test("range") {
     session.range(1, 10, 1, 2)
   }
