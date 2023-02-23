@@ -224,7 +224,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("dbtable", "tbl")
       .load()
-      .limit(1)
+      .limit(2)
       .select("x", "y")
       .orderBy("x")
       .collect()
@@ -232,11 +232,11 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     val expected = sqlContext.read
       .format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT x, y FROM tbl ORDER BY x FETCH FIRST 1 ROWS ONLY")
+      .option("query", "SELECT x, y FROM tbl ORDER BY x FETCH FIRST 2 ROWS ONLY")
       .load()
       .collect()
 
-    assert(actual.length === 1)
+    assert(actual.length === 2)
     assert(actual === expected)
   }
 }
