@@ -36,7 +36,7 @@ class PercentileHeapSuite extends SparkFunSuite {
     if (nums.length % 2 == 1 || p == 0) {
       sorted(p)
     } else {
-      (sorted(p - 1) + sorted(p)) / 2d
+      (sorted(p - 1) + sorted(p)) / 2.0
     }
   }
 

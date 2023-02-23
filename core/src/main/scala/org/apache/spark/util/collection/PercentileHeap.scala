@@ -52,7 +52,7 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
     if (size % 2 == 1 || smallHeap.isEmpty) {
       largeHeap.peek
     } else {
-      (largeHeap.peek + -smallHeap.peek) / 2d
+      (largeHeap.peek + -smallHeap.peek) / 2.0
     }
   }
 
