@@ -1918,6 +1918,22 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       .count()
   }
 
+  test("rollup column") {
+    simple.rollup(Column("a"), Column("b")).count()
+  }
+
+  test("cube column") {
+    simple.cube(Column("a"), Column("b")).count()
+  }
+
+  test("rollup string") {
+    simple.rollup("a", "b").count()
+  }
+
+  test("cube string") {
+    simple.cube("a", "b").count()
+  }
+
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),

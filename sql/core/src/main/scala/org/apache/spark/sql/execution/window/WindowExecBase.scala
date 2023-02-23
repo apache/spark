@@ -128,6 +128,7 @@ trait WindowExecBase extends UnaryExecNode {
             TimestampAddYMInterval(expr, boundOffset, Some(timeZone))
           case (TimestampType | TimestampNTZType, _: DayTimeIntervalType) =>
             TimeAdd(expr, boundOffset, Some(timeZone))
+          case (d: DecimalType, _: DecimalType) => DecimalAddNoOverflowCheck(expr, boundOffset, d)
           case (a, b) if a == b => Add(expr, boundOffset)
         }
         val bound = MutableProjection.create(boundExpr :: Nil, child.output)
