@@ -17,7 +17,9 @@
 package org.apache.spark.sql.protobuf.utils
 
 import scala.collection.JavaConverters._
+
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -85,7 +87,7 @@ object SchemaConverters extends Logging {
           fd.getMessageType.getFields.size() == 2 &&
           fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
           fd.getMessageType.getFields.get(1).getName.equals("nanos")) =>
-          Some(TimestampType)
+        Some(TimestampType)
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: Option[DataType] = None
         var valueType: Option[DataType] = None
@@ -121,13 +123,16 @@ object SchemaConverters extends Logging {
         // A value greater than 10 is not allowed, and if a protobuf record has more depth for
         // recursive fields than the allowed value, it will be truncated and some fields may be
         // discarded.
-        // SQL Schema for protobfuf `message Person { string name = 1; Person bff = 2;}`
+        // SQL Schema for protob2uf `message Person { string name = 1; Person bff = 2;}`
         // will vary based on the value of "recursive.fields.max.depth".
-        // 1: struct<name: string, bff: struct<name: string>>
-        // 2: struct<name string, bff: struct<name: string, bff: struct<name: string>>>
-        // 3: struct<name string, bff:
-        //      struct<name string, bff: struct<name: string, bff: struct<name: string>>>>
+        // 1: struct<name: string>
+        // 2: struct<name string, bff: struct<name: string>>
+        // 3: struct<name string, bff: struct<name string, bff: struct<name: string>>>
         // and so on.
+        // TODO(rangadi): A better way to terminate would be replace the remaining recursive struct
+        //      with the byte array of corresponding protobuf. This way no information is lost.
+        //      i.e. with max depth 2, the above looks like this:
+        //      struct<name: string, bff: struct<name: string, _serialized_bff: bytes>>
         val recordName = fd.getMessageType.getFullName
         val recursiveDepth = existingRecordNames.getOrElse(recordName, 0)
         val recursiveFieldMaxDepth = protobufOptions.recursiveFieldMaxDepth
@@ -140,7 +145,7 @@ object SchemaConverters extends Logging {
           // If it is inside a container like map or array, the containing field is dropped.
           log.info(
             s"The field ${fd.getFullName} of type $recordName is dropped " +
-            s"at recursive depth $recursiveDepth"
+              s"at recursive depth $recursiveDepth"
           )
           None
         } else {
