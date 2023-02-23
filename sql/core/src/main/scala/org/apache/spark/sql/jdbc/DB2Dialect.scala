@@ -162,6 +162,6 @@ private object DB2Dialect extends JdbcDialect {
   }
 
   override def getLimitClause(limit: Integer): String = {
-    if (limit > 0 ) s"FETCH FIRST $limit ROWS ONLY" else ""
+    if (limit > 0) s"FETCH FIRST $limit ROWS ONLY" else ""
   }
 }

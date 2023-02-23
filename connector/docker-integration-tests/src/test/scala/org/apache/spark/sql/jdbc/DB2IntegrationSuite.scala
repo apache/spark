@@ -218,7 +218,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(actual.toSet === expectedResult)
   }
 
-  test("SPARK-42534") {
+  test("SPARK-42534: DB2 Limit pushdown test") {
     val actual = sqlContext.read
       .format("jdbc")
       .option("url", jdbcUrl)
@@ -236,7 +236,6 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .load()
       .collect()
 
-    assert(actual.length === 2)
     assert(actual === expected)
   }
 }
