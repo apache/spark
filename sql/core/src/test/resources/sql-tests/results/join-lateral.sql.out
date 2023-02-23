@@ -1569,6 +1569,77 @@ struct<>
 
 
 -- !query
+CREATE OR REPLACE TEMP VIEW json_table(key, jstring) AS VALUES
+    ('1', '{"f1": "1", "f2": "2", "f3": 3, "f5": 5.23}'),
+    ('2', '{"f1": "1", "f3": "3", "f2": 2, "f4": 4.01}'),
+    ('3', '{"f1": 3, "f4": "4", "f3": "3", "f2": 2, "f5": 5.01}'),
+    ('4', cast(null as string)),
+    ('5', '{"f1": null, "f5": ""}'),
+    ('6', '[invalid JSON string]')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2
+-- !query schema
+struct<key:string,c0:string,c1:string,c2:string,c3:string,c4:string>
+-- !query output
+1	1	2	3	NULL	5.23
+2	1	2	3	4.01	NULL
+3	3	2	3	4	5.01
+4	NULL	NULL	NULL	NULL	NULL
+5	NULL	NULL	NULL	NULL	
+6	NULL	NULL	NULL	NULL	NULL
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2 WHERE t2.c0 IS NOT NULL
+-- !query schema
+struct<key:string,c0:string,c1:string,c2:string,c3:string,c4:string>
+-- !query output
+1	1	2	3	NULL	5.23
+2	1	2	3	4.01	NULL
+3	3	2	3	4	5.01
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1
+  JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1
+-- !query schema
+struct<key:string,f1:string,f2:string,f3:string,f4:string,f5:string>
+-- !query output
+1	1	2	3	NULL	5.23
+3	3	2	3	4	5.01
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1
+  LEFT JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1
+-- !query schema
+struct<key:string,f1:string,f2:string,f3:string,f4:string,f5:string>
+-- !query output
+1	1	2	3	NULL	5.23
+2	NULL	NULL	NULL	NULL	NULL
+3	3	2	3	4	5.01
+4	NULL	NULL	NULL	NULL	NULL
+5	NULL	NULL	NULL	NULL	NULL
+6	NULL	NULL	NULL	NULL	NULL
+
+
+-- !query
+DROP VIEW json_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

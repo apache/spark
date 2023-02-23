@@ -73,3 +73,17 @@ select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c);
 -- inline_outer
 select * from inline_outer(array(struct(1, 'a'), struct(2, 'b')));
 select * from inline_outer(array_remove(array(struct(1, 'a')), struct(1, 'a')));
+
+-- json_tuple
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b');
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'c');
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'a');
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x, y);
+select * from json_tuple('{"a": bad, "b": string}', 'a', 'b');
+
+-- json_tuple with erroneous input
+select * from json_tuple();
+select * from json_tuple('{"a": 1}');
+select * from json_tuple('{"a": 1}', 1);
+select * from json_tuple('{"a": 1}', null);
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x);

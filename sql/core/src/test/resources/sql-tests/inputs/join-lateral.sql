@@ -464,6 +464,24 @@ SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k;
 SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr);
 DROP VIEW array_struct;
 
+-- SPARK-42120: lateral join with table-valued function json_tuple
+CREATE OR REPLACE TEMP VIEW json_table(key, jstring) AS VALUES
+    ('1', '{"f1": "1", "f2": "2", "f3": 3, "f5": 5.23}'),
+    ('2', '{"f1": "1", "f3": "3", "f2": 2, "f4": 4.01}'),
+    ('3', '{"f1": 3, "f4": "4", "f3": "3", "f2": 2, "f5": 5.01}'),
+    ('4', cast(null as string)),
+    ('5', '{"f1": null, "f5": ""}'),
+    ('6', '[invalid JSON string]');
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2;
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2 WHERE t2.c0 IS NOT NULL;
+SELECT t1.key, t2.* FROM json_table t1
+  JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1;
+SELECT t1.key, t2.* FROM json_table t1
+  LEFT JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1;
+DROP VIEW json_table;
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;
