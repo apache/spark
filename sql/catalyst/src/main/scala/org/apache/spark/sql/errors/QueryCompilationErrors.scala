@@ -3411,7 +3411,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
         "operation" ->
-          s"creating generated columns with GENERATED ALWAYS AS expressions"
+          s"generated columns"
       )
     )
   }

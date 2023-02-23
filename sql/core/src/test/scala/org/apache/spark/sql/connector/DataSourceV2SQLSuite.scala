@@ -1443,7 +1443,7 @@ class DataSourceV2SQLSuiteV1Filter
           spark.sql(s"$statement dummy.$tableDefinition USING foo")
         }
         assert(e.getMessage.contains(
-          "does not support creating generated columns with GENERATED ALWAYS AS expressions"))
+          "does not support generated columns"))
         assert(e.getErrorClass == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
       }
     }

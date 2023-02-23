@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.BuiltInFunctionCatalog
-import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
+import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -75,10 +76,10 @@ object GeneratedColumn {
    * generation expression according to the above rules.
    */
   private def analyzeAndVerifyExpression(
-    expressionStr: String,
-    fieldName: String,
-    schema: StructType,
-    statementType: String): Unit = {
+      expressionStr: String,
+      fieldName: String,
+      schema: StructType,
+      statementType: String): Unit = {
     // Parse the expression string
     val parsed: Expression = try {
       parser.parseExpression(expressionStr)
@@ -86,7 +87,7 @@ object GeneratedColumn {
       case ex: ParseException =>
         // Shouldn't be possible since we check that the expression is a valid catalyst expression
         // during parsing
-        throw new AnalysisException(
+        throw SparkException.internalError(
           s"Failed to execute $statementType command because the column $fieldName has " +
             s"generation expression $expressionStr which fails to parse as a valid expression:" +
             s"\n${ex.getMessage}")
@@ -103,7 +104,9 @@ object GeneratedColumn {
       case ex: AnalysisException =>
         // Improve error message if possible
         if (ex.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
-          ex.messageParameters.get("objectName").filter(_ == toSQLId(fieldName)).foreach { _ =>
+          ex.messageParameters.get("objectName")
+            .filter(_ == QueryCompilationErrors.toSQLId(fieldName))
+            .foreach { _ =>
             // Generation expression references itself
             throw new AnalysisException(
               errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
@@ -137,17 +140,37 @@ object GeneratedColumn {
     val analyzed = plan.collectFirst {
       case Project(Seq(a: Alias), _: LocalRelation) => a.child
     }.get
+
     // todo: additional verifications?
   }
 
   /**
    * For any generated columns in `schema`, parse, analyze and verify the generation expression.
    */
-  def verifyGeneratedColumns(schema: StructType, statementType: String): Unit = {
+  private def verifyGeneratedColumns(schema: StructType, statementType: String): Unit = {
    schema.foreach { field =>
       getGenerationExpression(field).foreach { expressionStr =>
         analyzeAndVerifyExpression(expressionStr, field.name, schema, statementType)
       }
+    }
+  }
+
+  /**
+   * If `schema` contains any generated columns:
+   * 1) Check whether the table catalog supports generated columns otherwise throw an error.
+   * 2) Parse, analyze and verify the generation expressions for any generated columns.
+   */
+  def validateGeneratedColumns(
+      schema: StructType,
+      catalog: TableCatalog,
+      ident: Seq[String],
+      statementType: String): Unit = {
+    if (hasGeneratedColumns(schema)) {
+      if (!catalog.capabilities().contains(
+        TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
+        throw QueryCompilationErrors.generatedColumnsUnsupported(ident)
+      }
+      GeneratedColumn.verifyGeneratedColumns(schema, statementType)
     }
   }
 }

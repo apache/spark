@@ -2316,18 +2316,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-41290: No generated columns with V1") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"create table t(a int, b int generated always as (a + 1)) using parquet")
-      },
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-        "operation" ->
-          s"creating generated columns with GENERATED ALWAYS AS expressions")
-    )
-  }
-
   test("SPARK-42286: Insert into a table select from case when with cast, positive test") {
     withTable("t1", "t2") {
       sql("create table t1 (x int) using parquet")

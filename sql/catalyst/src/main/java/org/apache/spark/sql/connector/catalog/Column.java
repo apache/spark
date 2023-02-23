@@ -62,12 +62,12 @@ public interface Column {
   }
 
   static Column create(
-          String name,
-          DataType dataType,
-          boolean nullable,
-          String comment,
-          String generationExpression,
-          String metadataInJSON) {
+      String name,
+      DataType dataType,
+      boolean nullable,
+      String comment,
+      String generationExpression,
+      String metadataInJSON) {
     return new ColumnImpl(name, dataType, nullable, comment, null, generationExpression, metadataInJSON);
   }
 
