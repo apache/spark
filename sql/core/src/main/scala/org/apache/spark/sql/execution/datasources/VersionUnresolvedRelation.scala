@@ -43,6 +43,7 @@ case class VersionUnresolvedRelation (
     override val isStreaming: Boolean)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
+  val sparkSession: SparkSession = session
   val source: String = dataSource.sourceInfo.name
   val options: Map[String, String] = dataSource.options
   val userSpecifiedSchema: Option[StructType] = dataSource.userSpecifiedSchema

@@ -189,6 +189,7 @@ abstract class BaseSessionStateBuilder(
         new ResolveSessionCatalog(catalogManager) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
+        ResolveDataSourceVersion +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =

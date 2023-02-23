@@ -166,42 +166,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     Dataset.ofRows(
       sparkSession,
       VersionUnresolvedRelation(v1DataSource, isStreaming = true)(sparkSession))
-
-    val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
-      getConstructor().newInstance() // TableProvider or Source
-
-    val v1Relation = ds match {
-      case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
-      case _ => None
-    }
-    ds match {
-      // file source v2 does not support streaming yet.
-      case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          source = provider, conf = sparkSession.sessionState.conf)
-        val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
-            optionsWithPath.originalMap
-        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-        val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
-        import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-        table match {
-          case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-            import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-            Dataset.ofRows(
-              sparkSession,
-              StreamingRelationV2(
-                Some(provider), source, table, dsOptions,
-                table.columns.asSchema.toAttributes, None, None, v1Relation))
-
-          // fallback to v1
-          // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
-          case _ => Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
-        }
-
-      case _ =>
-        // Code path for data source v1.
-        Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
-    }
   }
 
   /**
