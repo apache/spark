@@ -183,6 +183,60 @@ message ExecutePlanResponse {
   }
 }
 
+// Request to transfer client-local artifacts (JARs and class files).
+message AddArtifactsRequest {
+
+  // Definition of an Artifact.
+  message Artifact {
+    // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+    // sequence of directories and the final file element.
+    // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar"
+    // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+    // The relative path of the file on the server's filesystem will be the same as the name of
+    // the provided artifact)
+    string name = 1;
+    // Raw data.
+    bytes data = 2;
+  }
+
+  // A number of small artifacts batched into a single RPC.
+  message Batch {
+    repeated Artifact artifacts = 1;
+  }
+
+  // The client_id is set by the client to be able to collate streaming responses from
+  // different queries.
+  string client_id = 1;
+
+  // User context
+  UserContext user_context = 2;
+
+  // The payload is either a batch of artifacts or a partial chunk of a large artifact.
+  oneof payload {
+    Batch batch = 3;
+    // A large artifact chunked into multiple requests. The server side should assume that the
+    // artifact has been completely uploaded either when it encounters a new artifact name, or
+    // when the the stream is completed.
+    Artifact chunk = 4;
+  }
+}
+
+// Response to adding an artifact. Contains relevant metadata to verify successful transfer of
+// artifact(s).
+message AddArtifactsResponse {
+  // Metadata of an artifact.
+  message ArtifactSummary {
+    string name = 1;
+    // Size in bytes.
+    int64 size = 2;
+    // CRC to verify integrity of the transferred artifact.
+    int64 crc = 3;
+  }
+
+  // The list of artifact(s) seen by the server.
+  repeated ArtifactSummary artifacts = 1;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -193,5 +247,9 @@ service SparkConnectService {
 
   // Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
   rpc AnalyzePlan(AnalyzePlanRequest) returns (AnalyzePlanResponse) {}
+
+  // Add artifacts to the session and returns a [[AddArtifactsResponse]] containing metadata about
+  // the added artifacts.
+  rpc AddArtifacts(stream AddArtifactsRequest) returns (AddArtifactsResponse) {}
 }
 
