@@ -1,3 +1,5 @@
-o
-YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
+
+ât
+^
+áZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
 localtimestamp

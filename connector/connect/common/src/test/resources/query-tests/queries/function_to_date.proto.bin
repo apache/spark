@@ -1,4 +1,6 @@
-o
-YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
+
+”t
+^
+“ZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
 to_date
 s

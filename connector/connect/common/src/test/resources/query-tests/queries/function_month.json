@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "624"
+  },
   "project": {
     "input": {
+      "common": {
+        "planId": "623"
+      },
       "localRelation": {
         "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
       }

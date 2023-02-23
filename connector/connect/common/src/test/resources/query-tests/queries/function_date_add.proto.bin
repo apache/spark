@@ -1,5 +1,7 @@
-v
-YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
+
+æ{
+^
+åZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
 date_add
 d
 0

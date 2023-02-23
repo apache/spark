@@ -1,4 +1,6 @@
-†
-YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>)'
+
+Œ‹
+^
+‹ZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>)'
 unix_timestamp
 current_timestamp

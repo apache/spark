@@ -1,5 +1,7 @@
-Ñ
-YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>'%
+
+ûâ
+^
+ùZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>'%
 to_utc_timestamp
 t
 

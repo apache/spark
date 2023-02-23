@@ -1,5 +1,7 @@
-ò
-YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>;9
+
+†ù
+^
+üZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>;9
 window
 t
 

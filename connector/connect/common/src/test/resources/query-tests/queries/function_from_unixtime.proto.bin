@@ -1,4 +1,6 @@
-t
-YZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
+
+Šy
+^
+‰ZWUstruct<d:date,t:timestamp,s:string,x:bigint,wt:struct<start:timestamp,end:timestamp>>
 from_unixtime
 8
