@@ -125,6 +125,16 @@
       <version>${mima.version}</version>
       <scope>test</scope>
     </dependency>
+    <!--
+      SPARK-42515: Add `parquet-hadoop` to this module because `SimpleSparkConnectService` is started
+      using the test classpath base on connect-client-jvm module currently, so this is a workaround way,
+      we should remove this when we find a way to let `SimpleSparkConnectService` use the correct classpath.
+    -->
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-hadoop</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
