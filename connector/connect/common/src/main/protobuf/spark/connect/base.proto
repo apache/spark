@@ -188,6 +188,18 @@ message OptionalValue {
   optional string value = 1;
 }
 
+// The key-value pair for the config request and response.
+message KeyValue {
+  string key = 1;
+  string value = 2;
+}
+
+// The key-value pair for the config request and response when the value can be optional.
+message OptionalKeyValue {
+  string key = 1;
+  OptionalValue value = 2;
+}
+
 // Request to update or fetch the configurations.
 message ConfigRequest {
   // (Required)
@@ -199,38 +211,60 @@ message ConfigRequest {
   // (Required) User context
   UserContext user_context = 2;
 
+  // (Required) The operation for the config.
   Operation operation = 3;
 
-  // (Optional)
-  //
-  // Identify which keys will be updated or fetched.
-  // Required when the 'operation' is 'SET', 'GET', 'GET_OPTION', 'UNSET',
-  // 'CONTAINS', 'IS_MODIFIABLE'.
-  repeated string keys = 4;
+  message Operation {
+    oneof op_type {
+      Set set = 1;
+      Get get = 2;
+      GetWithDefault get_with_default = 3;
+      GetOption get_option = 4;
+      GetAll get_all = 5;
+      Unset unset = 6;
+      Contains contains = 7;
+      IsModifiable is_modifiable = 8;
+    }
+  }
 
-  // (Optional)
-  //
-  // Corresponding values to the keys.
-  // Required when the 'operation' is 'SET'.
-  // Optional when the 'operation' is 'GET', the values here will be used
-  // as the default values.
-  repeated OptionalValue optional_values = 5;
+  message Set {
+    // (Required) The config key-value pairs to set.
+    repeated KeyValue pairs = 1;
+  }
 
-  // (Optional)
-  //
-  // Only used when the 'operation' is 'GET_ALL'.
-  // If prefix is given, only parameters that start with the prefix will be returned.
-  optional string prefix = 6;
+  message Get {
+    // (Required) The config keys to get.
+    repeated string keys = 1;
+  }
 
-  enum Operation {
-    OPERATION_UNSPECIFIED = 0;
-    OPERATION_SET = 1;
-    OPERATION_GET = 2;
-    OPERATION_GET_OPTION = 3;
-    OPERATION_GET_ALL = 4;
-    OPERATION_UNSET = 5;
-    OPERATION_CONTAINS = 6;
-    OPERATION_IS_MODIFIABLE = 7;
+  message GetWithDefault {
+    // (Required) The config key-value paris to get. The value will be used as the default value.
+    repeated OptionalKeyValue pairs = 1;
+  }
+
+  message GetOption {
+    // (Required) The config keys to get optionally.
+    repeated string keys = 1;
+  }
+
+  message GetAll {
+    // (Optional) The prefix of the config key to get.
+    optional string prefix = 1;
+  }
+
+  message Unset {
+    // (Required) The config keys to unset.
+    repeated string keys = 1;
+  }
+
+  message Contains {
+    // (Required) The config keys to check if the config contains them.
+    repeated string keys = 1;
+  }
+
+  message IsModifiable {
+    // (Required) The config keys to check the config is modifiable.
+    repeated string keys = 1;
   }
 }
 

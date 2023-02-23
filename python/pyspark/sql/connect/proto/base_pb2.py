@@ -36,7 +36,7 @@ from pyspark.sql.connect.proto import types_pb2 as spark_dot_connect_dot_types__
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x18spark/connect/base.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1cspark/connect/commands.proto\x1a\x1dspark/connect/relations.proto\x1a\x19spark/connect/types.proto"t\n\x04Plan\x12-\n\x04root\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationH\x00R\x04root\x12\x32\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x16.spark.connect.CommandH\x00R\x07\x63ommandB\t\n\x07op_type"\xb5\x01\n\x07\x45xplain\x12\x45\n\x0c\x65xplain_mode\x18\x01 \x01(\x0e\x32".spark.connect.Explain.ExplainModeR\x0b\x65xplainMode"c\n\x0b\x45xplainMode\x12\x14\n\x10MODE_UNSPECIFIED\x10\x00\x12\n\n\x06SIMPLE\x10\x01\x12\x0c\n\x08\x45XTENDED\x10\x02\x12\x0b\n\x07\x43ODEGEN\x10\x03\x12\x08\n\x04\x43OST\x10\x04\x12\r\n\tFORMATTED\x10\x05"z\n\x0bUserContext\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n\tuser_name\x18\x02 \x01(\tR\x08userName\x12\x35\n\nextensions\x18\xe7\x07 \x03(\x0b\x32\x14.google.protobuf.AnyR\nextensions"\x81\x02\n\x12\x41nalyzePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x12\x30\n\x07\x65xplain\x18\x05 \x01(\x0b\x32\x16.spark.connect.ExplainR\x07\x65xplainB\x0e\n\x0c_client_type"\x8a\x02\n\x13\x41nalyzePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12/\n\x06schema\x18\x02 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x12%\n\x0e\x65xplain_string\x18\x03 \x01(\tR\rexplainString\x12\x1f\n\x0btree_string\x18\x04 \x01(\tR\ntreeString\x12\x19\n\x08is_local\x18\x05 \x01(\x08R\x07isLocal\x12!\n\x0cis_streaming\x18\x06 \x01(\x08R\x0bisStreaming\x12\x1f\n\x0binput_files\x18\x07 \x03(\tR\ninputFiles"\xcf\x01\n\x12\x45xecutePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x42\x0e\n\x0c_client_type"\x8f\x06\n\x13\x45xecutePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12N\n\x0b\x61rrow_batch\x18\x02 \x01(\x0b\x32-.spark.connect.ExecutePlanResponse.ArrowBatchR\narrowBatch\x12\x44\n\x07metrics\x18\x04 \x01(\x0b\x32*.spark.connect.ExecutePlanResponse.MetricsR\x07metrics\x1a=\n\nArrowBatch\x12\x1b\n\trow_count\x18\x01 \x01(\x03R\x08rowCount\x12\x12\n\x04\x64\x61ta\x18\x02 \x01(\x0cR\x04\x64\x61ta\x1a\x85\x04\n\x07Metrics\x12Q\n\x07metrics\x18\x01 \x03(\x0b\x32\x37.spark.connect.ExecutePlanResponse.Metrics.MetricObjectR\x07metrics\x1a\xcc\x02\n\x0cMetricObject\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n\x07plan_id\x18\x02 \x01(\x03R\x06planId\x12\x16\n\x06parent\x18\x03 \x01(\x03R\x06parent\x12z\n\x11\x65xecution_metrics\x18\x04 \x03(\x0b\x32M.spark.connect.ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntryR\x10\x65xecutionMetrics\x1a{\n\x15\x45xecutionMetricsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12L\n\x05value\x18\x02 \x01(\x0b\x32\x36.spark.connect.ExecutePlanResponse.Metrics.MetricValueR\x05value:\x02\x38\x01\x1aX\n\x0bMetricValue\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05value\x18\x02 \x01(\x03R\x05value\x12\x1f\n\x0bmetric_type\x18\x03 \x01(\tR\nmetricType"4\n\rOptionalValue\x12\x19\n\x05value\x18\x01 \x01(\tH\x00R\x05value\x88\x01\x01\x42\x08\n\x06_value"\xfe\x03\n\rConfigRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\x44\n\toperation\x18\x03 \x01(\x0e\x32&.spark.connect.ConfigRequest.OperationR\toperation\x12\x12\n\x04keys\x18\x04 \x03(\tR\x04keys\x12\x45\n\x0foptional_values\x18\x05 \x03(\x0b\x32\x1c.spark.connect.OptionalValueR\x0eoptionalValues\x12\x1b\n\x06prefix\x18\x06 \x01(\tH\x00R\x06prefix\x88\x01\x01"\xc7\x01\n\tOperation\x12\x19\n\x15OPERATION_UNSPECIFIED\x10\x00\x12\x11\n\rOPERATION_SET\x10\x01\x12\x11\n\rOPERATION_GET\x10\x02\x12\x18\n\x14OPERATION_GET_OPTION\x10\x03\x12\x15\n\x11OPERATION_GET_ALL\x10\x04\x12\x13\n\x0fOPERATION_UNSET\x10\x05\x12\x16\n\x12OPERATION_CONTAINS\x10\x06\x12\x1b\n\x17OPERATION_IS_MODIFIABLE\x10\x07\x42\t\n\x07_prefix"\xd2\x01\n\x0e\x43onfigResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12\x12\n\x04keys\x18\x02 \x03(\tR\x04keys\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values\x12\x45\n\x0foptional_values\x18\x04 \x03(\x0b\x32\x1c.spark.connect.OptionalValueR\x0eoptionalValues\x12\x14\n\x05\x62ools\x18\x05 \x03(\x08R\x05\x62ools\x12\x1a\n\x08warnings\x18\x06 \x03(\tR\x08warnings2\x90\x02\n\x13SparkConnectService\x12X\n\x0b\x45xecutePlan\x12!.spark.connect.ExecutePlanRequest\x1a".spark.connect.ExecutePlanResponse"\x00\x30\x01\x12V\n\x0b\x41nalyzePlan\x12!.spark.connect.AnalyzePlanRequest\x1a".spark.connect.AnalyzePlanResponse"\x00\x12G\n\x06\x43onfig\x12\x1c.spark.connect.ConfigRequest\x1a\x1d.spark.connect.ConfigResponse"\x00\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x18spark/connect/base.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1cspark/connect/commands.proto\x1a\x1dspark/connect/relations.proto\x1a\x19spark/connect/types.proto"t\n\x04Plan\x12-\n\x04root\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationH\x00R\x04root\x12\x32\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x16.spark.connect.CommandH\x00R\x07\x63ommandB\t\n\x07op_type"\xb5\x01\n\x07\x45xplain\x12\x45\n\x0c\x65xplain_mode\x18\x01 \x01(\x0e\x32".spark.connect.Explain.ExplainModeR\x0b\x65xplainMode"c\n\x0b\x45xplainMode\x12\x14\n\x10MODE_UNSPECIFIED\x10\x00\x12\n\n\x06SIMPLE\x10\x01\x12\x0c\n\x08\x45XTENDED\x10\x02\x12\x0b\n\x07\x43ODEGEN\x10\x03\x12\x08\n\x04\x43OST\x10\x04\x12\r\n\tFORMATTED\x10\x05"z\n\x0bUserContext\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n\tuser_name\x18\x02 \x01(\tR\x08userName\x12\x35\n\nextensions\x18\xe7\x07 \x03(\x0b\x32\x14.google.protobuf.AnyR\nextensions"\x81\x02\n\x12\x41nalyzePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x12\x30\n\x07\x65xplain\x18\x05 \x01(\x0b\x32\x16.spark.connect.ExplainR\x07\x65xplainB\x0e\n\x0c_client_type"\x8a\x02\n\x13\x41nalyzePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12/\n\x06schema\x18\x02 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x12%\n\x0e\x65xplain_string\x18\x03 \x01(\tR\rexplainString\x12\x1f\n\x0btree_string\x18\x04 \x01(\tR\ntreeString\x12\x19\n\x08is_local\x18\x05 \x01(\x08R\x07isLocal\x12!\n\x0cis_streaming\x18\x06 \x01(\x08R\x0bisStreaming\x12\x1f\n\x0binput_files\x18\x07 \x03(\tR\ninputFiles"\xcf\x01\n\x12\x45xecutePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x42\x0e\n\x0c_client_type"\x8f\x06\n\x13\x45xecutePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12N\n\x0b\x61rrow_batch\x18\x02 \x01(\x0b\x32-.spark.connect.ExecutePlanResponse.ArrowBatchR\narrowBatch\x12\x44\n\x07metrics\x18\x04 \x01(\x0b\x32*.spark.connect.ExecutePlanResponse.MetricsR\x07metrics\x1a=\n\nArrowBatch\x12\x1b\n\trow_count\x18\x01 \x01(\x03R\x08rowCount\x12\x12\n\x04\x64\x61ta\x18\x02 \x01(\x0cR\x04\x64\x61ta\x1a\x85\x04\n\x07Metrics\x12Q\n\x07metrics\x18\x01 \x03(\x0b\x32\x37.spark.connect.ExecutePlanResponse.Metrics.MetricObjectR\x07metrics\x1a\xcc\x02\n\x0cMetricObject\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n\x07plan_id\x18\x02 \x01(\x03R\x06planId\x12\x16\n\x06parent\x18\x03 \x01(\x03R\x06parent\x12z\n\x11\x65xecution_metrics\x18\x04 \x03(\x0b\x32M.spark.connect.ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntryR\x10\x65xecutionMetrics\x1a{\n\x15\x45xecutionMetricsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12L\n\x05value\x18\x02 \x01(\x0b\x32\x36.spark.connect.ExecutePlanResponse.Metrics.MetricValueR\x05value:\x02\x38\x01\x1aX\n\x0bMetricValue\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05value\x18\x02 \x01(\x03R\x05value\x12\x1f\n\x0bmetric_type\x18\x03 \x01(\tR\nmetricType"4\n\rOptionalValue\x12\x19\n\x05value\x18\x01 \x01(\tH\x00R\x05value\x88\x01\x01\x42\x08\n\x06_value"2\n\x08KeyValue\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value"X\n\x10OptionalKeyValue\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x32\n\x05value\x18\x02 \x01(\x0b\x32\x1c.spark.connect.OptionalValueR\x05value"\xb9\x08\n\rConfigRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\x44\n\toperation\x18\x03 \x01(\x0b\x32&.spark.connect.ConfigRequest.OperationR\toperation\x1a\xb7\x04\n\tOperation\x12\x34\n\x03set\x18\x01 \x01(\x0b\x32 .spark.connect.ConfigRequest.SetH\x00R\x03set\x12\x34\n\x03get\x18\x02 \x01(\x0b\x32 .spark.connect.ConfigRequest.GetH\x00R\x03get\x12W\n\x10get_with_default\x18\x03 \x01(\x0b\x32+.spark.connect.ConfigRequest.GetWithDefaultH\x00R\x0egetWithDefault\x12G\n\nget_option\x18\x04 \x01(\x0b\x32&.spark.connect.ConfigRequest.GetOptionH\x00R\tgetOption\x12>\n\x07get_all\x18\x05 \x01(\x0b\x32#.spark.connect.ConfigRequest.GetAllH\x00R\x06getAll\x12:\n\x05unset\x18\x06 \x01(\x0b\x32".spark.connect.ConfigRequest.UnsetH\x00R\x05unset\x12\x43\n\x08\x63ontains\x18\x07 \x01(\x0b\x32%.spark.connect.ConfigRequest.ContainsH\x00R\x08\x63ontains\x12P\n\ris_modifiable\x18\x08 \x01(\x0b\x32).spark.connect.ConfigRequest.IsModifiableH\x00R\x0cisModifiableB\t\n\x07op_type\x1a\x34\n\x03Set\x12-\n\x05pairs\x18\x01 \x03(\x0b\x32\x17.spark.connect.KeyValueR\x05pairs\x1a\x19\n\x03Get\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1aG\n\x0eGetWithDefault\x12\x35\n\x05pairs\x18\x01 \x03(\x0b\x32\x1f.spark.connect.OptionalKeyValueR\x05pairs\x1a\x1f\n\tGetOption\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a\x30\n\x06GetAll\x12\x1b\n\x06prefix\x18\x01 \x01(\tH\x00R\x06prefix\x88\x01\x01\x42\t\n\x07_prefix\x1a\x1b\n\x05Unset\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a\x1e\n\x08\x43ontains\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a"\n\x0cIsModifiable\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys"\xd2\x01\n\x0e\x43onfigResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12\x12\n\x04keys\x18\x02 \x03(\tR\x04keys\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values\x12\x45\n\x0foptional_values\x18\x04 \x03(\x0b\x32\x1c.spark.connect.OptionalValueR\x0eoptionalValues\x12\x14\n\x05\x62ools\x18\x05 \x03(\x08R\x05\x62ools\x12\x1a\n\x08warnings\x18\x06 \x03(\tR\x08warnings2\x90\x02\n\x13SparkConnectService\x12X\n\x0b\x45xecutePlan\x12!.spark.connect.ExecutePlanRequest\x1a".spark.connect.ExecutePlanResponse"\x00\x30\x01\x12V\n\x0b\x41nalyzePlan\x12!.spark.connect.AnalyzePlanRequest\x1a".spark.connect.AnalyzePlanResponse"\x00\x12G\n\x06\x43onfig\x12\x1c.spark.connect.ConfigRequest\x1a\x1d.spark.connect.ConfigResponse"\x00\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
@@ -59,10 +59,20 @@ _EXECUTEPLANRESPONSE_METRICS_METRICVALUE = _EXECUTEPLANRESPONSE_METRICS.nested_t
     "MetricValue"
 ]
 _OPTIONALVALUE = DESCRIPTOR.message_types_by_name["OptionalValue"]
+_KEYVALUE = DESCRIPTOR.message_types_by_name["KeyValue"]
+_OPTIONALKEYVALUE = DESCRIPTOR.message_types_by_name["OptionalKeyValue"]
 _CONFIGREQUEST = DESCRIPTOR.message_types_by_name["ConfigRequest"]
+_CONFIGREQUEST_OPERATION = _CONFIGREQUEST.nested_types_by_name["Operation"]
+_CONFIGREQUEST_SET = _CONFIGREQUEST.nested_types_by_name["Set"]
+_CONFIGREQUEST_GET = _CONFIGREQUEST.nested_types_by_name["Get"]
+_CONFIGREQUEST_GETWITHDEFAULT = _CONFIGREQUEST.nested_types_by_name["GetWithDefault"]
+_CONFIGREQUEST_GETOPTION = _CONFIGREQUEST.nested_types_by_name["GetOption"]
+_CONFIGREQUEST_GETALL = _CONFIGREQUEST.nested_types_by_name["GetAll"]
+_CONFIGREQUEST_UNSET = _CONFIGREQUEST.nested_types_by_name["Unset"]
+_CONFIGREQUEST_CONTAINS = _CONFIGREQUEST.nested_types_by_name["Contains"]
+_CONFIGREQUEST_ISMODIFIABLE = _CONFIGREQUEST.nested_types_by_name["IsModifiable"]
 _CONFIGRESPONSE = DESCRIPTOR.message_types_by_name["ConfigResponse"]
 _EXPLAIN_EXPLAINMODE = _EXPLAIN.enum_types_by_name["ExplainMode"]
-_CONFIGREQUEST_OPERATION = _CONFIGREQUEST.enum_types_by_name["Operation"]
 Plan = _reflection.GeneratedProtocolMessageType(
     "Plan",
     (_message.Message,),
@@ -201,16 +211,128 @@ OptionalValue = _reflection.GeneratedProtocolMessageType(
 )
 _sym_db.RegisterMessage(OptionalValue)
 
+KeyValue = _reflection.GeneratedProtocolMessageType(
+    "KeyValue",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _KEYVALUE,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.KeyValue)
+    },
+)
+_sym_db.RegisterMessage(KeyValue)
+
+OptionalKeyValue = _reflection.GeneratedProtocolMessageType(
+    "OptionalKeyValue",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _OPTIONALKEYVALUE,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.OptionalKeyValue)
+    },
+)
+_sym_db.RegisterMessage(OptionalKeyValue)
+
 ConfigRequest = _reflection.GeneratedProtocolMessageType(
     "ConfigRequest",
     (_message.Message,),
     {
+        "Operation": _reflection.GeneratedProtocolMessageType(
+            "Operation",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_OPERATION,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.Operation)
+            },
+        ),
+        "Set": _reflection.GeneratedProtocolMessageType(
+            "Set",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_SET,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.Set)
+            },
+        ),
+        "Get": _reflection.GeneratedProtocolMessageType(
+            "Get",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_GET,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.Get)
+            },
+        ),
+        "GetWithDefault": _reflection.GeneratedProtocolMessageType(
+            "GetWithDefault",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_GETWITHDEFAULT,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.GetWithDefault)
+            },
+        ),
+        "GetOption": _reflection.GeneratedProtocolMessageType(
+            "GetOption",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_GETOPTION,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.GetOption)
+            },
+        ),
+        "GetAll": _reflection.GeneratedProtocolMessageType(
+            "GetAll",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_GETALL,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.GetAll)
+            },
+        ),
+        "Unset": _reflection.GeneratedProtocolMessageType(
+            "Unset",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_UNSET,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.Unset)
+            },
+        ),
+        "Contains": _reflection.GeneratedProtocolMessageType(
+            "Contains",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_CONTAINS,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.Contains)
+            },
+        ),
+        "IsModifiable": _reflection.GeneratedProtocolMessageType(
+            "IsModifiable",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CONFIGREQUEST_ISMODIFIABLE,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest.IsModifiable)
+            },
+        ),
         "DESCRIPTOR": _CONFIGREQUEST,
         "__module__": "spark.connect.base_pb2"
         # @@protoc_insertion_point(class_scope:spark.connect.ConfigRequest)
     },
 )
 _sym_db.RegisterMessage(ConfigRequest)
+_sym_db.RegisterMessage(ConfigRequest.Operation)
+_sym_db.RegisterMessage(ConfigRequest.Set)
+_sym_db.RegisterMessage(ConfigRequest.Get)
+_sym_db.RegisterMessage(ConfigRequest.GetWithDefault)
+_sym_db.RegisterMessage(ConfigRequest.GetOption)
+_sym_db.RegisterMessage(ConfigRequest.GetAll)
+_sym_db.RegisterMessage(ConfigRequest.Unset)
+_sym_db.RegisterMessage(ConfigRequest.Contains)
+_sym_db.RegisterMessage(ConfigRequest.IsModifiable)
 
 ConfigResponse = _reflection.GeneratedProtocolMessageType(
     "ConfigResponse",
@@ -258,12 +380,32 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _EXECUTEPLANRESPONSE_METRICS_METRICVALUE._serialized_end = 2107
     _OPTIONALVALUE._serialized_start = 2109
     _OPTIONALVALUE._serialized_end = 2161
-    _CONFIGREQUEST._serialized_start = 2164
-    _CONFIGREQUEST._serialized_end = 2674
-    _CONFIGREQUEST_OPERATION._serialized_start = 2464
-    _CONFIGREQUEST_OPERATION._serialized_end = 2663
-    _CONFIGRESPONSE._serialized_start = 2677
-    _CONFIGRESPONSE._serialized_end = 2887
-    _SPARKCONNECTSERVICE._serialized_start = 2890
-    _SPARKCONNECTSERVICE._serialized_end = 3162
+    _KEYVALUE._serialized_start = 2163
+    _KEYVALUE._serialized_end = 2213
+    _OPTIONALKEYVALUE._serialized_start = 2215
+    _OPTIONALKEYVALUE._serialized_end = 2303
+    _CONFIGREQUEST._serialized_start = 2306
+    _CONFIGREQUEST._serialized_end = 3387
+    _CONFIGREQUEST_OPERATION._serialized_start = 2486
+    _CONFIGREQUEST_OPERATION._serialized_end = 3053
+    _CONFIGREQUEST_SET._serialized_start = 3055
+    _CONFIGREQUEST_SET._serialized_end = 3107
+    _CONFIGREQUEST_GET._serialized_start = 3109
+    _CONFIGREQUEST_GET._serialized_end = 3134
+    _CONFIGREQUEST_GETWITHDEFAULT._serialized_start = 3136
+    _CONFIGREQUEST_GETWITHDEFAULT._serialized_end = 3207
+    _CONFIGREQUEST_GETOPTION._serialized_start = 3209
+    _CONFIGREQUEST_GETOPTION._serialized_end = 3240
+    _CONFIGREQUEST_GETALL._serialized_start = 3242
+    _CONFIGREQUEST_GETALL._serialized_end = 3290
+    _CONFIGREQUEST_UNSET._serialized_start = 3292
+    _CONFIGREQUEST_UNSET._serialized_end = 3319
+    _CONFIGREQUEST_CONTAINS._serialized_start = 3321
+    _CONFIGREQUEST_CONTAINS._serialized_end = 3351
+    _CONFIGREQUEST_ISMODIFIABLE._serialized_start = 3353
+    _CONFIGREQUEST_ISMODIFIABLE._serialized_end = 3387
+    _CONFIGRESPONSE._serialized_start = 3390
+    _CONFIGRESPONSE._serialized_end = 3600
+    _SPARKCONNECTSERVICE._serialized_start = 3603
+    _SPARKCONNECTSERVICE._serialized_end = 3875
 # @@protoc_insertion_point(module_scope)

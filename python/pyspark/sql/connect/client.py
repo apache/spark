@@ -771,13 +771,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         return req
 
-    def config(
-        self,
-        operation: str,
-        keys: Optional[List[str]],
-        optional_values: Optional[List[Optional[str]]] = None,
-        prefix: Optional[str] = None,
-    ) -> ConfigResult:
+    def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
         """
         Call the config RPC of Spark Connect.
 
@@ -791,35 +785,7 @@ class SparkConnectClient(object):
         The result of the config call.
         """
         req = self._config_request_with_metadata()
-        if operation == "set":
-            req.operation = req.Operation.OPERATION_SET
-        elif operation == "get":
-            req.operation = req.Operation.OPERATION_GET
-        elif operation == "get_option":
-            req.operation = req.Operation.OPERATION_GET_OPTION
-        elif operation == "get_all":
-            req.operation = req.Operation.OPERATION_GET_ALL
-        elif operation == "unset":
-            req.operation = req.Operation.OPERATION_UNSET
-        elif operation == "contains":
-            req.operation = req.Operation.OPERATION_CONTAINS
-        elif operation == "is_modifiable":
-            req.operation = req.Operation.OPERATION_IS_MODIFIABLE
-        else:
-            raise ValueError(
-                f"Unknown operation: {operation}. Accepted operations are "
-                "'set', 'get', 'get_option', 'get_all', 'unset', 'contains', 'is_modifiable'."
-            )
-        if keys is not None:
-            req.keys.extend(keys)
-        if optional_values is not None:
-            for value in optional_values:
-                optional_value = pb2.OptionalValue()
-                if value is not None:
-                    optional_value.value = value
-                req.optional_values.append(optional_value)
-        if prefix is not None:
-            req.prefix = prefix
+        req.operation.CopyFrom(operation)
         try:
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
