@@ -28,6 +28,7 @@ ARG spark_uid=185
 # docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
 RUN set -ex && \
+    cat /etc/resolv.conf && \
     apt-get update && \
     ln -s /lib /lib64 && \
     apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps openjdk-17-jre && \
@@ -49,6 +50,7 @@ COPY kubernetes/dockerfiles/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
+COPY hive_1_2_2 /opt/spark/hive_1_2_2
 
 ENV SPARK_HOME /opt/spark
 

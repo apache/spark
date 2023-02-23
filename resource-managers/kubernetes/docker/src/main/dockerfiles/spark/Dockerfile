@@ -28,6 +28,7 @@ ARG spark_uid=root
 # docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
 RUN set -ex && \
+    cat /etc/resolv.conf && \
     sed -i 's/http:\/\/deb.\(.*\)/https:\/\/deb.\1/g' /etc/apt/sources.list && \
     apt-get update && \
     ln -s /lib /lib64 && \
@@ -50,6 +51,7 @@ COPY kubernetes/dockerfiles/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
+COPY hive_1_2_2 /opt/spark/hive_1_2_2
 
 ENV SPARK_HOME /opt/spark
 
