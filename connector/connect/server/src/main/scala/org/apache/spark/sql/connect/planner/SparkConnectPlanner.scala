@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, MapInPandas, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.UdfPacket
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
@@ -470,7 +470,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformFrameMap(rel: proto.FrameMap): LogicalPlan = {
     val commonUdf = rel.getFunc
     val pythonUdf = transformPythonUDF(commonUdf)
-    pythonUdf.getEvalType match {
+    pythonUdf.evalType match {
       case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
         Dataset
           .ofRows(session, transformRelation(rel.getInput))
@@ -478,7 +478,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           .logicalPlan
       case _ =>
         throw InvalidPlanInput(
-          s"Function with EvalType: ${pythonUdf.getEvalType} is not supported")
+          s"Function with EvalType: ${pythonUdf.evalType} is not supported")
     }
   }
 
