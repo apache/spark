@@ -1028,6 +1028,19 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "SELECT TOP (123) a,b FROM test")
   }
 
+  test("SPARK-42534: DB2Dialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
+    assert(
+      DB2Dialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT a,b FROM test     FETCH FIRST 123 ROWS ONLY")
+  }
+
   test("table exists query by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
