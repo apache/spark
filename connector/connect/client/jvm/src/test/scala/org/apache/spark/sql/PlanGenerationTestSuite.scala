@@ -1704,7 +1704,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.lit(UTF8String.fromString("connect-utf8")),
       fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
       fn.lit(java.time.Instant.ofEpochMilli(1677155519808L)),
-      fn.lit(java.sql.Timestamp.valueOf("2023-02-23 09:20:00.0")),
+      fn.lit(new java.sql.Timestamp(12345L)),
       fn.lit(java.time.LocalDateTime.of(2023, 2, 23, 20, 36)),
       fn.lit(java.sql.Date.valueOf("2023-02-23")),
       fn.lit(java.time.Duration.ofSeconds(200L)),
