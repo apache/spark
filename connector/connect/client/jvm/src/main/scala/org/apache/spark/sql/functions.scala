@@ -3832,9 +3832,9 @@ object functions {
    *   The column or the expression to use as the timestamp for windowing by time. The time column
    *   must be of TimestampType or TimestampNTZType.
    * @param gapDuration
-   *   A column specifying the timeout of the session. It could be static value, e.g.
-   *   `10 minutes`, `1 second`, or an expression/UDF that specifies gap duration dynamically based
-   *   on the input row.
+   *   A column specifying the timeout of the session. It could be static value, e.g. `10
+   *   minutes`, `1 second`, or an expression/UDF that specifies gap duration dynamically based on
+   *   the input row.
    *
    * @group datetime_funcs
    * @since 3.4.0
