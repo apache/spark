@@ -23,7 +23,7 @@ check_dependencies(__name__, __file__)
 
 import sys
 import functools
-from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
+from typing import cast, Callable, Any, TYPE_CHECKING, List, Optional, Union
 
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import CloudPickleSerializer
@@ -108,11 +108,9 @@ class UserDefinedFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
-    def __call__(self, *cols: "ColumnOrName") -> Column:
-        arg_cols = [
-            col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
-        ]
-        arg_exprs = [col._expr for col in arg_cols]
+    def _build_common_inline_user_defined_function(
+        self, arg_exprs: List[ColumnReference] = []
+    ) -> CommonInlineUserDefinedFunction:
         data_type_str = (
             self._returnType.json() if isinstance(self._returnType, DataType) else self._returnType
         )
@@ -122,14 +120,19 @@ class UserDefinedFunction:
             command=CloudPickleSerializer().dumps((self.func, self._returnType)),
             python_ver="%d.%d" % sys.version_info[:2],
         )
-        return Column(
-            CommonInlineUserDefinedFunction(
-                function_name=self._name,
-                deterministic=self.deterministic,
-                arguments=arg_exprs,
-                function=py_udf,
-            )
+        return CommonInlineUserDefinedFunction(
+            function_name=self._name,
+            deterministic=self.deterministic,
+            arguments=arg_exprs,
+            function=py_udf,
         )
+
+    def __call__(self, *cols: "ColumnOrName") -> Column:
+        arg_cols = [
+            col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
+        ]
+        arg_exprs = [col._expr for col in arg_cols]
+        return Column(self._build_common_inline_user_defined_function(arg_exprs))
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and

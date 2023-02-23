@@ -21,7 +21,6 @@ check_dependencies(__name__, __file__)
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import json
-import sys
 from threading import Lock
 from inspect import signature, isclass
 
@@ -39,7 +38,6 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
-from pyspark.serializers import CloudPickleSerializer
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -1863,24 +1861,7 @@ class FrameMap(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], function: "UserDefinedFunction") -> None:
         super().__init__(child)
 
-        # Construct a CommonInlineUserDefinedFunction from function
-        data_type_str = (
-            function._returnType.json()
-            if isinstance(function._returnType, DataType)
-            else function._returnType
-        )
-        py_udf = PythonUDF(
-            output_type=data_type_str,
-            eval_type=function.evalType,
-            command=CloudPickleSerializer().dumps((function.func, function._returnType)),
-            python_ver="%d.%d" % sys.version_info[:2],
-        )
-        self._func = CommonInlineUserDefinedFunction(
-            function_name=function._name,
-            deterministic=function.deterministic,
-            arguments=[],
-            function=py_udf,
-        )
+        self._func = function._build_common_inline_user_defined_function()
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
