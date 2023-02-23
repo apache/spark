@@ -213,7 +213,7 @@ case class CheckOverflowInSum(
 }
 
 /**
- * An add expression for decimal values which is only used internally by Sum/Avg.
+ * An add expression for decimal values which is only used internally by Sum/Avg/Window.
  *
  * Nota that, this expression does not check overflow which is different with `Add`. When
  * aggregating values, Spark writes the aggregation buffer values to `UnsafeRow` via
