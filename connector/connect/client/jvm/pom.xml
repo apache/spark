@@ -125,11 +125,6 @@
       <version>${mima.version}</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.parquet</groupId>
-      <artifactId>parquet-hadoop</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
   <build>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
