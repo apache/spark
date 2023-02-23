@@ -1867,5 +1867,5 @@ class FrameMap(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.frame_map.input.CopyFrom(self._child.plan(session))
-        plan.frame_map.func.CopyFrom(self._func.to_command(session))
+        plan.frame_map.func.CopyFrom(self._func.to_plan_udf(session))
         return plan

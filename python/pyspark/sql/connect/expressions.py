@@ -547,7 +547,9 @@ class CommonInlineUserDefinedFunction(Expression):
         )
         return expr
 
-    def to_command(self, session: "SparkConnectClient") -> "proto.CommonInlineUserDefinedFunction":
+    def to_plan_udf(self, session: "SparkConnectClient") -> "proto.CommonInlineUserDefinedFunction":
+        """Compared to `to_plan`, it returns a CommonInlineUserDefinedFunction instead of an
+        Expression."""
         expr = proto.CommonInlineUserDefinedFunction()
         expr.function_name = self._function_name
         expr.deterministic = self._deterministic
