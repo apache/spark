@@ -38,7 +38,7 @@ import org.apache.spark.connect.proto
 class RelationalGroupedDataset protected[sql] (
     private[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[proto.Expression],
-    groupType: RelationalGroupedDataset.GroupType) {
+    groupType: proto.Aggregate.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
     df.session.newDataset { builder =>
@@ -49,12 +49,13 @@ class RelationalGroupedDataset protected[sql] (
 
       // TODO: support Pivot.
       groupType match {
-        case RelationalGroupedDataset.RollupType =>
+        case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
           builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
-        case RelationalGroupedDataset.CubeType =>
+        case proto.Aggregate.GroupType.GROUP_TYPE_CUBE =>
           builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
-        case _ =>
+        case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
           builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+        case g => throw new UnsupportedOperationException(g.toString)
       }
     }
   }
@@ -233,29 +234,4 @@ class RelationalGroupedDataset protected[sql] (
   def sum(colNames: String*): DataFrame = {
     toDF(colNames.map(colName => functions.sum(colName)))
   }
-}
-
-private[sql] object RelationalGroupedDataset {
-
-  /**
-   * The Grouping Type
-   */
-  private[sql] trait GroupType {
-    override def toString: String = getClass.getSimpleName.stripSuffix("$").stripSuffix("Type")
-  }
-
-  /**
-   * To indicate it's the GroupBy
-   */
-  private[sql] object GroupByType extends GroupType
-
-  /**
-   * To indicate it's the CUBE
-   */
-  private[sql] object CubeType extends GroupType
-
-  /**
-   * To indicate it's the ROLLUP
-   */
-  private[sql] object RollupType extends GroupType
 }

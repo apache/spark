@@ -1055,7 +1055,10 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
+    new RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
 
   /**
@@ -1079,7 +1082,10 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.RollupType)
+    new RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
   }
 
   /**
@@ -1110,7 +1116,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     new RelationalGroupedDataset(
       toDF(),
       colNames.map(colName => Column(colName).expr),
-      RelationalGroupedDataset.RollupType)
+      proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
   }
 
   /**
@@ -1134,7 +1140,10 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
+    new RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
   }
 
   /**
@@ -1164,7 +1173,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     new RelationalGroupedDataset(
       toDF(),
       colNames.map(colName => Column(colName).expr),
-      RelationalGroupedDataset.CubeType)
+      proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
   }
 
   /**
