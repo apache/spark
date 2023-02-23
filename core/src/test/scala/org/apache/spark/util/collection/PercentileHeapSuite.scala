@@ -30,12 +30,21 @@ class PercentileHeapSuite extends SparkFunSuite {
     }
   }
 
+  private def percentile(nums: Seq[Int], percentage: Double): Double = {
+    val p = (nums.length * percentage).toInt
+    val sorted = nums.sorted.toIndexedSeq
+    if (nums.length % 2 == 1 || p == 0) {
+      sorted(p)
+    } else {
+      (sorted(p - 1) + sorted(p)) / 2d
+    }
+  }
+
   private def testPercentileFor(nums: Seq[Int], percentage: Double) = {
     val h = new PercentileHeap(percentage)
     Random.shuffle(nums).foreach(h.insert(_))
     assert(h.size == nums.length)
-    val sorted = nums.sorted.toArray
-    assert(h.percentile == sorted((sorted.length * percentage).toInt))
+    assert(h.percentile == percentile(nums, percentage))
   }
 
   private val tests = Seq(

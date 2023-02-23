@@ -44,11 +44,16 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
 
   /**
    * Returns percentile of the inserted elements as if the inserted elements were sorted and we
-   * returned `sorted((sorted.length * percentage).toInt)`.
+   * returned `sorted(p)` where `p = (sorted.length * percentage).toInt` if number of elements
+   * is odd, otherwise `(sorted(p-1) + sorted(p)) / 2` if number of elements is even.
    */
   def percentile(): Double = {
     if (isEmpty) throw new NoSuchElementException("empty")
-    largeHeap.peek
+    if (size % 2 == 1 || smallHeap.isEmpty) {
+      largeHeap.peek
+    } else {
+      (largeHeap.peek + -smallHeap.peek) / 2d
+    }
   }
 
   def insert(x: Double): Unit = {
