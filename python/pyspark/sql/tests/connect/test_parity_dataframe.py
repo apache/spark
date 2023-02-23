@@ -46,11 +46,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_invalid_join_method(self):
         super().test_invalid_join_method()
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_join_without_on(self):
-        super().test_join_without_on()
-
     # TODO(SPARK-41527): Implement DataFrame.observe
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_observe(self):
@@ -74,11 +69,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_repr_behaviors(self):
         super().test_repr_behaviors()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_require_cross(self):
-        super().test_require_cross()
 
     # TODO(SPARK-41874): Implement DataFrame `sameSemantics`
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -116,16 +106,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas_for_array_of_struct(self):
         # Spark Connect's implementation is based on Arrow.
         super().check_to_pandas_for_array_of_struct(True)
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas_from_empty_dataframe(self):
-        super().test_to_pandas_from_empty_dataframe()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas_from_mixed_dataframe(self):
-        super().test_to_pandas_from_mixed_dataframe()
 
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
