@@ -1445,4 +1445,15 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       assert(windows.size === 1)
     }
   }
+
+  test("SPARK-42588: collapse two adjacent windows with the equivalent " +
+    "partition/order expression") {
+
+    val df = Seq((1, 1), (2, 2)).toDF("a", "b")
+      .withColumn("max_b", expr("max(b) OVER (PARTITION BY abs(a))"))
+      .withColumn("min_b", expr("min(b) OVER (PARTITION BY abs(a))"))
+
+    val windows = df.queryExecution.optimizedPlan.collect { case w: LogicalWindow => w }
+    assert(windows.size === 1)
+  }
 }

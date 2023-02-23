@@ -1250,7 +1250,7 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  * - If the partition specs and order specs are the same and the window expression are
  *   independent and are of the same window function type, collapse into the parent.
  */
-object CollapseWindow extends Rule[LogicalPlan] {
+object CollapseWindow extends Rule[LogicalPlan] with AliasHelper {
   private def specCompatible(s1: Seq[Expression], s2: Seq[Expression]): Boolean = {
     s1.length == s2.length &&
       s1.zip(s2).forall(e => e._1.semanticEquals(e._2))
@@ -1267,17 +1267,66 @@ object CollapseWindow extends Rule[LogicalPlan] {
         WindowFunctionType.functionType(w2.windowExpressions.head)
   }
 
+  private def windowsReplaceCompatible(w1: Window,
+                                       w2: Window,
+                                       pl1: Seq[NamedExpression],
+                                       pl2: Seq[NamedExpression]): Boolean = {
+    val aliasMap1 = getAliasMap(pl1)
+    val aliasMap2 = getAliasMap(pl2)
+    val replacedPartitionSpec1 = w1.partitionSpec.map(expr => {
+      replaceAlias(replaceAlias(expr, aliasMap1), aliasMap2)
+    })
+    val replacedOrderSpec1 = w1.orderSpec.map(x =>
+      replaceAlias(replaceAlias(x, aliasMap1), aliasMap2)
+    )
+    val replacedPartitionSpec2 = w2.partitionSpec.map(replaceAlias(_, aliasMap2))
+    val replacedOrderSpec2 = w2.orderSpec.map(replaceAlias(_, aliasMap2))
+    specCompatible(replacedPartitionSpec1, replacedPartitionSpec2) &&
+      specCompatible(replacedOrderSpec1, replacedOrderSpec2) &&
+      w1.references.intersect(w2.windowOutputSet).isEmpty &&
+      w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
+      // This assumes Window contains the same type of window expressions. This is ensured
+      // by ExtractWindowFunctions.
+      WindowFunctionType.functionType(w1.windowExpressions.head) ==
+        WindowFunctionType.functionType(w2.windowExpressions.head)
+  }
+
+  private def windowExpressionsTransform (w1: Window, w2: Window): Seq[NamedExpression] = {
+    val map1 = AttributeMap(w1.partitionSpec.map(_.asInstanceOf[Attribute])
+      .zip(w2.partitionSpec.map(_.asInstanceOf[Attribute])))
+    val map2 = AttributeMap(w1.orderSpec.map(_.child.asInstanceOf[Attribute])
+      .zip(w2.orderSpec.map(_.child.asInstanceOf[Attribute])))
+    w1.windowExpressions.map { expr =>
+      expr.transform {
+        case a: Attribute => (map1 ++ map2).get(a).map(_.withName(a.name)).getOrElse(a)
+      }.asInstanceOf[NamedExpression]
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
         if windowsCompatible(w1, w2) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
 
-    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
-        if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
-      Project(
-        pl ++ w1.windowOutputSet,
-        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
+    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild))) =>
+      if (windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet)) {
+        Project(
+          pl ++ w1.windowOutputSet,
+          w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
+      } else {
+        grandChild match {
+          case Project(pl2, _) if windowsReplaceCompatible(w1, w2, pl, pl2) =>
+            val _we1 = windowExpressionsTransform(w1, w2)
+            val _w1 = Window(we2 ++ _we1, w2.partitionSpec, w2.orderSpec, grandChild)
+            if (_w1.references.subsetOf(grandChild.outputSet)) {
+              Project(pl ++ _w1.windowOutputSet, _w1)
+            } else {
+              w1
+            }
+          case _ => w1
+        }
+      }
   }
 }
 
