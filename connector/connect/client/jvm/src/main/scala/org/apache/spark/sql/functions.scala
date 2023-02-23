@@ -116,7 +116,6 @@ object functions {
         .setMicroseconds(microseconds)
     }
 
-
   private val nullType =
     proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
 
@@ -173,7 +172,8 @@ object functions {
       case Literal(f, FloatType) => createLiteral(_.setFloat(f.asInstanceOf[Float]))
       case Literal(b, ByteType) => createLiteral(_.setByte(b.asInstanceOf[Byte]))
       case Literal(s, ShortType) => createLiteral(_.setShort(s.asInstanceOf[Short]))
-      case Literal(s, StringType) => createLiteral(_.setString(s.asInstanceOf[UTF8String].toString))
+      case Literal(s, StringType) =>
+        createLiteral(_.setString(s.asInstanceOf[UTF8String].toString))
       case Literal(b, BooleanType) => createLiteral(_.setBoolean(b.asInstanceOf[Boolean]))
       case Literal(d, dt: DecimalType) => createDecimalLiteral(dt.precision, dt.scale, d.toString)
       case Literal(i, TimestampType) => createLiteral(_.setTimestamp(i.asInstanceOf[Long]))
