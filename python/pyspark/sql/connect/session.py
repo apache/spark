@@ -422,7 +422,7 @@ class SparkSession:
         raise NotImplementedError("newSession() is not implemented.")
 
     @property
-    def conf(self) -> Any:
+    def conf(self) -> RuntimeConf:
         return RuntimeConf(self.client)
 
     @property
