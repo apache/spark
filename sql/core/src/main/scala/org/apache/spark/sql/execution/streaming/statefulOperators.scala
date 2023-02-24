@@ -115,7 +115,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
    * for the output so far (including output from eviction). Operators which behave differently
    * (e.g. different criteria on eviction) must override this method.
    */
-  def produceOutputWatermark(inputWatermarkMs: Long): Long = inputWatermarkMs
+  def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = Some(inputWatermarkMs)
 
   override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),

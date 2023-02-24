@@ -24,7 +24,6 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.WatermarkPropagator.DEFAULT_WATERMARK_MS
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -154,8 +153,8 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
   private val batchIdToWatermark: jutil.TreeMap[Long, Long] = new jutil.TreeMap[Long, Long]()
 
   // contains the association for batchId -> (stateful operator ID -> input watermark)
-  private val inputWatermarks: mutable.Map[Long, Map[Long, Long]] =
-    mutable.Map[Long, Map[Long, Long]]()
+  private val inputWatermarks: mutable.Map[Long, Map[Long, Option[Long]]] =
+    mutable.Map[Long, Map[Long, Option[Long]]]()
 
   private def isInitialized(batchId: Long): Boolean = batchIdToWatermark.containsKey(batchId)
 
@@ -166,23 +165,21 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
    */
   private def getInputWatermarks(
       node: SparkPlan,
-      nodeToOutputWatermark: mutable.Map[Int, Long]): Seq[Long] = {
-    node.children.map { child =>
+      nodeToOutputWatermark: mutable.Map[Int, Option[Long]]): Seq[Long] = {
+    node.children.flatMap { child =>
       nodeToOutputWatermark.getOrElse(child.id, {
         throw new IllegalStateException(
           s"watermark for the node ${child.id} should be registered")
       })
-    }.filter { case curr =>
-      // This path is to exclude children from watermark calculation
-      // which don't have watermark information
-      curr != DEFAULT_WATERMARK_MS
+      // Since we use flatMap here, this will exclude children from watermark calculation
+      // which don't have watermark information.
     }
   }
 
   private def doSimulate(batchId: Long, plan: SparkPlan, originWatermark: Long): Unit = {
     val statefulOperatorIdToNodeId = mutable.HashMap[Long, Int]()
-    val nodeToOutputWatermark = mutable.HashMap[Int, Long]()
-    val nextStatefulOperatorToWatermark = mutable.HashMap[Long, Long]()
+    val nodeToOutputWatermark = mutable.HashMap[Int, Option[Long]]()
+    val nextStatefulOperatorToWatermark = mutable.HashMap[Long, Option[Long]]()
 
     // This calculation relies on post-order traversal of the query plan.
     plan.transformUp {
@@ -194,7 +191,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
             "the previous behavior. Note that multiple stateful operators will be disallowed.")
         }
 
-        nodeToOutputWatermark.put(node.id, originWatermark)
+        nodeToOutputWatermark.put(node.id, Some(originWatermark))
         node
 
       case node: StateStoreWriter =>
@@ -202,15 +199,18 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         statefulOperatorIdToNodeId.put(stOpId, node.id)
 
         val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
+
         val finalInputWatermarkMs = if (inputWatermarks.nonEmpty) {
-          inputWatermarks.min
+          Some(inputWatermarks.min)
         } else {
           // We can't throw exception here, as we allow stateful operator to process without
           // watermark. E.g. streaming aggregation with update/complete mode.
-          DEFAULT_WATERMARK_MS
+          None
         }
 
-        val outputWatermarkMs = node.produceOutputWatermark(finalInputWatermarkMs)
+        val outputWatermarkMs = finalInputWatermarkMs.flatMap { wm =>
+          node.produceOutputWatermark(wm)
+        }
         nodeToOutputWatermark.put(node.id, outputWatermarkMs)
         nextStatefulOperatorToWatermark.put(stOpId, finalInputWatermarkMs)
         node
@@ -219,10 +219,9 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         // pass-through, but also consider multiple children like the case of union
         val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
         val finalInputWatermarkMs = if (inputWatermarks.nonEmpty) {
-          val minCurrInputWatermarkMs = inputWatermarks.min
-          minCurrInputWatermarkMs
+          Some(inputWatermarks.min)
         } else {
-          DEFAULT_WATERMARK_MS
+          None
         }
 
         nodeToOutputWatermark.put(node.id, finalInputWatermarkMs)
@@ -259,7 +258,8 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       // In current Spark's logic, event time watermark cannot go down to negative. So even there is
       // no input watermark for operator, the final input watermark for operator should be 0L.
       inputWatermarks(batchId).get(stateOpId) match {
-        case Some(wm) => Math.max(0L, wm)
+        case Some(Some(wm)) => wm
+        case Some(None) => 0L
         case None => throw new IllegalStateException(s"Watermark for batch ID $batchId and " +
           s"stateOpId $stateOpId is not yet set!")
       }
@@ -288,8 +288,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
 }
 
 object WatermarkPropagator {
-  val DEFAULT_WATERMARK_MS = -1L
-
   def apply(conf: SQLConf): WatermarkPropagator = {
     if (conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
       new PropagateWatermarkSimulator

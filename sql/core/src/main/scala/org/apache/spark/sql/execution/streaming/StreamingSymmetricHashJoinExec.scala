@@ -709,12 +709,12 @@ case class StreamingSymmetricHashJoinExec(
   // must be lower bound of both sides of event time column. The lower bound of event time column
   // for each side is determined by state watermark, hence we take a minimum of (left state
   // watermark, right state watermark, input watermark) to decide the output watermark.
-  override def produceOutputWatermark(inputWatermarkMs: Long): Long = {
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
         left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
         !allowMultipleStatefulOperators)
 
-    (leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min
+    Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
   }
 }

@@ -828,7 +828,7 @@ class MultiStatefulOperatorsSuite
           }.head
 
           val outputWatermark = joinOperator.produceOutputWatermark(0)
-          assert(outputWatermark === expectedOutputWatermark)
+          assert(outputWatermark.get === expectedOutputWatermark)
         }
       )
     }
