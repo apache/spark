@@ -44,6 +44,9 @@ class ConfTestsMixin:
         # `defaultValue` in `spark.conf.get` is set to None.
         self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode", None), None)
 
+        self.assertTrue(spark.conf.isModifiable("spark.sql.execution.arrow.maxRecordsPerBatch"))
+        self.assertFalse(spark.conf.isModifiable("spark.sql.warehouse.dir"))
+
     def test_conf_with_python_objects(self):
         spark = self.spark
 
@@ -59,6 +62,8 @@ class ConfTestsMixin:
 
         with self.assertRaises(Exception):
             spark.conf.set("foo", Decimal(1))
+
+        spark.conf.unset("foo")
 
 
 class ConfTests(ConfTestsMixin, ReusedSQLTestCase):

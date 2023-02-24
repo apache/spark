@@ -19,10 +19,9 @@ import warnings
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.errors import IllegalArgumentException
 from pyspark.sql.conf import RuntimeConfig as PySparkRuntimeConfig
 from pyspark.sql.connect import proto
-from pyspark.sql.connect.client import ConfigResult, SparkConnectClient
+from pyspark.sql.connect.client import SparkConnectClient
 
 
 class RuntimeConf:
@@ -37,10 +36,9 @@ class RuntimeConf:
             value = "true" if value else "false"
         elif isinstance(value, int):
             value = str(value)
-        op_set = proto.ConfigRequest.Set(pairs=[_key_value(key, value)])
+        op_set = proto.ConfigRequest.Set(pairs=[_to_proto_key_value(key, value)])
         operation = proto.ConfigRequest.Operation(set=op_set)
         result = self._client.config(operation)
-        assert isinstance(result.operation, ConfigResult.Set)
         for warn in result.warnings:
             warnings.warn(warn)
 
@@ -53,19 +51,15 @@ class RuntimeConf:
         if default is _NoValue:
             op_get = proto.ConfigRequest.Get(keys=[key])
             operation = proto.ConfigRequest.Operation(get=op_get)
-            result = self._client.config(operation)
-            assert isinstance(result.operation, ConfigResult.Get)
-            return result.operation.values[0]
         else:
             if default is not None:
                 self._checkType(default, "default")
             op_get_with_default = proto.ConfigRequest.GetWithDefault(
-                pairs=[_optional_key_value(key, cast(Optional[str], default))]
+                pairs=[_to_proto_key_value(key, cast(Optional[str], default))]
             )
             operation = proto.ConfigRequest.Operation(get_with_default=op_get_with_default)
-            result = self._client.config(operation)
-            assert isinstance(result.operation, ConfigResult.GetWithDefault)
-            return result.operation.values[0]
+        result = self._client.config(operation)
+        return result.pairs[0][1]
 
     get.__doc__ = PySparkRuntimeConfig.get.__doc__
 
@@ -73,7 +67,6 @@ class RuntimeConf:
         op_unset = proto.ConfigRequest.Unset(keys=[key])
         operation = proto.ConfigRequest.Operation(unset=op_unset)
         result = self._client.config(operation)
-        assert isinstance(result.operation, ConfigResult.Unset)
         for warn in result.warnings:
             warnings.warn(warn)
 
@@ -83,8 +76,12 @@ class RuntimeConf:
         op_is_modifiable = proto.ConfigRequest.IsModifiable(keys=[key])
         operation = proto.ConfigRequest.Operation(is_modifiable=op_is_modifiable)
         result = self._client.config(operation)
-        assert isinstance(result.operation, ConfigResult.IsModifiable)
-        return result.operation.bools[0]
+        if result.pairs[0][1] == "true":
+            return True
+        elif result.pairs[0][1] == "false":
+            return False
+        else:
+            raise ValueError(f"Unknown boolean value: {result.pairs[0][1]}")
 
     isModifiable.__doc__ = PySparkRuntimeConfig.isModifiable.__doc__
 
@@ -96,18 +93,12 @@ class RuntimeConf:
             )
 
 
-def _optional_value(value: Optional[str]) -> proto.OptionalValue:
+def _to_proto_optional_value(value: Optional[str]) -> proto.OptionalValue:
     return proto.OptionalValue(value=value)
 
 
-def _key_value(key: str, value: Optional[str]) -> proto.KeyValue:
-    if value is None:
-        raise IllegalArgumentException(f"requirement failed: value cannot be null for key: {key}")
-    return proto.KeyValue(key=key, value=value)
-
-
-def _optional_key_value(key: str, value: Optional[str]) -> proto.OptionalKeyValue:
-    return proto.OptionalKeyValue(key=key, value=_optional_value(value))
+def _to_proto_key_value(key: str, value: Optional[str]) -> proto.KeyValue:
+    return proto.KeyValue(key=key, value=_to_proto_optional_value(value))
 
 
 RuntimeConf.__doc__ = PySparkRuntimeConfig.__doc__

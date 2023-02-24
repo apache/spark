@@ -403,82 +403,19 @@ class AnalyzeResult:
 
 
 class ConfigResult:
-    class Operation:
-        pass
-
-    class Set(Operation):
-        pass
-
-    class Get(Operation):
-        def __init__(self, values: List[str]):
-            self.values = values
-
-    class GetWithDefault(Operation):
-        def __init__(self, values: List[Optional[str]]):
-            self.values = values
-
-    class GetOption(Operation):
-        def __init__(self, values: List[Optional[str]]):
-            self.values = values
-
-    class GetAll(Operation):
-        def __init__(self, pairs: List[Tuple[str, str]]):
-            self.pairs = pairs
-
-    class Unset(Operation):
-        pass
-
-    class IsModifiable(Operation):
-        def __init__(self, bools: List[bool]):
-            self.bools = bools
-
-    def __init__(self, operation: Operation, warnings: List[str]):
-        self.operation = operation
+    def __init__(self, pairs: List[Tuple[str, Optional[str]]], warnings: List[str]):
+        self.pairs = pairs
         self.warnings = warnings
 
     @classmethod
     def fromProto(cls, pb: pb2.ConfigResponse) -> "ConfigResult":
-        warnings = list(pb.warnings)
-        op_type = pb.operation.WhichOneof("op_type")
-        if op_type == "set":
-            return ConfigResult(ConfigResult.Set(), warnings)
-        elif op_type == "get":
-            return ConfigResult(ConfigResult.Get(list(pb.operation.get.values)), warnings)
-        elif op_type == "get_with_default":
-            return ConfigResult(
-                ConfigResult.GetWithDefault(
-                    [
-                        value.value if value.HasField("value") else None
-                        for value in pb.operation.get_with_default.values
-                    ]
-                ),
-                warnings,
-            )
-        elif op_type == "get_option":
-            return ConfigResult(
-                ConfigResult.GetOption(
-                    [
-                        value.value if value.HasField("value") else None
-                        for value in pb.operation.get_with_default.values
-                    ]
-                ),
-                warnings,
-            )
-        elif op_type == "get_all":
-            return ConfigResult(
-                ConfigResult.GetAll(
-                    [(pair.key, pair.value) for pair in pb.operation.get_all.pairs]
-                ),
-                warnings,
-            )
-        elif op_type == "unset":
-            return ConfigResult(ConfigResult.Unset(), warnings)
-        elif op_type == "is_modifiable":
-            return ConfigResult(
-                ConfigResult.IsModifiable(list(pb.operation.is_modifiable.bools)), warnings
-            )
-        else:
-            raise ValueError(f"Unknown op_type in ConfigResponse: {op_type}")
+        return ConfigResult(
+            pairs=[
+                (pair.key, pair.value.value if pair.value.HasField("value") else None)
+                for pair in pb.pairs
+            ],
+            warnings=list(pb.warnings),
+        )
 
 
 class SparkConnectClient(object):

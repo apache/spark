@@ -35,7 +35,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
         .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
         .session
 
-    val (operation, warnings) = request.getOperation.getOpTypeCase match {
+    val builder = request.getOperation.getOpTypeCase match {
       case proto.ConfigRequest.Operation.OpTypeCase.SET =>
         handleSet(request.getOperation.getSet, session.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET =>
@@ -53,78 +53,66 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       case _ => throw new UnsupportedOperationException(s"${request.getOperation} not supported.")
     }
 
-    val response = proto.ConfigResponse
-      .newBuilder()
-      .setClientId(request.getClientId)
-      .setOperation(operation)
-      .addAllWarnings(warnings.asJava)
-      .build()
-    responseObserver.onNext(response)
+    builder.setClientId(request.getClientId)
+    responseObserver.onNext(builder.build())
     responseObserver.onCompleted()
   }
 
   private def handleSet(
       operation: proto.ConfigRequest.Set,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.Set.newBuilder()
-    val warnings = operation.getPairsList.asScala.flatMap { pair =>
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val builder = proto.ConfigResponse.newBuilder()
+    operation.getPairsList.asScala.iterator.foreach { pair =>
       val key = pair.getKey
-      val value = pair.getValue
+      val value = SparkConnectConfigHandler.toOption(pair.getValue).orNull
       conf.set(key, value)
-      getWarning(key)
-    }.toSeq
-    builder.setSet(response.build())
-    (builder.build(), warnings)
+      getWarning(key).foreach(builder.addWarnings)
+    }
+    builder
   }
 
   private def handleGet(
       operation: proto.ConfigRequest.Get,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.Get.newBuilder()
-    val warnings = operation.getKeysList.asScala.flatMap { key =>
-      response.addValues(conf.get(key))
-      getWarning(key)
-    }.toSeq
-    builder.setGet(response.build())
-    (builder.build(), warnings)
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val builder = proto.ConfigResponse.newBuilder()
+    operation.getKeysList.asScala.iterator.foreach { key =>
+      val value = conf.get(key)
+      builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
+      getWarning(key).foreach(builder.addWarnings)
+    }
+    builder
   }
 
   private def handleGetWithDefault(
       operation: proto.ConfigRequest.GetWithDefault,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.GetWithDefault.newBuilder()
-    val warnings = operation.getPairsList.asScala.flatMap { pair =>
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val builder = proto.ConfigResponse.newBuilder()
+    operation.getPairsList.asScala.iterator.foreach { pair =>
       val key = pair.getKey
-      val value = SparkConnectConfigHandler.toOption(pair.getValue).orNull
-      response.addValues(
-        SparkConnectConfigHandler.toProtoOptionalValue(Option(conf.get(key, value))))
-      getWarning(key)
-    }.toSeq
-    builder.setGetWithDefault(response.build())
-    (builder.build(), warnings)
+      val default = SparkConnectConfigHandler.toOption(pair.getValue).orNull
+      val value = conf.get(key, default)
+      builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
+      getWarning(key).foreach(builder.addWarnings)
+    }
+    builder
   }
 
   private def handleGetOption(
       operation: proto.ConfigRequest.GetOption,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.GetOption.newBuilder()
-    val warnings = operation.getKeysList.asScala.flatMap { key =>
-      response.addValues(SparkConnectConfigHandler.toProtoOptionalValue(conf.getOption(key)))
-      getWarning(key)
-    }.toSeq
-    builder.setGetOption(response.build())
-    (builder.build(), warnings)
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val builder = proto.ConfigResponse.newBuilder()
+    operation.getKeysList.asScala.iterator.foreach { key =>
+      val value = conf.getOption(key)
+      builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, value))
+      getWarning(key).foreach(builder.addWarnings)
+    }
+    builder
   }
 
   private def handleGetAll(
       operation: proto.ConfigRequest.GetAll,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.GetAll.newBuilder()
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val builder = proto.ConfigResponse.newBuilder()
     val results = if (operation.hasPrefix) {
       val prefix = operation.getPrefix
       conf.getAll.iterator
@@ -133,38 +121,34 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     } else {
       conf.getAll.iterator
     }
-    val warnings = results.flatMap { case (key, value) =>
-      response.addPairs(proto.KeyValue.newBuilder().setKey(key).setValue(value).build())
-      getWarning(key)
-    }.toSeq
-    builder.setGetAll(response.build())
-    (builder.build(), warnings)
+    results.foreach { case (key, value) =>
+      builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
+      getWarning(key).foreach(builder.addWarnings)
+    }
+    builder
   }
 
   private def handleUnset(
       operation: proto.ConfigRequest.Unset,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.Unset.newBuilder()
-    val warnings = operation.getKeysList.asScala.flatMap { key =>
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val builder = proto.ConfigResponse.newBuilder()
+    operation.getKeysList.asScala.iterator.foreach { key =>
       conf.unset(key)
-      getWarning(key)
-    }.toSeq
-    builder.setUnset(response.build())
-    (builder.build(), warnings)
+      getWarning(key).foreach(builder.addWarnings)
+    }
+    builder
   }
 
   private def handleIsModifiable(
       operation: proto.ConfigRequest.IsModifiable,
-      conf: RuntimeConfig): (proto.ConfigResponse.Operation, Seq[String]) = {
-    val builder = proto.ConfigResponse.Operation.newBuilder()
-    val response = proto.ConfigResponse.IsModifiable.newBuilder()
-    val warnings = operation.getKeysList.asScala.flatMap { key =>
-      response.addBools(conf.isModifiable(key))
-      getWarning(key)
-    }.toSeq
-    builder.setIsModifiable(response.build())
-    (builder.build(), warnings)
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val builder = proto.ConfigResponse.newBuilder()
+    operation.getKeysList.asScala.iterator.foreach { key =>
+      val value = conf.isModifiable(key)
+      builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value.toString)))
+      getWarning(key).foreach(builder.addWarnings)
+    }
+    builder
   }
 
   private def getWarning(key: String): Option[String] = {
@@ -190,7 +174,14 @@ object SparkConnectConfigHandler {
 
   def toProtoOptionalValue(value: Option[String]): proto.OptionalValue = {
     val builder = proto.OptionalValue.newBuilder()
-    value.foreach(builder.setValue(_))
+    value.foreach(builder.setValue)
+    builder.build()
+  }
+
+  def toProtoKeyValue(key: String, value: Option[String]): proto.KeyValue = {
+    val builder = proto.KeyValue.newBuilder()
+    builder.setKey(key)
+    builder.setValue(toProtoOptionalValue(value))
     builder.build()
   }
 }
