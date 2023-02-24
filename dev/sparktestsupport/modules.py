@@ -532,6 +532,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_readwriter",
         "pyspark.sql.tests.connect.test_parity_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
+        "pyspark.sql.tests.connect.test_parity_pandas_map",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

@@ -30,12 +30,17 @@ from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import SortOrder, ColumnReference, LiteralExpression
+from pyspark.sql.connect.expressions import (
+    SortOrder,
+    ColumnReference,
+    LiteralExpression,
+)
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark.sql.connect.udf import UserDefinedFunction
 
 
 class InputValidationError(Exception):
@@ -1863,3 +1868,21 @@ class ListCatalogs(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
+
+
+class FrameMap(LogicalPlan):
+    """Logical plan object for a Frame Map API: mapInPandas, mapInArrow."""
+
+    def __init__(
+        self, child: Optional["LogicalPlan"], function: "UserDefinedFunction", cols: List[str]
+    ) -> None:
+        super().__init__(child)
+
+        self._func = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.frame_map.input.CopyFrom(self._child.plan(session))
+        plan.frame_map.func.CopyFrom(self._func.to_plan_udf(session))
+        return plan

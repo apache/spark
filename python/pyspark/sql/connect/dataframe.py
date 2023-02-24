@@ -51,6 +51,7 @@ from pyspark.sql.dataframe import (
 
 from pyspark.errors import PySparkTypeError
 from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark.rdd import PythonEvalType
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
@@ -73,6 +74,7 @@ if TYPE_CHECKING:
         LiteralType,
         PrimitiveType,
         OptionalPrimitiveType,
+        PandasMapIterFunction,
     )
     from pyspark.sql.connect.session import SparkSession
 
@@ -1540,8 +1542,24 @@ class DataFrame:
     def storageLevel(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("storageLevel() is not implemented.")
 
-    def mapInPandas(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("mapInPandas() is not implemented.")
+    def mapInPandas(
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+
+        if self._plan is None:
+            raise Exception("Cannot mapInPandas when self._plan is empty.")
+
+        udf_obj = UserDefinedFunction(
+            func, returnType=schema, evalType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+        )
+
+        return DataFrame.withPlan(
+            plan.FrameMap(child=self._plan, function=udf_obj, cols=self.columns),
+            session=self._session,
+        )
+
+    mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
     def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("mapInArrow() is not implemented.")

@@ -351,7 +351,9 @@ def parse_data_type(data_type: str) -> DataType:
     return_type_schema = (
         PySparkSession.builder.getOrCreate().createDataFrame(data=[], schema=data_type).schema
     )
-    if len(return_type_schema.fields) == 1:
+    with_col_name = " " in data_type.strip()
+    if len(return_type_schema.fields) == 1 and not with_col_name:
+        # To match pyspark.sql.types._parse_datatype_string
         return_type = return_type_schema.fields[0].dataType
     else:
         return_type = return_type_schema

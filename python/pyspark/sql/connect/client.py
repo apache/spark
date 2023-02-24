@@ -494,7 +494,7 @@ class SparkConnectClient(object):
             deterministic=deterministic,
             arguments=[],
             function=py_udf,
-        ).to_command(self)
+        ).to_plan_udf(self)
 
         # construct the request
         req = self._execute_plan_request_with_metadata()
