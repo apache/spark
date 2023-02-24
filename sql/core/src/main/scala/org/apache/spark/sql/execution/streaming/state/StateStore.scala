@@ -550,9 +550,9 @@ object StateStore extends Logging {
       }
 
       if (loadTimeMs > 2000L) {
-        logWarning(s"Took too long to load state store provider with " +
-          s"storeId=${storeProviderId.storeId.toString}, " +
-          s"queryRunId=${storeProviderId.queryRunId} and loadTimeMs=$loadTimeMs")
+        logWarning(s"Loaded state store provider in loadTimeMs=$loadTimeMs " +
+          s"for storeId=${storeProviderId.storeId.toString} and " +
+          s"queryRunId=${storeProviderId.queryRunId}")
       }
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
