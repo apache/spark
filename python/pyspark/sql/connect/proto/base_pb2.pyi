@@ -851,6 +851,7 @@ class ConfigRequest(google.protobuf.message.Message):
     CLIENT_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     OPERATION_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     """(Required)
 
@@ -863,25 +864,50 @@ class ConfigRequest(google.protobuf.message.Message):
     @property
     def operation(self) -> global___ConfigRequest.Operation:
         """(Required) The operation for the config."""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         operation: global___ConfigRequest.Operation | None = ...,
+        client_type: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "operation", b"operation", "user_context", b"user_context"
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "operation",
+            b"operation",
+            "user_context",
+            b"user_context",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id", b"client_id", "operation", b"operation", "user_context", b"user_context"
+            "_client_type",
+            b"_client_type",
+            "client_id",
+            b"client_id",
+            "client_type",
+            b"client_type",
+            "operation",
+            b"operation",
+            "user_context",
+            b"user_context",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
 
 global___ConfigRequest = ConfigRequest
 

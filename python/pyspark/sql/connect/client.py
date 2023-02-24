@@ -818,6 +818,7 @@ class SparkConnectClient(object):
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()
         req.client_id = self._session_id
+        req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
