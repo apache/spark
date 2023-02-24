@@ -854,6 +854,8 @@ object SparkConnectClient {
     // Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
     test := ((Test / test) dependsOn (LocalProject("assembly") / Compile / Keys.`package`)).value,
 
+    testOnly := ((Test / testOnly) dependsOn (LocalProject("assembly") / Compile / Keys.`package`)).evaluated,
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
