@@ -60,8 +60,6 @@ class RelationalGroupedDataset protected[sql] (
           builder.getAggregateBuilder
             .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
             .setPivot(pivot.get)
-        case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT if pivot.isEmpty =>
-          throw new IllegalArgumentException("Pivot should not be empty")
         case g => throw new UnsupportedOperationException(g.toString)
       }
     }
@@ -333,7 +331,8 @@ class RelationalGroupedDataset protected[sql] (
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
         val valueExprs = values.map(_ match {
           case c: Column if c.expr.hasLiteral => c.expr.getLiteral
-          case c: Column if !c.expr.hasLiteral => throw new IllegalArgumentException()
+          case c: Column if !c.expr.hasLiteral =>
+            throw new IllegalArgumentException("values only accept literal Column")
           case v => functions.lit(v).expr.getLiteral
         })
         new RelationalGroupedDataset(

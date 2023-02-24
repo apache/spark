@@ -129,4 +129,11 @@ class DatasetSuite
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }
+
+  test("Pivot") {
+    val df = ss.newDataset(_ => ())
+    intercept[IllegalArgumentException] {
+      df.groupBy().pivot(Column("c"), Seq(Column("col")))
+    }
+  }
 }
