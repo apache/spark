@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.window
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BindReferences, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, ExpressionCanonicalizer, GenerateOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.{NumericType, StringType}
 
 sealed trait WindowGroupLimitMode
 
@@ -47,7 +48,7 @@ case class WindowGroupLimitExec(
     rankLikeFunction: Expression,
     limit: Int,
     mode: WindowGroupLimitMode,
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
 
@@ -96,8 +97,72 @@ case class WindowGroupLimitExec(
     }
   }
 
+  override def supportCodegen: Boolean = rankLikeFunction.isInstanceOf[RowNumber]
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  protected lazy val countTerm = WindowGroupLimitExec.newCountTerm()
+  private var groupMapVariable: String = _
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
+
+    if (partitionSpec.nonEmpty) {
+      groupMapVariable = ctx.addMutableState("java.util.Map<java.lang.Object, java.lang.Integer>",
+        "groupMapVariable",
+        v => s"$v = new java.util.HashMap<java.lang.Object, java.lang.Integer>();",
+        forceInline = true)
+    }
+
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String =
+    rankLikeFunction match {
+      case _: RowNumber if partitionSpec.isEmpty =>
+        s"""
+           | if ($countTerm < $limit) {
+           |   $countTerm += 1;
+           |   ${consume(ctx, input)}
+           | }
+         """.stripMargin
+      case _: RowNumber =>
+        val partitionExprs = BindReferences.bindReferences[Expression](partitionSpec, output)
+        val partitionEvs = partitionExprs.map(ExpressionCanonicalizer.execute(_).genCode(ctx))
+        val partitionValues = partitionEvs.zip(partitionSpec.map(_.dataType)).map {
+          case (ev, StringType) => s"${ev.value}.toString()"
+          case (ev, _: NumericType) => s"${ev.value}"
+          case (ev, _) => s"${ev.value}"
+        }
+        val group = ctx.freshName("group")
+        val rankValue = ctx.freshName("rankValue")
+        s"""
+           | int $rankValue = 0;
+           | String $group = ${partitionValues.mkString(""" + "," + """)};
+           | if ($groupMapVariable.containsKey($group)) {
+           |   $rankValue = (Integer) $groupMapVariable.get($group);
+           | }
+           | if ($rankValue < $limit) {
+           |   ${consume(ctx, input)}
+           | }
+           | $rankValue += 1;
+           | $groupMapVariable.put($group, $rankValue);
+         """.stripMargin
+    }
+
   override protected def withNewChildInternal(newChild: SparkPlan): WindowGroupLimitExec =
     copy(child = newChild)
+}
+
+object WindowGroupLimitExec {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+
+  def newCountTerm(): String = {
+    val id = curId.getAndIncrement()
+    s"_window_limit_counter_$id"
+  }
 }
 
 abstract class BaseLimitIterator extends Iterator[InternalRow] {
