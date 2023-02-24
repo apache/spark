@@ -196,9 +196,41 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val eval = doGenCode(ctx, ExprCode(
-        JavaCode.isNullVariable(isNull),
-        JavaCode.variable(value, dataType)))
+      val exprKey = ExpressionEquals(this)
+      val eval = if (EquivalentExpressions.supportedExpression(this)) {
+        ctx.commonExpressions.get(exprKey) match {
+          case Some((useCount, genFunc, Some(reuseExprCode))) =>
+            ctx.commonExpressions -= exprKey
+            if (useCount <= 1) {
+              ctx.commonExpressions -= exprKey
+            } else {
+              ctx.commonExpressions += exprKey ->
+                (useCount - 1, genFunc, Some(reuseExprCode))
+            }
+            reuseExprCode
+          case Some((useCount, genFunc, None)) =>
+            val eval = doGenCode(ctx, ExprCode(
+              JavaCode.isNullVariable(isNull),
+              JavaCode.variable(value, dataType)))
+            val reuseExprCode = genFunc(eval)
+            ctx.commonExpressions -= exprKey
+            if (useCount <= 1) {
+              ctx.commonExpressions -= exprKey
+            } else {
+              ctx.commonExpressions += exprKey ->
+                (useCount - 1, genFunc, Some(reuseExprCode))
+            }
+            reuseExprCode
+          case None =>
+            doGenCode(ctx, ExprCode(
+              JavaCode.isNullVariable(isNull),
+              JavaCode.variable(value, dataType)))
+        }
+      } else {
+        doGenCode(ctx, ExprCode(
+          JavaCode.isNullVariable(isNull),
+          JavaCode.variable(value, dataType)))
+      }
       reduceCodeSize(ctx, eval)
       if (eval.code.toString.nonEmpty) {
         // Add `this` in the comment.

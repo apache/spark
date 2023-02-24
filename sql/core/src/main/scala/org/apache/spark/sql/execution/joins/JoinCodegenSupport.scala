@@ -55,11 +55,13 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
 
       // filter the output via condition
       ctx.currentVars = streamVars2 ++ buildVars
-      val ev =
-        BindReferences.bindReference(expr, streamPlan.output ++ buildPlan.output).genCode(ctx)
+      val bondExpr = BindReferences.bindReference(expr, streamPlan.output ++ buildPlan.output)
+      initBlock += ctx.subexpressionElimination(bondExpr)
+      val ev = bondExpr.genCode(ctx)
       val skipRow = s"${ev.isNull} || !${ev.value}"
       s"""
          |$eval
+         |$initBlock
          |${ev.code}
          |if (!($skipRow))
        """.stripMargin
