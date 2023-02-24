@@ -32,7 +32,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 object ResolveDataSourceVersion extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r@VersionUnresolvedRelation(v1DataSource, _, isStreaming) if isStreaming =>
+    case r@VersionUnresolvedRelation(v1DataSource, _, _) =>
       val sparkSession = r.sparkSession
       val ds = DataSource.lookupDataSource(r.source, sparkSession.sqlContext.conf).
         getConstructor().newInstance() // TableProvider or Source
@@ -44,29 +44,12 @@ object ResolveDataSourceVersion extends Rule[LogicalPlan] {
       ds match {
         // file source v2 does not support streaming yet.
         case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            source = provider, conf = sparkSession.sessionState.conf)
-          val finalOptions = sessionOptions.filterKeys(!r.options.contains(_)) ++ r.options
-          val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-          val table = DataSourceV2Utils.getTableFromProvider(
-            provider, dsOptions, r.userSpecifiedSchema)
-          import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-          table match {
-            case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-              import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-              StreamingRelationV2(
-                Some(provider), r.source, table, dsOptions,
-                table.columns.asSchema.toAttributes, None, None, v1Relation)
+          DataSourceV2Utils.loadV2StreamingSource(
+            sparkSession, provider, r.userSpecifiedSchema, r.options, r.source, v1Relation)
+            .getOrElse(StreamingRelation(v1DataSource))
 
-            // fallback to v1
-            case _ => StreamingRelation(v1DataSource)
-          }
-
-        case _ =>
-          // Code path for data source v1.
-          StreamingRelation(v1DataSource)
+        // fallback to v1
+        case _ => StreamingRelation(v1DataSource)
       }
-    case r@VersionUnresolvedRelation(v1DataSource, _, isStreaming) if !isStreaming =>
-
   }
 }

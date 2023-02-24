@@ -27,10 +27,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
-import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, CONTINUOUS_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -146,6 +149,29 @@ private[sql] object DataSourceV2Utils extends Logging {
         Option(Dataset.ofRows(
           sparkSession,
           DataSourceV2Relation.create(table, catalog, ident, dsOptions)))
+      case _ => None
+    }
+  }
+
+  def loadV2StreamingSource(
+      sparkSession: SparkSession,
+      provider: TableProvider,
+      userSpecifiedSchema: Option[StructType],
+      extraOptions: Map[String, String],
+      source: String,
+      v1Relation: Option[StreamingRelation]): Option[LogicalPlan] = {
+    val sessionOptions = extractSessionConfigs(
+      source = provider, conf = sparkSession.sessionState.conf)
+    val finalOptions = sessionOptions.filterKeys(!extraOptions.contains(_)) ++ extraOptions
+    val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+    val table = getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    table match {
+      case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+        Some(StreamingRelationV2(
+          Some(provider), source, table, dsOptions,
+          table.columns.asSchema.toAttributes, None, None, v1Relation))
       case _ => None
     }
   }
