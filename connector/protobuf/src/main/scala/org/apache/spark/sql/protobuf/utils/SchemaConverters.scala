@@ -109,6 +109,7 @@ object SchemaConverters extends Logging {
         }
         (keyType, valueType) match {
           case (None, _) =>
+            // This is probably never expected. Protobuf does not allow complex types for keys.
             log.info(s"Dropping map field ${fd.getFullName}. Key reached max recursive depth.")
             None
           case (_, None) =>
