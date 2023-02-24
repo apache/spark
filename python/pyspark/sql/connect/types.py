@@ -87,9 +87,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DoubleType):
         ret.double.CopyFrom(pb2.DataType.Double())
     elif isinstance(data_type, DecimalType):
-        ret.decimal.CopyFrom(
-            pb2.DataType.Decimal(scale=data_type.scale, precision=data_type.precision)
-        )
+        ret.decimal.scale = data_type.scale
+        ret.decimal.precision = data_type.precision
     elif isinstance(data_type, DateType):
         ret.date.CopyFrom(pb2.DataType.Date())
     elif isinstance(data_type, TimestampType):
