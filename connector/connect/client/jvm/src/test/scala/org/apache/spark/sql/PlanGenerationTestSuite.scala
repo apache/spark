@@ -366,7 +366,8 @@ class PlanGenerationTestSuite
   }
 
   test("apply") {
-    simple.select(simple.apply("a"))
+    val stable = simple
+    stable.select(stable("a"))
   }
 
   test("hint") {
@@ -374,7 +375,8 @@ class PlanGenerationTestSuite
   }
 
   test("col") {
-    simple.select(simple.col("id"), simple.col("b"))
+    val stable = simple
+    stable.select(stable.col("id"), stable.col("b"))
   }
 
   test("colRegex") {

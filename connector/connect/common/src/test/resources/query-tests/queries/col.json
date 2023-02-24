@@ -1,6 +1,6 @@
 {
   "common": {
-    "planId": "3"
+    "planId": "1"
   },
   "project": {
     "input": {
@@ -13,11 +13,13 @@
     },
     "expressions": [{
       "unresolvedAttribute": {
-        "unparsedIdentifier": "id"
+        "unparsedIdentifier": "id",
+        "planId": "0"
       }
     }, {
       "unresolvedAttribute": {
-        "unparsedIdentifier": "b"
+        "unparsedIdentifier": "b",
+        "planId": "0"
       }
     }]
   }

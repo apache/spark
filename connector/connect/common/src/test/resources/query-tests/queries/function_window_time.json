@@ -19,7 +19,8 @@
         "aliases": [{
           "expr": {
             "unresolvedAttribute": {
-              "unparsedIdentifier": "wt"
+              "unparsedIdentifier": "wt",
+              "planId": "0"
             }
           },
           "name": ["wt"],
