@@ -511,7 +511,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *
    * @param indexName the name of the index to be dropped.
    * @param tableIdent the table on which index to be dropped.
-  * @return the SQL statement to use for dropping the index.
+   * @return the SQL statement to use for dropping the index.
    */
   def dropIndex(indexName: String, tableIdent: Identifier): String = {
     throw new UnsupportedOperationException("dropIndex is not supported")
@@ -541,14 +541,14 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Returns the LIMIT clause for the SELECT statement
    */
   def getLimitClause(limit: Integer): String = {
-    if (limit > 0 ) s"LIMIT $limit" else ""
+    if (limit > 0) s"LIMIT $limit" else ""
   }
 
   /**
    * Returns the OFFSET clause for the SELECT statement
    */
   def getOffsetClause(offset: Integer): String = {
-    if (offset > 0 ) s"OFFSET $offset" else ""
+    if (offset > 0) s"OFFSET $offset" else ""
   }
 
   /**
@@ -556,6 +556,20 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new JdbcSQLQueryBuilder(this, options)
+
+  /**
+   * Returns ture if dialect supports LIMIT clause.
+   *
+   * Note: Some build-in dialect supports LIMIT clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
+   */
+  def supportsLimit: Boolean = true
+
+  /**
+   * Returns ture if dialect supports OFFSET clause.
+   */
+  def supportsOffset: Boolean = true
 
   def supportsTableSample: Boolean = false
 
