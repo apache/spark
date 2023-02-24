@@ -1270,14 +1270,17 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
 
 private[sql] object Column {
 
-  def apply(name: String): Column = Column { builder =>
+  def apply(name: String): Column = Column(name, None)
+
+  def apply(name: String, planId: Option[Long]): Column = Column { builder =>
     name match {
       case "*" =>
         builder.getUnresolvedStarBuilder
       case _ if name.endsWith(".*") =>
         builder.getUnresolvedStarBuilder.setUnparsedTarget(name)
       case _ =>
-        builder.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name)
+        val attributeBuilder = builder.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name)
+        planId.foreach(attributeBuilder.setPlanId)
     }
   }
 
