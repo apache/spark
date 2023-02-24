@@ -1484,13 +1484,14 @@ class DataSourceV2SQLSuiteV1Filter
     def checkUnsupportedGenerationExpression(
         expr: String,
         expectedReason: String,
-        genColType: String = "INT"): Unit = {
+        genColType: String = "INT",
+        customTableDef: Option[String] = None): Unit = {
       val tableDef =
         s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo"
       withTable(s"testcat.$tblName") {
         checkError(
           exception = intercept[AnalysisException] {
-            sql(tableDef)
+            sql(customTableDef.getOrElse(tableDef))
           },
           errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
           parameters = Map(
@@ -1537,6 +1538,49 @@ class DataSourceV2SQLSuiteV1Filter
           parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
           context = ExpectedContext(fragment = "B", start = 0, stop = 0)
         )
+      }
+    }
+    // Respects case sensitivity when resolving
+    withSQLConf(SQLConf.CASE_SENSITIVE.key ->  "true") {
+      withTable(s"testcat.$tblName") {
+        sql(s"CREATE TABLE testcat.$tblName(" +
+          s"a INT, b INT GENERATED ALWAYS AS (B + 1), B INT) USING foo")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+    }
+    
+    // Generated column can't reference other generated columns
+    checkUnsupportedGenerationExpression(
+      "c + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"CREATE TABLE testcat.$tblName(a INT, " +
+          s"b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+    // Is case-insensitive by default
+    checkUnsupportedGenerationExpression(
+      "C + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"CREATE TABLE testcat.$tblName(a INT, " +
+          s"b INT GENERATED ALWAYS AS (C + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+    checkUnsupportedGenerationExpression(
+      "c + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"CREATE TABLE testcat.$tblName(a INT, " +
+          s"b INT GENERATED ALWAYS AS (c + 1), C INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+    // Respects case sensitivity when resolving
+    withSQLConf(SQLConf.CASE_SENSITIVE.key ->  "true") {
+      withTable(s"testcat.$tblName") {
+        sql(s"CREATE TABLE testcat.$tblName(" +
+          s"a INT, A INT GENERATED ALWAYS AS (a + 1), b INT GENERATED ALWAYS AS (a + 1)) USING foo")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
 

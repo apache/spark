@@ -112,8 +112,10 @@ object GeneratedColumn {
       throw unsupportedExpressionError("subquery expressions are not allowed for generated columns")
     }
     // Analyze the parse result
-    // Generated column can't reference itself
-    val relation = new LocalRelation(StructType(schema.filterNot(_.name == fieldName)).toAttributes)
+    val allowedBaseColumns = schema
+      .filterNot(_.name == fieldName) // Can't reference itself
+      .filterNot(isGeneratedColumn) // Can't reference other generated columns
+    val relation = new LocalRelation(StructType(allowedBaseColumns).toAttributes)
     val plan = try {
       val analyzer: Analyzer = GeneratedColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, fieldName)()), relation))
@@ -128,6 +130,13 @@ object GeneratedColumn {
             if (SQLConf.get.resolver(unresolvedCol, QueryCompilationErrors.toSQLId(fieldName))) {
               // Generation expression references itself
               throw unsupportedExpressionError("generation expression cannot reference itself")
+            }
+            // Check whether the unresolved column is another generated column in the schema
+            schema.filter(isGeneratedColumn).foreach { col =>
+              if (SQLConf.get.resolver(unresolvedCol, QueryCompilationErrors.toSQLId(col.name))) {
+                throw unsupportedExpressionError(
+                  "generation expression cannot reference another generated column")
+              }
             }
           }
         }
