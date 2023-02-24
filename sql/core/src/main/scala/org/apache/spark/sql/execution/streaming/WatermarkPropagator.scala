@@ -258,8 +258,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       // In current Spark's logic, event time watermark cannot go down to negative. So even there is
       // no input watermark for operator, the final input watermark for operator should be 0L.
       inputWatermarks(batchId).get(stateOpId) match {
-        case Some(Some(wm)) => wm
-        case Some(None) => 0L
+        case Some(wmOpt) => Math.max(wmOpt.getOrElse(0L), 0L)
         case None => throw new IllegalStateException(s"Watermark for batch ID $batchId and " +
           s"stateOpId $stateOpId is not yet set!")
       }
