@@ -829,7 +829,6 @@ object SparkConnect {
 
 object SparkConnectClient {
   import BuildCommons.protoVersion
-  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
   lazy val settings = Seq(
     // For some reason the resolution from the imported Maven build does not work for some
@@ -852,14 +851,8 @@ object SparkConnectClient {
       )
     },
 
-    buildTestDeps := {
-      (LocalProject("sql") / Compile / Keys.`package`).value
-      (LocalProject("connect") / assembly).value
-      (LocalProject("connect-client-jvm") / assembly).value
-    },
-
-    // Make sure the connect server assembly jar is available for testing.
-    test := ((Test / test) dependsOn (buildTestDeps)).value,
+    // Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
+    test := ((Test / test) dependsOn (LocalProject("assembly") / Compile / Keys.`package`)).value,
 
     (assembly / test) := { },
 
