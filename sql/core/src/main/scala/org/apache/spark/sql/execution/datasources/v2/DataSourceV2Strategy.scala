@@ -208,7 +208,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         newSchema, catalog.asTableCatalog, ident.asMultipartIdentifier, "CREATE TABLE")
 
       val v2Columns = structTypeToV2Columns(newSchema)
-
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,

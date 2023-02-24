@@ -1450,13 +1450,6 @@ class DataSourceV2SQLSuiteV1Filter
             "operation" -> "generated columns"
           )
         )
-//        val e = intercept[AnalysisException] {
-//          sql("USE dummy")
-//          sql(s"$statement dummy.$tableDefinition USING foo")
-//        }
-//        assert(e.getMessage.contains(
-//          "does not support generated columns"))
-//        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
       }
     }
   }
@@ -1576,6 +1569,31 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
       assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
     }
+
+    // No subquery expressions
+    checkUnsupportedGenerationExpression(
+      "(SELECT 1)",
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpression(
+      "(SELECT (SELECT 2) + 1)", // nested
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpression(
+      "(SELECT 1) + a", // refers to another column
+      "subquery expressions are not allowed for generated columns"
+    )
+    withTable("other") {
+      sql("create table other(x INT) using parquet")
+      checkUnsupportedGenerationExpression(
+        "(select min(x) from other)", // refers to another table
+        "subquery expressions are not allowed for generated columns"
+      )
+    }
+    checkUnsupportedGenerationExpression(
+      "(select min(x) from faketable)", // refers to a non-existent table
+      "subquery expressions are not allowed for generated columns"
+    )
   }
 
   test("ShowCurrentNamespace: basic tests") {

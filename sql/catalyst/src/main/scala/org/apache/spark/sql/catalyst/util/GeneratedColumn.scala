@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.BuiltInFunctionCatalog
 import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -74,6 +75,7 @@ object GeneratedColumn {
    * - No user-defined expressions
    * - The expression must be deterministic
    * - The expression data type can be safely up-cast to the destination column data type
+   * - No subquery expressions
    *
    * Throws an [[AnalysisException]] if the expression cannot be converted or is an invalid
    * generation expression according to the above rules.
@@ -104,6 +106,10 @@ object GeneratedColumn {
           s"Failed to execute $statementType command because the column $fieldName has " +
             s"generation expression $expressionStr which fails to parse as a valid expression:" +
             s"\n${ex.getMessage}")
+    }
+    // Don't allow subquery expressions
+    if (parsed.containsPattern(PLAN_EXPRESSION)) {
+      throw unsupportedExpressionError("subquery expressions are not allowed for generated columns")
     }
     // Analyze the parse result
     // Generated column can't reference itself
