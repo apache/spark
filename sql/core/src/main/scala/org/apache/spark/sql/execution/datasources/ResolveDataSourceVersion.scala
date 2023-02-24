@@ -19,14 +19,11 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, Dataset}
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.TreePattern.RESOLVE_VERSION
-import org.apache.spark.sql.connector.catalog.TableCapability.{CONTINUOUS_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
-import org.apache.spark.sql.execution.datasources.VersionUnresolvedRelation
+import org.apache.spark.sql.connector.catalog.TableCapability.{CONTINUOUS_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
@@ -35,46 +32,39 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 object ResolveDataSourceVersion extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-
-//    case p if !p.childrenResolved => p
-//    case p if p.resolved => p
-//
-//    case p => p.transformExpressionsWithPruning(
-//      _.containsPattern(RESOLVE_VERSION), ruleId) {
-    case r@VersionUnresolvedRelation(v1DataSource, output, isStreaming) =>
+    case r@VersionUnresolvedRelation(v1DataSource, _, _) =>
       val sparkSession = r.sparkSession
-    val ds = DataSource.lookupDataSource(r.source, sparkSession.sqlContext.conf).
-      getConstructor().newInstance() // TableProvider or Source
+      val ds = DataSource.lookupDataSource(r.source, sparkSession.sqlContext.conf).
+        getConstructor().newInstance() // TableProvider or Source
 
-    val v1Relation = ds match {
-      case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
-      case _ => None
-    }
-    ds match {
-      // file source v2 does not support streaming yet.
-      case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          source = provider, conf = sparkSession.sessionState.conf)
-        val finalOptions = sessionOptions.filterKeys(!r.options.contains(_)) ++ r.options
-        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-        val table = DataSourceV2Utils.getTableFromProvider(
-          provider, dsOptions, r.userSpecifiedSchema)
-        import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-        table match {
-          case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-            import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      val v1Relation = ds match {
+        case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
+        case _ => None
+      }
+      ds match {
+        // file source v2 does not support streaming yet.
+        case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
+          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+            source = provider, conf = sparkSession.sessionState.conf)
+          val finalOptions = sessionOptions.filterKeys(!r.options.contains(_)) ++ r.options
+          val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+          val table = DataSourceV2Utils.getTableFromProvider(
+            provider, dsOptions, r.userSpecifiedSchema)
+          import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+          table match {
+            case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
+              import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
               StreamingRelationV2(
                 Some(provider), r.source, table, dsOptions,
                 table.columns.asSchema.toAttributes, None, None, v1Relation)
 
-          // fallback to v1
-          case _ => StreamingRelation(v1DataSource)
-        }
+            // fallback to v1
+            case _ => StreamingRelation(v1DataSource)
+          }
 
-      case _ =>
-        // Code path for data source v1.
-        StreamingRelation(v1DataSource)
-    }
-
+        case _ =>
+          // Code path for data source v1.
+          StreamingRelation(v1DataSource)
+      }
   }
 }
