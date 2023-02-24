@@ -83,7 +83,7 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * @return the set of capabilities for this TableCatalog
    */
-  default Set<TableCatalogCapability> capabilities() {return Collections.emptySet();}
+  default Set<TableCatalogCapability> capabilities() { return Collections.emptySet(); }
 
   /**
    * List the tables in a namespace from the catalog.

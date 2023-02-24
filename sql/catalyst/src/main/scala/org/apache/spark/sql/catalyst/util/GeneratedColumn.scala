@@ -71,7 +71,8 @@ object GeneratedColumn {
 
   /**
    * Parse and analyze `expressionStr` and perform verification. This means:
-   * - The expression cannot refer to itself
+   * - The expression cannot reference itself
+   * - The expression cannot reference other generated columns
    * - No user-defined expressions
    * - The expression must be deterministic
    * - The expression data type can be safely up-cast to the destination column data type
@@ -127,13 +128,14 @@ object GeneratedColumn {
         if (ex.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
           ex.messageParameters.get("objectName").foreach { unresolvedCol =>
             // Check whether the unresolved column is this column (w.r.t. case-sensitivity)
-            if (SQLConf.get.resolver(unresolvedCol, QueryCompilationErrors.toSQLId(fieldName))) {
+            val resolver = SQLConf.get.resolver
+            if (resolver(unresolvedCol, QueryCompilationErrors.toSQLId(fieldName))) {
               // Generation expression references itself
               throw unsupportedExpressionError("generation expression cannot reference itself")
             }
             // Check whether the unresolved column is another generated column in the schema
             schema.filter(isGeneratedColumn).foreach { col =>
-              if (SQLConf.get.resolver(unresolvedCol, QueryCompilationErrors.toSQLId(col.name))) {
+              if (resolver(unresolvedCol, QueryCompilationErrors.toSQLId(col.name))) {
                 throw unsupportedExpressionError(
                   "generation expression cannot reference another generated column")
               }
@@ -165,7 +167,7 @@ object GeneratedColumn {
    * For any generated columns in `schema`, parse, analyze and verify the generation expression.
    */
   private def verifyGeneratedColumns(schema: StructType, statementType: String): Unit = {
-   schema.foreach { field =>
+    schema.foreach { field =>
       getGenerationExpression(field).foreach { expressionStr =>
         analyzeAndVerifyExpression(expressionStr, field.name, field.dataType, schema, statementType)
       }
@@ -174,7 +176,7 @@ object GeneratedColumn {
 
   /**
    * If `schema` contains any generated columns:
-   * 1) Check whether the table catalog supports generated columns otherwise throw an error.
+   * 1) Check whether the table catalog supports generated columns. Otherwise throw an error.
    * 2) Parse, analyze and verify the generation expressions for any generated columns.
    */
   def validateGeneratedColumns(

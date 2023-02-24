@@ -499,7 +499,6 @@ private[sql] object CatalogV2Util {
       f.getExistenceDefaultValue().isDefined
     val isGeneratedColumn = GeneratedColumn.isGeneratedColumn(f)
     if (isDefaultColumn && isGeneratedColumn) {
-      // todo: should we throw this error earlier? (i.e. on parsing)
       throw new AnalysisException(
         errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
         messageParameters = Map(

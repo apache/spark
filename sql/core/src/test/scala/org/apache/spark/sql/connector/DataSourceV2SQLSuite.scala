@@ -1522,17 +1522,19 @@ class DataSourceV2SQLSuiteV1Filter
     )
     // Obeys case sensitivity when intercepting the error message
     // Intercepts when case-insensitive
-    checkUnsupportedGenerationExpression(
-      "B + 1",
-      "generation expression cannot reference itself"
-    )
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkUnsupportedGenerationExpression(
+        "B + 1",
+        "generation expression cannot reference itself"
+      )
+    }
     // Doesn't intercept when case-sensitive
-    withSQLConf(SQLConf.CASE_SENSITIVE.key ->  "true") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable(s"testcat.$tblName") {
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"CREATE TABLE testcat.$tblName(a INT, " +
-              s"b INT GENERATED ALWAYS AS (B + 1)) USING foo")
+              "b INT GENERATED ALWAYS AS (B + 1)) USING foo")
           },
           errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
@@ -1541,45 +1543,47 @@ class DataSourceV2SQLSuiteV1Filter
       }
     }
     // Respects case sensitivity when resolving
-    withSQLConf(SQLConf.CASE_SENSITIVE.key ->  "true") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable(s"testcat.$tblName") {
         sql(s"CREATE TABLE testcat.$tblName(" +
-          s"a INT, b INT GENERATED ALWAYS AS (B + 1), B INT) USING foo")
+          "a INT, b INT GENERATED ALWAYS AS (B + 1), B INT) USING foo")
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
-    
+
     // Generated column can't reference other generated columns
     checkUnsupportedGenerationExpression(
       "c + 1",
       "generation expression cannot reference another generated column",
       customTableDef = Some(
         s"CREATE TABLE testcat.$tblName(a INT, " +
-          s"b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+          "b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
       )
     )
-    // Is case-insensitive by default
-    checkUnsupportedGenerationExpression(
-      "C + 1",
-      "generation expression cannot reference another generated column",
-      customTableDef = Some(
-        s"CREATE TABLE testcat.$tblName(a INT, " +
-          s"b INT GENERATED ALWAYS AS (C + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+    // Respects case-insensitivity
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkUnsupportedGenerationExpression(
+        "C + 1",
+        "generation expression cannot reference another generated column",
+        customTableDef = Some(
+          s"CREATE TABLE testcat.$tblName(a INT, " +
+            "b INT GENERATED ALWAYS AS (C + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+        )
       )
-    )
-    checkUnsupportedGenerationExpression(
-      "c + 1",
-      "generation expression cannot reference another generated column",
-      customTableDef = Some(
-        s"CREATE TABLE testcat.$tblName(a INT, " +
-          s"b INT GENERATED ALWAYS AS (c + 1), C INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      checkUnsupportedGenerationExpression(
+        "c + 1",
+        "generation expression cannot reference another generated column",
+        customTableDef = Some(
+          s"CREATE TABLE testcat.$tblName(a INT, " +
+            "b INT GENERATED ALWAYS AS (c + 1), C INT GENERATED ALWAYS AS (a + 1)) USING foo"
+        )
       )
-    )
+    }
     // Respects case sensitivity when resolving
-    withSQLConf(SQLConf.CASE_SENSITIVE.key ->  "true") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable(s"testcat.$tblName") {
         sql(s"CREATE TABLE testcat.$tblName(" +
-          s"a INT, A INT GENERATED ALWAYS AS (a + 1), b INT GENERATED ALWAYS AS (a + 1)) USING foo")
+          "a INT, A INT GENERATED ALWAYS AS (a + 1), b INT GENERATED ALWAYS AS (a + 1)) USING foo")
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }

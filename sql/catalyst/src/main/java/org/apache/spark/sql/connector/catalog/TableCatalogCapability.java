@@ -32,17 +32,17 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public enum TableCatalogCapability {
 
-    /**
-     * Signals that the TableCatalog supports defining generated columns upon table creation in SQL.
-     * <p>
-     * Without this capability, any create/replace table statements with a generated column defined
-     * in the table schema will throw an exception during analysis.
-     * <p>
-     * A generated column is defined with syntax: {@code colName colType GENERATED ALWAYS AS (expr)}
-     * <p>
-     * Generation expression are included in the column definition for APIs like
-     * {@link TableCatalog#createTable}.
-     * See {@link Column#generationExpression()}.
-     */
-    SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS
+  /**
+  * Signals that the TableCatalog supports defining generated columns upon table creation in SQL.
+  * <p>
+  * Without this capability, any create/replace table statements with a generated column defined
+  * in the table schema will throw an exception during analysis.
+  * <p>
+  * A generated column is defined with syntax: {@code colName colType GENERATED ALWAYS AS (expr)}
+  * <p>
+  * Generation expression are included in the column definition for APIs like
+  * {@link TableCatalog#createTable}.
+  * See {@link Column#generationExpression()}.
+  */
+  SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS
 }
