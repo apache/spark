@@ -43,7 +43,8 @@ class DatasetSuite
   private def newSparkSession(): SparkSession = {
     val client = new SparkConnectClient(
       proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName(getClass.getName).directExecutor().build())
+      InProcessChannelBuilder.forName(getClass.getName).directExecutor().build(),
+      "test")
     new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
 
