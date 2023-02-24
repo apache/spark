@@ -464,6 +464,16 @@ SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k;
 SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr);
 DROP VIEW array_struct;
 
+-- SPARK-42121: lateral join with table-valued functions posexplode and posexplode_outer
+SELECT * FROM LATERAL posexplode(ARRAY(1, 2));
+SELECT * FROM t1, LATERAL posexplode(ARRAY(c1, c2)) t2(pos, c3);
+SELECT * FROM t1 JOIN LATERAL posexplode(ARRAY(c1, c2)) t(pos, c3) ON t1.c1 = c3;
+SELECT * FROM t3, LATERAL posexplode(c2) t2(pos, v);
+SELECT * FROM t3 JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3;
+SELECT * FROM t3, LATERAL posexplode_outer(c2) t2(pos, v);
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3;
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode_outer(c2) t(pos, c3) ON t3.c1 = c3;
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;

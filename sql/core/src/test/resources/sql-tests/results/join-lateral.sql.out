@@ -1569,6 +1569,88 @@ struct<>
 
 
 -- !query
+SELECT * FROM LATERAL posexplode(ARRAY(1, 2))
+-- !query schema
+struct<pos:int,col:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL posexplode(ARRAY(c1, c2)) t2(pos, c3)
+-- !query schema
+struct<c1:int,c2:int,pos:int,c3:int>
+-- !query output
+0	1	0	0
+0	1	1	1
+1	2	0	1
+1	2	1	2
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL posexplode(ARRAY(c1, c2)) t(pos, c3) ON t1.c1 = c3
+-- !query schema
+struct<c1:int,c2:int,pos:int,c3:int>
+-- !query output
+0	1	0	0
+1	2	0	1
+
+
+-- !query
+SELECT * FROM t3, LATERAL posexplode(c2) t2(pos, v)
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,v:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	0	2
+NULL	[4]	0	4
+
+
+-- !query
+SELECT * FROM t3 JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,c3:int>
+-- !query output
+0	[0,1]	0	0
+
+
+-- !query
+SELECT * FROM t3, LATERAL posexplode_outer(c2) t2(pos, v)
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,v:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	0	2
+2	[]	NULL	NULL
+NULL	[4]	0	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,c3:int>
+-- !query output
+0	[0,1]	0	0
+1	[2]	NULL	NULL
+2	[]	NULL	NULL
+NULL	[4]	NULL	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode_outer(c2) t(pos, c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,c3:int>
+-- !query output
+0	[0,1]	0	0
+1	[2]	NULL	NULL
+2	[]	NULL	NULL
+NULL	[4]	NULL	NULL
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

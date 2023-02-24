@@ -73,3 +73,23 @@ select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c);
 -- inline_outer
 select * from inline_outer(array(struct(1, 'a'), struct(2, 'b')));
 select * from inline_outer(array_remove(array(struct(1, 'a')), struct(1, 'a')));
+
+-- posexplode
+select * from posexplode(array());
+select * from posexplode(array(1, 2));
+select * from posexplode(array(1, 2)) t(pos, x);
+select * from posexplode(map());
+select * from posexplode(map('a', 1, 'b', 2));
+select * from posexplode(map('a', 1, 'b', 2)) t(pos, k, v);
+
+-- posexplode with erroneous input
+select * from posexplode(1);
+select * from posexplode(1, 2);
+select * from posexplode(explode(array(1)));
+select * from posexplode(array(1, 2)) t(x);
+
+-- posexplode
+select * from posexplode_outer(array());
+select * from posexplode_outer(array(1, 2));
+select * from posexplode_outer(map());
+select * from posexplode_outer(map('a', 1, 'b', 2));
