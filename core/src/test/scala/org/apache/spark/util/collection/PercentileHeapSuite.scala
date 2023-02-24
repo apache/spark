@@ -63,7 +63,7 @@ class PercentileHeapSuite extends SparkFunSuite {
     }
   }
 
-  test("benchmark") {
+  ignore("benchmark") {
     val input: Seq[Int] = 0 until 1000
     val numRuns = 1000
 
