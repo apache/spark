@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
@@ -55,13 +56,47 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   private[this] val allocator = new RootAllocator()
 
   /**
+   * Executes a SQL query substituting named parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText
+   *   A SQL statement with named parameters to execute.
+   * @param args
+   *   A map of parameter names to literal values.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: Map[String, String]): DataFrame = {
+    sql(sqlText, args.asJava)
+  }
+
+  /**
+   * Executes a SQL query substituting named parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText
+   *   A SQL statement with named parameters to execute.
+   * @param args
+   *   A map of parameter names to literal values.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataset {
+    builder =>
+      builder
+        .setSql(proto.SQL.newBuilder().setQuery(sqlText).putAllArgs(args))
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
    * runs DDL/DML commands, but not for SELECT queries.
    *
    * @since 3.4.0
    */
-  def sql(query: String): DataFrame = newDataset { builder =>
-    builder.setSql(proto.SQL.newBuilder().setQuery(query))
+  def sql(query: String): DataFrame = {
+    sql(query, Map.empty[String, String])
   }
 
   /**
