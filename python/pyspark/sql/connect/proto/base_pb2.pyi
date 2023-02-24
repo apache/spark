@@ -571,30 +571,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
 global___ExecutePlanResponse = ExecutePlanResponse
 
-class OptionalValue(google.protobuf.message.Message):
-    """The placeholder for the config request and response when the values can be optional."""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    VALUE_FIELD_NUMBER: builtins.int
-    value: builtins.str
-    def __init__(
-        self,
-        *,
-        value: builtins.str | None = ...,
-    ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_value", b"_value"]
-    ) -> typing_extensions.Literal["value"] | None: ...
-
-global___OptionalValue = OptionalValue
-
 class KeyValue(google.protobuf.message.Message):
     """The key-value pair for the config request and response."""
 
@@ -603,20 +579,27 @@ class KeyValue(google.protobuf.message.Message):
     KEY_FIELD_NUMBER: builtins.int
     VALUE_FIELD_NUMBER: builtins.int
     key: builtins.str
-    @property
-    def value(self) -> global___OptionalValue: ...
+    """(Required) The key."""
+    value: builtins.str
+    """(Optional) The value."""
     def __init__(
         self,
         *,
         key: builtins.str = ...,
-        value: global___OptionalValue | None = ...,
+        value: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["value", b"value"]
+        self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_value", b"_value", "key", b"key", "value", b"value"
+        ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_value", b"_value"]
+    ) -> typing_extensions.Literal["value"] | None: ...
 
 global___KeyValue = KeyValue
 

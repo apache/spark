@@ -410,10 +410,7 @@ class ConfigResult:
     @classmethod
     def fromProto(cls, pb: pb2.ConfigResponse) -> "ConfigResult":
         return ConfigResult(
-            pairs=[
-                (pair.key, pair.value.value if pair.value.HasField("value") else None)
-                for pair in pb.pairs
-            ],
+            pairs=[(pair.key, pair.value if pair.HasField("value") else None) for pair in pb.pairs],
             warnings=list(pb.warnings),
         )
 

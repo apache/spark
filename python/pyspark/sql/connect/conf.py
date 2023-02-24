@@ -36,7 +36,7 @@ class RuntimeConf:
             value = "true" if value else "false"
         elif isinstance(value, int):
             value = str(value)
-        op_set = proto.ConfigRequest.Set(pairs=[_to_proto_key_value(key, value)])
+        op_set = proto.ConfigRequest.Set(pairs=[proto.KeyValue(key=key, value=value)])
         operation = proto.ConfigRequest.Operation(set=op_set)
         result = self._client.config(operation)
         for warn in result.warnings:
@@ -55,7 +55,7 @@ class RuntimeConf:
             if default is not None:
                 self._checkType(default, "default")
             op_get_with_default = proto.ConfigRequest.GetWithDefault(
-                pairs=[_to_proto_key_value(key, cast(Optional[str], default))]
+                pairs=[proto.KeyValue(key=key, value=cast(Optional[str], default))]
             )
             operation = proto.ConfigRequest.Operation(get_with_default=op_get_with_default)
         result = self._client.config(operation)
@@ -91,14 +91,6 @@ class RuntimeConf:
             raise TypeError(
                 "expected %s '%s' to be a string (was '%s')" % (identifier, obj, type(obj).__name__)
             )
-
-
-def _to_proto_optional_value(value: Optional[str]) -> proto.OptionalValue:
-    return proto.OptionalValue(value=value)
-
-
-def _to_proto_key_value(key: str, value: Optional[str]) -> proto.KeyValue:
-    return proto.KeyValue(key=key, value=_to_proto_optional_value(value))
 
 
 RuntimeConf.__doc__ = PySparkRuntimeConfig.__doc__

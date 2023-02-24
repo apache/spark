@@ -63,9 +63,8 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       conf: RuntimeConfig): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
     operation.getPairsList.asScala.iterator.foreach { pair =>
-      val key = pair.getKey
-      val value = SparkConnectConfigHandler.toOption(pair.getValue).orNull
-      conf.set(key, value)
+      val (key, value) = SparkConnectConfigHandler.toKeyValue(pair)
+      conf.set(key, value.orNull)
       getWarning(key).foreach(builder.addWarnings)
     }
     builder
@@ -88,9 +87,8 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       conf: RuntimeConfig): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
     operation.getPairsList.asScala.iterator.foreach { pair =>
-      val key = pair.getKey
-      val default = SparkConnectConfigHandler.toOption(pair.getValue).orNull
-      val value = conf.get(key, default)
+      val (key, default) = SparkConnectConfigHandler.toKeyValue(pair)
+      val value = conf.get(key, default.orNull)
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
       getWarning(key).foreach(builder.addWarnings)
     }
@@ -164,24 +162,20 @@ object SparkConnectConfigHandler {
 
   private[connect] val unsupportedConfigurations = Set("spark.sql.execution.arrow.enabled")
 
-  def toOption(value: proto.OptionalValue): Option[String] = {
-    if (value.hasValue) {
-      Some(value.getValue)
+  def toKeyValue(pair: proto.KeyValue): (String, Option[String]) = {
+    val key = pair.getKey
+    val value = if (pair.hasValue) {
+      Some(pair.getValue)
     } else {
       None
     }
-  }
-
-  def toProtoOptionalValue(value: Option[String]): proto.OptionalValue = {
-    val builder = proto.OptionalValue.newBuilder()
-    value.foreach(builder.setValue)
-    builder.build()
+    (key, value)
   }
 
   def toProtoKeyValue(key: String, value: Option[String]): proto.KeyValue = {
     val builder = proto.KeyValue.newBuilder()
     builder.setKey(key)
-    builder.setValue(toProtoOptionalValue(value))
+    value.foreach(builder.setValue)
     builder.build()
   }
 }

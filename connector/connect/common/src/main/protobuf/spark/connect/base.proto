@@ -183,15 +183,12 @@ message ExecutePlanResponse {
   }
 }
 
-// The placeholder for the config request and response when the values can be optional.
-message OptionalValue {
-  optional string value = 1;
-}
-
 // The key-value pair for the config request and response.
 message KeyValue {
+  // (Required) The key.
   string key = 1;
-  OptionalValue value = 2;
+  // (Optional) The value.
+  optional string value = 2;
 }
 
 // Request to update or fetch the configurations.
