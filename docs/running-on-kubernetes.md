@@ -1845,8 +1845,6 @@ Spark allows users to specify a custom Kubernetes schedulers.
 
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
-**This feature is currently experimental. In future versions, there may be behavioral changes around configuration, feature step improvement.**
-
 ##### Prerequisites
 * Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.7.0:
 
