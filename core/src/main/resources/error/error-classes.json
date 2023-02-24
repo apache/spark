@@ -1614,8 +1614,7 @@
   },
   "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
     "message" : [
-      "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>:",
-      "<errorMessage>"
+      "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>."
     ]
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {

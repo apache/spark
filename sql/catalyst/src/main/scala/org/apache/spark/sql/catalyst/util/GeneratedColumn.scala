@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.BuiltInFunctionCatalog
 import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * This object contains utility methods and values for Generated Columns
@@ -71,6 +72,8 @@ object GeneratedColumn {
    * Parse and analyze `expressionStr` and perform verification. This means:
    * - The expression cannot refer to itself
    * - No user-defined expressions
+   * - The expression must be deterministic
+   * - The expression data type can be safely up-cast to the destination column data type
    *
    * Throws an [[AnalysisException]] if the expression cannot be converted or is an invalid
    * generation expression according to the above rules.
@@ -78,8 +81,18 @@ object GeneratedColumn {
   private def analyzeAndVerifyExpression(
       expressionStr: String,
       fieldName: String,
+      dataType: DataType,
       schema: StructType,
       statementType: String): Unit = {
+    def unsupportedExpressionError(reason: String): AnalysisException = {
+      new AnalysisException(
+        errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        messageParameters = Map(
+          "fieldName" -> fieldName,
+          "expressionStr" -> expressionStr,
+          "reason" -> reason))
+    }
+
     // Parse the expression string
     val parsed: Expression = try {
       parser.parseExpression(expressionStr)
@@ -104,44 +117,33 @@ object GeneratedColumn {
       case ex: AnalysisException =>
         // Improve error message if possible
         if (ex.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
-          ex.messageParameters.get("objectName")
-            .filter(_ == QueryCompilationErrors.toSQLId(fieldName))
-            .foreach { _ =>
-            // Generation expression references itself
-            throw new AnalysisException(
-              errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-              messageParameters = Map(
-                "fieldName" -> fieldName,
-                "expressionStr" -> expressionStr,
-                "reason" -> "generation expression cannot reference itself",
-                "errorMessage" -> ex.getMessage))
+          ex.messageParameters.get("objectName").foreach { unresolvedCol =>
+            // Check whether the unresolved column is this column (w.r.t. case-sensitivity)
+            if (SQLConf.get.resolver(unresolvedCol, QueryCompilationErrors.toSQLId(fieldName))) {
+              // Generation expression references itself
+              throw unsupportedExpressionError("generation expression cannot reference itself")
+            }
           }
         }
         if (ex.getErrorClass == "UNRESOLVED_ROUTINE") {
           // Cannot resolve function using built-in catalog
           ex.messageParameters.get("routineName").foreach { fnName =>
-            throw new AnalysisException(
-              errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-              messageParameters = Map(
-                "fieldName" -> fieldName,
-                "expressionStr" -> expressionStr,
-                "reason" -> s"failed to resolve $fnName to a built-in function",
-                "errorMessage" -> ex.getMessage))
+            throw unsupportedExpressionError(s"failed to resolve $fnName to a built-in function")
           }
         }
-        throw new AnalysisException(
-          errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-          messageParameters = Map(
-            "fieldName" -> fieldName,
-            "expressionStr" -> expressionStr,
-            "reason" -> "the expression fails to resolve as a valid expression",
-            "errorMessage" -> ex.getMessage))
+        throw ex
     }
     val analyzed = plan.collectFirst {
       case Project(Seq(a: Alias), _: LocalRelation) => a.child
     }.get
-
-    // todo: additional verifications?
+    if (!analyzed.deterministic) {
+      throw unsupportedExpressionError("the expression is not deterministic")
+    }
+    if (!Cast.canUpCast(analyzed.dataType, dataType)) {
+      throw unsupportedExpressionError(
+        s"the expression data type ${analyzed.dataType.simpleString} " +
+        s"is incompatible with column data type ${dataType.simpleString}")
+    }
   }
 
   /**
@@ -150,7 +152,7 @@ object GeneratedColumn {
   private def verifyGeneratedColumns(schema: StructType, statementType: String): Unit = {
    schema.foreach { field =>
       getGenerationExpression(field).foreach { expressionStr =>
-        analyzeAndVerifyExpression(expressionStr, field.name, schema, statementType)
+        analyzeAndVerifyExpression(expressionStr, field.name, field.dataType, schema, statementType)
       }
     }
   }

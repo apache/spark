@@ -1431,20 +1431,32 @@ class DataSourceV2SQLSuiteV1Filter
       // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
       withTable(s"testcat.$tblName") {
         if (statement == "REPLACE TABLE") {
-          spark.sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+          sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
         }
         // Can create table with a generated column
-        spark.sql(s"$statement testcat.$tableDefinition USING foo")
+        sql(s"$statement testcat.$tableDefinition USING foo")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
       // BasicInMemoryTableCatalog.capabilities() = {}
       withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
-        val e = intercept[AnalysisException] {
-          sql("USE dummy")
-          spark.sql(s"$statement dummy.$tableDefinition USING foo")
-        }
-        assert(e.getMessage.contains(
-          "does not support generated columns"))
-        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("USE dummy")
+            sql(s"$statement dummy.$tableDefinition USING foo")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+          parameters = Map(
+            "tableName" -> "`my_tab`",
+            "operation" -> "generated columns"
+          )
+        )
+//        val e = intercept[AnalysisException] {
+//          sql("USE dummy")
+//          sql(s"$statement dummy.$tableDefinition USING foo")
+//        }
+//        assert(e.getMessage.contains(
+//          "does not support generated columns"))
+//        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
       }
     }
   }
@@ -1457,11 +1469,11 @@ class DataSourceV2SQLSuiteV1Filter
       for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
         withTable(s"testcat.$tblName") {
           if (statement == "REPLACE TABLE") {
-            spark.sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+            sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
           }
           checkError(
             exception = intercept[AnalysisException] {
-              spark.sql(s"$statement testcat.$tableDefinition USING foo")
+              sql(s"$statement testcat.$tableDefinition USING foo")
             },
             errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
             parameters = Map(
@@ -1475,41 +1487,94 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-41290: Generated column expression must be valid generation expression") {
-    // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
     val tblName = "my_tab"
+    def checkUnsupportedGenerationExpression(
+        expr: String,
+        expectedReason: String,
+        genColType: String = "INT"): Unit = {
+      val tableDef =
+        s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo"
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(tableDef)
+          },
+          errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "b",
+            "expressionStr" -> expr,
+            "reason" -> expectedReason)
+        )
+      }
+    }
+
+    // Expression cannot be resolved since it doesn't exist
+    checkUnsupportedGenerationExpression(
+      "not_a_function(a)",
+      "failed to resolve `not_a_function` to a built-in function"
+    )
+
+    // Expression cannot be resolved since it's not a built-in function
+    spark.udf.register("timesTwo", (x: Int) => x * 2)
+    checkUnsupportedGenerationExpression(
+      "timesTwo(a)",
+      "failed to resolve `timesTwo` to a built-in function"
+    )
+
+    // Generated column can't reference itself
+    checkUnsupportedGenerationExpression(
+      "b + 1",
+      "generation expression cannot reference itself"
+    )
+    // Obeys case sensitivity when intercepting the error message
+    // Intercepts when case-insensitive
+    checkUnsupportedGenerationExpression(
+      "B + 1",
+      "generation expression cannot reference itself"
+    )
+    // Doesn't intercept when case-sensitive
+    withSQLConf(SQLConf.CASE_SENSITIVE.key ->  "true") {
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE testcat.$tblName(a INT, " +
+              s"b INT GENERATED ALWAYS AS (B + 1)) USING foo")
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
+          context = ExpectedContext(fragment = "B", start = 0, stop = 0)
+        )
+      }
+    }
+
+    // Generated column can't reference non-existent column
     withTable(s"testcat.$tblName") {
-      // Expression cannot be resolved since it doesn't exist
-      var e = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
-          s"b DATE GENERATED ALWAYS AS (not_a_function(a))) USING foo")
-      }
-      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
-      assert(e.getMessage.contains("failed to resolve `not_a_function` to a built-in function"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS (c + 1)) USING foo")
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`"),
+        context = ExpectedContext(fragment = "c", start = 0, stop = 0)
+      )
+    }
 
-      // Expression cannot be resolved since it's not a built-in function
-      spark.udf.register("timesTwo", (x: Int) => x * 2)
-      e = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
-          s"b INT GENERATED ALWAYS AS (timesTwo(a))) USING foo")
-      }
-      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
-      assert(e.getMessage.contains("failed to resolve `timesTwo` to a built-in function"))
+    // Expression must be deterministic
+    checkUnsupportedGenerationExpression(
+      "rand()",
+      "the expression is not deterministic"
+    )
 
-      // Generated column can't reference itself
-      e = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
-          s"b INT GENERATED ALWAYS AS (b + 1)) USING foo")
-      }
-      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
-      assert(e.getMessage.contains("generation expression cannot reference itself"))
-
-      // Generated column can't reference non-existent column
-      e = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE testcat.$tblName(a INT, " +
-          s"b INT GENERATED ALWAYS AS (c + 1)) USING foo")
-      }
-      assert(e.getErrorClass == "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN")
-      assert(e.getMessage.contains("fails to resolve as a valid expression"))
+    // Data type is incompatible
+    checkUnsupportedGenerationExpression(
+      "a + 1",
+      "the expression data type int is incompatible with column data type boolean",
+      "BOOLEAN"
+    )
+    // But we allow valid up-casts
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
+      assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
     }
   }
 

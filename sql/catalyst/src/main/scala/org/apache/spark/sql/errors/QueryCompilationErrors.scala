@@ -3410,8 +3410,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
-        "operation" ->
-          s"generated columns"
+        "operation" -> "generated columns"
       )
     )
   }
