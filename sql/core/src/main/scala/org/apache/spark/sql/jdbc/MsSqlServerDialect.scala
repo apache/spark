@@ -197,8 +197,6 @@ private object MsSqlServerDialect extends JdbcDialect {
     }
   }
 
-  override def supportsOffset: Boolean = false
-
   class MsSqlServerSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
     extends JdbcSQLQueryBuilder(dialect, options) {
 
@@ -213,4 +211,6 @@ private object MsSqlServerDialect extends JdbcDialect {
 
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new MsSqlServerSQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
 }
