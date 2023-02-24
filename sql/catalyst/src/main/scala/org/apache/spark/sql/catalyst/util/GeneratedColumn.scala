@@ -39,7 +39,7 @@ object GeneratedColumn {
    * The metadata key for saving a generation expression in a generated column's metadata. This is
    * only used internally and connectors should access generation expressions from the V2 columns.
    */
-  val GENERATION_EXPRESSION_METADATA_KEY = "generationExpression"
+  val GENERATION_EXPRESSION_METADATA_KEY = "GENERATION_EXPRESSION"
 
   /** Parser for parsing generation expression SQL strings */
   private lazy val parser = new CatalystSqlParser()
@@ -112,7 +112,7 @@ object GeneratedColumn {
     if (parsed.containsPattern(PLAN_EXPRESSION)) {
       throw unsupportedExpressionError("subquery expressions are not allowed for generated columns")
     }
-    // Analyze the parse result
+    // Analyze the parsed result
     val allowedBaseColumns = schema
       .filterNot(_.name == fieldName) // Can't reference itself
       .filterNot(isGeneratedColumn) // Can't reference other generated columns
@@ -127,18 +127,18 @@ object GeneratedColumn {
         // Improve error message if possible
         if (ex.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
           ex.messageParameters.get("objectName").foreach { unresolvedCol =>
-            // Check whether the unresolved column is this column (w.r.t. case-sensitivity)
             val resolver = SQLConf.get.resolver
-            if (resolver(unresolvedCol, QueryCompilationErrors.toSQLId(fieldName))) {
-              // Generation expression references itself
+            // Whether `col` = `unresolvedCol` taking into account case-sensitivity
+            def isUnresolvedCol(col: String) =
+              resolver(unresolvedCol, QueryCompilationErrors.toSQLId(col))
+            // Check whether the unresolved column is this column
+            if (isUnresolvedCol(fieldName)) {
               throw unsupportedExpressionError("generation expression cannot reference itself")
             }
             // Check whether the unresolved column is another generated column in the schema
-            schema.filter(isGeneratedColumn).foreach { col =>
-              if (resolver(unresolvedCol, QueryCompilationErrors.toSQLId(col.name))) {
-                throw unsupportedExpressionError(
-                  "generation expression cannot reference another generated column")
-              }
+            if (schema.exists(col => isGeneratedColumn(col) && isUnresolvedCol(col.name))) {
+              throw unsupportedExpressionError(
+                "generation expression cannot reference another generated column")
             }
           }
         }
@@ -154,11 +154,11 @@ object GeneratedColumn {
       case Project(Seq(a: Alias), _: LocalRelation) => a.child
     }.get
     if (!analyzed.deterministic) {
-      throw unsupportedExpressionError("the expression is not deterministic")
+      throw unsupportedExpressionError("generation expression is not deterministic")
     }
     if (!Cast.canUpCast(analyzed.dataType, dataType)) {
       throw unsupportedExpressionError(
-        s"the expression data type ${analyzed.dataType.simpleString} " +
+        s"generation expression data type ${analyzed.dataType.simpleString} " +
         s"is incompatible with column data type ${dataType.simpleString}")
     }
   }

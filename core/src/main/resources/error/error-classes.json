@@ -573,7 +573,7 @@
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
-        "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
+      "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
     ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {

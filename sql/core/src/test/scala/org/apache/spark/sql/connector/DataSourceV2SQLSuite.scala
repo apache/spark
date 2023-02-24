@@ -1603,13 +1603,13 @@ class DataSourceV2SQLSuiteV1Filter
     // Expression must be deterministic
     checkUnsupportedGenerationExpression(
       "rand()",
-      "the expression is not deterministic"
+      "generation expression is not deterministic"
     )
 
     // Data type is incompatible
     checkUnsupportedGenerationExpression(
       "a + 1",
-      "the expression data type int is incompatible with column data type boolean",
+      "generation expression data type int is incompatible with column data type boolean",
       "BOOLEAN"
     )
     // But we allow valid up-casts
