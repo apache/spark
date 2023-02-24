@@ -122,8 +122,8 @@ message Read {
   }
 
   message DataSource {
-    // (Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
-    string format = 1;
+    // (Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    optional string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
     //

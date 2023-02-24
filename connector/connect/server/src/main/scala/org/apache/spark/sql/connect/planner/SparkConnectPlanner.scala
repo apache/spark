@@ -667,12 +667,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         UnresolvedRelation(multipartIdentifier)
 
       case proto.Read.ReadTypeCase.DATA_SOURCE =>
-        if (rel.getDataSource.getFormat == "") {
-          throw InvalidPlanInput("DataSource requires a format")
-        }
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         val reader = session.read
-        reader.format(rel.getDataSource.getFormat)
+        if (rel.getDataSource.hasFormat) {
+          reader.format(rel.getDataSource.getFormat)
+        }
         localMap.foreach { case (key, value) => reader.option(key, value) }
         if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
 
