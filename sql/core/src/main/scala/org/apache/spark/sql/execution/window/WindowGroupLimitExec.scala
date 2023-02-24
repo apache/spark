@@ -133,7 +133,7 @@ case class WindowGroupLimitExec(
         val partitionEvs = partitionExprs.map(ExpressionCanonicalizer.execute(_).genCode(ctx))
         val partitionValues = partitionEvs.zip(partitionSpec.map(_.dataType)).map {
           case (ev, StringType) => s"${ev.value}.toString()"
-          case (ev, _: NumericType) => s"${ev.value}"
+          case (ev, _: NumericType) => s"String.valueOf(${ev.value})"
           case (ev, _) => s"${ev.value}"
         }
         val group = ctx.freshName("group")
