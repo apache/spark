@@ -224,7 +224,12 @@ object SparkSession extends Logging {
   class Builder() extends Logging {
     private var _client: SparkConnectClient = _
 
-    def client(client: SparkConnectClient): Builder = {
+    def remote(connectionString: String): Builder = {
+      client(SparkConnectClient.builder().connectionString(connectionString).build())
+      this
+    }
+
+    private[sql] def client(client: SparkConnectClient): Builder = {
       _client = client
       this
     }
