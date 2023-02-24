@@ -287,7 +287,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       expressions: Seq[Expression],
       useSubexprElimination: Boolean = false): ExprCode = {
-    val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
+    val (exprEvals, initBlock) = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprSchemas = expressions.map(e => Schema(e.dataType, e.nullable))
 
     val numVarLenFields = exprSchemas.count {
@@ -307,6 +307,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val code =
       code"""
+         |$initBlock
          |$rowWriter.reset();
          |$evalSubexpr
          |$writeExpressions
