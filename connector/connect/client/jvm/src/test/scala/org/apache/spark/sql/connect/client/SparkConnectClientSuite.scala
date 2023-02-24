@@ -94,7 +94,7 @@ class SparkConnectClientSuite
     testClientConnection(client, testPort)
   }
 
-  test ("SparkSession initialisation with connection string") {
+  test("SparkSession initialisation with connection string") {
     val testPort = 16002
     client = SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
     startDummyServer(testPort)
