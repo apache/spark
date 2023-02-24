@@ -232,3 +232,13 @@ class UDFRegistration:
         return return_udf
 
     register.__doc__ = PySparkUDFRegistration.register.__doc__
+
+    def registerJavaFunction(
+        self,
+        name: str,
+        javaClassName: str,
+        returnType: Optional["DataTypeOrString"] = None,
+    ) -> None:
+        self.sparkSession._client.register_java(name, javaClassName, returnType)
+
+    registerJavaFunction.__doc__ = PySparkUDFRegistration.registerJavaFunction.__doc__
