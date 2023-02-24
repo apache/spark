@@ -55,11 +55,13 @@ class RelationalGroupedDataset protected[sql] (
           builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
         case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
           builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-        case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT if pivot.isDefined =>
+        case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT =>
+          assert(pivot.isEmpty)
           builder.getAggregateBuilder
             .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
             .setPivot(pivot.get)
-        // TODO: throw proper error message for PIVOT when pivot proto is not defined.
+        case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT if pivot.isEmpty =>
+          throw new IllegalArgumentException("Pivot should not be empty")
         case g => throw new UnsupportedOperationException(g.toString)
       }
     }
@@ -344,7 +346,6 @@ class RelationalGroupedDataset protected[sql] (
               .addAllValues(valueExprs.asJava)
               .build()))
       case _ =>
-        // TODO: throw proper error message for `repeatedPivotsUnsupportedError`.
         throw new UnsupportedOperationException()
     }
   }
