@@ -136,7 +136,18 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       condition: Option[Expression],
-      eventTimeWatermarkForEviction: Option[Long]): (Option[Long], Option[Long]) = {
+      eventTimeWatermarkForEviction: Option[Long],
+      useFirstEventTimeColumn: Boolean): (Option[Long], Option[Long]) = {
+
+    // Perform assertions against multiple event time columns in the same DataFrame. This method
+    // assumes there is only one event time column per each side (left / right) and it is not very
+    // clear to reason about the correctness if there are multiple event time columns. Disallow to
+    // be conservative.
+    WatermarkSupport.findEventTimeColumn(leftAttributes,
+      useFirstOccurrence = useFirstEventTimeColumn)
+    WatermarkSupport.findEventTimeColumn(rightAttributes,
+      useFirstOccurrence = useFirstEventTimeColumn)
+
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
       leftKeys, rightKeys)
 
@@ -172,7 +183,17 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       condition: Option[Expression],
-      eventTimeWatermarkForEviction: Option[Long]): JoinStateWatermarkPredicates = {
+      eventTimeWatermarkForEviction: Option[Long],
+      useFirstEventTimeColumn: Boolean): JoinStateWatermarkPredicates = {
+
+    // Perform assertions against multiple event time columns in the same DataFrame. This method
+    // assumes there is only one event time column per each side (left / right) and it is not very
+    // clear to reason about the correctness if there are multiple event time columns. Disallow to
+    // be conservative.
+    WatermarkSupport.findEventTimeColumn(leftAttributes,
+      useFirstOccurrence = useFirstEventTimeColumn)
+    WatermarkSupport.findEventTimeColumn(rightAttributes,
+      useFirstOccurrence = useFirstEventTimeColumn)
 
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
       leftKeys, rightKeys)

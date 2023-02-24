@@ -98,6 +98,9 @@ class IncrementalExecution(
     }
   }
 
+  private val allowMultipleStatefulOperators: Boolean =
+    sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`
    * preparation walks the query plan.
@@ -323,7 +326,7 @@ class IncrementalExecution(
             stateWatermarkPredicates =
               StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
                 j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-                iwEviction)
+                iwEviction, !allowMultipleStatefulOperators)
           )
       }
     }

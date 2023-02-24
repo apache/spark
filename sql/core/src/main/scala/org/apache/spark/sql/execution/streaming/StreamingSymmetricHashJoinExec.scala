@@ -189,6 +189,8 @@ case class StreamingSymmetricHashJoinExec(
   private val hadoopConfBcast = sparkContext.broadcast(
     new SerializableConfiguration(SessionState.newHadoopConf(
       sparkContext.hadoopConfiguration, conf)))
+  private val allowMultipleStatefulOperators =
+    conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
   val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
@@ -710,7 +712,8 @@ case class StreamingSymmetricHashJoinExec(
   override def produceOutputWatermark(inputWatermarkMs: Long): Long = {
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
-        left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs))
+        left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
+        !allowMultipleStatefulOperators)
 
     (leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min
   }
