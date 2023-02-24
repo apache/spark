@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+# Use the spark connect JVM client to connect to a spark connect server.
+#
+# Start a local server:
+# A local spark-connect server with default settings can be started using the following command:
+#  `bin/spark-connect`
+# The client should be able to connect to this server directly with the default client settings.
+#
+# Connect to a remote server:
+# To connect to a remote server, use env var `SPARK_REMOTE` to configure the client connection
+# string. e.g.
+#  `export SPARK_REMOTE="sc://<URL>:<port>/;token=<auth token>;<param1>=<value1>"`
+
+if [ -z "${SPARK_HOME}" ]; then
+  source "$(dirname "$0")"/find-spark-home
+fi
+
+# Build the jars needed for spark connect JVM client
+build/sbt "sql/package;connect-client-jvm/assembly"
+
+CONNECT_CLASSPATH="$(build/sbt -DcopyDependencies=false "export connect-client-jvm/fullClasspath" | grep jar | tail -n1)"
+SQL_CLASSPATH="$(build/sbt -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
+
+INIT_SCRIPT="${SPARK_HOME}"/bin/spark-connect-scala-client.sc
+"${SPARK_HOME}"/build/scala*/bin/scala -cp "$CONNECT_CLASSPATH:$SQL_CLASSPATH" -i $INIT_SCRIPT
