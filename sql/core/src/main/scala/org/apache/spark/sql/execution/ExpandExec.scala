@@ -168,6 +168,8 @@ case class ExpandExec(
     }
 
     // Part 2: switch/case statements
+    initBlock += ctx.subexpressionElimination(
+      projections.flatten.map(BindReferences.bindReference(_, attributeSeq)): _*)
     val switchCaseExprs = projections.zipWithIndex.map { case (exprs, row) =>
       val (exprCodesWithIndices, inputVarSets) = exprs.indices.flatMap { col =>
         if (!sameOutput(col)) {

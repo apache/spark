@@ -198,6 +198,7 @@ trait CodegenSupport extends SparkPlan {
     s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString(conf.maxToStringFields)}")}
        |$evaluated
+       |${parent.initBlock}
        |$consumeFunc
      """.stripMargin
   }
@@ -341,6 +342,8 @@ trait CodegenSupport extends SparkPlan {
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     throw new UnsupportedOperationException
   }
+
+  var initBlock: Block = EmptyBlock
 
   /**
    * Whether or not the result rows of this operator should be copied before putting into a buffer.

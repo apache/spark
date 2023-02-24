@@ -38,7 +38,8 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
     val ctx = newCodeGenContext()
 
     // Do sub-expression elimination for predicates.
-    val eval = ctx.generateExpressions(Seq(predicate), useSubexprElimination).head
+    val (evals, initBlock) = ctx.generateExpressions(Seq(predicate), useSubexprElimination)
+    val eval = evals.head
     val evalSubexpr = ctx.subexprFunctionsCode
 
     val codeBody = s"""
@@ -60,6 +61,7 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
         }
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
+          $initBlock
           $evalSubexpr
           ${eval.code}
           return !${eval.isNull} && ${eval.value};
