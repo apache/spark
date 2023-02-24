@@ -24,6 +24,7 @@ import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types.{DataType, Metadata}
 
@@ -1233,18 +1234,53 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @since 3.4.0
    */
   def bitwiseXOR(other: Any): Column = fn("^", other)
+
+  /**
+   * Defines a windowing column.
+   *
+   * {{{
+   *   val w = Window.partitionBy("name").orderBy("id")
+   *   df.select(
+   *     sum("price").over(w.rangeBetween(Window.unboundedPreceding, 2)),
+   *     avg("price").over(w.rowsBetween(Window.currentRow, 4))
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
+
+  /**
+   * Defines an empty analytic clause. In this case the analytic function is applied and presented
+   * for all rows in the result set.
+   *
+   * {{{
+   *   df.select(
+   *     sum("price").over(),
+   *     avg("price").over()
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  def over(): Column = over(Window.spec)
 }
 
 private[sql] object Column {
 
-  def apply(name: String): Column = Column { builder =>
+  def apply(name: String): Column = Column(name, None)
+
+  def apply(name: String, planId: Option[Long]): Column = Column { builder =>
     name match {
       case "*" =>
         builder.getUnresolvedStarBuilder
       case _ if name.endsWith(".*") =>
         builder.getUnresolvedStarBuilder.setUnparsedTarget(name)
       case _ =>
-        builder.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name)
+        val attributeBuilder = builder.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name)
+        planId.foreach(attributeBuilder.setPlanId)
     }
   }
 

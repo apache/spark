@@ -19,6 +19,7 @@ import os
 import shutil
 import tempfile
 
+from pyspark.errors import AnalysisException
 from pyspark.sql.functions import col
 from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import StructType, StructField, StringType
@@ -214,6 +215,17 @@ class ReadwriterV2TestsMixin:
         self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), tpe)
         self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), tpe)
         self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), tpe)
+
+    def test_create(self):
+        df = self.df
+        with self.table("test_table"):
+            df.writeTo("test_table").using("parquet").create()
+            self.assertEqual(100, self.spark.sql("select * from test_table").count())
+
+    def test_create_without_provider(self):
+        df = self.df
+        with self.assertRaisesRegex(AnalysisException, "Hive support is required"):
+            df.writeTo("test_table").create()
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):

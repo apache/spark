@@ -160,4 +160,8 @@ private object DB2Dialect extends JdbcDialect {
       s"DROP SCHEMA ${quoteIdentifier(schema)} RESTRICT"
     }
   }
+
+  override def getLimitClause(limit: Integer): String = {
+    if (limit > 0) s"FETCH FIRST $limit ROWS ONLY" else ""
+  }
 }

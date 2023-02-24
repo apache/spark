@@ -142,6 +142,11 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas_with_duplicated_column_names(self):
         super().test_to_pandas_with_duplicated_column_names()
 
+    # TODO(SPARK-42367): DataFrame.drop should handle duplicated columns properly
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_drop_duplicates_with_ambiguous_reference(self):
+        super().test_drop_duplicates_with_ambiguous_reference()
+
 
 if __name__ == "__main__":
     import unittest

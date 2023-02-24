@@ -27,7 +27,7 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{aggregate, array, col, lit, rand, sequence, shuffle, transform, udf}
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
@@ -140,7 +140,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("write table") {
-    try {
+    withTable("myTable") {
       val df = spark.range(10).limit(3)
       df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
       spark.range(2).write.insertInto("myTable")
@@ -151,8 +151,45 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       assert(result(2).getLong(0) == 1)
       assert(result(3).getLong(0) == 1)
       assert(result(4).getLong(0) == 2)
-    } finally {
-      spark.sql("drop table if exists myTable").collect()
+    }
+  }
+
+  test("writeTo with create and using") {
+    // TODO (SPARK-42519): Add more test after we can set configs. See more WriteTo test cases
+    //  in SparkConnectProtoSuite.
+    //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    withTable("myTableV2") {
+      spark.range(3).writeTo("myTableV2").using("parquet").create()
+      val result = spark.sql("select * from myTableV2").sort("id").collect()
+      assert(result.length == 3)
+      assert(result(0).getLong(0) == 0)
+      assert(result(1).getLong(0) == 1)
+      assert(result(2).getLong(0) == 2)
+    }
+  }
+
+  // TODO (SPARK-42519): Revisit this test after we can set configs.
+  //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+  test("writeTo with create and append") {
+    withTable("myTableV2") {
+      spark.range(3).writeTo("myTableV2").using("parquet").create()
+      withTable("myTableV2") {
+        assertThrows[StatusRuntimeException] {
+          // Failed to append as Cannot write into v1 table: `spark_catalog`.`default`.`mytablev2`.
+          spark.range(3).writeTo("myTableV2").append()
+        }
+      }
+    }
+  }
+
+  // TODO (SPARK-42519): Revisit this test after we can set configs.
+  //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+  test("writeTo with create") {
+    withTable("myTableV2") {
+      assertThrows[StatusRuntimeException] {
+        // Failed to create as Hive support is required.
+        spark.range(3).writeTo("myTableV2").create()
+      }
     }
   }
 
@@ -335,5 +372,38 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     checkSample(datasets.get(1), 1.0 / 10.0, 3.0 / 10.0, 9L)
     checkSample(datasets.get(2), 3.0 / 10.0, 6.0 / 10.0, 9L)
     checkSample(datasets.get(3), 6.0 / 10.0, 1.0, 9L)
+  }
+
+  test("lambda functions") {
+    // This test is mostly to validate lambda variables are properly resolved.
+    val result = spark
+      .range(3)
+      .select(
+        col("id"),
+        array(sequence(col("id"), lit(10)), sequence(col("id") * 2, lit(10))).as("data"))
+      .select(col("id"), transform(col("data"), x => transform(x, x => x + 1)).as("data"))
+      .select(
+        col("id"),
+        transform(col("data"), x => aggregate(x, lit(0L), (x, y) => x + y)).as("summaries"))
+      .collect()
+    val expected = Array(Row(0L, Seq(66L, 66L)), Row(1L, Seq(65L, 63L)), Row(2L, Seq(63L, 56L)))
+    assert(result === expected)
+  }
+
+  test("shuffle array") {
+    // We cannot do structural tests for shuffle because its random seed will always change.
+    val result = spark
+      .sql("select 1")
+      .select(shuffle(array(lit(1), lit(2), lit(3), lit(74))))
+      .head()
+      .getSeq[Int](0)
+    assert(result.toSet === Set(1, 2, 3, 74))
+  }
+
+  test("ambiguous joins") {
+    val left = spark.range(100).select(col("id"), rand(10).as("a"))
+    val right = spark.range(100).select(col("id"), rand(12).as("a"))
+    val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
+    assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
   }
 }
