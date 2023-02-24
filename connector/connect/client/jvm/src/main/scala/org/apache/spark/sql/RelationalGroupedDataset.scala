@@ -56,7 +56,7 @@ class RelationalGroupedDataset protected[sql] (
         case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
           builder.getAggregateBuilder.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT =>
-          assert(pivot.isEmpty)
+          assert(pivot.isDefined)
           builder.getAggregateBuilder
             .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
             .setPivot(pivot.get)
