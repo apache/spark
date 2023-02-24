@@ -35,7 +35,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
 )
-from typing import Any, Callable, Iterator, List, Mapping, Protocol, TYPE_CHECKING, Tuple, Union
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -50,19 +50,14 @@ supported_scalar_types = (
     StringType,
 )
 
-
-class PredictBatchFunction(Protocol):
-    """Callable type for end user predict functions that take a variable number of ndarrays as
-    input and returns one of the following as output:
-    - single ndarray (single output)
-    - dictionary of named ndarrays (multiple outputs represented in columnar form)
-    - list of dictionaries of named ndarrays (multiple outputs represented in row form)
-    """
-
-    def __call__(
-        self, *args: np.ndarray
-    ) -> np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]]:
-        ...
+# Callable type for end user predict functions that take a variable number of ndarrays as
+# input and returns one of the following as output:
+# - single ndarray (single output)
+# - dictionary of named ndarrays (multiple outputs represented in columnar form)
+# - list of dictionaries of named ndarrays (multiple outputs represented in row form)
+PredictBatchFunction = Callable[
+    [np.ndarray], Union[np.ndarray, Mapping[str, np.ndarray], List[Mapping[str, np.dtype]]]
+]
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
@@ -153,7 +148,7 @@ def array_to_vector(col: Column) -> Column:
 
 
 def _batched(
-    data: pd.Series | pd.DataFrame | Tuple[pd.Series], batch_size: int
+    data: Union[pd.Series, pd.DataFrame, Tuple[pd.Series]], batch_size: int
 ) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
     if isinstance(data, pd.DataFrame):
@@ -170,7 +165,7 @@ def _batched(
         index += batch_size
 
 
-def _is_tensor_col(data: pd.Series | pd.DataFrame) -> bool:
+def _is_tensor_col(data: Union[pd.Series, pd.DataFrame]) -> bool:
     if isinstance(data, pd.Series):
         return data.dtype == np.object_ and isinstance(data.iloc[0], (np.ndarray, list))
     elif isinstance(data, pd.DataFrame):
@@ -183,7 +178,7 @@ def _is_tensor_col(data: pd.Series | pd.DataFrame) -> bool:
         )
 
 
-def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
+def _has_tensor_cols(data: Union[pd.Series, pd.DataFrame, Tuple[pd.Series]]) -> bool:
     """Check if input Series/DataFrame/Tuple contains any tensor-valued columns."""
     if isinstance(data, (pd.Series, pd.DataFrame)):
         return _is_tensor_col(data)
@@ -192,7 +187,7 @@ def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
 
 
 def _validate_and_transform_multiple_inputs(
-    batch: pd.DataFrame, input_shapes: List[List[int] | None], num_input_cols: int
+    batch: pd.DataFrame, input_shapes: List[Optional[List[int]]], num_input_cols: int
 ) -> List[np.ndarray]:
     multi_inputs = [batch[col].to_numpy() for col in batch.columns]
     if input_shapes:
@@ -354,7 +349,7 @@ def predict_batch_udf(
     *,
     return_type: DataType,
     batch_size: int,
-    input_tensor_shapes: List[List[int] | None] | Mapping[int, List[int]] | None = None,
+    input_tensor_shapes: Optional[Union[List[Optional[List[int]]], Mapping[int, List[int]]]] = None,
 ) -> UserDefinedFunctionLike:
     """Given a function which loads a model and returns a `predict` function for inference over a
     batch of numpy inputs, returns a Pandas UDF wrapper for inference over a Spark DataFrame.
@@ -383,7 +378,7 @@ def predict_batch_udf(
 
     Parameters
     ----------
-    make_predict_fn : Callable[[], PredictBatchFunction]
+    make_predict_fn : callable
         Function which is responsible for loading a model and returning a
         :py:class:`PredictBatchFunction` which takes one or more numpy arrays as input and returns
         one of the following:
@@ -408,7 +403,8 @@ def predict_batch_udf(
     batch_size : int
         Batch size to use for inference.  This is typically a limitation of the model
         and/or available hardware resources and is usually smaller than the Spark partition size.
-    input_tensor_shapes : List[List[int] | None] | Mapping[int, List[int]] | None, optional
+    input_tensor_shapes : list, dict, optional.
+        A list of ints or a dictionary of ints (key) and list of ints (value).
         Input tensor shapes for models with tensor inputs.  This can be a list of shapes,
         where each shape is a list of integers or None (for scalar inputs).  Alternatively, this
         can be represented by a "sparse" dictionary, where the keys are the integer indices of the
