@@ -201,6 +201,14 @@ message AddArtifactsRequest {
     int64 crc = 3;
   }
 
+  // A chunk of an Artifact.
+  message ArtifactChunk {
+    // Data chunk.
+    bytes data = 1;
+    // CRC to allow server to verify integrity of the chunk.
+    int64 crc = 2;
+  }
+
   // A number of small artifacts batched into a single RPC.
   message Batch {
     repeated Artifact artifacts = 1;
@@ -213,13 +221,30 @@ message AddArtifactsRequest {
   // User context
   UserContext user_context = 2;
 
+  // Signals the start of a chunked artifact.
+  message BeginChunkedArtifact {
+    // Name of the artifact undergoing chunking. Follows the same conventions as the `name` in
+    // the `Artifact` message.
+    string name = 1;
+    // Total size of the artifact in bytes.
+    int64 total_bytes = 2;
+    // Number of chunks the artifact is split into.
+    // This includes the `initial_chunk`.
+    int64 num_chunks = 3;
+    // The first/initial chunk.
+    ArtifactChunk initial_chunk = 4;
+  }
+
   // The payload is either a batch of artifacts or a partial chunk of a large artifact.
   oneof payload {
     Batch batch = 3;
-    // A large artifact chunked into multiple requests. The server side should assume that the
-    // artifact has been completely uploaded either when it encounters a new artifact name, or
-    // when the the stream is completed.
-    Artifact chunk = 4;
+    // The metadata and the initial chunk of a large artifact chunked into multiple requests.
+    // The server side is notified about the total size of the large artifact as well as the
+    // number of chunks to expect.
+    BeginChunkedArtifact begin_chunk = 4;
+    // A chunk of an artifact excluding metadata. This can be any chunk of the artifact excluding
+    // the first chunk.
+    ArtifactChunk chunk = 5;
   }
 }
 
