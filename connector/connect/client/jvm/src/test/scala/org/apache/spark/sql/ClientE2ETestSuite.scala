@@ -27,7 +27,7 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.{aggregate, array, col, lit, sequence, shuffle, transform, udf}
+import org.apache.spark.sql.functions.{aggregate, array, col, lit, rand, sequence, shuffle, transform, udf}
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
@@ -398,5 +398,12 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       .head()
       .getSeq[Int](0)
     assert(result.toSet === Set(1, 2, 3, 74))
+  }
+
+  test("ambiguous joins") {
+    val left = spark.range(100).select(col("id"), rand(10).as("a"))
+    val right = spark.range(100).select(col("id"), rand(12).as("a"))
+    val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
+    assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
   }
 }

@@ -117,6 +117,8 @@ import org.apache.spark.util.Utils
  */
 class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan: proto.Plan)
     extends Serializable {
+  // Make sure we don't forget to set plan id.
+  assert(plan.getRoot.getCommon.hasPlanId)
 
   override def toString: String = {
     try {
@@ -873,7 +875,14 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group untypedrel
    * @since 3.4.0
    */
-  def col(colName: String): Column = functions.col(colName)
+  def col(colName: String): Column = {
+    val planId = if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
+      Option(plan.getRoot.getCommon.getPlanId)
+    } else {
+      None
+    }
+    Column.apply(colName, planId)
+  }
 
   /**
    * Selects column based on the column name specified as a regex and returns it as [[Column]].

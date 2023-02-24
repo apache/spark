@@ -26,6 +26,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 class SparkConnectClientSuite
@@ -33,20 +34,23 @@ class SparkConnectClientSuite
     with BeforeAndAfterEach {
 
   private var client: SparkConnectClient = _
+  private var service: DummySparkConnectService = _
   private var server: Server = _
 
   private def startDummyServer(port: Int): Unit = {
-    val sb = NettyServerBuilder
+    service = new DummySparkConnectService
+    server = NettyServerBuilder
       .forPort(port)
-      .addService(new DummySparkConnectService())
-
-    server = sb.build
+      .addService(service)
+      .build()
     server.start()
   }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     client = null
     server = null
+    service = null
   }
 
   override def afterEach(): Unit = {
@@ -102,6 +106,16 @@ class SparkConnectClientSuite
     assertThrows[StatusRuntimeException] {
       client.analyze(request)
     }
+  }
+
+  test("SparkSession initialisation with connection string") {
+    val testPort = 16002
+    client = SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
+    startDummyServer(testPort)
+    val session = SparkSession.builder().client(client).build()
+    val df = session.range(10)
+    df.analyze // Trigger RPC
+    assert(df.plan === service.getAndClearLatestInputPlan())
   }
 
   private case class TestPackURI(
