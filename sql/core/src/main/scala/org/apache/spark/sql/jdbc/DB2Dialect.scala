@@ -170,25 +170,6 @@ private object DB2Dialect extends JdbcDialect {
     if (offset > 0) s"OFFSET $offset ROWS" else ""
   }
 
-  class DB2SQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
-    extends JdbcSQLQueryBuilder(dialect, options) {
-
-    override def build(): String = {
-      val selectStmt = if (limit > 0 && offset > 0) {
-        val offsetClause = dialect.getOffsetClause(offset)
-        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
-          s" $whereClause $groupByClause $orderByClause $offsetClause FETCH FIRST $limit ROWS ONLY"
-      } else {
-        super.build()
-      }
-
-      options.prepareQuery + selectStmt
-    }
-  }
-
-  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
-    new DB2SQLQueryBuilder(this, options)
-
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
