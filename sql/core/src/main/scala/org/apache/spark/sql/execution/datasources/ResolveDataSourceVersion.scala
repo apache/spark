@@ -32,7 +32,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 object ResolveDataSourceVersion extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r@VersionUnresolvedRelation(v1DataSource, _, _) =>
+    case r@VersionUnresolvedRelation(v1DataSource, _, isStreaming) if isStreaming =>
       val sparkSession = r.sparkSession
       val ds = DataSource.lookupDataSource(r.source, sparkSession.sqlContext.conf).
         getConstructor().newInstance() // TableProvider or Source
@@ -66,5 +66,7 @@ object ResolveDataSourceVersion extends Rule[LogicalPlan] {
           // Code path for data source v1.
           StreamingRelation(v1DataSource)
       }
+    case r@VersionUnresolvedRelation(v1DataSource, _, isStreaming) if !isStreaming =>
+
   }
 }
