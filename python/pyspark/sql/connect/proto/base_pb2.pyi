@@ -416,6 +416,20 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class SqlCommandResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IS_COMMAND_FIELD_NUMBER: builtins.int
+        is_command: builtins.bool
+        def __init__(
+            self,
+            *,
+            is_command: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["is_command", b"is_command"]
+        ) -> None: ...
+
     class ArrowBatch(google.protobuf.message.Message):
         """Batch results of metrics."""
 
@@ -542,10 +556,17 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
+    SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
+    @property
+    def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult: ...
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """Support arbitrary result objects."""
     @property
     def metrics(self) -> global___ExecutePlanResponse.Metrics:
         """Metrics for the query execution. Typically, this field is only present in the last
@@ -556,17 +577,44 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         *,
         client_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
+        sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal["arrow_batch", b"arrow_batch", "metrics", b"metrics"],
+        field_name: typing_extensions.Literal[
+            "arrow_batch",
+            b"arrow_batch",
+            "extension",
+            b"extension",
+            "metrics",
+            b"metrics",
+            "response_type",
+            b"response_type",
+            "sql_command_result",
+            b"sql_command_result",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "arrow_batch", b"arrow_batch", "client_id", b"client_id", "metrics", b"metrics"
+            "arrow_batch",
+            b"arrow_batch",
+            "client_id",
+            b"client_id",
+            "extension",
+            b"extension",
+            "metrics",
+            b"metrics",
+            "response_type",
+            b"response_type",
+            "sql_command_result",
+            b"sql_command_result",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["response_type", b"response_type"]
+    ) -> typing_extensions.Literal["arrow_batch", "sql_command_result", "extension"] | None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse

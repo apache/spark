@@ -22,10 +22,13 @@ import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny}
+import io.grpc.stub.StreamObserver
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
+import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -34,14 +37,15 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.{QueryExecution}
+import org.apache.spark.sql.execution.arrow.{ArrowConverters}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
@@ -1423,7 +1427,10 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  def process(command: proto.Command): Unit = {
+  def process(
+      command: proto.Command,
+      clientId: String,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
@@ -1435,8 +1442,25 @@ class SparkConnectPlanner(val session: SparkSession) {
         handleWriteOperationV2(command.getWriteOperationV2)
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
+      case proto.Command.CommandTypeCase.SQL_COMMAND =>
+        handleSqlCommand(command.getSqlCommand, clientId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
+  }
+
+  def handleSqlCommand(
+      getSqlCommand: SqlCommand,
+      clientId: String,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+    val df = session.sql(getSqlCommand.getSql)
+    val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
+    responseObserver.onNext(
+      ExecutePlanResponse
+        .newBuilder()
+        .setClientId(clientId)
+        .setSqlCommandResult(SqlCommandResult.newBuilder().setIsCommand(isCommand))
+        .build())
+    SparkConnectStreamHandler.processAsArrowBatches(clientId, df, responseObserver)
   }
 
   private def handleRegisterUserDefinedFunction(

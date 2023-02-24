@@ -35,12 +35,17 @@ message Command {
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
     WriteOperationV2 write_operation_v2 = 4;
+    SqlCommand sql_command = 5;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
 
   }
+}
+
+message SqlCommand {
+  string sql = 1;
 }
 
 // A command that can create DataFrame global temp view or local temp view.

@@ -1863,3 +1863,14 @@ class ListCatalogs(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
+
+
+class SqlCommand(LogicalPlan):
+    def __init__(self, sql: str) -> None:
+        super(SqlCommand, self).__init__(None)
+        self._sql = sql
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        cmd = proto.Command()
+        cmd.sql_command.sql = self._sql
+        return cmd

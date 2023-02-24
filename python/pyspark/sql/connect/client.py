@@ -521,7 +521,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, _ = self._execute_and_fetch(req)
+        table, _, _2 = self._execute_and_fetch(req)
         return table
 
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
@@ -531,7 +531,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, metrics = self._execute_and_fetch(req)
+        table, metrics, _ = self._execute_and_fetch(req)
         pdf = table.to_pandas()
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -587,7 +587,9 @@ class SparkConnectClient(object):
         result = self._analyze(plan, explain_mode)
         return result.explain_string
 
-    def execute_command(self, command: pb2.Command) -> None:
+    def execute_command(
+        self, command: pb2.Command
+    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
         """
         Execute given command.
         """
@@ -596,8 +598,11 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        self._execute(req)
-        return
+        data, _, properties = self._execute_and_fetch(req)
+        if data:
+            return (data.to_pandas(), properties)
+        else:
+            return (None, properties)
 
     def close(self) -> None:
         """
@@ -698,12 +703,12 @@ class SparkConnectClient(object):
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple["pa.Table", List[PlanMetrics]]:
+    ) -> Tuple["pa.Table", List[PlanMetrics], Dict[str, Any]]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
         batches: List[pa.RecordBatch] = []
-
+        properties = {}
         try:
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
@@ -719,6 +724,8 @@ class SparkConnectClient(object):
                         if b.metrics is not None:
                             logger.debug("Received metric batch.")
                             m = b.metrics
+                        if b.HasField("sql_command_result"):
+                            properties["is_sql_command"] = b.sql_command_result.is_command
                         if b.HasField("arrow_batch"):
                             logger.debug(
                                 f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -734,7 +741,7 @@ class SparkConnectClient(object):
         assert len(batches) > 0
         table = pa.Table.from_batches(batches=batches)
         metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
-        return table, metrics
+        return table, metrics, properties
 
     def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """

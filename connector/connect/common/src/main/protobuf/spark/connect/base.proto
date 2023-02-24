@@ -152,11 +152,22 @@ message ExecutePlanRequest {
 message ExecutePlanResponse {
   string client_id = 1;
 
-  ArrowBatch arrow_batch = 2;
+  oneof response_type {
+    ArrowBatch arrow_batch = 2;
+
+    SqlCommandResult sql_command_result = 5;
+
+    // Support arbitrary result objects.
+    google.protobuf.Any extension = 999;
+  }
 
   // Metrics for the query execution. Typically, this field is only present in the last
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
+
+  message SqlCommandResult {
+    bool is_command = 2;
+  }
 
   // Batch results of metrics.
   message ArrowBatch {
