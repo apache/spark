@@ -1550,6 +1550,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         handleRegisterPythonUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.JAVA_UDF =>
+        handleRegisterJavaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -1573,6 +1575,18 @@ class SparkConnectPlanner(val session: SparkSession) {
       udfDeterministic = fun.getDeterministic)
 
     session.udf.registerPython(fun.getFunctionName, udpf)
+  }
+
+  private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = fun.getJavaUdf
+    val dataType = DataType.parseTypeWithFallback(
+      schema = udf.getOutputType,
+      parser = DataType.fromDDL,
+      fallbackParser = DataType.fromJson) match {
+      case s: DataType => s
+      case other => throw InvalidPlanInput(s"Invalid return type $other")
+    }
+    session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {
