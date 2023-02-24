@@ -333,6 +333,7 @@ class RelationalGroupedDataset protected[sql] (
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
         val valueExprs = values.map(_ match {
           case c: Column if c.expr.hasLiteral => c.expr.getLiteral
+          case c: Column if !c.expr.hasLiteral => throw new IllegalArgumentException()
           case v => functions.lit(v).expr.getLiteral
         })
         new RelationalGroupedDataset(
