@@ -44,11 +44,13 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       SparkConnectService
         .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getClientId)
         .session
-    v.getPlan.getOpTypeCase match {
-      case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
-      case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
-      case _ =>
-        throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+    session.withActive {
+      v.getPlan.getOpTypeCase match {
+        case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
+        case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
+        case _ =>
+          throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+      }
     }
   }
 

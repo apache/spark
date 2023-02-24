@@ -379,13 +379,13 @@ class TypesTestsMixin:
 
     def test_negative_decimal(self):
         try:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true").collect()
             df = self.spark.createDataFrame([(1,), (11,)], ["value"])
             ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
             actual = list(map(lambda r: int(r.value), ret))
             self.assertEqual(actual, [0, 10])
         finally:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false").collect()
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
