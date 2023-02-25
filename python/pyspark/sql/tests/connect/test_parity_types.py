@@ -113,11 +113,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_infer_schema_with_udt(self):
         super().test_infer_schema_with_udt()
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_negative_decimal(self):
-        super().test_negative_decimal()
-
     # TODO(SPARK-42020): createDataFrame with UDT
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_nested_udt_in_df(self):
