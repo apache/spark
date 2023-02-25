@@ -406,4 +406,15 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
     assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
   }
+
+  test("test temp view") {
+    spark.range(100).createTempView("test1")
+    assert(spark.sql("SELECT * FROM test1").count() == 100)
+    spark.range(1000).createOrReplaceTempView("test1")
+    assert(spark.sql("SELECT * FROM test1").count() == 1000)
+    spark.range(100).createGlobalTempView("view1")
+    assert(spark.sql("SELECT * FROM global_temp.view1").count() == 100)
+    spark.range(1000).createOrReplaceGlobalTempView("view1")
+    assert(spark.sql("SELECT * FROM global_temp.view1").count() == 1000)
+  }
 }

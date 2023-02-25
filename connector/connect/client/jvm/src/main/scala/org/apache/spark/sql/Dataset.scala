@@ -1907,6 +1907,100 @@ class Dataset[T] private[sql] (val sparkSession: SparkSession, private[sql] val 
   }
 
   /**
+   * Registers this Dataset as a temporary table using the given name. The lifetime of this
+   * temporary table is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  @deprecated("Use createOrReplaceTempView(viewName) instead.", "3.4.0")
+  def registerTempTable(tableName: String): Unit = {
+    createOrReplaceTempView(tableName)
+  }
+
+  /**
+   * Creates a local temporary view using the given name. The lifetime of this temporary view is
+   * tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not tied
+   * to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+   *
+   * @throws AnalysisException
+   *   if the view name is invalid or already exists
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  @throws[AnalysisException]
+  def createTempView(viewName: String): Unit = {
+    buildAndExecuteTempView(viewName, replace = false, global = false)
+  }
+
+  /**
+   * Creates a local temporary view using the given name. The lifetime of this temporary view is
+   * tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def createOrReplaceTempView(viewName: String): Unit = {
+    buildAndExecuteTempView(viewName, replace = true, global = false)
+  }
+
+  /**
+   * Creates a global temporary view using the given name. The lifetime of this temporary view is
+   * tied to this Spark application.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark
+   * application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM global_temp.view1`.
+   *
+   * @throws AnalysisException
+   *   if the view name is invalid or already exists
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  @throws[AnalysisException]
+  def createGlobalTempView(viewName: String): Unit = {
+    buildAndExecuteTempView(viewName, replace = false, global = true)
+  }
+
+  /**
+   * Creates or replaces a global temporary view using the given name. The lifetime of this
+   * temporary view is tied to this Spark application.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark
+   * application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM global_temp.view1`.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def createOrReplaceGlobalTempView(viewName: String): Unit = {
+    buildAndExecuteTempView(viewName, replace = true, global = true)
+  }
+
+  private def buildAndExecuteTempView(
+      viewName: String,
+      replace: Boolean,
+      global: Boolean): Unit = {
+    val command = session.newCommand { builder =>
+      builder.getCreateDataframeViewBuilder
+        .setInput(plan.getRoot)
+        .setName(viewName)
+        .setIsGlobal(global)
+        .setReplace(replace)
+    }
+    session.execute(command)
+  }
+
+  /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain column
    * name.
    *
