@@ -115,7 +115,7 @@ import org.apache.spark.util.Utils
  *
  * @since 3.4.0
  */
-class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan: proto.Plan)
+class Dataset[T] private[sql] (val sparkSession: SparkSession, private[sql] val plan: proto.Plan)
     extends Serializable {
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
@@ -169,7 +169,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def toDF(colNames: String*): DataFrame = session.newDataset { builder =>
+  def toDF(colNames: String*): DataFrame = sparkSession.newDataset { builder =>
     builder.getToDfBuilder
       .setInput(plan.getRoot)
       .addAllColumnNames(colNames.asJava)
@@ -191,7 +191,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group basic
    * @since 3.4.0
    */
-  def to(schema: StructType): DataFrame = session.newDataset { builder =>
+  def to(schema: StructType): DataFrame = sparkSession.newDataset { builder =>
     builder.getToSchemaBuilder
       .setInput(plan.getRoot)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
@@ -277,7 +277,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
 
   private def explain(mode: proto.Explain.ExplainMode): Unit = {
     // scalastyle:off println
-    println(session.analyze(plan, mode).getExplainString)
+    println(sparkSession.analyze(plan, mode).getExplainString)
     // scalastyle:on println
   }
 
@@ -468,7 +468,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   def show(numRows: Int, truncate: Int, vertical: Boolean): Unit = {
-    val df = session.newDataset { builder =>
+    val df = sparkSession.newDataset { builder =>
       builder.getShowStringBuilder
         .setInput(plan.getRoot)
         .setNumRows(numRows)
@@ -485,7 +485,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   }
 
   private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       val joinBuilder = builder.getJoinBuilder
       joinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
       f(joinBuilder)
@@ -751,7 +751,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   }
 
   private def buildSort(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       builder.getSortBuilder
         .setInput(plan.getRoot)
         .setIsGlobal(global)
@@ -859,7 +859,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def hint(name: String, parameters: Any*): Dataset[T] = session.newDataset { builder =>
+  def hint(name: String, parameters: Any*): Dataset[T] = sparkSession.newDataset { builder =>
     builder.getHintBuilder
       .setInput(plan.getRoot)
       .setName(name)
@@ -899,7 +899,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def as(alias: String): Dataset[T] = session.newDataset { builder =>
+  def as(alias: String): Dataset[T] = sparkSession.newDataset { builder =>
     builder.getSubqueryAliasBuilder
       .setInput(plan.getRoot)
       .setAlias(alias)
@@ -939,7 +939,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = session.newDataset { builder =>
+  def select(cols: Column*): DataFrame = sparkSession.newDataset { builder =>
     builder.getProjectBuilder
       .setInput(plan.getRoot)
       .addAllExpressions(cols.map(_.expr).asJava)
@@ -989,7 +989,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def filter(condition: Column): Dataset[T] = session.newDataset { builder =>
+  def filter(condition: Column): Dataset[T] = sparkSession.newDataset { builder =>
     builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
   }
 
@@ -1032,7 +1032,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
       ids: Array[Column],
       valuesOption: Option[Array[Column]],
       variableColumnName: String,
-      valueColumnName: String): DataFrame = session.newDataset { builder =>
+      valueColumnName: String): DataFrame = sparkSession.newDataset { builder =>
     val unpivot = builder.getUnpivotBuilder
       .setInput(plan.getRoot)
       .addAllIds(ids.toSeq.map(_.expr).asJava)
@@ -1393,7 +1393,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def limit(n: Int): Dataset[T] = session.newDataset { builder =>
+  def limit(n: Int): Dataset[T] = sparkSession.newDataset { builder =>
     builder.getLimitBuilder
       .setInput(plan.getRoot)
       .setLimit(n)
@@ -1405,7 +1405,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def offset(n: Int): Dataset[T] = session.newDataset { builder =>
+  def offset(n: Int): Dataset[T] = sparkSession.newDataset { builder =>
     builder.getOffsetBuilder
       .setInput(plan.getRoot)
       .setOffset(n)
@@ -1413,7 +1413,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
 
   private def buildSetOp(right: Dataset[T], setOpType: proto.SetOperation.SetOpType)(
       f: proto.SetOperation.Builder => Unit): Dataset[T] = {
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       f(
         builder.getSetOpBuilder
           .setSetOpType(setOpType)
@@ -1677,7 +1677,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       builder.getSampleBuilder
         .setInput(plan.getRoot)
         .setWithReplacement(withReplacement)
@@ -1745,7 +1745,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     normalizedCumWeights
       .sliding(2)
       .map { case Array(low, high) =>
-        session.newDataset[T] { builder =>
+        sparkSession.newDataset[T] { builder =>
           builder.getSampleBuilder
             .setInput(sortedInput)
             .setWithReplacement(false)
@@ -1789,7 +1789,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
     val aliases = values.zip(names).map { case (value, name) =>
       value.name(name).expr.getAlias
     }
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       builder.getWithColumnsBuilder
         .setInput(plan.getRoot)
         .addAllAliases(aliases.asJava)
@@ -1880,7 +1880,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   def withColumnsRenamed(colsMap: java.util.Map[String, String]): DataFrame = {
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       builder.getWithColumnsRenamedBuilder
         .setInput(plan.getRoot)
         .putAllRenameColumnsMap(colsMap)
@@ -1899,7 +1899,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
       .setExpr(col(columnName).expr)
       .addName(columnName)
       .setMetadata(metadata.json)
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       builder.getWithColumnsBuilder
         .setInput(plan.getRoot)
         .addAliases(newAlias)
@@ -1959,7 +1959,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   @scala.annotation.varargs
   def drop(col: Column, cols: Column*): DataFrame = buildDrop(col +: cols)
 
-  private def buildDrop(cols: Seq[Column]): DataFrame = session.newDataset { builder =>
+  private def buildDrop(cols: Seq[Column]): DataFrame = sparkSession.newDataset { builder =>
     builder.getDropBuilder
       .setInput(plan.getRoot)
       .addAllCols(cols.map(_.expr).asJava)
@@ -1972,7 +1972,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(): Dataset[T] = session.newDataset { builder =>
+  def dropDuplicates(): Dataset[T] = sparkSession.newDataset { builder =>
     builder.getDeduplicateBuilder
       .setInput(plan.getRoot)
       .setAllColumnsAsKeys(true)
@@ -1985,7 +1985,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = session.newDataset { builder =>
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = sparkSession.newDataset { builder =>
     builder.getDeduplicateBuilder
       .setInput(plan.getRoot)
       .addAllColumnNames(colNames.asJava)
@@ -2042,7 +2042,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def describe(cols: String*): DataFrame = session.newDataset { builder =>
+  def describe(cols: String*): DataFrame = sparkSession.newDataset { builder =>
     builder.getDescribeBuilder
       .setInput(plan.getRoot)
       .addAllCols(cols.asJava)
@@ -2117,7 +2117,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def summary(statistics: String*): DataFrame = session.newDataset { builder =>
+  def summary(statistics: String*): DataFrame = sparkSession.newDataset { builder =>
     builder.getSummaryBuilder
       .setInput(plan.getRoot)
       .addAllStatistics(statistics.asJava)
@@ -2185,7 +2185,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @since 3.4.0
    */
   def tail(n: Int): Array[T] = {
-    val lastN = session.newDataset[T] { builder =>
+    val lastN = sparkSession.newDataset[T] { builder =>
       builder.getTailBuilder
         .setInput(plan.getRoot)
         .setLimit(n)
@@ -2257,7 +2257,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   }
 
   private def buildRepartition(numPartitions: Int, shuffle: Boolean): Dataset[T] = {
-    session.newDataset { builder =>
+    sparkSession.newDataset { builder =>
       builder.getRepartitionBuilder
         .setInput(plan.getRoot)
         .setNumPartitions(numPartitions)
@@ -2267,7 +2267,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
 
   private def buildRepartitionByExpression(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = session.newDataset { builder =>
+      partitionExprs: Seq[Column]): Dataset[T] = sparkSession.newDataset { builder =>
     val repartitionBuilder = builder.getRepartitionByExpressionBuilder
       .setInput(plan.getRoot)
       .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
@@ -2462,10 +2462,10 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {
-    session.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
+    sparkSession.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
   }
 
-  def collectResult(): SparkResult = session.execute(plan)
+  def collectResult(): SparkResult = sparkSession.execute(plan)
 
   private[sql] def withResult[E](f: SparkResult => E): E = {
     val result = collectResult()
