@@ -184,8 +184,7 @@ private case object OracleDialect extends JdbcDialect {
   override def getOffsetClause(offset: Integer): String = {
     // Oracle doesn't support OFFSET clause.
     // We can use rownum > n to skip some rows in the result set.
-    // Note: rn is a alias of rownum.
-    if (offset > 0) s"WHERE rn > $offset" else ""
+    if (offset > 0) s"WHERE rownum > $offset" else ""
   }
 
   class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
