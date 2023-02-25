@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-
 trait TPCDSBase extends TPCBase with TPCDSSchema {
 
   // The TPCDS queries below are based on v1.4
@@ -65,9 +63,9 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
     }
   }
 
-  val tableNames: Iterable[String] = tableColumns.keys
+  override protected val tableNames: Iterable[String] = tableColumns.keys
 
-  def createTable(
+  override protected def createTable(
       spark: SparkSession,
       tableName: String,
       format: String = "parquet",
@@ -81,20 +79,4 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
        """.stripMargin)
   }
 
-  override def createTables(): Unit = {
-    tableNames.foreach { tableName =>
-      createTable(spark, tableName)
-      if (injectStats) {
-        // To simulate plan generation on actual TPC-DS data, injects data stats here
-        spark.sessionState.catalog.alterTableStats(
-          TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
-      }
-    }
-  }
-
-  override def dropTables(): Unit = {
-    tableNames.foreach { tableName =>
-      spark.sessionState.catalog.dropTable(TableIdentifier(tableName), true, true)
-    }
-  }
 }

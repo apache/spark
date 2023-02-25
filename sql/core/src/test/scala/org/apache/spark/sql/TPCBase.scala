@@ -18,12 +18,14 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-trait TPCBase extends SharedSparkSession {
+trait TPCBase extends SharedSparkSession with TPCSchema {
 
   protected def injectStats: Boolean = false
+  protected val tableNames: Iterable[String]
 
   override protected def sparkConf: SparkConf = {
     if (injectStats) {
@@ -47,7 +49,26 @@ trait TPCBase extends SharedSparkSession {
     super.afterAll()
   }
 
-  protected def createTables(): Unit
+  protected def createTable(
+      spark: SparkSession,
+      tableName: String,
+      format: String = "parquet",
+      options: Seq[String] = Nil): Unit = {}
 
-  protected def dropTables(): Unit
+  protected def createTables(): Unit = {
+    tableNames.foreach { tableName =>
+      createTable(spark, tableName)
+      if (injectStats) {
+        // To simulate plan generation on actual TPC-H/TPC-DS data, injects data stats here
+        spark.sessionState.catalog.alterTableStats(
+          TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
+      }
+    }
+  }
+
+  protected def dropTables(): Unit = {
+    tableNames.foreach { tableName =>
+      spark.sessionState.catalog.dropTable(TableIdentifier(tableName), true, true)
+    }
+  }
 }

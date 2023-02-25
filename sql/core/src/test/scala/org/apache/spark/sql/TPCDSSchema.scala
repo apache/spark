@@ -41,9 +41,9 @@ package org.apache.spark.sql
  *    |     Date      |     Date      |
  *    |---------------|---------------|
  */
-trait TPCDSSchema {
+trait TPCDSSchema extends TPCSchema {
 
-  protected val tableColumns: Map[String, String] = Map(
+  override protected val tableColumns: Map[String, String] = Map(
     "store_sales" ->
       """
         |`ss_sold_date_sk` INT,
@@ -543,7 +543,7 @@ trait TPCDSSchema {
   )
 
   // The partition column is consistent with the databricks/spark-sql-perf project.
-  protected val tablePartitionColumns = Map(
+  override protected val tablePartitionColumns = Map(
     "catalog_sales" -> Seq("`cs_sold_date_sk`"),
     "catalog_returns" -> Seq("`cr_returned_date_sk`"),
     "inventory" -> Seq("`inv_date_sk`"),
