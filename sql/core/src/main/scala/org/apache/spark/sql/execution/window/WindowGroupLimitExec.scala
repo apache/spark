@@ -110,9 +110,9 @@ case class WindowGroupLimitExec(
     ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
 
     if (partitionSpec.nonEmpty) {
-      groupMapVariable = ctx.addMutableState("java.util.Map<java.lang.Object, java.lang.Integer>",
+      groupMapVariable = ctx.addMutableState("java.util.Map<String, Integer>",
         "groupMapVariable",
-        v => s"$v = new java.util.HashMap<java.lang.Object, java.lang.Integer>();",
+        v => s"$v = new java.util.HashMap<String, Integer>();",
         forceInline = true)
     }
 
@@ -129,18 +129,33 @@ case class WindowGroupLimitExec(
            | }
          """.stripMargin
       case _: RowNumber =>
-        val partitionExprs = BindReferences.bindReferences[Expression](partitionSpec, output)
+        val partitionExprs = BindReferences.bindReferences[Expression](partitionSpec, child.output)
         val partitionEvs = partitionExprs.map(ExpressionCanonicalizer.execute(_).genCode(ctx))
-        val partitionValues = partitionEvs.zip(partitionSpec.map(_.dataType)).map {
-          case (ev, StringType) => s"${ev.value}.toString()"
-          case (ev, _: NumericType) => s"String.valueOf(${ev.value})"
-          case (ev, _) => s"${ev.value}"
-        }
+        val partitionValues = ctx.addMutableState("java.util.List<String>",
+          "partitionValues", v => s"$v = new java.util.ArrayList<String>();",
+          forceInline = true)
+        val setPartitionValuesCode = partitionEvs.zip(partitionSpec.map(_.dataType)).map {
+          case (ev, dataType) =>
+            val stringValue = dataType match {
+              case StringType => s"${ev.value}.toString()"
+              case _: NumericType => s"String.valueOf(${ev.value})"
+              case _ => s"${ev.value}"
+            }
+            s"""
+               | if (${ev.isNull}) {
+               |   $partitionValues.add("");
+               | } else {
+               |   $partitionValues.add($stringValue);
+               | }
+             """.stripMargin
+        }.mkString("\n")
         val group = ctx.freshName("group")
         val rankValue = ctx.freshName("rankValue")
         s"""
            | int $rankValue = 0;
-           | String $group = ${partitionValues.mkString(""" + "," + """)};
+           | ${partitionEvs.map(_.code).mkString("\n")}
+           | $setPartitionValuesCode
+           | String $group = String.join(",", $partitionValues);
            | if ($groupMapVariable.containsKey($group)) {
            |   $rankValue = (Integer) $groupMapVariable.get($group);
            | }
