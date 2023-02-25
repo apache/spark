@@ -1131,7 +1131,7 @@ class DataFrameTestsMixin:
     def test_to_pandas_with_duplicated_column_names(self):
         for arrow_enabled in [False, True]:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-                self.check_to_pandas_with_duplicated_column_names(arrow_enabled)
+                self.check_to_pandas_with_duplicated_column_names()
 
     def check_to_pandas_with_duplicated_column_names(self):
         import numpy as np
