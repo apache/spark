@@ -192,6 +192,12 @@ class SparkSession(
     new Dataset[T](this, plan)
   }
 
+  private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
+    val builder = proto.Command.newBuilder()
+    f(builder)
+    builder.build()
+  }
+
   private[sql] def analyze(
       plan: proto.Plan,
       mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
