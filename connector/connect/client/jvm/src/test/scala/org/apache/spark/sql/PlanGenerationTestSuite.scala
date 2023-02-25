@@ -35,6 +35,7 @@ import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 // scalastyle:off
 /**
@@ -1971,7 +1972,16 @@ class PlanGenerationTestSuite
       fn.lit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.lit(Array.tabulate(23)(i => (i + 120).toByte)),
       fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
-      fn.lit(java.time.LocalDate.of(2020, 10, 10)))
+      fn.lit(null),
+      fn.lit(java.time.LocalDate.of(2020, 10, 10)),
+      fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
+      fn.lit(java.time.Instant.ofEpochMilli(1677155519808L)),
+      fn.lit(new java.sql.Timestamp(12345L)),
+      fn.lit(java.time.LocalDateTime.of(2023, 2, 23, 20, 36)),
+      fn.lit(java.sql.Date.valueOf("2023-02-23")),
+      fn.lit(java.time.Duration.ofSeconds(200L)),
+      fn.lit(java.time.Period.ofDays(100)),
+      fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
   /* Window API */
