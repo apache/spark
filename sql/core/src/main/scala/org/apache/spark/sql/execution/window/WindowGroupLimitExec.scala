@@ -154,6 +154,7 @@ case class WindowGroupLimitExec(
         s"""
            | int $rankValue = 0;
            | ${partitionEvs.map(_.code).mkString("\n")}
+           | $partitionValues.clear();
            | $setPartitionValuesCode
            | String $group = String.join(",", $partitionValues);
            | if ($groupMapVariable.containsKey($group)) {
