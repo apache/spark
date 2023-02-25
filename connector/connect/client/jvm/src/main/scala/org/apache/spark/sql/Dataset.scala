@@ -2555,6 +2555,60 @@ class Dataset[T] private[sql] (val sparkSession: SparkSession, private[sql] val 
     new DataFrameWriterV2[T](table, this)
   }
 
+  def unpersist(blocking: Boolean): this.type = {
+    throw new UnsupportedOperationException("unpersist() is not implemented.")
+  }
+
+  def unpersist(): this.type = unpersist(blocking = false)
+
+  def cache(): this.type = {
+    throw new UnsupportedOperationException("cache() is not implemented.")
+  }
+
+  def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {
+    throw new UnsupportedOperationException("withWatermark is not implemented.")
+  }
+
+  def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
+    throw new UnsupportedOperationException("observe is not implemented.")
+  }
+
+  def foreach(f: T => Unit): Unit = {
+    throw new UnsupportedOperationException("foreach is not implemented.")
+  }
+
+  def foreachPartition(f: Iterator[T] => Unit): Unit = {
+    throw new UnsupportedOperationException("foreach is not implemented.")
+  }
+
+  def checkpoint(): Dataset[T] = {
+    throw new UnsupportedOperationException("checkpoint is not implemented.")
+  }
+
+  def checkpoint(eager: Boolean): Dataset[T] = {
+    throw new UnsupportedOperationException("checkpoint is not implemented.")
+  }
+
+  def localCheckpoint(): Dataset[T] = {
+    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
+  }
+
+  def localCheckpoint(eager: Boolean): Dataset[T] = {
+    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
+  }
+
+  def sameSemantics(other: Dataset[T]): Boolean = {
+    throw new UnsupportedOperationException("sameSemantics is not implemented.")
+  }
+
+  def semanticHash(): Int = {
+    throw new UnsupportedOperationException("semanticHash is not implemented.")
+  }
+
+  def toJSON: Dataset[String] = {
+    throw new UnsupportedOperationException("toJSON is not implemented.")
+  }
+
   private[sql] def analyze: proto.AnalyzePlanResponse = {
     sparkSession.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
   }
