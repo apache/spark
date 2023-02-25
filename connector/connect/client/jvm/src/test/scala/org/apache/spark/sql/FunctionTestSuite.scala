@@ -18,8 +18,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ignore funsuite
-
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
 

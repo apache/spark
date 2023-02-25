@@ -22,19 +22,17 @@ import java.util.concurrent.atomic.AtomicLong
 import io.grpc.Server
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
 
 // Add sample tests.
 // - sample fraction: simple.sample(0.1)
 // - sample withReplacement_fraction: simple.sample(withReplacement = true, 0.11)
 // Add tests for exceptions thrown
-class DatasetSuite
-    extends AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterEach {
+class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private var server: Server = _
   private var service: DummySparkConnectService = _
