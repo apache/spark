@@ -1913,7 +1913,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
    * @group basic
    * @since 3.4.0
    */
-  @deprecated("Use createOrReplaceTempView(viewName) instead.", "2.0.0")
+  @deprecated("Use createOrReplaceTempView(viewName) instead.", "3.4.0")
   def registerTempTable(tableName: String): Unit = {
     createOrReplaceTempView(tableName)
   }
