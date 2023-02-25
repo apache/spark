@@ -255,15 +255,14 @@ class DataSource(LogicalPlan):
 
     def __init__(
         self,
-        format: str,
+        format: Optional[str] = None,
         schema: Optional[str] = None,
         options: Optional[Mapping[str, str]] = None,
         paths: Optional[List[str]] = None,
     ) -> None:
         super().__init__(None)
 
-        assert isinstance(format, str) and format != ""
-
+        assert format is None or isinstance(format, str)
         assert schema is None or isinstance(schema, str)
 
         if options is not None:
@@ -282,7 +281,8 @@ class DataSource(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
-        plan.read.data_source.format = self._format
+        if self._format is not None:
+            plan.read.data_source.format = self._format
         if self._schema is not None:
             plan.read.data_source.schema = self._schema
         if self._options is not None and len(self._options) > 0:
