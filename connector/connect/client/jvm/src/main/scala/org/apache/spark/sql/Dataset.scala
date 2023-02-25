@@ -2508,7 +2508,7 @@ class Dataset[T] private[sql] (val session: SparkSession, private[sql] val plan:
   }
 
   def semanticHash(): Int = {
-    throw new UnsupportedOperationException("sameSemantics is not implemented.")
+    throw new UnsupportedOperationException("semanticHash is not implemented.")
   }
 
   def toJSON: Dataset[String] = {
