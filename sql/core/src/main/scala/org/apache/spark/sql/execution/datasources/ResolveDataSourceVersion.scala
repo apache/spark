@@ -17,17 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
-import org.apache.spark.sql.connector.catalog.TableCapability.{CONTINUOUS_READ, MICRO_BATCH_READ}
+import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object ResolveDataSourceVersion extends Rule[LogicalPlan] {
 
@@ -50,6 +45,7 @@ object ResolveDataSourceVersion extends Rule[LogicalPlan] {
 
         // fallback to v1
         case _ => StreamingRelation(v1DataSource)
+        // TODO: Add dataframeReader fall back logic
       }
   }
 }
