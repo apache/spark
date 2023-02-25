@@ -47,7 +47,12 @@ public interface Column {
     return create(name, dataType, nullable, null, null);
   }
 
-  static Column create(String name, DataType dataType, boolean nullable, String comment, String metadataInJSON) {
+  static Column create(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      String comment,
+      String metadataInJSON) {
     return new ColumnImpl(name, dataType, nullable, comment, null, null, metadataInJSON);
   }
 
@@ -68,7 +73,8 @@ public interface Column {
       String comment,
       String generationExpression,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null, generationExpression, metadataInJSON);
+    return new ColumnImpl(name, dataType, nullable, comment, null,
+            generationExpression, metadataInJSON);
   }
 
   /**

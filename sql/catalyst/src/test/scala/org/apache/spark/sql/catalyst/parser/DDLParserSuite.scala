@@ -23,7 +23,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
@@ -2722,7 +2722,9 @@ class DDLParserSuite extends AnalysisTest {
     val schemaWithGeneratedColumn = new StructType()
       .add("a", IntegerType, true)
       .add("b", IntegerType, false,
-        new MetadataBuilder().putString("generationExpression", "a+1").build())
+        new MetadataBuilder()
+          .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, "a+1")
+          .build())
     comparePlans(parsePlan(
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
