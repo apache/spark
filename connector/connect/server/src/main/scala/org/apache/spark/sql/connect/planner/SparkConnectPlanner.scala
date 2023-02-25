@@ -24,7 +24,7 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.SimplePythonFunction
+import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
@@ -106,6 +106,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
+      case proto.Relation.RelTypeCase.FRAME_MAP =>
+        transformFrameMap(rel.getFrameMap)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -456,6 +458,20 @@ class SparkConnectPlanner(val session: SparkSession) {
       .ofRows(session, transformRelation(rel.getInput))
       .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
       .logicalPlan
+  }
+
+  private def transformFrameMap(rel: proto.FrameMap): LogicalPlan = {
+    val commonUdf = rel.getFunc
+    val pythonUdf = transformPythonUDF(commonUdf)
+    pythonUdf.evalType match {
+      case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
+        logical.MapInPandas(
+          pythonUdf,
+          pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+          transformRelation(rel.getInput))
+      case _ =>
+        throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+    }
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {

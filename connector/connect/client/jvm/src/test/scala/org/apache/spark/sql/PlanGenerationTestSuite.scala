@@ -18,13 +18,14 @@ package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
@@ -56,7 +57,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * `connector/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll with Logging {
+class PlanGenerationTestSuite
+    extends ConnectFunSuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach
+    with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
@@ -100,11 +105,15 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val client = new SparkConnectClient(
+    val client = SparkConnectClient(
       proto.UserContext.newBuilder().build(),
       InProcessChannelBuilder.forName("/dev/null").build())
-    val builder = SparkSession.builder().client(client)
-    session = builder.build()
+    session =
+      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+  }
+
+  override protected def beforeEach(): Unit = {
+    session.resetPlanIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -222,6 +231,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   /* Spark Session API */
   test("sql") {
     session.sql("select 1")
+  }
+
+  test("parameterized sql") {
+    session.sql("select 1", Map("minId" -> "7", "maxId" -> "20"))
   }
 
   test("range") {
@@ -358,7 +371,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("apply") {
-    simple.select(simple.apply("a"))
+    val stable = simple
+    stable.select(stable("a"))
   }
 
   test("hint") {
@@ -366,7 +380,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("col") {
-    simple.select(simple.col("id"), simple.col("b"))
+    val stable = simple
+    stable.select(stable.col("id"), stable.col("b"))
   }
 
   test("colRegex") {
