@@ -71,7 +71,7 @@ class DatasetSuite
   }
 
   test("write") {
-    val df = ss.newDataset(_ => ()).limit(10)
+    val df = ss.newDataFrame(_ => ()).limit(10)
 
     val builder = proto.WriteOperation.newBuilder()
     builder
@@ -103,7 +103,7 @@ class DatasetSuite
   }
 
   test("write V2") {
-    val df = ss.newDataset(_ => ()).limit(10)
+    val df = ss.newDataFrame(_ => ()).limit(10)
 
     val builder = proto.WriteOperationV2.newBuilder()
     builder

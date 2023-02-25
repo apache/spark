@@ -107,11 +107,18 @@ object AgnosticEncoders {
     override def dataType: DataType = schema
   }
 
-  case class RowEncoder(fields: Seq[EncoderField]) extends AgnosticEncoder[Row] {
+  abstract class BaseRowEncoder extends AgnosticEncoder[Row] {
     override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
     override def clsTag: ClassTag[Row] = classTag[Row]
+  }
+
+  case class RowEncoder(fields: Seq[EncoderField]) extends BaseRowEncoder {
+    override val schema: StructType = StructType(fields.map(_.structField))
+  }
+
+  object UnboundRowEncoder extends BaseRowEncoder {
+    override val schema: StructType = new StructType()
   }
 
   case class JavaBeanEncoder[K](

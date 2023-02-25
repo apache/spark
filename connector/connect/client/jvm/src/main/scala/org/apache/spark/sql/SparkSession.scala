@@ -26,6 +26,8 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.Cleaner
 
@@ -87,7 +89,7 @@ class SparkSession(
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataset {
+  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataFrame {
     builder =>
       builder
         .setSql(proto.SQL.newBuilder().setQuery(sqlText).putAllArgs(args))
@@ -138,7 +140,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(end: Long): Dataset[Row] = range(0, end)
+  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -146,7 +148,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long): Dataset[Row] = {
+  def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1)
   }
 
@@ -156,7 +158,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long): Dataset[Row] = {
+  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, None)
   }
 
@@ -166,7 +168,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Row] = {
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     range(start, end, step, Option(numPartitions))
   }
 
@@ -174,8 +176,8 @@ class SparkSession(
       start: Long,
       end: Long,
       step: Long,
-      numPartitions: Option[Int]): Dataset[Row] = {
-    newDataset { builder =>
+      numPartitions: Option[Int]): Dataset[java.lang.Long] = {
+    newDataset(BoxedLongEncoder) { builder =>
       val rangeBuilder = builder.getRangeBuilder
         .setStart(start)
         .setEnd(end)
@@ -184,12 +186,18 @@ class SparkSession(
     }
   }
 
-  private[sql] def newDataset[T](f: proto.Relation.Builder => Unit): Dataset[T] = {
+  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
+    newDataset(UnboundRowEncoder)(f)
+  }
+
+  private[sql] def newDataset[T](
+      encoder: AgnosticEncoder[T])(
+      f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    new Dataset[T](this, plan)
+    new Dataset[T](this, plan, encoder)
   }
 
   private[sql] def analyze(
@@ -197,9 +205,9 @@ class SparkSession(
       mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
     client.analyze(plan, mode)
 
-  private[sql] def execute(plan: proto.Plan): SparkResult = {
+  private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator)
+    val result = new SparkResult(value, allocator, encoder)
     cleaner.register(result)
     result
   }

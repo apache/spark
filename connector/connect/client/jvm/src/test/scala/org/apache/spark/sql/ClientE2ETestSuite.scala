@@ -53,9 +53,9 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val df = spark.range(10).limit(3)
     val result = df.collect()
     assert(result.length == 3)
-    assert(result(0).getLong(0) == 0)
-    assert(result(1).getLong(0) == 1)
-    assert(result(2).getLong(0) == 2)
+    assert(result(0) == 0)
+    assert(result(1) == 1)
+    assert(result(2) == 2)
   }
 
   test("simple udf") {
@@ -241,7 +241,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   // Dataset tests
   test("Dataset inspection") {
     val df = spark.range(10)
-    val local = spark.newDataset { builder =>
+    val local = spark.newDataFrame { builder =>
       builder.getLocalRelationBuilder.setSchema(simpleSchema.catalogString)
     }
     assert(!df.isLocal)
@@ -281,9 +281,9 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset result collection") {
-    def checkResult(rows: TraversableOnce[Row], expectedValues: Long*): Unit = {
+    def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
       rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {
-        case (actual, expected) => assert(actual.getLong(0) === expected)
+        case (actual, expected) => assert(actual === expected)
       }
     }
     val df = spark.range(10)
@@ -354,7 +354,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     implicit val tolerance = TolerantNumerics.tolerantDoubleEquality(0.01)
 
     val df = spark.range(100)
-    def checkSample(ds: DataFrame, lower: Double, upper: Double, seed: Long): Unit = {
+    def checkSample(ds: Dataset[java.lang.Long], lower: Double, upper: Double, seed: Long): Unit = {
       assert(ds.plan.getRoot.hasSample)
       val sample = ds.plan.getRoot.getSample
       assert(sample.getSeed === seed)
