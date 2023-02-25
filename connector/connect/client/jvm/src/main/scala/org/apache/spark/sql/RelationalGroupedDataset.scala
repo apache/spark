@@ -41,7 +41,7 @@ class RelationalGroupedDataset protected[sql] (
     groupType: proto.Aggregate.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
-    df.session.newDataset { builder =>
+    df.sparkSession.newDataset { builder =>
       builder.getAggregateBuilder
         .setInput(df.plan.getRoot)
         .addAllGroupingExpressions(groupingExprs.asJava)
