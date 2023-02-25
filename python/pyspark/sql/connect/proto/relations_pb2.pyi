@@ -602,7 +602,10 @@ class Read(google.protobuf.message.Message):
         OPTIONS_FIELD_NUMBER: builtins.int
         PATHS_FIELD_NUMBER: builtins.int
         format: builtins.str
-        """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro."""
+        """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+
+        If not set, the value from SQL conf 'spark.sql.sources.default' will be used.
+        """
         schema: builtins.str
         """(Optional) If not set, Spark will infer the schema.
 
