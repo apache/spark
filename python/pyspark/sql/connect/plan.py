@@ -956,6 +956,14 @@ class SQL(LogicalPlan):
 
         return plan
 
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        cmd = proto.Command()
+        cmd.sql_command.sql = self._query
+        if self._args is not None and len(self._args) > 0:
+            for k, v in self._args.items():
+                cmd.sql_command.args[k] = v
+        return cmd
+
 
 class Range(LogicalPlan):
     def __init__(
@@ -1863,14 +1871,3 @@ class ListCatalogs(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
-
-
-class SqlCommand(LogicalPlan):
-    def __init__(self, sql: str) -> None:
-        super(SqlCommand, self).__init__(None)
-        self._sql = sql
-
-    def command(self, session: "SparkConnectClient") -> proto.Command:
-        cmd = proto.Command()
-        cmd.sql_command.sql = self._sql
-        return cmd

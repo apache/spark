@@ -522,6 +522,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         table, _, _2 = self._execute_and_fetch(req)
+        assert table is not None
         return table
 
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
@@ -532,6 +533,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         table, metrics, _ = self._execute_and_fetch(req)
+        assert table is not None
         pdf = table.to_pandas()
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -599,7 +601,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
         data, _, properties = self._execute_and_fetch(req)
-        if data:
+        if data is not None:
             return (data.to_pandas(), properties)
         else:
             return (None, properties)
@@ -703,7 +705,7 @@ class SparkConnectClient(object):
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple["pa.Table", List[PlanMetrics], Dict[str, Any]]:
+    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], Dict[str, Any]]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
@@ -738,10 +740,13 @@ class SparkConnectClient(object):
                                     batches.append(batch)
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
-        assert len(batches) > 0
-        table = pa.Table.from_batches(batches=batches)
         metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
-        return table, metrics, properties
+
+        if len(batches) > 0:
+            table = pa.Table.from_batches(batches=batches)
+            return table, metrics, properties
+        else:
+            return None, metrics, properties
 
     def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """

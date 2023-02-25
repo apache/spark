@@ -147,14 +147,39 @@ global___Command = Command
 class SqlCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class ArgsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
     SQL_FIELD_NUMBER: builtins.int
+    ARGS_FIELD_NUMBER: builtins.int
     sql: builtins.str
+    """(Required) SQL Query."""
+    @property
+    def args(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """(Optional) A map of parameter names to literal values."""
     def __init__(
         self,
         *,
         sql: builtins.str = ...,
+        args: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["sql", b"sql"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["args", b"args", "sql", b"sql"]
+    ) -> None: ...
 
 global___SqlCommand = SqlCommand
 

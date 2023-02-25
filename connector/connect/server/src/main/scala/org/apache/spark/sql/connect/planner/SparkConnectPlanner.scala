@@ -1452,7 +1452,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       getSqlCommand: SqlCommand,
       clientId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    val df = session.sql(getSqlCommand.getSql)
+    val df = session.sql(getSqlCommand.getSql, getSqlCommand.getArgsMap)
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
     responseObserver.onNext(
       ExecutePlanResponse
