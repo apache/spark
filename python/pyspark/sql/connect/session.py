@@ -47,6 +47,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
@@ -421,8 +422,8 @@ class SparkSession:
         raise NotImplementedError("newSession() is not implemented.")
 
     @property
-    def conf(self) -> Any:
-        raise NotImplementedError("conf() is not implemented.")
+    def conf(self) -> RuntimeConf:
+        return RuntimeConf(self.client)
 
     @property
     def sparkContext(self) -> Any:

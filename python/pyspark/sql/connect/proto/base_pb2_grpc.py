@@ -40,6 +40,11 @@ class SparkConnectServiceStub(object):
             request_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
         )
+        self.Config = channel.unary_unary(
+            "/spark.connect.SparkConnectService/Config",
+            request_serializer=spark_dot_connect_dot_base__pb2.ConfigRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.ConfigResponse.FromString,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -60,6 +65,12 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def Config(self, request, context):
+        """Update or fetch the configurations and returns a [[ConfigResponse]] containing the result."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -72,6 +83,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.AnalyzePlan,
             request_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.SerializeToString,
+        ),
+        "Config": grpc.unary_unary_rpc_method_handler(
+            servicer.Config,
+            request_deserializer=spark_dot_connect_dot_base__pb2.ConfigRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.ConfigResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -132,6 +148,35 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/AnalyzePlan",
             spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def Config(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/Config",
+            spark_dot_connect_dot_base__pb2.ConfigRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.ConfigResponse.FromString,
             options,
             channel_credentials,
             insecure,
