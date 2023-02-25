@@ -24,8 +24,8 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.util.Utils
 
 /**
- * This object provides a global list of configured relation and expression plugins for Spark
- * Connect. The plugins are used to handle custom message types.
+ * This object provides a global list of configured relation, expression and command plugins for
+ * Spark Connect. The plugins are used to handle custom message types.
  */
 object SparkConnectPluginRegistry {
 

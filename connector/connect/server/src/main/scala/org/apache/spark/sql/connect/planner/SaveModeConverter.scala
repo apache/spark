@@ -31,7 +31,7 @@ object SaveModeConverter {
       case proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS => SaveMode.ErrorIfExists
       case _ =>
         throw new IllegalArgumentException(
-          s"Cannot convert from WriteOperaton.SaveMode to Spark SaveMode: ${mode.getNumber}")
+          s"Cannot convert from WriteOperation.SaveMode to Spark SaveMode: ${mode.getNumber}")
     }
   }
 
