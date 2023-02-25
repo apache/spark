@@ -60,6 +60,7 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
+    FrameMap frame_map = 28;
 
     // NA functions
     NAFill fill_na = 90;
@@ -121,8 +122,10 @@ message Read {
   }
 
   message DataSource {
-    // (Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
-    string format = 1;
+    // (Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    //
+    // If not set, the value from SQL conf 'spark.sql.sources.default' will be used.
+    optional string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
     //
@@ -768,3 +771,12 @@ message RepartitionByExpression {
   // (Optional) number of partitions, must be positive.
   optional int32 num_partitions = 3;
 }
+
+message FrameMap {
+  // (Required) Input relation for a Frame Map API: mapInPandas, mapInArrow.
+  Relation input = 1;
+
+  // (Required) Input user-defined function of a Frame Map API.
+  CommonInlineUserDefinedFunction func = 2;
+}
+

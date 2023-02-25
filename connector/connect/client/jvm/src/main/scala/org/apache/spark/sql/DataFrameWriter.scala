@@ -252,7 +252,7 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
       builder.putOptions(k, v)
     }
 
-    ds.session.execute(proto.Command.newBuilder().setWriteOperation(builder).build())
+    ds.sparkSession.execute(proto.Command.newBuilder().setWriteOperation(builder).build())
   }
 
   /**

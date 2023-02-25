@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "1"
+  },
   "withColumns": {
     "input": {
+      "common": {
+        "planId": "0"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
@@ -8,7 +14,8 @@
     "aliases": [{
       "expr": {
         "unresolvedAttribute": {
-          "unparsedIdentifier": "id"
+          "unparsedIdentifier": "id",
+          "planId": "0"
         }
       },
       "name": ["id"],

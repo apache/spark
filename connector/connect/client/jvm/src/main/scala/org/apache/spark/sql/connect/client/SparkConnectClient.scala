@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.connect.client
 
-import scala.language.existentials
-
-import io.grpc.{ManagedChannel, ManagedChannelBuilder}
+import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 import java.net.URI
 import java.util.UUID
+import java.util.concurrent.Executor
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 /**
  * Conceptually the remote spark session that communicates with the server.
  */
-class SparkConnectClient(
+private[sql] class SparkConnectClient(
     private val userContext: proto.UserContext,
-    private val channel: ManagedChannel) {
+    private val channel: ManagedChannel,
+    private[client] val userAgent: String) {
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
@@ -40,7 +41,7 @@ class SparkConnectClient(
    * @return
    *   User ID.
    */
-  def userId: String = userContext.getUserId()
+  private[client] def userId: String = userContext.getUserId()
 
   // Generate a unique session ID for this client. This UUID must be unique to allow
   // concurrent Spark sessions of the same user. If the channel is closed, creating
@@ -60,6 +61,8 @@ class SparkConnectClient(
       .newBuilder()
       .setPlan(plan)
       .setUserContext(userContext)
+      .setClientId(sessionId)
+      .setClientType(userAgent)
       .build()
     stub.executePlan(request)
   }
@@ -77,6 +80,7 @@ class SparkConnectClient(
       .setExplain(proto.Explain.newBuilder().setExplainMode(mode))
       .setUserContext(userContext)
       .setClientId(sessionId)
+      .setClientType(userAgent)
       .build()
     analyze(request)
   }
@@ -89,7 +93,21 @@ class SparkConnectClient(
   }
 }
 
-object SparkConnectClient {
+private[sql] object SparkConnectClient {
+
+  private val DEFAULT_USER_AGENT: String = "_SPARK_CONNECT_SCALA"
+
+  private val AUTH_TOKEN_META_DATA_KEY: Metadata.Key[String] =
+    Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
+
+  private val AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG: String =
+    "Authentication token cannot be passed over insecure connections. " +
+      "Either remove 'token' or set 'use_ssl=true'"
+
+  // for internal tests
+  def apply(userContext: UserContext, channel: ManagedChannel): SparkConnectClient =
+    new SparkConnectClient(userContext, channel, DEFAULT_USER_AGENT)
+
   def builder(): Builder = new Builder()
 
   /**
@@ -98,11 +116,24 @@ object SparkConnectClient {
    */
   class Builder() {
     private val userContextBuilder = proto.UserContext.newBuilder()
+    private var userAgent: Option[String] = None
+
     private var host: String = "localhost"
     private var port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
 
+    private var token: Option[String] = None
+    // If no value specified for isSslEnabled, default to false
+    private var isSslEnabled: Option[Boolean] = None
+
+    private var metadata: Map[String, String] = Map.empty
+
     def userId(id: String): Builder = {
       userContextBuilder.setUserId(id)
+      this
+    }
+
+    def userName(name: String): Builder = {
+      userContextBuilder.setUserName(name)
       this
     }
 
@@ -117,10 +148,58 @@ object SparkConnectClient {
       this
     }
 
+    /**
+     * Setting the token implicitly sets the use_ssl=true. All the following examples yield the
+     * same results:
+     *
+     * {{{
+     * sc://localhost/;token=aaa
+     * sc://localhost/;use_ssl=true;token=aaa
+     * sc://localhost/;token=aaa;use_ssl=true
+     * }}}
+     *
+     * Throws exception if the token is set but use_ssl=false.
+     *
+     * @param inputToken
+     *   the user token.
+     * @return
+     *   this builder.
+     */
+    def token(inputToken: String): Builder = {
+      require(inputToken != null && inputToken.nonEmpty)
+      token = Some(inputToken)
+      // Only set the isSSlEnabled if it is not yet set
+      isSslEnabled match {
+        case None => isSslEnabled = Some(true)
+        case Some(false) =>
+          throw new IllegalArgumentException(AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
+        case Some(true) => // Good, the ssl is enabled
+      }
+      this
+    }
+
+    def enableSsl(): Builder = {
+      isSslEnabled = Some(true)
+      this
+    }
+
+    /**
+     * Disables the SSL. Throws exception if the token has been set.
+     *
+     * @return
+     *   this builder.
+     */
+    def disableSsl(): Builder = {
+      require(token.isEmpty, AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
+      isSslEnabled = Some(false)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
       val PARAM_TOKEN = "token"
+      val PARAM_USER_AGENT = "user_agent"
     }
 
     private def verifyURI(uri: URI): Unit = {
@@ -146,6 +225,12 @@ object SparkConnectClient {
       }
     }
 
+    def userAgent(value: String): Builder = {
+      require(value != null)
+      userAgent = Some(value)
+      this
+    }
+
     private def parseURIParams(uri: URI): Unit = {
       val params = uri.getPath.split(';').drop(1).filter(_ != "")
       params.foreach { kv =>
@@ -158,13 +243,13 @@ object SparkConnectClient {
           }
           (arr(0), arr(1))
         }
-        if (key == URIParams.PARAM_USER_ID) {
-          userContextBuilder.setUserId(value)
-        } else {
-          // TODO(SPARK-41917): Support SSL and Auth tokens.
-          throw new UnsupportedOperationException(
-            "Parameters apart from user_id" +
-              " are currently unsupported.")
+        key match {
+          case URIParams.PARAM_USER_ID => userId(value)
+          case URIParams.PARAM_USER_AGENT => userAgent(value)
+          case URIParams.PARAM_TOKEN => token(value)
+          case URIParams.PARAM_USE_SSL =>
+            if (java.lang.Boolean.valueOf(value)) enableSsl() else disableSsl()
+          case _ => this.metadata = this.metadata + (key -> value)
         }
       }
     }
@@ -176,7 +261,6 @@ object SparkConnectClient {
      * Note: The connection string, if used, will override any previous host/port settings.
      */
     def connectionString(connectionString: String): Builder = {
-      // TODO(SPARK-41917): Support SSL and Auth tokens.
       val uri = new URI(connectionString)
       verifyURI(uri)
       parseURIParams(uri)
@@ -189,9 +273,84 @@ object SparkConnectClient {
     }
 
     def build(): SparkConnectClient = {
-      val channelBuilder = ManagedChannelBuilder.forAddress(host, port).usePlaintext()
+      val creds = isSslEnabled match {
+        case Some(false) | None => InsecureChannelCredentials.create()
+        case Some(true) =>
+          token match {
+            case Some(t) =>
+              // With access token added in the http header.
+              CompositeChannelCredentials.create(
+                TlsChannelCredentials.create,
+                new AccessTokenCallCredentials(t))
+            case None =>
+              TlsChannelCredentials.create
+          }
+      }
+
+      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, creds)
+      if (metadata.nonEmpty) {
+        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
+      }
       val channel: ManagedChannel = channelBuilder.build()
-      new SparkConnectClient(userContextBuilder.build(), channel)
+      new SparkConnectClient(
+        userContextBuilder.build(),
+        channel,
+        userAgent.getOrElse(DEFAULT_USER_AGENT))
+    }
+  }
+
+  /**
+   * A [[CallCredentials]] created from an access token.
+   *
+   * @param token
+   *   A string to place directly in the http request authorization header, for example
+   *   "authorization: Bearer <access_token>".
+   */
+  private[client] class AccessTokenCallCredentials(token: String) extends CallCredentials {
+    override def applyRequestMetadata(
+        requestInfo: CallCredentials.RequestInfo,
+        appExecutor: Executor,
+        applier: CallCredentials.MetadataApplier): Unit = {
+      appExecutor.execute(() => {
+        try {
+          val headers = new Metadata()
+          headers.put(AUTH_TOKEN_META_DATA_KEY, s"Bearer $token");
+          applier.apply(headers)
+        } catch {
+          case e: Throwable =>
+            applier.fail(Status.UNAUTHENTICATED.withCause(e));
+        }
+      })
+    }
+
+    override def thisUsesUnstableApi(): Unit = {
+      // Marks this API is not stable. Left empty on purpose.
+    }
+  }
+
+  /**
+   * A client interceptor to pass extra parameters in http request header.
+   *
+   * @param metadata
+   *   extra metadata placed in the http request header, for example "key: value".
+   */
+  private[client] class MetadataHeaderClientInterceptor(metadata: Map[String, String])
+      extends ClientInterceptor {
+    override def interceptCall[ReqT, RespT](
+        method: MethodDescriptor[ReqT, RespT],
+        callOptions: CallOptions,
+        next: Channel): ClientCall[ReqT, RespT] = {
+      new ForwardingClientCall.SimpleForwardingClientCall[ReqT, RespT](
+        next.newCall(method, callOptions)) {
+        override def start(
+            responseListener: ClientCall.Listener[RespT],
+            headers: Metadata): Unit = {
+          metadata.foreach { case (key, value) =>
+            headers.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+          }
+          super.start(responseListener, headers)
+        }
+      }
     }
   }
 }

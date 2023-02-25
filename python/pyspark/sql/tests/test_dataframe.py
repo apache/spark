@@ -144,6 +144,15 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "subset", "arg_type": "str"},
         )
 
+    def test_drop_duplicates_with_ambiguous_reference(self):
+        df1 = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        df2 = self.spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
+        df3 = df1.join(df2, df1.name == df2.name, "inner")
+
+        self.assertEqual(df3.drop("name", "age").columns, ["height"])
+        self.assertEqual(df3.drop("name", df3.age, "unknown").columns, ["height"])
+        self.assertEqual(df3.drop("name", "age", df3.height).columns, [])
+
     def test_dropna(self):
         schema = StructType(
             [

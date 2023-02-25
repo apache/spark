@@ -18,22 +18,24 @@ package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ignore funsuite
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 // scalastyle:off
 /**
@@ -55,7 +57,11 @@ import org.apache.spark.sql.types._
  * `connector/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll with Logging {
+class PlanGenerationTestSuite
+    extends ConnectFunSuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach
+    with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
@@ -99,11 +105,15 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val client = new SparkConnectClient(
+    val client = SparkConnectClient(
       proto.UserContext.newBuilder().build(),
       InProcessChannelBuilder.forName("/dev/null").build())
-    val builder = SparkSession.builder().client(client)
-    session = builder.build()
+    session =
+      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+  }
+
+  override protected def beforeEach(): Unit = {
+    session.resetPlanIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -221,6 +231,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   /* Spark Session API */
   test("sql") {
     session.sql("select 1")
+  }
+
+  test("parameterized sql") {
+    session.sql("select 1", Map("minId" -> "7", "maxId" -> "20"))
   }
 
   test("range") {
@@ -357,7 +371,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("apply") {
-    simple.select(simple.apply("a"))
+    val stable = simple
+    stable.select(stable("a"))
   }
 
   test("hint") {
@@ -365,7 +380,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("col") {
-    simple.select(simple.col("id"), simple.col("b"))
+    val stable = simple
+    stable.select(stable.col("id"), stable.col("b"))
   }
 
   test("colRegex") {
@@ -1934,6 +1950,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     simple.cube("a", "b").count()
   }
 
+  test("pivot") {
+    simple.groupBy(Column("id")).pivot("a", Seq(1, 2, 3)).agg(functions.count(Column("b")))
+  }
+
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
@@ -1952,7 +1972,16 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.lit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.lit(Array.tabulate(23)(i => (i + 120).toByte)),
       fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
-      fn.lit(java.time.LocalDate.of(2020, 10, 10)))
+      fn.lit(null),
+      fn.lit(java.time.LocalDate.of(2020, 10, 10)),
+      fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
+      fn.lit(java.time.Instant.ofEpochMilli(1677155519808L)),
+      fn.lit(new java.sql.Timestamp(12345L)),
+      fn.lit(java.time.LocalDateTime.of(2023, 2, 23, 20, 36)),
+      fn.lit(java.sql.Date.valueOf("2023-02-23")),
+      fn.lit(java.time.Duration.ofSeconds(200L)),
+      fn.lit(java.time.Period.ofDays(100)),
+      fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
   /* Window API */

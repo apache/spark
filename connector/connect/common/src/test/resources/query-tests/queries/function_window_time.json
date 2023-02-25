@@ -1,8 +1,17 @@
 {
+  "common": {
+    "planId": "2"
+  },
   "project": {
     "input": {
+      "common": {
+        "planId": "1"
+      },
       "withColumns": {
         "input": {
+          "common": {
+            "planId": "0"
+          },
           "localRelation": {
             "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
           }
@@ -10,7 +19,8 @@
         "aliases": [{
           "expr": {
             "unresolvedAttribute": {
-              "unparsedIdentifier": "wt"
+              "unparsedIdentifier": "wt",
+              "planId": "0"
             }
           },
           "name": ["wt"],

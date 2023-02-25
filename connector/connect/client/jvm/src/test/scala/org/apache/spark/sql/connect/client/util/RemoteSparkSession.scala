@@ -109,9 +109,7 @@ object SparkConnectServerUtils {
   }
 }
 
-trait RemoteSparkSession
-    extends org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterAll {
+trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   import SparkConnectServerUtils._
   var spark: SparkSession = _
 
