@@ -276,34 +276,6 @@ Enable the profile (e.g. 2.13):
     # For sbt
     ./build/sbt -Pscala-2.13 compile
 
-## Running Jenkins tests with GitHub Enterprise
-
-To run tests with Jenkins:
-
-    ./dev/run-tests-jenkins
-
-If use an individual repository or a repository on GitHub Enterprise, export below environment variables before running above command.
-
-### Related environment variables
-
-<table class="table">
-<tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>SPARK_PROJECT_URL</code></td>
-  <td>https://github.com/apache/spark</td>
-  <td>
-    The Spark project URL of GitHub Enterprise.
-  </td>
-</tr>
-<tr>
-  <td><code>GITHUB_API_BASE</code></td>
-  <td>https://api.github.com/repos/apache/spark</td>
-  <td>
-    The Spark project API server URL of GitHub Enterprise.
-  </td>
-</tr>
-</table>
-
 ### Building and testing on IPv6-only environment
 
 Use Apache Spark GitBox URL because GitHub doesn't support IPv6 yet.
