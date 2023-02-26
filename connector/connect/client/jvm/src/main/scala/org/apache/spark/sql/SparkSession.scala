@@ -17,12 +17,14 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
@@ -58,6 +60,24 @@ class SparkSession(
     with Logging {
 
   private[this] val allocator = new RootAllocator()
+
+  def version: String = SPARK_VERSION
+
+  /**
+   * Executes some code block and prints to stdout the time taken to execute the block. This is
+   * available in Scala only and is used primarily for interactive testing and debugging.
+   *
+   * @since 3.4.0
+   */
+  def time[T](f: => T): T = {
+    val start = System.nanoTime()
+    val ret = f
+    val end = System.nanoTime()
+    // scalastyle:off println
+    println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
+    // scalastyle:on println
+    ret
+  }
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
