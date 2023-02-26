@@ -2478,5 +2478,5 @@ package object config {
         " successfully. This is relevant in context of consistent accumulator status.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 }

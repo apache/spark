@@ -139,7 +139,7 @@ private[storage] object BlockInfo {
  *
  * This class is thread-safe.
  */
-private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = true) extends Logging {
+private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false) extends Logging {
 
   private type TaskAttemptId = Long
 
@@ -154,7 +154,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = true)
    * Record invisible rdd blocks stored in the block manager, entries will be removed when blocks
    * are marked as visible or blocks are removed by [[removeBlock()]].
    */
-  private[spark] val invisibleRDDBlocks = ConcurrentHashMap.newKeySet[RDDBlockId]
+  private[this] val invisibleRDDBlocks = new mutable.HashSet[RDDBlockId]
 
   /**
    * Stripe used to control multi-threaded access to block information.
@@ -186,6 +186,13 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = true)
 
   // ----------------------------------------------------------------------------------------------
 
+  // Exposed for test only.
+  private[storage] def containsInvisibleRDDBlock(blockId: RDDBlockId): Boolean = {
+    invisibleRDDBlocks.synchronized {
+      invisibleRDDBlocks.contains(blockId)
+    }
+  }
+
   private[spark] def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
     if (trackingCacheVisibility) {
       invisibleRDDBlocks.synchronized {
@@ -200,9 +207,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = true)
   private[spark] def tryMarkBlockAsVisible(blockId: RDDBlockId): Unit = {
     if (trackingCacheVisibility) {
       invisibleRDDBlocks.synchronized {
-        if (blockInfoWrappers.containsKey(blockId)) {
-          invisibleRDDBlocks.remove(blockId)
-        }
+        invisibleRDDBlocks.remove(blockId)
       }
     }
   }
@@ -562,7 +567,9 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = true)
     blockInfoWrappers.clear()
     readLocksByTask.clear()
     writeLocksByTask.clear()
-    invisibleRDDBlocks.clear()
+    invisibleRDDBlocks.synchronized {
+      invisibleRDDBlocks.clear()
+    }
   }
 
 }

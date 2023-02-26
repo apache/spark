@@ -256,6 +256,11 @@ class BlockManagerMasterEndpoint(
       return
     }
 
+    // TODO: When visible is false(the task had failed), we should be asking the block managers to
+    //  evict the block since the results can be inconsistent if there is any indeterminate
+    //  operation computing the rdd. Besides evicting the blocks here, when a rdd block is reported
+    //  we may also need to check the data with existing replicas somehow.
+    //  This will be tracked with jira: https://issues.apache.org/jira/browse/SPARK-42582
     if (visible) {
       tidToRddBlockIds.get(taskId).foreach { blockIds =>
         blockIds.foreach { blockId =>

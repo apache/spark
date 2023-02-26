@@ -105,6 +105,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
       .set(Network.RPC_ASK_TIMEOUT, "5s")
       .set(PUSH_BASED_SHUFFLE_ENABLED, true)
+      .set(RDD_CACHE_VISIBILITY_TRACKING_ENABLED, true)
   }
 
   private def makeSortShuffleManager(conf: Option[SparkConf] = None): SortShuffleManager = {
@@ -2287,14 +2288,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Put cache successfully and reported block task info.
     assert(res1.isLeft && computed)
     verify(master, times(1)).updateRDDBlockTaskInfo(blockId, 1)
+    assert(store.getStatus(blockId).nonEmpty && !store.isRDDBlockVisible(blockId))
 
     // Cache exists but not visible.
     computed = false
-    assert(store.getStatus(blockId).nonEmpty && !store.isRDDBlockVisible(blockId))
     val res2 = store.getOrElseUpdateRDDBlock(
       1, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
     // Load cache successfully and reported block task info.
     assert(res2.isLeft && computed)
+    assert(!store.isRDDBlockVisible(blockId))
     verify(master, times(2)).updateRDDBlockTaskInfo(blockId, 1)
 
     // Cache exists and visible.
@@ -2308,6 +2310,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     verify(master, times(2)).updateRDDBlockTaskInfo(blockId, 1)
   }
 
+
   test("SPARK-41497: mark rdd block as visible") {
     val store = makeBlockManager(8000, "executor1")
     val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
@@ -2315,28 +2318,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     store.putIterator(blockId, data.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.getStatus(blockId).nonEmpty)
     assert(!store.blockInfoManager.isRDDBlockVisible(blockId))
-    assert(store.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(store.blockInfoManager.containsInvisibleRDDBlock(blockId))
 
     // Mark rdd block as visible.
     store.blockInfoManager.tryMarkBlockAsVisible(blockId)
     assert(store.blockInfoManager.isRDDBlockVisible(blockId))
-    assert(!store.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(!store.blockInfoManager.containsInvisibleRDDBlock(blockId))
 
     // Cache the block again should not change the visibility status.
     store.putIterator(blockId, data.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.blockInfoManager.isRDDBlockVisible(blockId))
-    assert(!store.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(!store.blockInfoManager.containsInvisibleRDDBlock(blockId))
 
     // Remove rdd block.
     store.removeBlock(blockId)
     assert(!store.blockInfoManager.isRDDBlockVisible(blockId))
-    assert(!store.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(!store.blockInfoManager.containsInvisibleRDDBlock(blockId))
 
     // Visibility status should not be added once rdd is removed.
     store.blockInfoManager.tryMarkBlockAsVisible(blockId)
     assert(!store.blockInfoManager.isRDDBlockVisible(blockId))
-    assert(!store.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(!store.blockInfoManager.containsInvisibleRDDBlock(blockId))
   }
+
 
   test("SPARK-41497: master & manager interaction about rdd block visibility information") {
     val store1 = makeBlockManager(8000, "executor1")
@@ -2352,13 +2356,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Block information is reported and block is not visible.
     assert(master.getLocations(blockId).nonEmpty)
     assert(!master.isRDDBlockVisible(blockId))
-    assert(store1.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(store1.blockInfoManager.containsInvisibleRDDBlock(blockId))
 
     // A copy is reported, visibility status not changed.
     store2.putIterator(blockId, data.iterator, StorageLevel.MEMORY_ONLY)
     assert(master.getLocations(blockId).length === 2)
     assert(!master.isRDDBlockVisible(blockId))
-    assert(store2.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(store2.blockInfoManager.containsInvisibleRDDBlock(blockId))
 
     // Report rdd block visibility as true, driver should ask block managers to mark the block
     // as visible.
@@ -2377,6 +2381,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     }
   }
 
+
   test("SPARK-41497: rdd block's visibility status should be cached once got from driver") {
     val store = makeBlockManager(8000, "executor1")
     val taskId = 0L
@@ -2388,12 +2393,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Block information is reported and block is not visible.
     assert(master.getLocations(blockId).nonEmpty)
     assert(!master.isRDDBlockVisible(blockId))
-    assert(store.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(store.blockInfoManager.containsInvisibleRDDBlock(blockId))
 
     doAnswer(_ => true).when(master).isRDDBlockVisible(mc.any())
     // Visibility status should be cached.
     assert(store.isRDDBlockVisible(blockId))
-    assert(!store.blockInfoManager.invisibleRDDBlocks.contains(blockId))
+    assert(!store.blockInfoManager.containsInvisibleRDDBlock(blockId))
     assert(store.blockInfoManager.isRDDBlockVisible(blockId))
   }
 
