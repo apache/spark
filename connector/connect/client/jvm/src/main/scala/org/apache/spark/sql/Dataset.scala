@@ -1104,6 +1104,35 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Groups the Dataset using the specified columns, so that we can run aggregation on them. See
+   * [[RelationalGroupedDataset]] for all the available aggregate functions.
+   *
+   * This is a variant of groupBy that can only group by existing columns using column names (i.e.
+   * cannot construct expressions).
+   *
+   * {{{
+   *   // Compute the average for all numeric columns grouped by department.
+   *   ds.groupBy("department").avg()
+   *
+   *   // Compute the max age and average salary, grouped by department and gender.
+   *   ds.groupBy($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def groupBy(col1: String, cols: String*): RelationalGroupedDataset = {
+    val colNames: Seq[String] = col1 +: cols
+    new RelationalGroupedDataset(
+      toDF(),
+      colNames.map(colName => Column(colName).expr),
+      proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+  }
+
+  /**
    * Create a multi-dimensional rollup for the current Dataset using the specified columns, so we
    * can run aggregation on them. See [[RelationalGroupedDataset]] for all the available aggregate
    * functions.

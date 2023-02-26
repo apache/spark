@@ -1892,6 +1892,12 @@ class PlanGenerationTestSuite
         "a" -> "count")
   }
 
+  test("groupby agg string") {
+    simple
+      .groupBy("id", "b")
+      .agg("a" -> "max", "a" -> "count")
+  }
+
   test("groupby agg columns") {
     simple
       .groupBy(Column("id"))
