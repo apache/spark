@@ -1990,14 +1990,14 @@ class Dataset[T] private[sql] (val sparkSession: SparkSession, private[sql] val 
       viewName: String,
       replace: Boolean,
       global: Boolean): Unit = {
-    val command = session.newCommand { builder =>
+    val command = sparkSession.newCommand { builder =>
       builder.getCreateDataframeViewBuilder
         .setInput(plan.getRoot)
         .setName(viewName)
         .setIsGlobal(global)
         .setReplace(replace)
     }
-    session.execute(command)
+    sparkSession.execute(command)
   }
 
   /**
