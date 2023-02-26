@@ -22,16 +22,14 @@ import io.grpc.{Server, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
-class SparkConnectClientSuite
-    extends AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterEach {
+class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private var client: SparkConnectClient = _
   private var service: DummySparkConnectService = _

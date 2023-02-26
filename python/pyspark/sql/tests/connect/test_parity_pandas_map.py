@@ -16,26 +16,30 @@
 #
 import unittest
 
-from pyspark.sql.connect.readwriter import DataFrameWriterV2
-from pyspark.sql.tests.test_readwriter import ReadwriterTestsMixin, ReadwriterV2TestsMixin
+from pyspark.sql.tests.pandas.test_pandas_map import MapInPandasTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class ReadwriterParityTests(ReadwriterTestsMixin, ReusedConnectTestCase):
-    pass
+class MapInPandasParityTests(MapInPandasTestsMixin, ReusedConnectTestCase):
+    @unittest.skip(
+        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
+    )
+    def test_empty_dataframes_with_less_columns(self):
+        super().test_empty_dataframes_with_less_columns()
 
+    @unittest.skip(
+        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
+    )
+    def test_other_than_dataframe(self):
+        super().test_other_than_dataframe()
 
-class ReadwriterV2ParityTests(ReadwriterV2TestsMixin, ReusedConnectTestCase):
-    def test_api(self):
-        self.check_api(DataFrameWriterV2)
-
-    def test_partitioning_functions(self):
-        self.check_partitioning_functions(DataFrameWriterV2)
+    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
+    def test_map_in_pandas_with_column_vector(self):
+        super().test_map_in_pandas_with_column_vector()
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_readwriter import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_pandas_map import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

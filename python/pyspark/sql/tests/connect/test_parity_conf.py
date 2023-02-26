@@ -14,28 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.sql.connect.readwriter import DataFrameWriterV2
-from pyspark.sql.tests.test_readwriter import ReadwriterTestsMixin, ReadwriterV2TestsMixin
+from pyspark.sql.tests.test_conf import ConfTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class ReadwriterParityTests(ReadwriterTestsMixin, ReusedConnectTestCase):
+class ConfParityTests(ConfTestsMixin, ReusedConnectTestCase):
     pass
-
-
-class ReadwriterV2ParityTests(ReadwriterV2TestsMixin, ReusedConnectTestCase):
-    def test_api(self):
-        self.check_api(DataFrameWriterV2)
-
-    def test_partitioning_functions(self):
-        self.check_partitioning_functions(DataFrameWriterV2)
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_parity_readwriter import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_conf import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

@@ -570,3 +570,345 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
+
+class KeyValue(google.protobuf.message.Message):
+    """The key-value pair for the config request and response."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    key: builtins.str
+    """(Required) The key."""
+    value: builtins.str
+    """(Optional) The value."""
+    def __init__(
+        self,
+        *,
+        key: builtins.str = ...,
+        value: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_value", b"_value", "value", b"value"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_value", b"_value", "key", b"key", "value", b"value"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_value", b"_value"]
+    ) -> typing_extensions.Literal["value"] | None: ...
+
+global___KeyValue = KeyValue
+
+class ConfigRequest(google.protobuf.message.Message):
+    """Request to update or fetch the configurations."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Operation(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SET_FIELD_NUMBER: builtins.int
+        GET_FIELD_NUMBER: builtins.int
+        GET_WITH_DEFAULT_FIELD_NUMBER: builtins.int
+        GET_OPTION_FIELD_NUMBER: builtins.int
+        GET_ALL_FIELD_NUMBER: builtins.int
+        UNSET_FIELD_NUMBER: builtins.int
+        IS_MODIFIABLE_FIELD_NUMBER: builtins.int
+        @property
+        def set(self) -> global___ConfigRequest.Set: ...
+        @property
+        def get(self) -> global___ConfigRequest.Get: ...
+        @property
+        def get_with_default(self) -> global___ConfigRequest.GetWithDefault: ...
+        @property
+        def get_option(self) -> global___ConfigRequest.GetOption: ...
+        @property
+        def get_all(self) -> global___ConfigRequest.GetAll: ...
+        @property
+        def unset(self) -> global___ConfigRequest.Unset: ...
+        @property
+        def is_modifiable(self) -> global___ConfigRequest.IsModifiable: ...
+        def __init__(
+            self,
+            *,
+            set: global___ConfigRequest.Set | None = ...,
+            get: global___ConfigRequest.Get | None = ...,
+            get_with_default: global___ConfigRequest.GetWithDefault | None = ...,
+            get_option: global___ConfigRequest.GetOption | None = ...,
+            get_all: global___ConfigRequest.GetAll | None = ...,
+            unset: global___ConfigRequest.Unset | None = ...,
+            is_modifiable: global___ConfigRequest.IsModifiable | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "get",
+                b"get",
+                "get_all",
+                b"get_all",
+                "get_option",
+                b"get_option",
+                "get_with_default",
+                b"get_with_default",
+                "is_modifiable",
+                b"is_modifiable",
+                "op_type",
+                b"op_type",
+                "set",
+                b"set",
+                "unset",
+                b"unset",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "get",
+                b"get",
+                "get_all",
+                b"get_all",
+                "get_option",
+                b"get_option",
+                "get_with_default",
+                b"get_with_default",
+                "is_modifiable",
+                b"is_modifiable",
+                "op_type",
+                b"op_type",
+                "set",
+                b"set",
+                "unset",
+                b"unset",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
+        ) -> typing_extensions.Literal[
+            "set", "get", "get_with_default", "get_option", "get_all", "unset", "is_modifiable"
+        ] | None: ...
+
+    class Set(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PAIRS_FIELD_NUMBER: builtins.int
+        @property
+        def pairs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
+            """(Required) The config key-value pairs to set."""
+        def __init__(
+            self,
+            *,
+            pairs: collections.abc.Iterable[global___KeyValue] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
+
+    class Get(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEYS_FIELD_NUMBER: builtins.int
+        @property
+        def keys(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) The config keys to get."""
+        def __init__(
+            self,
+            *,
+            keys: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
+
+    class GetWithDefault(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PAIRS_FIELD_NUMBER: builtins.int
+        @property
+        def pairs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
+            """(Required) The config key-value paris to get. The value will be used as the default value."""
+        def __init__(
+            self,
+            *,
+            pairs: collections.abc.Iterable[global___KeyValue] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
+
+    class GetOption(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEYS_FIELD_NUMBER: builtins.int
+        @property
+        def keys(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) The config keys to get optionally."""
+        def __init__(
+            self,
+            *,
+            keys: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
+
+    class GetAll(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PREFIX_FIELD_NUMBER: builtins.int
+        prefix: builtins.str
+        """(Optional) The prefix of the config key to get."""
+        def __init__(
+            self,
+            *,
+            prefix: builtins.str | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["_prefix", b"_prefix", "prefix", b"prefix"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["_prefix", b"_prefix", "prefix", b"prefix"]
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_prefix", b"_prefix"]
+        ) -> typing_extensions.Literal["prefix"] | None: ...
+
+    class Unset(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEYS_FIELD_NUMBER: builtins.int
+        @property
+        def keys(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) The config keys to unset."""
+        def __init__(
+            self,
+            *,
+            keys: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
+
+    class IsModifiable(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEYS_FIELD_NUMBER: builtins.int
+        @property
+        def keys(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) The config keys to check the config is modifiable."""
+        def __init__(
+            self,
+            *,
+            keys: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
+
+    CLIENT_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    OPERATION_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    client_id: builtins.str
+    """(Required)
+
+    The client_id is set by the client to be able to collate streaming responses from
+    different queries.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context"""
+    @property
+    def operation(self) -> global___ConfigRequest.Operation:
+        """(Required) The operation for the config."""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    def __init__(
+        self,
+        *,
+        client_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        operation: global___ConfigRequest.Operation | None = ...,
+        client_type: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "operation",
+            b"operation",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_id",
+            b"client_id",
+            "client_type",
+            b"client_type",
+            "operation",
+            b"operation",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+
+global___ConfigRequest = ConfigRequest
+
+class ConfigResponse(google.protobuf.message.Message):
+    """Response to the config request."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLIENT_ID_FIELD_NUMBER: builtins.int
+    PAIRS_FIELD_NUMBER: builtins.int
+    WARNINGS_FIELD_NUMBER: builtins.int
+    client_id: builtins.str
+    @property
+    def pairs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
+        """(Optional) The result key-value pairs.
+
+        Available when the operation is 'Get', 'GetWithDefault', 'GetOption', 'GetAll'.
+        Also available for the operation 'IsModifiable' with boolean string "true" and "false".
+        """
+    @property
+    def warnings(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional)
+
+        Warning messages for deprecated or unsupported configurations.
+        """
+    def __init__(
+        self,
+        *,
+        client_id: builtins.str = ...,
+        pairs: collections.abc.Iterable[global___KeyValue] | None = ...,
+        warnings: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "client_id", b"client_id", "pairs", b"pairs", "warnings", b"warnings"
+        ],
+    ) -> None: ...
+
+global___ConfigResponse = ConfigResponse
