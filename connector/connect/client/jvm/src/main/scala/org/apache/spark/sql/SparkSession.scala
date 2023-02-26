@@ -190,8 +190,7 @@ class SparkSession(
     newDataset(UnboundRowEncoder)(f)
   }
 
-  private[sql] def newDataset[T](
-      encoder: AgnosticEncoder[T])(
+  private[sql] def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)

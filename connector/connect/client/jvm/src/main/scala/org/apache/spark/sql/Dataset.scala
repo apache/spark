@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{StringEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -120,7 +120,7 @@ import org.apache.spark.util.Utils
 class Dataset[T] private[sql] (
     val session: SparkSession,
     private[sql] val plan: proto.Plan,
-    private val encoder: AgnosticEncoder[T])
+    val encoder: AgnosticEncoder[T])
     extends Serializable {
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
@@ -158,30 +158,29 @@ class Dataset[T] private[sql] (
   def toDF(): DataFrame = new Dataset(session, plan, UnboundRowEncoder)
 
   /**
-   * Returns a new Dataset where each record has been mapped on to the specified type. The
-   * method used to map columns depend on the type of `U`:
-   * <ul>
-   *   <li>When `U` is a class, fields for the class will be mapped to columns of the same name
-   *   (case sensitivity is determined by `spark.sql.caseSensitive`).</li>
-   *   <li>When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
-   *   be assigned to `_1`).</li>
-   *   <li>When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
-   *   `DataFrame` will be used.</li>
+   * Returns a new Dataset where each record has been mapped on to the specified type. The method
+   * used to map columns depend on the type of `U`: <ul> <li>When `U` is a class, fields for the
+   * class will be mapped to columns of the same name (case sensitivity is determined by
+   * `spark.sql.caseSensitive`).</li> <li>When `U` is a tuple, the columns will be mapped by
+   * ordinal (i.e. the first column will be assigned to `_1`).</li> <li>When `U` is a primitive
+   * type (i.e. String, Int, etc), then the first column of the `DataFrame` will be used.</li>
    * </ul>
    *
-   * If the schema of the Dataset does not match the desired `U` type, you can use `select`
-   * along with `alias` or `as` to rearrange or rename as required.
+   * If the schema of the Dataset does not match the desired `U` type, you can use `select` along
+   * with `alias` or `as` to rearrange or rename as required.
    *
-   * Note that `as[]` only changes the view of the data that is passed into typed operations,
-   * such as `map()`, and does not eagerly project away any columns that are not present in
-   * the specified class.
+   * Note that `as[]` only changes the view of the data that is passed into typed operations, such
+   * as `map()`, and does not eagerly project away any columns that are not present in the
+   * specified class.
    *
    * @group basic
    * @since 3.4.0
    */
-  def as[U : Encoder]: Dataset[U] = {
+  def as[U: Encoder]: Dataset[U] = {
     val encoder = implicitly[Encoder[U]].asInstanceOf[AgnosticEncoder[U]]
-    new Dataset[U](session, to(encoder.schema).plan, encoder)
+    // We should add some validation/coercion here. We cannot use `to`
+    // because that does not work with positional arguments.
+    new Dataset[U](session, plan, encoder)
   }
 
   /**
@@ -2286,7 +2285,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def count(): Long = {
-    groupBy().count().collect().head.getLong(0)
+    groupBy().count().as(PrimitiveLongEncoder).collect().head
   }
 
   private def buildRepartition(numPartitions: Int, shuffle: Boolean): Dataset[T] = {

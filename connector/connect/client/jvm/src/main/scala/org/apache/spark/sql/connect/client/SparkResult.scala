@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncode
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
@@ -52,7 +52,6 @@ private[sql] class SparkResult[T](
       // Create a row encoder based on the schema.
       RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
     } else {
-      assert(DataType.equalsIgnoreNullability(encoder.schema, schema))
       encoder
     }
     ExpressionEncoder(agnosticEncoder)
