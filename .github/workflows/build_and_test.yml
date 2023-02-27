@@ -564,6 +564,8 @@ jobs:
       run: ./dev/lint-scala
     - name: Java linter
       run: ./dev/lint-java
+    - name: Spark connect jvm client mima check
+      run: ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
