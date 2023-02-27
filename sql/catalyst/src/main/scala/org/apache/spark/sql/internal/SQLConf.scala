@@ -4035,6 +4035,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_EMPTY_CURRENT_DB_IN_CLI =
+    buildConf("spark.sql.legacy.emptyCurrentDBInCli")
+      .internal()
+      .doc("When false, spark-sql CLI prints the the current database in prompt")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA =
     buildConf("spark.sql.legacy.keepCommandOutputSchema")
       .internal()
@@ -4178,7 +4186,12 @@ object SQLConf {
    * @param comment Additional info regarding to the removed config. For example,
    *                reasons of config deprecation, what users should use instead of it.
    */
-  case class DeprecatedConfig(key: String, version: String, comment: String)
+  case class DeprecatedConfig(key: String, version: String, comment: String) {
+    def toDeprecationString: String = {
+      s"The SQL config '$key' has been deprecated in Spark v$version " +
+        s"and may be removed in the future. $comment"
+    }
+  }
 
   /**
    * Maps deprecated SQL config keys to information about the deprecation.
@@ -5149,11 +5162,8 @@ class SQLConf extends Serializable with Logging {
    * Logs a warning message if the given config key is deprecated.
    */
   private def logDeprecationWarning(key: String): Unit = {
-    SQLConf.deprecatedSQLConfigs.get(key).foreach {
-      case DeprecatedConfig(configName, version, comment) =>
-        logWarning(
-          s"The SQL config '$configName' has been deprecated in Spark v$version " +
-          s"and may be removed in the future. $comment")
+    SQLConf.deprecatedSQLConfigs.get(key).foreach { config =>
+      logWarning(config.toDeprecationString)
     }
   }
 

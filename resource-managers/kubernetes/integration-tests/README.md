@@ -331,11 +331,9 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 # Running the Volcano Integration Tests
 
-Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage is limited.
-
 ## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
-- Volcano v1.5.1.
+- Volcano v1.7.0.
 
 ## Installation
 

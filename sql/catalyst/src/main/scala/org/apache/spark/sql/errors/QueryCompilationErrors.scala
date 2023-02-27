@@ -3405,6 +3405,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
   }
 
+  def generatedColumnsUnsupported(nameParts: Seq[String]): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(nameParts),
+        "operation" -> "generated columns"
+      )
+    )
+  }
+
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",

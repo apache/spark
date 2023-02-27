@@ -171,7 +171,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    sparkSession.newDataset { builder =>
+    sparkSession.newDataFrame { builder =>
       val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
       assertSourceFormatSpecified()
       dataSourceBuilder.setFormat(source)
@@ -308,7 +308,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    * @since 3.4.0
    */
   def table(tableName: String): DataFrame = {
-    sparkSession.newDataset { builder =>
+    sparkSession.newDataFrame { builder =>
       builder.getReadBuilder.getNamedTableBuilder.setUnparsedIdentifier(tableName)
     }
   }

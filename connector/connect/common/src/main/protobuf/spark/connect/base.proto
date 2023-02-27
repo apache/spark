@@ -183,6 +183,97 @@ message ExecutePlanResponse {
   }
 }
 
+// The key-value pair for the config request and response.
+message KeyValue {
+  // (Required) The key.
+  string key = 1;
+  // (Optional) The value.
+  optional string value = 2;
+}
+
+// Request to update or fetch the configurations.
+message ConfigRequest {
+  // (Required)
+  //
+  // The client_id is set by the client to be able to collate streaming responses from
+  // different queries.
+  string client_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // (Required) The operation for the config.
+  Operation operation = 3;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
+
+  message Operation {
+    oneof op_type {
+      Set set = 1;
+      Get get = 2;
+      GetWithDefault get_with_default = 3;
+      GetOption get_option = 4;
+      GetAll get_all = 5;
+      Unset unset = 6;
+      IsModifiable is_modifiable = 7;
+    }
+  }
+
+  message Set {
+    // (Required) The config key-value pairs to set.
+    repeated KeyValue pairs = 1;
+  }
+
+  message Get {
+    // (Required) The config keys to get.
+    repeated string keys = 1;
+  }
+
+  message GetWithDefault {
+    // (Required) The config key-value paris to get. The value will be used as the default value.
+    repeated KeyValue pairs = 1;
+  }
+
+  message GetOption {
+    // (Required) The config keys to get optionally.
+    repeated string keys = 1;
+  }
+
+  message GetAll {
+    // (Optional) The prefix of the config key to get.
+    optional string prefix = 1;
+  }
+
+  message Unset {
+    // (Required) The config keys to unset.
+    repeated string keys = 1;
+  }
+
+  message IsModifiable {
+    // (Required) The config keys to check the config is modifiable.
+    repeated string keys = 1;
+  }
+}
+
+// Response to the config request.
+message ConfigResponse {
+  string client_id = 1;
+
+  // (Optional) The result key-value pairs.
+  //
+  // Available when the operation is 'Get', 'GetWithDefault', 'GetOption', 'GetAll'.
+  // Also available for the operation 'IsModifiable' with boolean string "true" and "false".
+  repeated KeyValue pairs = 2;
+
+  // (Optional)
+  //
+  // Warning messages for deprecated or unsupported configurations.
+  repeated string warnings = 3;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -193,5 +284,8 @@ service SparkConnectService {
 
   // Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
   rpc AnalyzePlan(AnalyzePlanRequest) returns (AnalyzePlanResponse) {}
+
+  // Update or fetch the configurations and returns a [[ConfigResponse]] containing the result.
+  rpc Config(ConfigRequest) returns (ConfigResponse) {}
 }
 

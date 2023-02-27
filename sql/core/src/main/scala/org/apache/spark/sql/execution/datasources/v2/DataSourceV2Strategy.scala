@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.structTypeToV2Columns
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
@@ -178,6 +178,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
+      GeneratedColumn.validateGeneratedColumns(
+        newSchema, catalog.asTableCatalog, ident.asMultipartIdentifier, "CREATE TABLE")
+
       CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
@@ -201,6 +204,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
+      GeneratedColumn.validateGeneratedColumns(
+        newSchema, catalog.asTableCatalog, ident.asMultipartIdentifier, "CREATE TABLE")
+
       val v2Columns = structTypeToV2Columns(newSchema)
       catalog match {
         case staging: StagingTableCatalog =>

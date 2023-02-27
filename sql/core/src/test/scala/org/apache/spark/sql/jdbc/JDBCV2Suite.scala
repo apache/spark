@@ -51,6 +51,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
 
+    override def supportsLimit: Boolean = false
+
+    override def supportsOffset: Boolean = false
+
     class H2SQLBuilder extends JDBCSQLBuilder {
       override def visitUserDefinedScalarFunction(
           funcName: String, canonicalName: String, inputs: Array[String]): String = {
@@ -299,6 +303,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // LIMIT is pushed down only if all the filters are pushed down
     checkPushedInfo(df5, "PushedFilters: []")
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
+
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df6 = spark.read.table("h2.test.employee")
+        .where($"dept" === 1).limit(1)
+      checkLimitRemoved(df6, false)
+      checkPushedInfo(df6, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1]")
+      checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {
@@ -383,6 +400,22 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // OFFSET is pushed down only if all the filters are pushed down
     checkPushedInfo(df6, "PushedFilters: []")
     checkAnswer(df6, Seq(Row(10000.00, 1300.0, "dav"), Row(9000.00, 1200.0, "cat")))
+
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df7 = spark.read
+        .table("h2.test.employee")
+        .where($"dept" === 1)
+        .offset(1)
+      checkOffsetRemoved(df7, false)
+      checkPushedInfo(df7,
+        "PushedFilters: [DEPT IS NOT NULL, DEPT = 1]")
+      checkAnswer(df7, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("simple scan with LIMIT and OFFSET") {
