@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql
 
+import scala.language.implicitConversions
+
 /**
  * A collection of implicit methods for converting names and Symbols into [[Column]]s.
  *
@@ -25,7 +27,7 @@ abstract class SQLImplicits {
   /**
    * Converts $"col name" into a [[Column]].
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   implicit class StringToColumn(val sc: StringContext) {
     def $(args: Any*): ColumnName = {
@@ -35,7 +37,7 @@ abstract class SQLImplicits {
 
   /**
    * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
-   * @since 1.3.0
+   * @since 3.4.0
    */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 }

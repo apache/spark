@@ -194,7 +194,7 @@ class SparkSession(
   // Disable style checker so "implicits" object can start with lowercase i
   /**
    * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into `DataFrame`s.
+   * common names and [[Symbol]]s into [[Column]]s.
    *
    * {{{
    *   val sparkSession = SparkSession.builder.getOrCreate()
@@ -203,7 +203,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  object implicits extends SQLImplicits with Serializable
+  object implicits extends SQLImplicits
   // scalastyle:on
 
   private def range(
