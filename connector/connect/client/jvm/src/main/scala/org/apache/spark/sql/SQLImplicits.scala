@@ -24,6 +24,7 @@ import scala.language.implicitConversions
  * @since 3.4.0
  */
 abstract class SQLImplicits {
+
   /**
    * Converts $"col name" into a [[Column]].
    *
