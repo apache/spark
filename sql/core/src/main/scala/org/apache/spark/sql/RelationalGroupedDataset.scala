@@ -95,7 +95,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Returns true if `exprs` contains a [[Star]].
+   * Returns true if `exprs` contains a star.
    */
   def containsStar(exprs: Seq[Expression]): Boolean =
     exprs.exists(_.collect { case _: Star => true }.nonEmpty)
