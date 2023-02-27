@@ -22,6 +22,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.expressions.Window
@@ -69,6 +70,17 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   }
 
   override def hashCode: Int = expr.hashCode()
+
+  /**
+   * Provides a type hint about the expected return value of this column. This information can be
+   * used by operations such as `select` on a [[Dataset]] to automatically convert the results
+   * into the correct JVM types.
+   * @since 3.4.0
+   */
+  def as[U: Encoder]: TypedColumn[Any, U] = {
+    val encoder = implicitly[Encoder[U]].asInstanceOf[AgnosticEncoder[U]]
+    new TypedColumn[Any, U](expr, encoder)
+  }
 
   /**
    * Extracts a value or values from a complex type. The following types of extraction are
@@ -1429,4 +1441,32 @@ class ColumnName(name: String) extends Column(name) {
    * @since 3.4.0
    */
   def struct(structType: StructType): StructField = StructField(name, structType)
+}
+
+/**
+ * A [[Column]] where an [[Encoder]] has been given for the expected input and return type. To
+ * create a [[TypedColumn]], use the `as` function on a [[Column]].
+ *
+ * @tparam T
+ *   The input type expected for this expression. Can be `Any` if the expression is type checked
+ *   by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
+ * @tparam U
+ *   The output type of this column.
+ *
+ * @since 3.4.0
+ */
+class TypedColumn[-T, U] private[sql] (
+    expr: proto.Expression,
+    private[sql] val encoder: AgnosticEncoder[U])
+    extends Column(expr) {
+
+  /**
+   * Gives the [[TypedColumn]] a name (alias). If the current `TypedColumn` has metadata
+   * associated with it, this metadata will be propagated to the new column.
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  override def name(alias: String): TypedColumn[T, U] =
+    new TypedColumn[T, U](super.name(alias).expr, encoder)
 }
