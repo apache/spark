@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
@@ -26,9 +30,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
-
-import java.io.File
-import java.net.URI
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
@@ -80,7 +81,7 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     }
   }
 
-  test("SPARK-42539 User-provided JARs should not take precedence over builtin Hive JARs") {
+  test("SPARK-42539: User-provided JARs should not take precedence over builtin Hive JARs") {
     withTempDir { tmpDir =>
         val classFile = TestUtils.createCompiledClass(
           "Hive", tmpDir, packageName = Some("org.apache.hadoop.hive.ql.metadata"))
