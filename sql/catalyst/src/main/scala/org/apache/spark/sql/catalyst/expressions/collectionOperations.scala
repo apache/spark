@@ -1451,13 +1451,13 @@ case class ArrayPrepend(left: Expression, right: Expression)
       val pos = ctx.freshName("pos")
       val allocation = CodeGenerator.createArrayData(
         newArray,
-        right.dataType,
+        elementType,
         newArraySize,
         s" $prettyName failed.")
       val assignment =
-        CodeGenerator.createArrayAssignment(newArray, right.dataType, arr, pos, i, false)
+        CodeGenerator.createArrayAssignment(newArray, elementType, arr, pos, i, false)
       val newElemAssignment =
-        CodeGenerator.setArrayElement(newArray, right.dataType, pos, value, Some(rightGen.isNull))
+        CodeGenerator.setArrayElement(newArray, elementType, pos, value, Some(rightGen.isNull))
       s"""
          |int $pos = 0;
          |int $newArraySize = $arr.numElements() + 1;
