@@ -32,6 +32,8 @@ else
   JAVA_CMD=java
 fi
 
+rm .connect-mima-check-result
+
 TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
 CORE_CLASSPATH="$(build/sbt -DcopyDependencies=false "export core/fullClasspath" | grep jar | tail -n1)"
 CATALYST_CLASSPATH="$(build/sbt -DcopyDependencies=false "export catalyst/fullClasspath" | grep jar | tail -n1)"
@@ -49,9 +51,9 @@ $JAVA_CMD \
   -cp "$TOOLS_CLASSPATH:$CORE_CLASSPATH:$CATALYST_CLASSPATH" \
   org.apache.spark.tools.CheckConnectJvmClientCompatibility
 
-ERRORS=$(grep ERROR .connect-mima-check-result)
+ERRORS=$(grep ERROR .connect-mima-check-result | tail -n1)
 
-if test ! -z $ERRORS; then
+if test ! -z "$ERRORS"; then
   cat .connect-mima-check-result
   echo -e "connect-client-jvm module mima check failed."
   echo -e "Exceptions to binary compatibility can be added in tools/CheckConnectJvmClientCompatibility.scala"
