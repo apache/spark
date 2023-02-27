@@ -69,7 +69,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("write") {
-    val df = ss.newDataset(_ => ()).limit(10)
+    val df = ss.newDataFrame(_ => ()).limit(10)
 
     val builder = proto.WriteOperation.newBuilder()
     builder
@@ -101,7 +101,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("write V2") {
-    val df = ss.newDataset(_ => ()).limit(10)
+    val df = ss.newDataFrame(_ => ()).limit(10)
 
     val builder = proto.WriteOperationV2.newBuilder()
     builder
@@ -129,7 +129,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("Pivot") {
-    val df = ss.newDataset(_ => ())
+    val df = ss.newDataFrame(_ => ())
     intercept[IllegalArgumentException] {
       df.groupBy().pivot(Column("c"), Seq(Column("col")))
     }
