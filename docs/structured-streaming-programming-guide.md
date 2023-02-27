@@ -1255,14 +1255,14 @@ val words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: S
 
 // Group the data by window and word and compute the count of each group
 val windowedCounts = words.groupBy(
-window($"timestamp", "10 minutes", "5 minutes"),
-$"word"
+  window($"timestamp", "10 minutes", "5 minutes"),
+  $"word"
 ).count()
 
 // Group the windowed data by another window and word and compute the count of each group
 val anotherWindowedCounts = windowedCounts.groupBy(
-window(window_time($"window"), "1 hour"),
-$"word"
+  window(window_time($"window"), "1 hour"),
+  $"word"
 ).count()
 {% endhighlight %}
 
@@ -1274,14 +1274,14 @@ Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp
 
 // Group the data by window and word and compute the count of each group
 Dataset<Row> windowedCounts = words.groupBy(
-functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
-words.col("word")
+  functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
+  words.col("word")
 ).count();
 
 // Group the windowed data by another window and word and compute the count of each group
 Dataset<Row> anotherWindowedCounts = windowedCounts.groupBy(
-functions.window(functions.window_time("window"), "1 hour"),
-windowedCounts.col("word")
+  functions.window(functions.window_time("window"), "1 hour"),
+  windowedCounts.col("word")
 ).count();
 {% endhighlight %}
 
@@ -1292,14 +1292,14 @@ words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: Strin
 
 # Group the data by window and word and compute the count of each group
 windowedCounts = words.groupBy(
-window(words.timestamp, "10 minutes", "5 minutes"),
-words.word
+    window(words.timestamp, "10 minutes", "5 minutes"),
+    words.word
 ).count()
 
 # Group the windowed data by another window and word and compute the count of each group
 anotherWindowedCounts = windowedCounts.groupBy(
-window(window_time(windowedCounts.window), "1 hour"),
-windowedCounts.word
+    window(window_time(windowedCounts.window), "1 hour"),
+    windowedCounts.word
 ).count()
 {% endhighlight %}
 
@@ -1318,14 +1318,14 @@ val words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: S
 
 // Group the data by window and word and compute the count of each group
 val windowedCounts = words.groupBy(
-window($"timestamp", "10 minutes", "5 minutes"),
-$"word"
+  window($"timestamp", "10 minutes", "5 minutes"),
+  $"word"
 ).count()
 
 // Group the windowed data by another window and word and compute the count of each group
 val anotherWindowedCounts = windowedCounts.groupBy(
-window($"window", "1 hour"),
-$"word"
+  window($"window", "1 hour"),
+  $"word"
 ).count()
 {% endhighlight %}
 
@@ -1337,14 +1337,14 @@ Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp
 
 // Group the data by window and word and compute the count of each group
 Dataset<Row> windowedCounts = words.groupBy(
-functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
-words.col("word")
+  functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
+  words.col("word")
 ).count();
 
 // Group the windowed data by another window and word and compute the count of each group
 Dataset<Row> anotherWindowedCounts = windowedCounts.groupBy(
-functions.window("window", "1 hour"),
-windowedCounts.col("word")
+  functions.window("window", "1 hour"),
+  windowedCounts.col("word")
 ).count();
 {% endhighlight %}
 
@@ -1355,14 +1355,14 @@ words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: Strin
 
 # Group the data by window and word and compute the count of each group
 windowedCounts = words.groupBy(
-window(words.timestamp, "10 minutes", "5 minutes"),
-words.word
+    window(words.timestamp, "10 minutes", "5 minutes"),
+    words.word
 ).count()
 
 # Group the windowed data by another window and word and compute the count of each group
 anotherWindowedCounts = windowedCounts.groupBy(
-window(windowedCounts.window, "1 hour"),
-windowedCounts.word
+    window(windowedCounts.window, "1 hour"),
+    windowedCounts.word
 ).count()
 {% endhighlight %}
 
