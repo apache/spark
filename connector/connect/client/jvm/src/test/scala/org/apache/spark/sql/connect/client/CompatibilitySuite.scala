@@ -72,6 +72,7 @@ class CompatibilitySuite extends ConnectFunSuite {
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
       IncludeByName("org.apache.spark.sql.Column.*"),
+      IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
       IncludeByName("org.apache.spark.sql.DataFrameReader.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriter.*"),
@@ -156,6 +157,7 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
 
       // RelationalGroupedDataset
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.as"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.pivot"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.this"),
