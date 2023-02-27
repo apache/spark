@@ -7648,7 +7648,6 @@ def array_prepend(col: "ColumnOrName", element: Any) -> Column:
 
     Returns
     -------
-
     :class:`~pyspark.sql.Column`
         an array excluding given value.
 
