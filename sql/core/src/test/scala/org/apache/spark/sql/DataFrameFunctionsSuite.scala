@@ -2710,6 +2710,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "leftType" -> "\"ARRAY<INT>\"",
         "rightType" -> "\"STRING\""),
       queryContext = Array(ExpectedContext("", "", 0, 30, "array_prepend(array(1, 2), '1')")))
+    val df2 = Seq((Array[String]("a", "b", "c"), "d"),
+      (null, "d"),
+      (Array[String]("x", "y", "z"), null),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(df2.selectExpr("array_prepend(a, b)"),
+      Seq(Row(Seq("d", "a", "b", "c")), Row(null), Row(Seq(null, "x", "y", "z")), Row(null)))
   }
 
   test("array remove") {

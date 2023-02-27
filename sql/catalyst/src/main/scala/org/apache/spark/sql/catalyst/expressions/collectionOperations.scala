@@ -1418,6 +1418,9 @@ case class ArrayPrepend(left: Expression, right: Expression)
 
   override def nullable: Boolean = left.nullable
 
+  @transient protected lazy val elementType: DataType =
+    inputTypes.head.asInstanceOf[ArrayType].elementType
+
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)
     if (value1 == null) {
@@ -1427,23 +1430,16 @@ case class ArrayPrepend(left: Expression, right: Expression)
       nullSafeEval(value1, value2)
     }
   }
-  override def nullSafeEval(arr: Any, value: Any): Any = {
-    val numberOfElements = arr.asInstanceOf[ArrayData].numElements()
-    if (numberOfElements + 1 > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+  override def nullSafeEval(arr: Any, elementData: Any): Any = {
+    val arrayData = arr.asInstanceOf[ArrayData]
+    val numberOfElements = arrayData.numElements() + 1
+    if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
     }
-    val newArray = new Array[Any](numberOfElements + 1)
-    newArray(0) = value
-    var pos = 1
-    arr
-      .asInstanceOf[ArrayData]
-      .foreach(
-        right.dataType,
-        (i, v) => {
-          newArray(pos) = v
-          pos += 1
-        })
-    new GenericArrayData(newArray)
+    val finalData = new Array[Any](numberOfElements)
+    finalData.update(0, elementData)
+    arrayData.foreach(elementType, (i: Int, v: Any) => finalData.update(i + 1, v))
+    new GenericArrayData(finalData)
   }
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val leftGen = left.genCode(ctx)
@@ -1505,7 +1501,7 @@ case class ArrayPrepend(left: Expression, right: Expression)
       newLeft: Expression, newRight: Expression): ArrayPrepend =
     copy(left = newLeft, right = newRight)
 
-  override def dataType: DataType = left.dataType
+  override def dataType: DataType = if (right.nullable) left.dataType.asNullable else left.dataType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
