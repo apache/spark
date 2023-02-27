@@ -27,6 +27,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions.{aggregate, array, col, lit, rand, sequence, shuffle, transform, udf}
@@ -141,7 +142,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
-  ignore("write table") {
+  test("write table") {
     withTable("myTable") {
       val df = spark.range(10).limit(3)
       df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
@@ -156,7 +157,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
-  ignore("writeTo with create and using") {
+  test("writeTo with create and using") {
     // TODO (SPARK-42519): Add more test after we can set configs. See more WriteTo test cases
     //  in SparkConnectProtoSuite.
     //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -172,7 +173,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
 
   // TODO (SPARK-42519): Revisit this test after we can set configs.
   //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-  ignore("writeTo with create and append") {
+  test("writeTo with create and append") {
     withTable("myTableV2") {
       spark.range(3).writeTo("myTableV2").using("parquet").create()
       withTable("myTableV2") {
@@ -186,7 +187,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
 
   // TODO (SPARK-42519): Revisit this test after we can set configs.
   //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-  ignore("writeTo with create") {
+  test("writeTo with create") {
     withTable("myTableV2") {
       assertThrows[StatusRuntimeException] {
         // Failed to create as Hive support is required.
@@ -195,7 +196,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
-  ignore("write path collision") {
+  test("write path collision") {
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
     // Failed because the path cannot be provided both via option and save method.
@@ -470,6 +471,15 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(spark.sql("SELECT * FROM global_temp.view1").count() == 100)
     spark.range(1000).createOrReplaceGlobalTempView("view1")
     assert(spark.sql("SELECT * FROM global_temp.view1").count() == 1000)
+  }
+
+  test("version") {
+    assert(spark.version == SPARK_VERSION)
+  }
+
+  test("time") {
+    val timeFragments = Seq("Time taken: ", " ms")
+    testCapturedStdOut(spark.time(spark.sql("select 1").collect()), timeFragments: _*)
   }
 }
 
