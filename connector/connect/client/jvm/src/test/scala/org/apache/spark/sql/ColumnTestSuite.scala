@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 /**
  * Tests for client local Column behavior.
