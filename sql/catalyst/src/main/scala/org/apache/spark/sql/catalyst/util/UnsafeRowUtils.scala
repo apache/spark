@@ -136,7 +136,7 @@ object UnsafeRowUtils {
    * @return None if all the checks pass. An error message if the row is not matched with the schema
    */
   def validateStructuralIntegrityWithReason(
-    row: UnsafeRow, expectedSchema: StructType): Option[String] = {
+      row: UnsafeRow, expectedSchema: StructType): Option[String] = {
     validateStructuralIntegrityWithReasonImpl(row, expectedSchema).map {
       errorMessage => s"Error message is: $errorMessage, " +
           s"UnsafeRow status: ${getStructuralIntegrityStatus(row, expectedSchema)}"

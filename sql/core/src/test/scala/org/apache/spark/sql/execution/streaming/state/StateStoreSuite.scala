@@ -1253,6 +1253,30 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  test("SPARK-42572: StateStore validateStateRowFormat shouldn't check" +
+    " value row format when SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED is false") {
+    // By default, when there is an invalid pair of value row and value schema, it should throw
+    val keyRow = dataToKeyRow("key", 1)
+    val valueRow = dataToValueRow(2)
+    val e = intercept[InvalidUnsafeRowException] {
+      // Here valueRow doesn't match with prefixKeySchema
+      StateStoreProvider.validateStateRowFormat(
+        keyRow, keySchema, valueRow, prefixKeySchema, getDefaultStoreConf())
+    }
+    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+
+    // When sqlConf.stateStoreFormatValidationEnabled is set to false and
+    // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,
+    // don't check value row
+    val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
+    sqlConf.setConf(SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED, false)
+    val storeConf = StateStoreConf(sqlConf)
+    // Shouldn't throw
+    StateStoreProvider.validateStateRowFormat(
+      keyRow, keySchema, valueRow, prefixKeySchema, storeConf)
+  }
+
   /** Return a new provider with a random id */
   def newStoreProvider(): ProviderClass
 
@@ -1344,6 +1368,7 @@ object StateStoreTestsHelper {
   val keySchema = StructType(
     Seq(StructField("key1", StringType, true), StructField("key2", IntegerType, true)))
   val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
+  val prefixKeySchema = StructType(Seq(StructField("key1", StringType, true)))
 
   val keyProj = UnsafeProjection.create(Array[DataType](StringType, IntegerType))
   val prefixKeyProj = UnsafeProjection.create(Array[DataType](StringType))
