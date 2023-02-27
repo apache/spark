@@ -1412,6 +1412,10 @@ class ColumnName(name: String) extends Column(name) {
   def map(keyType: DataType, valueType: DataType): StructField =
     map(MapType(keyType, valueType))
 
+  /**
+   * Creates a new `StructField` of type map.
+   * @since 3.4.0
+   */
   def map(mapType: MapType): StructField = StructField(name, mapType)
 
   /**
