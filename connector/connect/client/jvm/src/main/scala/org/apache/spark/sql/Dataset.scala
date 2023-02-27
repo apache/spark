@@ -1013,6 +1013,31 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Returns a new Dataset by computing the given [[Column]] expression for each element.
+   *
+   * {{{
+   *   val ds = Seq(1, 2, 3).toDS()
+   *   val newDS = ds.select(expr("value + 1").as[Int])
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
+    val encoder = c1.encoder
+    val expr = if (encoder.schema == encoder.dataType) {
+      functions.inline(functions.array(c1)).expr
+    } else {
+      c1.expr
+    }
+    sparkSession.newDataset(encoder) { builder =>
+      builder.getProjectBuilder
+        .setInput(plan.getRoot)
+        .addExpressions(expr)
+    }
+  }
+
+  /**
    * Filters rows using the given condition.
    * {{{
    *   // The following are equivalent:
