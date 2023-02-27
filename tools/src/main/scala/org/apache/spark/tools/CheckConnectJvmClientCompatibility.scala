@@ -18,11 +18,12 @@
 package org.apache.spark.tools
 
 import java.io.{File, Writer}
-import java.lang.reflect.{Method, Modifier}
 import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.regex.Pattern
+
+import scala.reflect.runtime.universe.runtimeMirror
 
 import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.lib.MiMaLib
@@ -63,12 +64,12 @@ object CheckConnectJvmClientCompatibility {
         resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
         resultWriter.write("\n")
       }
-//      val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
-//      if (incompatibleApis.nonEmpty) {
-//        resultWriter.write("ERROR: Dataset apis incompatible with the sql module include: \n")
-//        resultWriter.write(incompatibleApis.mkString("\n"))
-//        resultWriter.write("\n")
-//      }
+      val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
+      if (incompatibleApis.nonEmpty) {
+        resultWriter.write("ERROR: Dataset apis incompatible with the sql module include: \n")
+        resultWriter.write(incompatibleApis.mkString("\n"))
+        resultWriter.write("\n")
+      }
     } catch {
       case e: Exception =>
         resultWriter.write(s"ERROR: ${e.getMessage}")
@@ -210,24 +211,29 @@ object CheckConnectJvmClientCompatibility {
       }
   }
 
-  private def checkDatasetApiCompatibility(clientJar: File, sqlJar: File): Array[String] = {
+  private def checkDatasetApiCompatibility(clientJar: File, sqlJar: File): Seq[String] = {
 
-    def publicMethodsNames(methods: Array[Method]): Array[String] = {
-      methods.filter(m => Modifier.isPublic(m.getModifiers))
-        .filterNot(_.toString.contains(".$anonfun")).map(_.toString)
+    def methods(jar: File, className: String): Seq[String] = {
+      val classLoader: URLClassLoader = new URLClassLoader(Seq(jar.toURI.toURL).toArray)
+      val mirror = runtimeMirror(classLoader)
+      // scalastyle:off classforname
+      val classSymbol =
+        mirror.classSymbol(Class.forName(className, false, classLoader))
+      // scalastyle:on classforname
+      classSymbol.typeSignature.members
+        .filter(_.isMethod)
+        .map(_.asMethod)
+        .filter(m => m.isPublic)
+        .map(_.fullName)
+        .toSeq
     }
 
-    val clientClassLoader: URLClassLoader = new URLClassLoader(Seq(clientJar.toURI.toURL).toArray)
-    val sqlClassLoader: URLClassLoader = new URLClassLoader(Seq(sqlJar.toURI.toURL).toArray)
-
-    val clientClass = clientClassLoader.loadClass("org.apache.spark.sql.Dataset")
-    val sqlClass = sqlClassLoader.loadClass("org.apache.spark.sql.Dataset")
-
-    val newMethods = publicMethodsNames(clientClass.getMethods)
-    val oldMethods = publicMethodsNames(sqlClass.getMethods)
+    val className = "org.apache.spark.sql.Dataset"
+    val clientMethods = methods(clientJar, className)
+    val sqlMethods = methods(sqlJar, className)
 
     // For now we simply check the new methods is a subset of the old methods.
-    newMethods.diff(oldMethods)
+    clientMethods.diff(sqlMethods)
   }
 
   /**
