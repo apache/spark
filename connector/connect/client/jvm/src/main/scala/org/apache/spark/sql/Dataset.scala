@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{Metadata, StructType}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
@@ -2582,6 +2583,14 @@ class Dataset[T] private[sql] (val sparkSession: SparkSession, private[sql] val 
    */
   def writeTo(table: String): DataFrameWriterV2[T] = {
     new DataFrameWriterV2[T](table, this)
+  }
+
+  def persist(): this.type = {
+    throw new UnsupportedOperationException("persist is not implemented.")
+  }
+
+  def persist(newLevel: StorageLevel): this.type = {
+    throw new UnsupportedOperationException("persist is not implemented.")
   }
 
   def unpersist(blocking: Boolean): this.type = {
