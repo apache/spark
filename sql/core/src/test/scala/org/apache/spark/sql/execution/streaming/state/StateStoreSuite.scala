@@ -1253,7 +1253,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  test("SPARK-42572: StateStore validateStateRowFormat shouldn't check" +
+  test("SPARK-42572: StateStoreProvider.validateStateRowFormat shouldn't check" +
     " value row format when SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED is false") {
     // By default, when there is an invalid pair of value row and value schema, it should throw
     val keyRow = dataToKeyRow("key", 1)
