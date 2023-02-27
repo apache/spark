@@ -27,22 +27,26 @@ object VersionUnresolvedRelation {
       dataSource: DataSource,
       isStreaming: Boolean)(session: SparkSession): VersionUnresolvedRelation = {
     VersionUnresolvedRelation(
-      dataSource = dataSource,
+      source = dataSource.className,
+      dataSource = Some(dataSource),
+      options = dataSource.options,
+      userSpecifiedSchema = dataSource.userSpecifiedSchema,
       output = dataSource.sourceInfo.schema.toAttributes,
       isStreaming = isStreaming)(session)
   }
 }
 
 case class VersionUnresolvedRelation (
-    dataSource: DataSource,
-    output: Seq[Attribute],
-    override val isStreaming: Boolean)(session: SparkSession)
+  source: String,
+  dataSource: Option[DataSource],
+  options: Map[String, String] = Map.empty,
+  userSpecifiedSchema: Option[StructType] = None,
+  paths: Seq[String] = Seq.empty,
+  output: Seq[Attribute] = Seq.empty,
+  override val isStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   val sparkSession: SparkSession = session
-  val source: String = dataSource.sourceInfo.name
-  val options: Map[String, String] = dataSource.options
-  val userSpecifiedSchema: Option[StructType] = dataSource.userSpecifiedSchema
 
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
 
@@ -51,5 +55,24 @@ case class VersionUnresolvedRelation (
   )
 
   override def toString: String = s"[Version Unresolved] $source"
-
 }
+
+//case class VersionUnresolvedRelation (
+//    dataSource: DataSource,
+//    output: Seq[Attribute],
+//    override val isStreaming: Boolean)(session: SparkSession)
+//  extends LeafNode with MultiInstanceRelation {
+//
+//  val sparkSession: SparkSession = session
+//  val source: String = dataSource.sourceInfo.name
+//  val options: Map[String, String] = dataSource.options
+//  val userSpecifiedSchema: Option[StructType] = dataSource.userSpecifiedSchema
+//
+//  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
+//
+//  override def computeStats(): Statistics = Statistics(
+//    sizeInBytes = BigInt(conf.defaultSizeInBytes)
+//  )
+//
+//  override def toString: String = s"[Version Unresolved] $source"
+//}

@@ -27,9 +27,22 @@ import org.apache.spark.sql.sources.StreamSourceProvider
 object ResolveDataSourceVersion extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r@VersionUnresolvedRelation(v1DataSource, _, _) =>
+    // TODO: Add dataframeReader fall back logic
+    case r@VersionUnresolvedRelation(
+        source, dataSource, optionsWithPath, userSpecifiedSchema, _, _, _) =>
       val sparkSession = r.sparkSession
-      val ds = DataSource.lookupDataSource(r.source, sparkSession.sqlContext.conf).
+      // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
+      // We can't be sure at this point whether we'll actually want to use V2,
+      // since we don't know the writer or whether the query is continuous.
+      val v1DataSource = dataSource.getOrElse {
+        DataSource(
+          sparkSession,
+          userSpecifiedSchema = userSpecifiedSchema,
+          className = source,
+          options = optionsWithPath)
+      }
+
+      val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
         getConstructor().newInstance() // TableProvider or Source
 
       val v1Relation = ds match {
@@ -40,12 +53,11 @@ object ResolveDataSourceVersion extends Rule[LogicalPlan] {
         // file source v2 does not support streaming yet.
         case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
           DataSourceV2Utils.loadV2StreamingSource(
-            sparkSession, provider, r.userSpecifiedSchema, r.options, r.source, v1Relation)
+            sparkSession, provider, userSpecifiedSchema, optionsWithPath, source, v1Relation)
             .getOrElse(StreamingRelation(v1DataSource))
 
         // fallback to v1
         case _ => StreamingRelation(v1DataSource)
-        // TODO: Add dataframeReader fall back logic
       }
   }
 }
