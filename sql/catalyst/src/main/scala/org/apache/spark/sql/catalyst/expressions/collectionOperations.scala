@@ -1405,8 +1405,8 @@ case class ArrayContains(left: Expression, right: Expression)
     "_FUNC_(array, value) - Returns an array containing value as well as all elements from array. The new element is positioned at the beginning of the array.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3), 4);
-       [4, 1, 2, 3]
+      > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
+       ["d","b","d","c","a"]
   """,
   group = "array_funcs",
   since = "3.4.0")
