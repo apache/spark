@@ -177,7 +177,8 @@ object UnsafeRowUtils {
   }
 
   def getStructuralIntegrityStatus(row: UnsafeRow, expectedSchema: StructType): String = {
-    val fieldStatusArr = expectedSchema.fields.zipWithIndex.map {
+    val minLength = Math.min(row.numFields(), expectedSchema.fields.length)
+    val fieldStatusArr = expectedSchema.fields.take(minLength).zipWithIndex.map {
       case (field, index) =>
         val offsetAndSizeStr = if (!UnsafeRow.isFixedLength(field.dataType)) {
           val (offset, size) = getOffsetAndSize(row, index)
