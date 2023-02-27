@@ -81,7 +81,8 @@ class CompatibilitySuite extends ConnectFunSuite {
       IncludeByName("org.apache.spark.sql.functions.*"),
       IncludeByName("org.apache.spark.sql.RelationalGroupedDataset.*"),
       IncludeByName("org.apache.spark.sql.SparkSession.*"),
-      IncludeByName("org.apache.spark.sql.RuntimeConfig.*"))
+      IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
+      IncludeByName("org.apache.spark.sql.TypedColumn.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
@@ -136,7 +137,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.broadcast"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.count"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
 
@@ -178,10 +178,12 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getActiveSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.range"),
 
       // RuntimeConfig
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"))
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
+
+      // TypedColumn
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"))
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
