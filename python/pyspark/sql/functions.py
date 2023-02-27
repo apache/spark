@@ -7618,6 +7618,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     return _invoke_function_over_columns("get", col, index)
 
+
 @try_remote_functions
 def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     """
@@ -7644,8 +7645,9 @@ def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     >>> df = spark.createDataFrame([([2, 3, 4],), ([],)], ['data'])
     >>> df.select(array_prepend(df.data, 1)).collect()
     [Row(array_prepend(data, 1)=[1, 2, 3, 4]), Row(array_prepend(data, 1)=[1])]
-    """ 
+    """
     return _invoke_function("array_prepend", _to_java_column(col), element)
+
 
 @try_remote_functions
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
@@ -7676,6 +7678,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     [Row(array_remove(data, 1)=[2, 3]), Row(array_remove(data, 1)=[])]
     """
     return _invoke_function("array_remove", _to_java_column(col), element)
+
 
 @try_remote_functions
 def array_distinct(col: "ColumnOrName") -> Column:
