@@ -32,27 +32,14 @@ import com.typesafe.tools.mima.lib.MiMaLib
 import org.apache.spark.tools.GenerateMIMAIgnore.{classLoader, mirror}
 
 /**
- * This test checks the binary compatibility of the connect client API against the spark SQL API
+ * A tool for checking the binary compatibility of the connect client API against the spark SQL API
  * using MiMa. We did not write this check using a SBT build rule as the rule cannot provide the
  * same level of freedom as a test. With a test we can:
  *   1. Specify any two jars to run the compatibility check.
  *   1. Easily make the test automatically pick up all new methods added while the client is being
  *      built.
  *
- * The test requires the following artifacts built before running:
- * {{{
- *     spark-sql
- *     spark-connect-client-jvm
- * }}}
- * To build the above artifact, use e.g. `sbt package` or `mvn clean install -DskipTests`.
- *
- * When debugging this test, if any changes to the client API, the client jar need to be built
- * before running the test. An example workflow with SBT for this test:
- *   1. Compatibility test has reported an unexpected client API change.
- *   1. Fix the wrong client API.
- *   1. Build the client jar: `sbt package`
- *   1. Run the test again: `sbt "testOnly
- *      org.apache.spark.sql.connect.client.CompatibilitySuite"`
+ * We can run this check by executing the `dev/connect-jvm-client-mima-check`。
  */
 // scalastyle:off println
 object CheckConnectJvmClientCompatibility {
@@ -265,8 +252,8 @@ object CheckConnectJvmClientCompatibility {
   }
 
   /**
-   * Find a jar in the Spark project artifacts. It requires a build first (e.g. sbt package, mvn
-   * clean install -DskipTests) so that this method can find the jar in the target folders.
+   * Find a jar in the Spark project artifacts. It requires a build first (e.g. sbt package)
+   * so that this method can find the jar in the target folders.
    *
    * @return the jar
    */
