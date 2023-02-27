@@ -333,6 +333,14 @@ object SparkSession extends Logging {
     throw new UnsupportedOperationException("getDefaultSession is not supported")
   }
 
+  def setActiveSession(session: SparkSession): Unit = {
+    throw new UnsupportedOperationException("setActiveSession is not supported")
+  }
+
+  def clearActiveSession(): Unit = {
+    throw new UnsupportedOperationException("clearActiveSession is not supported")
+  }
+
   def active: SparkSession = {
     throw new UnsupportedOperationException("active is not supported")
   }
