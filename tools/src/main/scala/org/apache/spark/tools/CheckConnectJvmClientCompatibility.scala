@@ -35,7 +35,7 @@ import com.typesafe.tools.mima.lib.MiMaLib
  *   1. Easily make the test automatically pick up all new methods added while the client is being
  *      built.
  *
- * We can run this check by executing the `dev/connect-jvm-client-mima-check`。
+ * We can run this check by executing the `dev/connect-jvm-client-mima-check`.
  */
 // scalastyle:off println
 object CheckConnectJvmClientCompatibility {
