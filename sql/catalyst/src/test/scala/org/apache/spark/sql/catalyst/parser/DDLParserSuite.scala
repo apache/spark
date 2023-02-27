@@ -23,7 +23,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
@@ -2716,5 +2716,50 @@ class DDLParserSuite extends AnalysisTest {
         "optionName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"", start = 27, stop = 71))
+  }
+
+  test("SPARK-41290: implement parser support for GENERATED ALWAYS AS columns in tables") {
+    val schemaWithGeneratedColumn = new StructType()
+      .add("a", IntegerType, true)
+      .add("b", IntegerType, false,
+        new MetadataBuilder()
+          .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, "a+1")
+          .build())
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
+      CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    comparePlans(parsePlan(
+      "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
+      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    // Two generation expressions
+    checkError(
+      exception = parseException("CREATE TABLE my_tab(a INT, " +
+          "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)) USING PARQUET"),
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map("columnName" -> "b", "optionName" -> "GENERATED ALWAYS AS"),
+      context = ExpectedContext(
+        fragment = "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)",
+        start = 27,
+        stop = 87
+      )
+    )
+    // Empty expression
+    checkError(
+      exception = parseException(
+        "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS ()) USING PARQUET"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "')'", "hint" -> "")
+    )
+    // No parenthesis
+    checkError(
+      exception = parseException(
+        "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS a + 1) USING PARQUET"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'a'", "hint" -> ": missing '('")
+    )
   }
 }
