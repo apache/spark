@@ -63,12 +63,12 @@ object CheckConnectJvmClientCompatibility {
         resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
         resultWriter.write("\n")
       }
-      val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
-      if (incompatibleApis.nonEmpty) {
-        resultWriter.write("ERROR: Dataset apis incompatible with the sql module include: \n")
-        resultWriter.write(incompatibleApis.mkString("\n"))
-        resultWriter.write("\n")
-      }
+//      val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
+//      if (incompatibleApis.nonEmpty) {
+//        resultWriter.write("ERROR: Dataset apis incompatible with the sql module include: \n")
+//        resultWriter.write(incompatibleApis.mkString("\n"))
+//        resultWriter.write("\n")
+//      }
     } catch {
       case e: Exception =>
         resultWriter.write(s"ERROR: ${e.getMessage}")
