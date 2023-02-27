@@ -39,14 +39,15 @@ import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
  *     spark-sql
  *     spark-connect-client-jvm
  * }}}
- * To build the above artifact, use e.g. `sbt package` or `mvn clean install -DskipTests`.
+ * To build the above artifact, use e.g. `build/sbt package` or
+ * `build/mvn clean install -DskipTests`.
  *
  * When debugging this test, if any changes to the client API, the client jar need to be built
  * before running the test. An example workflow with SBT for this test:
  *   1. Compatibility test has reported an unexpected client API change.
  *   1. Fix the wrong client API.
- *   1. Build the client jar: `sbt package`
- *   1. Run the test again: `sbt "testOnly
+ *   1. Build the client jar: `build/sbt package`
+ *   1. Run the test again: `build/sbt "testOnly
  *      org.apache.spark.sql.connect.client.CompatibilitySuite"`
  */
 class CompatibilitySuite extends ConnectFunSuite {
