@@ -32,7 +32,7 @@ else
   JAVA_CMD=java
 fi
 
-rm -rf .connect-mima-check-result
+rm -f .connect-mima-check-result
 
 TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
 CORE_CLASSPATH="$(build/sbt -DcopyDependencies=false "export core/fullClasspath" | grep jar | tail -n1)"
