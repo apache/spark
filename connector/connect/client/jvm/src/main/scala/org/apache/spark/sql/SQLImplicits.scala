@@ -14,18 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql
 
-package org.apache.spark.sql.internal.connector
+import scala.language.implicitConversions
 
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
-import org.apache.spark.sql.types.DataType
+/**
+ * A collection of implicit methods for converting names and Symbols into [[Column]]s.
+ *
+ * @since 3.4.0
+ */
+abstract class SQLImplicits {
 
-// The standard concrete implementation of data source V2 column.
-case class ColumnImpl(
-    name: String,
-    dataType: DataType,
-    nullable: Boolean,
-    comment: String,
-    defaultValue: ColumnDefaultValue,
-    generationExpression: String,
-    metadataInJSON: String) extends Column
+  /**
+   * Converts $"col name" into a [[Column]].
+   *
+   * @since 3.4.0
+   */
+  implicit class StringToColumn(val sc: StringContext) {
+    def $(args: Any*): ColumnName = {
+      new ColumnName(sc.s(args: _*))
+    }
+  }
+
+  /**
+   * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
+   * @since 3.4.0
+   */
+  implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+}

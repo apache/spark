@@ -17,15 +17,19 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.Cleaner
 
@@ -59,6 +63,35 @@ class SparkSession(
 
   private[this] val allocator = new RootAllocator()
 
+  def version: String = SPARK_VERSION
+
+  /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark configurations that
+   * are relevant to Spark SQL. When getting the value of a config, his defaults to the value set
+   * in server, if any.
+   *
+   * @since 3.4.0
+   */
+  val conf: RuntimeConfig = new RuntimeConfig(client)
+
+  /**
+   * Executes some code block and prints to stdout the time taken to execute the block. This is
+   * available in Scala only and is used primarily for interactive testing and debugging.
+   *
+   * @since 3.4.0
+   */
+  def time[T](f: => T): T = {
+    val start = System.nanoTime()
+    val ret = f
+    val end = System.nanoTime()
+    // scalastyle:off println
+    println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
+    // scalastyle:on println
+    ret
+  }
+
   /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
    * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
@@ -87,7 +120,7 @@ class SparkSession(
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataset {
+  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataFrame {
     builder =>
       // Send the SQL once to the server and then check the output.
       val cmd = newCommand(b =>
@@ -148,7 +181,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(end: Long): Dataset[Row] = range(0, end)
+  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -156,7 +189,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long): Dataset[Row] = {
+  def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1)
   }
 
@@ -166,7 +199,7 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long): Dataset[Row] = {
+  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, None)
   }
 
@@ -176,16 +209,32 @@ class SparkSession(
    *
    * @since 3.4.0
    */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Row] = {
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     range(start, end, step, Option(numPartitions))
   }
+
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
+  /**
+   * (Scala-specific) Implicit methods available in Scala for converting common names and
+   * [[Symbol]]s into [[Column]]s.
+   *
+   * {{{
+   *   val sparkSession = SparkSession.builder.getOrCreate()
+   *   import sparkSession.implicits._
+   * }}}
+   *
+   * @since 3.4.0
+   */
+  object implicits extends SQLImplicits
+  // scalastyle:on
 
   private def range(
       start: Long,
       end: Long,
       step: Long,
-      numPartitions: Option[Int]): Dataset[Row] = {
-    newDataset { builder =>
+      numPartitions: Option[Int]): Dataset[java.lang.Long] = {
+    newDataset(BoxedLongEncoder) { builder =>
       val rangeBuilder = builder.getRangeBuilder
         .setStart(start)
         .setEnd(end)
@@ -194,12 +243,17 @@ class SparkSession(
     }
   }
 
-  private[sql] def newDataset[T](f: proto.Relation.Builder => Unit): Dataset[T] = {
+  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
+    newDataset(UnboundRowEncoder)(f)
+  }
+
+  private[sql] def newDataset[T](encoder: AgnosticEncoder[T])(
+      f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    new Dataset[T](this, plan)
+    new Dataset[T](this, plan, encoder)
   }
 
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
@@ -213,9 +267,9 @@ class SparkSession(
       mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
     client.analyze(plan, mode)
 
-  private[sql] def execute(plan: proto.Plan): SparkResult = {
+  private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator)
+    val result = new SparkResult(value, allocator, encoder)
     cleaner.register(result)
     result
   }

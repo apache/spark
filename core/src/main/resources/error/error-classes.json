@@ -571,6 +571,11 @@
     ],
     "sqlState" : "42809"
   },
+  "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
+    "message" : [
+      "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
+    ]
+  },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
       "Invalid Graphite protocol: <protocol>."
@@ -1606,6 +1611,11 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
+    "message" : [
+      "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>."
+    ]
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [

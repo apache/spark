@@ -22,6 +22,7 @@ import org.scalatest.matchers.must.Matchers.the
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.catalyst.plans.logical.{Window => LogicalWindow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
@@ -1427,6 +1428,21 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           )
         )
       }
+    }
+  }
+
+  test("SPARK-42525: collapse two adjacent windows with the same partition/order in subquery") {
+    withTempView("t1") {
+      Seq((1, 1), (2, 2)).toDF("a", "b").createOrReplaceTempView("t1")
+      val df = sql(
+        """
+          |SELECT a, b, rk, row_number() OVER (PARTITION BY a ORDER BY b) AS rn
+          |FROM   (SELECT a, b, rank() OVER (PARTITION BY a ORDER BY b) AS rk
+          |        FROM t1) t2
+          |""".stripMargin)
+
+      val windows = df.queryExecution.optimizedPlan.collect { case w: LogicalWindow => w }
+      assert(windows.size === 1)
     }
   }
 }

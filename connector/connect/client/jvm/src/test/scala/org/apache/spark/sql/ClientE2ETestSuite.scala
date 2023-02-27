@@ -17,17 +17,20 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
+import java.nio.file.Files
 
 import scala.collection.JavaConverters._
+import scala.reflect.runtime.universe.TypeTag
 
 import io.grpc.StatusRuntimeException
-import java.nio.file.Files
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
+import org.apache.spark.SPARK_VERSION
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.{aggregate, array, col, lit, rand, sequence, shuffle, transform, udf}
+import org.apache.spark.sql.functions.{aggregate, array, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
@@ -70,9 +73,9 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val df = spark.range(10).limit(3)
     val result = df.collect()
     assert(result.length == 3)
-    assert(result(0).getLong(0) == 0)
-    assert(result(1).getLong(0) == 1)
-    assert(result(2).getLong(0) == 2)
+    assert(result(0) == 0)
+    assert(result(1) == 1)
+    assert(result(2) == 2)
   }
 
   test("simple udf") {
@@ -251,28 +254,38 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     checkFragments(result, fragmentsToCheck)
   }
 
-  private val simpleSchema = new StructType().add("id", "long", nullable = false)
+  private val simpleSchema = new StructType().add("value", "long", nullable = true)
 
   // Dataset tests
   test("Dataset inspection") {
     val df = spark.range(10)
-    val local = spark.newDataset { builder =>
+    val local = spark.newDataFrame { builder =>
       builder.getLocalRelationBuilder.setSchema(simpleSchema.catalogString)
     }
     assert(!df.isLocal)
     assert(local.isLocal)
     assert(!df.isStreaming)
-    assert(df.toString.contains("[id: bigint]"))
+    assert(df.toString.contains("[value: bigint]"))
     assert(df.inputFiles.isEmpty)
   }
 
   test("Dataset schema") {
     val df = spark.range(10)
     assert(df.schema === simpleSchema)
-    assert(df.dtypes === Array(("id", "LongType")))
-    assert(df.columns === Array("id"))
+    assert(df.dtypes === Array(("value", "LongType")))
+    assert(df.columns === Array("value"))
     testCapturedStdOut(df.printSchema(), simpleSchema.treeString)
     testCapturedStdOut(df.printSchema(5), simpleSchema.treeString(5))
+  }
+
+  test("Dataframe schema") {
+    val df = spark.sql("select * from range(10)")
+    val expectedSchema = new StructType().add("id", "long", nullable = false)
+    assert(df.schema === expectedSchema)
+    assert(df.dtypes === Array(("id", "LongType")))
+    assert(df.columns === Array("id"))
+    testCapturedStdOut(df.printSchema(), expectedSchema.treeString)
+    testCapturedStdOut(df.printSchema(5), expectedSchema.treeString(5))
   }
 
   test("Dataset explain") {
@@ -296,9 +309,9 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset result collection") {
-    def checkResult(rows: TraversableOnce[Row], expectedValues: Long*): Unit = {
+    def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
       rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {
-        case (actual, expected) => assert(actual.getLong(0) === expected)
+        case (actual, expected) => assert(actual === expected)
       }
     }
     val df = spark.range(10)
@@ -369,7 +382,11 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     implicit val tolerance = TolerantNumerics.tolerantDoubleEquality(0.01)
 
     val df = spark.range(100)
-    def checkSample(ds: DataFrame, lower: Double, upper: Double, seed: Long): Unit = {
+    def checkSample(
+        ds: Dataset[java.lang.Long],
+        lower: Double,
+        upper: Double,
+        seed: Long): Unit = {
       assert(ds.plan.getRoot.hasSample)
       val sample = ds.plan.getRoot.getSample
       assert(sample.getSeed === seed)
@@ -387,6 +404,62 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     checkSample(datasets.get(1), 1.0 / 10.0, 3.0 / 10.0, 9L)
     checkSample(datasets.get(2), 3.0 / 10.0, 6.0 / 10.0, 9L)
     checkSample(datasets.get(3), 6.0 / 10.0, 1.0, 9L)
+  }
+
+  test("Dataset count") {
+    assert(spark.range(10).count() === 10)
+  }
+
+  // We can remove this as soon this is added to SQLImplicits.
+  private implicit def newProductEncoder[T <: Product: TypeTag]: Encoder[T] =
+    ScalaReflection.encoderFor[T]
+
+  test("Dataset collect tuple") {
+    val result = spark
+      .range(3)
+      .select(col("id"), (col("id") % 2).cast("int").as("a"), (col("id") / lit(10.0d)).as("b"))
+      .as[(Long, Int, Double)]
+      .collect()
+    result.zipWithIndex.foreach { case ((id, a, b), i) =>
+      assert(id == i)
+      assert(a == id % 2)
+      assert(b == id / 10.0d)
+    }
+  }
+
+  private val generateMyTypeColumns = Seq(
+    (col("id") / lit(10.0d)).as("b"),
+    col("id"),
+    lit("world").as("d"),
+    (col("id") % 2).cast("int").as("a"))
+
+  private def validateMyTypeResult(result: Array[MyType]): Unit = {
+    result.zipWithIndex.foreach { case (MyType(id, a, b), i) =>
+      assert(id == i)
+      assert(a == id % 2)
+      assert(b == id / 10.0d)
+    }
+  }
+
+  test("Dataset collect complex type") {
+    val result = spark
+      .range(3)
+      .select(generateMyTypeColumns: _*)
+      .as[MyType]
+      .collect()
+    validateMyTypeResult(result)
+  }
+
+  test("Dataset typed select - simple column") {
+    val numRows = spark.range(1000).select(count("id")).first()
+    assert(numRows === 1000)
+  }
+
+  test("Dataset typed select - complex column") {
+    val ds = spark
+      .range(3)
+      .select(struct(generateMyTypeColumns: _*).as[MyType])
+    validateMyTypeResult(ds.collect())
   }
 
   test("lambda functions") {
@@ -432,4 +505,34 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     spark.range(1000).createOrReplaceGlobalTempView("view1")
     assert(spark.sql("SELECT * FROM global_temp.view1").count() == 1000)
   }
+
+  test("version") {
+    assert(spark.version == SPARK_VERSION)
+  }
+
+  test("time") {
+    val timeFragments = Seq("Time taken: ", " ms")
+    testCapturedStdOut(spark.time(spark.sql("select 1").collect()), timeFragments: _*)
+  }
+
+  test("RuntimeConfig") {
+    intercept[NoSuchElementException](spark.conf.get("foo.bar"))
+    assert(spark.conf.getOption("foo.bar").isEmpty)
+    spark.conf.set("foo.bar", value = true)
+    assert(spark.conf.getOption("foo.bar") === Option("true"))
+    spark.conf.set("foo.bar.numBaz", 100L)
+    assert(spark.conf.get("foo.bar.numBaz") === "100")
+    spark.conf.set("foo.bar.name", "donkey")
+    assert(spark.conf.get("foo.bar.name") === "donkey")
+    spark.conf.unset("foo.bar.name")
+    val allKeyValues = spark.conf.getAll
+    assert(allKeyValues("foo.bar") === "true")
+    assert(allKeyValues("foo.bar.numBaz") === "100")
+    assert(!spark.conf.isModifiable("foo.bar")) // This is a bit odd.
+    assert(spark.conf.isModifiable("spark.sql.ansi.enabled"))
+    assert(!spark.conf.isModifiable("spark.sql.globalTempDatabase"))
+    intercept[Exception](spark.conf.set("spark.sql.globalTempDatabase", "/dev/null"))
+  }
 }
+
+private[sql] case class MyType(id: Long, a: Double, b: Double)

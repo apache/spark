@@ -39,14 +39,15 @@ import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
  *     spark-sql
  *     spark-connect-client-jvm
  * }}}
- * To build the above artifact, use e.g. `sbt package` or `mvn clean install -DskipTests`.
+ * To build the above artifact, use e.g. `build/sbt package` or `build/mvn clean install
+ * -DskipTests`.
  *
  * When debugging this test, if any changes to the client API, the client jar need to be built
  * before running the test. An example workflow with SBT for this test:
  *   1. Compatibility test has reported an unexpected client API change.
  *   1. Fix the wrong client API.
- *   1. Build the client jar: `sbt package`
- *   1. Run the test again: `sbt "testOnly
+ *   1. Build the client jar: `build/sbt package`
+ *   1. Run the test again: `build/sbt "testOnly
  *      org.apache.spark.sql.connect.client.CompatibilitySuite"`
  */
 class CompatibilitySuite extends ConnectFunSuite {
@@ -71,6 +72,7 @@ class CompatibilitySuite extends ConnectFunSuite {
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
       IncludeByName("org.apache.spark.sql.Column.*"),
+      IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
       IncludeByName("org.apache.spark.sql.DataFrameReader.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriter.*"),
@@ -78,7 +80,9 @@ class CompatibilitySuite extends ConnectFunSuite {
       IncludeByName("org.apache.spark.sql.Dataset.*"),
       IncludeByName("org.apache.spark.sql.functions.*"),
       IncludeByName("org.apache.spark.sql.RelationalGroupedDataset.*"),
-      IncludeByName("org.apache.spark.sql.SparkSession.*"))
+      IncludeByName("org.apache.spark.sql.SparkSession.*"),
+      IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
+      IncludeByName("org.apache.spark.sql.TypedColumn.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
@@ -99,15 +103,11 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.COL_POS_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.curId"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupBy"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.observe"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.as"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.checkpoint"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.localCheckpoint"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.withWatermark"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.na"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.stat"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
@@ -123,24 +123,11 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreach"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreachPartition"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.persist"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.cache"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.storageLevel"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.unpersist"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.Dataset.registerTempTable"
-      ), // deprecated
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.createTempView"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.createOrReplaceTempView"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.createGlobalTempView"),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.Dataset.createOrReplaceGlobalTempView"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.writeStream"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJSON"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sameSemantics"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.semanticHash"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.this"),
 
       // functions
@@ -150,11 +137,11 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.broadcast"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.count"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
 
       // RelationalGroupedDataset
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.as"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.pivot"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.this"),
@@ -165,13 +152,10 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getActiveSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.implicits"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.version"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sharedState"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sessionState"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sqlContext"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.conf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udf"),
@@ -186,7 +170,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.catalog"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.time"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.stop"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setActiveSession"),
@@ -195,7 +178,12 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getActiveSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.range"))
+
+      // RuntimeConfig
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
+
+      // TypedColumn
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"))
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))

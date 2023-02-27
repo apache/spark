@@ -27,6 +27,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
@@ -400,6 +401,15 @@ object functions {
    * @since 3.4.0
    */
   def count(e: Column): Column = Column.fn("count", e)
+
+  /**
+   * Aggregate function: returns the number of items in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def count(columnName: String): TypedColumn[Any, Long] =
+    count(Column(columnName)).as(PrimitiveLongEncoder)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
