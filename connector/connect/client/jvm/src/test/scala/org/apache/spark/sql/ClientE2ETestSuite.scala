@@ -427,4 +427,23 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val timeFragments = Seq("Time taken: ", " ms")
     testCapturedStdOut(spark.time(spark.sql("select 1").collect()), timeFragments: _*)
   }
+
+  test("RuntimeConfig") {
+    intercept[NoSuchElementException](spark.conf.get("foo.bar"))
+    assert(spark.conf.getOption("foo.bar").isEmpty)
+    spark.conf.set("foo.bar", value = true)
+    assert(spark.conf.getOption("foo.bar") === Option("true"))
+    spark.conf.set("foo.bar.numBaz", 100L)
+    assert(spark.conf.get("foo.bar.numBaz") === "100")
+    spark.conf.set("foo.bar.name", "donkey")
+    assert(spark.conf.get("foo.bar.name") === "donkey")
+    spark.conf.unset("foo.bar.name")
+    val allKeyValues = spark.conf.getAll
+    assert(allKeyValues("foo.bar") === "true")
+    assert(allKeyValues("foo.bar.numBaz") === "100")
+    assert(!spark.conf.isModifiable("foo.bar")) // This is a bit odd.
+    assert(spark.conf.isModifiable("spark.sql.ansi.enabled"))
+    assert(!spark.conf.isModifiable("spark.sql.globalTempDatabase"))
+    intercept[Exception](spark.conf.set("spark.sql.globalTempDatabase", "/dev/null"))
+  }
 }

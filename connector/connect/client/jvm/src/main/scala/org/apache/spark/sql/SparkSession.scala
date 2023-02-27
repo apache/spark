@@ -64,6 +64,17 @@ class SparkSession(
   def version: String = SPARK_VERSION
 
   /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark configurations that
+   * are relevant to Spark SQL. When getting the value of a config, his defaults to the value set
+   * in server, if any.
+   *
+   * @since 3.4.0
+   */
+  val conf: RuntimeConfig = new RuntimeConfig(client)
+
+  /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
    * available in Scala only and is used primarily for interactive testing and debugging.
    *
