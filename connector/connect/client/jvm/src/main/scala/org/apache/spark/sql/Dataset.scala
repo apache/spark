@@ -2113,7 +2113,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(colNames: String*): DataFrame = buildDropWithColNames(colNames)
+  def drop(colNames: String*): DataFrame = buildDropByNames(colNames)
 
   /**
    * Returns a new Dataset with column dropped.
@@ -2147,7 +2147,7 @@ class Dataset[T] private[sql] (
       .addAllColumns(cols.map(_.expr).asJava)
   }
 
-  private def buildDropWithColNames(cols: Seq[String]): DataFrame = session.newDataset {
+  private def buildDropByNames(cols: Seq[String]): DataFrame = sparkSession.newDataset {
     builder =>
       builder.getDropBuilder
         .setInput(plan.getRoot)
