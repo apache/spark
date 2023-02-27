@@ -856,7 +856,9 @@ object SparkConnectClient {
       (LocalProject("assembly") / Compile / Keys.`package`).value
     },
 
-    // Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
+    // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
+    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
+    // so no additional configuration is required.
     test := ((Test / test) dependsOn (buildTestDeps)).value,
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
