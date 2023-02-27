@@ -2192,6 +2192,13 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "operation" -> "generated columns")
     )
   }
+
+  test("SPARK-42603: Set spark.sql.legacy.createHiveTableByDefault to false") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(c1 bigint)")
+      sql("desc formatted t1").collect().toSeq.contains(Row("Provider", "parquet", ""))
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
