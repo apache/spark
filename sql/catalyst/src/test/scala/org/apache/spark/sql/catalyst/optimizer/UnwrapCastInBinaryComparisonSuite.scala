@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.sql.Date
+
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -366,6 +368,43 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(castInt(f4) <=> t, false)
     assertEquivalent(castInt(f4) <= t, trueIfNotNull(f4))
     assertEquivalent(castInt(f4) < t, trueIfNotNull(f4))
+  }
+
+  test("SPARK-42597: Support timestamp type") {
+    val tsRelation = LocalRelation($"a".timestamp)
+    val date = Date.valueOf("2023-02-26")
+
+    def assertTimestampEquivalent(e1: Expression, e2: Expression): Unit = {
+      val plan = tsRelation.where(e1).analyze
+      val actual = Optimize.execute(plan)
+      val expected = tsRelation.where(e2).analyze
+      comparePlans(actual, expected)
+    }
+
+    assertTimestampEquivalent(
+      Cast($"a", DateType) > Literal(date),
+      $"a" >= Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
+
+    assertTimestampEquivalent(
+      Cast($"a", DateType) >= Literal(date),
+      $"a" >= Cast(date, TimestampType))
+
+    assertTimestampEquivalent(
+      Cast($"a", DateType) < Literal(date),
+      $"a" < Cast(date, TimestampType))
+
+    assertTimestampEquivalent(
+      Cast($"a", DateType) <= Literal(date),
+      $"a" < Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
+
+    assertTimestampEquivalent(
+      Cast($"a", DateType) === Literal(date),
+      $"a" >= Cast(date, TimestampType) &&
+        $"a" < Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
+
+    assertTimestampEquivalent(
+      Literal(date) < Cast($"a", DateType),
+      $"a" >= Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
