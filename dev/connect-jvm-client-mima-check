@@ -42,6 +42,7 @@ echo "Build connect-client-jvm module ..."
 build/sbt connect-client-jvm/assembly
 
 echo "Do connect-client-jvm module mima check ..."
+
 $JAVA_CMD \
   -Xmx2g \
   -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.util.jar=ALL-UNNAMED \

@@ -24,12 +24,8 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.regex.Pattern
 
-import scala.reflect.runtime.universe.runtimeMirror
-
 import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.lib.MiMaLib
-
-import org.apache.spark.tools.GenerateMIMAIgnore.{classLoader, mirror}
 
 /**
  * A tool for checking the binary compatibility of the connect client API against the spark SQL API
