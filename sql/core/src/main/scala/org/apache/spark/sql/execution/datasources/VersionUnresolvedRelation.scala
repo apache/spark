@@ -37,13 +37,13 @@ object VersionUnresolvedRelation {
 }
 
 case class VersionUnresolvedRelation (
-  source: String,
-  dataSource: Option[DataSource],
-  options: Map[String, String] = Map.empty,
-  userSpecifiedSchema: Option[StructType] = None,
-  paths: Seq[String] = Seq.empty,
-  output: Seq[Attribute] = Seq.empty,
-  override val isStreaming: Boolean = false)(session: SparkSession)
+    source: String,
+    dataSource: Option[DataSource],
+    options: Map[String, String] = Map.empty,
+    userSpecifiedSchema: Option[StructType] = None,
+    paths: Seq[String] = Seq.empty,
+    output: Seq[Attribute] = Seq.empty,
+    override val isStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   val sparkSession: SparkSession = session
