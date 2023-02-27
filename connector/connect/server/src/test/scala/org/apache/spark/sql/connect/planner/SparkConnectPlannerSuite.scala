@@ -332,18 +332,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Aggregate")
   }
 
-  test("Invalid DataSource") {
-    val dataSource = proto.Read.DataSource.newBuilder()
-
-    val e = intercept[InvalidPlanInput](
-      transform(
-        proto.Relation
-          .newBuilder()
-          .setRead(proto.Read.newBuilder().setDataSource(dataSource))
-          .build()))
-    assert(e.getMessage.contains("DataSource requires a format"))
-  }
-
   test("Test invalid deduplicate") {
     val deduplicate = proto.Deduplicate
       .newBuilder()

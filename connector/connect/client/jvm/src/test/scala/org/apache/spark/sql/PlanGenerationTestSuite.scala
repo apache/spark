@@ -17,22 +17,25 @@
 package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ignore funsuite
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 // scalastyle:off
 /**
@@ -54,7 +57,11 @@ import org.apache.spark.sql.types._
  * `connector/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll with Logging {
+class PlanGenerationTestSuite
+    extends ConnectFunSuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach
+    with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
@@ -98,11 +105,15 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val client = new SparkConnectClient(
+    val client = SparkConnectClient(
       proto.UserContext.newBuilder().build(),
       InProcessChannelBuilder.forName("/dev/null").build())
-    val builder = SparkSession.builder().client(client)
-    session = builder.build()
+    session =
+      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+  }
+
+  override protected def beforeEach(): Unit = {
+    session.resetPlanIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -220,6 +231,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   /* Spark Session API */
   test("sql") {
     session.sql("select 1")
+  }
+
+  test("parameterized sql") {
+    session.sql("select 1", Map("minId" -> "7", "maxId" -> "20"))
   }
 
   test("range") {
@@ -356,7 +371,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("apply") {
-    simple.select(simple.apply("a"))
+    val stable = simple
+    stable.select(stable("a"))
   }
 
   test("hint") {
@@ -364,7 +380,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
   }
 
   test("col") {
-    simple.select(simple.col("id"), simple.col("b"))
+    val stable = simple
+    stable.select(stable.col("id"), stable.col("b"))
   }
 
   test("colRegex") {
@@ -1607,6 +1624,260 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
     fn.timestamp_seconds(fn.col("x"))
   }
 
+  // Array of Long
+  // Array of Long
+  // Array of Array of Long
+  // Map string, Long
+  // Map string, Long
+
+  functionTest("array_contains") {
+    fn.array_contains(fn.col("e"), lit(1))
+  }
+
+  functionTest("array_append") {
+    fn.array_append(fn.col("e"), lit(1))
+  }
+
+  functionTest("arrays_overlap") {
+    fn.arrays_overlap(fn.col("e"), fn.array(lit(1), lit(2)))
+  }
+
+  functionTest("slice") {
+    fn.slice(fn.col("e"), 0, 5)
+  }
+
+  functionTest("array_join") {
+    fn.array_join(fn.col("e"), ";")
+  }
+
+  functionTest("array_join with null replacement") {
+    fn.array_join(fn.col("e"), ";", "null")
+  }
+
+  functionTest("concat") {
+    fn.concat(fn.col("e"), fn.array(lit(1), lit(2)), fn.sequence(lit(33), lit(40)))
+  }
+
+  functionTest("array_position") {
+    fn.array_position(fn.col("e"), 10)
+  }
+
+  functionTest("element_at") {
+    fn.element_at(fn.col("f"), "bob")
+  }
+
+  functionTest("get") {
+    fn.get(fn.col("e"), lit(2))
+  }
+
+  functionTest("array_sort") {
+    fn.array_sort(fn.col("e"))
+  }
+
+  functionTest("array_sort with comparator") {
+    fn.array_sort(fn.col("e"), (l, r) => l - r)
+  }
+
+  functionTest("array_remove") {
+    fn.array_remove(fn.col("e"), 314)
+  }
+
+  functionTest("array_compact") {
+    fn.array_compact(fn.col("e"))
+  }
+
+  functionTest("array_distinct") {
+    fn.array_distinct(fn.col("e"))
+  }
+
+  functionTest("array_intersect") {
+    fn.array_intersect(fn.col("e"), fn.array(lit(10), lit(4)))
+  }
+
+  functionTest("array_insert") {
+    fn.array_insert(fn.col("e"), lit(0), lit(1))
+  }
+
+  functionTest("array_union") {
+    fn.array_union(fn.col("e"), fn.array(lit(1), lit(2), lit(3)))
+  }
+
+  functionTest("array_except") {
+    fn.array_except(fn.col("e"), fn.array(lit(1), lit(2), lit(4)))
+  }
+
+  functionTest("transform") {
+    fn.transform(fn.col("e"), x => x + 1)
+  }
+
+  functionTest("transform with index") {
+    fn.transform(fn.col("e"), (x, i) => x + i)
+  }
+
+  functionTest("exists") {
+    fn.exists(fn.col("e"), x => x > 10)
+  }
+
+  functionTest("forall") {
+    fn.forall(fn.col("e"), x => x > 10)
+  }
+
+  functionTest("filter") {
+    fn.filter(fn.col("e"), x => x > 10)
+  }
+
+  functionTest("filter with pair input") {
+    fn.filter(fn.col("e"), (x, i) => x > 10 && i > 2)
+  }
+
+  functionTest("aggregate") {
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
+  }
+
+  functionTest("zip_with") {
+    fn.zip_with(fn.col("e"), fn.col("e"), (x, y) => x + y)
+  }
+
+  functionTest("transform_keys") {
+    fn.transform_keys(fn.col("f"), (k, v) => fn.concat(k, v.getItem("id")))
+  }
+
+  functionTest("transform_values") {
+    fn.transform_values(fn.col("f"), (k, v) => v.withField("key", k))
+  }
+
+  functionTest("map_filter") {
+    fn.map_filter(fn.col("f"), (k, _) => k.contains(lit("baz")))
+  }
+
+  functionTest("map_zip_with") {
+    fn.map_zip_with(fn.col("f"), fn.col("f"), (_, v1, v2) => v1.getItem("id") + v2.getItem("id"))
+  }
+
+  functionTest("explode") {
+    fn.explode(fn.col("e"))
+  }
+
+  functionTest("explode_outer") {
+    fn.explode_outer(fn.col("e"))
+  }
+
+  functionTest("posexplode") {
+    fn.posexplode(fn.col("e"))
+  }
+
+  functionTest("posexplode_outer") {
+    fn.posexplode_outer(fn.col("e"))
+  }
+
+  functionTest("inline") {
+    fn.inline(fn.map_values(fn.col("f")))
+  }
+
+  functionTest("inline_outer") {
+    fn.inline_outer(fn.map_values(fn.col("f")))
+  }
+
+  functionTest("get_json_object") {
+    fn.get_json_object(fn.col("g"), "$.device_type")
+  }
+
+  functionTest("json_tuple") {
+    fn.json_tuple(fn.col("g"), "a", "b", "id")
+  }
+
+  functionTest("from_json") {
+    fn.from_json(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("schema_of_json") {
+    fn.schema_of_json(lit("""[{"col":01}]"""))
+  }
+
+  functionTest("schema_of_json with options") {
+    fn.schema_of_json(
+      lit("""[{"col":01}]"""),
+      Collections.singletonMap("allowNumericLeadingZeros", "true"))
+  }
+
+  functionTest("to_json") {
+    fn.to_json(fn.col("d"), Map(("timestampFormat", "dd/MM/yyyy")))
+  }
+
+  functionTest("size") {
+    fn.size(fn.col("f"))
+  }
+
+  functionTest("sort_array") {
+    fn.sort_array(fn.col("e"))
+  }
+
+  functionTest("array_min") {
+    fn.array_min(fn.col("e"))
+  }
+
+  functionTest("array_max") {
+    fn.array_max(fn.col("e"))
+  }
+
+  functionTest("reverse") {
+    fn.reverse(fn.col("e"))
+  }
+
+  functionTest("flatten") {
+    fn.flatten(fn.array(fn.col("e"), fn.sequence(fn.lit(1), fn.lit(10))))
+  }
+
+  functionTest("sequence") {
+    fn.sequence(fn.lit(1), fn.lit(10))
+  }
+
+  functionTest("array_repeat") {
+    fn.array_repeat(fn.col("a"), 10)
+  }
+
+  functionTest("map_contains_key") {
+    fn.map_contains_key(fn.col("f"), "xyz")
+  }
+
+  functionTest("map_keys") {
+    fn.map_keys(fn.col("f"))
+  }
+
+  functionTest("map_values") {
+    fn.map_values(fn.col("f"))
+  }
+
+  functionTest("map_entries") {
+    fn.map_entries(fn.col("f"))
+  }
+
+  functionTest("map_from_entries") {
+    fn.map_from_entries(fn.transform(fn.col("e"), (x, i) => fn.struct(i, x)))
+  }
+
+  functionTest("arrays_zip") {
+    fn.arrays_zip(fn.col("e"), fn.sequence(lit(1), lit(20)))
+  }
+
+  functionTest("map_concat") {
+    fn.map_concat(
+      fn.col("f"),
+      fn.map(lit("foo"), fn.struct(lit(12L).as("id"), lit(68).as("a"), lit(Math.E).as("b"))))
+  }
+
+  functionTest("from_csv") {
+    fn.from_csv(fn.col("g"), simpleSchema, Map(("mode", "FAILFAST")))
+  }
+
+  functionTest("schema_of_csv") {
+    fn.schema_of_csv(lit("1|abc"), Collections.singletonMap("sep", "|"))
+  }
+
+  functionTest("to_csv") {
+    fn.to_csv(fn.col("d"), Collections.singletonMap("sep", "|"))
+  }
+
   test("groupby agg") {
     simple
       .groupBy(Column("id"))
@@ -1619,6 +1890,12 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
         "b" -> "avg",
         "*" -> "size",
         "a" -> "count")
+  }
+
+  test("groupby agg string") {
+    simple
+      .groupBy("id", "b")
+      .agg("a" -> "max", "a" -> "count")
   }
 
   test("groupby agg columns") {
@@ -1663,6 +1940,26 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       .count()
   }
 
+  test("rollup column") {
+    simple.rollup(Column("a"), Column("b")).count()
+  }
+
+  test("cube column") {
+    simple.cube(Column("a"), Column("b")).count()
+  }
+
+  test("rollup string") {
+    simple.rollup("a", "b").count()
+  }
+
+  test("cube string") {
+    simple.cube("a", "b").count()
+  }
+
+  test("pivot") {
+    simple.groupBy(Column("id")).pivot("a", Seq(1, 2, 3)).agg(functions.count(Column("b")))
+  }
+
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
@@ -1681,7 +1978,16 @@ class PlanGenerationTestSuite extends ConnectFunSuite with BeforeAndAfterAll wit
       fn.lit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.lit(Array.tabulate(23)(i => (i + 120).toByte)),
       fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
-      fn.lit(java.time.LocalDate.of(2020, 10, 10)))
+      fn.lit(null),
+      fn.lit(java.time.LocalDate.of(2020, 10, 10)),
+      fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
+      fn.lit(java.time.Instant.ofEpochMilli(1677155519808L)),
+      fn.lit(new java.sql.Timestamp(12345L)),
+      fn.lit(java.time.LocalDateTime.of(2023, 2, 23, 20, 36)),
+      fn.lit(java.sql.Date.valueOf("2023-02-23")),
+      fn.lit(java.time.Duration.ofSeconds(200L)),
+      fn.lit(java.time.Period.ofDays(100)),
+      fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
   /* Window API */

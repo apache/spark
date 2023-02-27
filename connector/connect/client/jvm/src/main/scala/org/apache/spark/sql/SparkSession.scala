@@ -17,11 +17,15 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.concurrent.TimeUnit._
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
+import org.apache.spark.SPARK_VERSION
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
@@ -47,12 +51,67 @@ import org.apache.spark.sql.connect.client.util.Cleaner
  *     .getOrCreate()
  * }}}
  */
-class SparkSession(private val client: SparkConnectClient, private val cleaner: Cleaner)
+class SparkSession(
+    private val client: SparkConnectClient,
+    private val cleaner: Cleaner,
+    private val planIdGenerator: AtomicLong)
     extends Serializable
     with Closeable
     with Logging {
 
   private[this] val allocator = new RootAllocator()
+
+  def version: String = SPARK_VERSION
+
+  /**
+   * Executes some code block and prints to stdout the time taken to execute the block. This is
+   * available in Scala only and is used primarily for interactive testing and debugging.
+   *
+   * @since 3.4.0
+   */
+  def time[T](f: => T): T = {
+    val start = System.nanoTime()
+    val ret = f
+    val end = System.nanoTime()
+    // scalastyle:off println
+    println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
+    // scalastyle:on println
+    ret
+  }
+
+  /**
+   * Executes a SQL query substituting named parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText
+   *   A SQL statement with named parameters to execute.
+   * @param args
+   *   A map of parameter names to literal values.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: Map[String, String]): DataFrame = {
+    sql(sqlText, args.asJava)
+  }
+
+  /**
+   * Executes a SQL query substituting named parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText
+   *   A SQL statement with named parameters to execute.
+   * @param args
+   *   A map of parameter names to literal values.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataset {
+    builder =>
+      builder
+        .setSql(proto.SQL.newBuilder().setQuery(sqlText).putAllArgs(args))
+  }
 
   /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
@@ -60,8 +119,8 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
    *
    * @since 3.4.0
    */
-  def sql(query: String): DataFrame = newDataset { builder =>
-    builder.setSql(proto.SQL.newBuilder().setQuery(query))
+  def sql(query: String): DataFrame = {
+    sql(query, Map.empty[String, String])
   }
 
   /**
@@ -148,8 +207,15 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
   private[sql] def newDataset[T](f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
+    builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     new Dataset[T](this, plan)
+  }
+
+  private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
+    val builder = proto.Command.newBuilder()
+    f(builder)
+    builder.build()
   }
 
   private[sql] def analyze(
@@ -169,6 +235,15 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
     client.execute(plan).asScala.foreach(_ => ())
   }
 
+  /**
+   * This resets the plan id generator so we can produce plans that are comparable.
+   *
+   * For testing only!
+   */
+  private[sql] def resetPlanIdGenerator(): Unit = {
+    planIdGenerator.set(0)
+  }
+
   override def close(): Unit = {
     client.shutdown()
     allocator.close()
@@ -178,9 +253,11 @@ class SparkSession(private val client: SparkConnectClient, private val cleaner: 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
 object SparkSession extends Logging {
+  private val planIdGenerator = new AtomicLong
+
   def builder(): Builder = new Builder()
 
-  private lazy val cleaner = {
+  private[sql] lazy val cleaner = {
     val cleaner = new Cleaner
     cleaner.start()
     cleaner
@@ -189,7 +266,12 @@ object SparkSession extends Logging {
   class Builder() extends Logging {
     private var _client: SparkConnectClient = _
 
-    def client(client: SparkConnectClient): Builder = {
+    def remote(connectionString: String): Builder = {
+      client(SparkConnectClient.builder().connectionString(connectionString).build())
+      this
+    }
+
+    private[sql] def client(client: SparkConnectClient): Builder = {
       _client = client
       this
     }
@@ -198,7 +280,7 @@ object SparkSession extends Logging {
       if (_client == null) {
         _client = SparkConnectClient.builder().build()
       }
-      new SparkSession(_client, cleaner)
+      new SparkSession(_client, cleaner, planIdGenerator)
     }
   }
 }

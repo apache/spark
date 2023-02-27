@@ -26,8 +26,9 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{aggregate, array, col, lit, rand, sequence, shuffle, transform, udf}
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
@@ -372,5 +373,58 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     checkSample(datasets.get(1), 1.0 / 10.0, 3.0 / 10.0, 9L)
     checkSample(datasets.get(2), 3.0 / 10.0, 6.0 / 10.0, 9L)
     checkSample(datasets.get(3), 6.0 / 10.0, 1.0, 9L)
+  }
+
+  test("lambda functions") {
+    // This test is mostly to validate lambda variables are properly resolved.
+    val result = spark
+      .range(3)
+      .select(
+        col("id"),
+        array(sequence(col("id"), lit(10)), sequence(col("id") * 2, lit(10))).as("data"))
+      .select(col("id"), transform(col("data"), x => transform(x, x => x + 1)).as("data"))
+      .select(
+        col("id"),
+        transform(col("data"), x => aggregate(x, lit(0L), (x, y) => x + y)).as("summaries"))
+      .collect()
+    val expected = Array(Row(0L, Seq(66L, 66L)), Row(1L, Seq(65L, 63L)), Row(2L, Seq(63L, 56L)))
+    assert(result === expected)
+  }
+
+  test("shuffle array") {
+    // We cannot do structural tests for shuffle because its random seed will always change.
+    val result = spark
+      .sql("select 1")
+      .select(shuffle(array(lit(1), lit(2), lit(3), lit(74))))
+      .head()
+      .getSeq[Int](0)
+    assert(result.toSet === Set(1, 2, 3, 74))
+  }
+
+  test("ambiguous joins") {
+    val left = spark.range(100).select(col("id"), rand(10).as("a"))
+    val right = spark.range(100).select(col("id"), rand(12).as("a"))
+    val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
+    assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
+  }
+
+  test("test temp view") {
+    spark.range(100).createTempView("test1")
+    assert(spark.sql("SELECT * FROM test1").count() == 100)
+    spark.range(1000).createOrReplaceTempView("test1")
+    assert(spark.sql("SELECT * FROM test1").count() == 1000)
+    spark.range(100).createGlobalTempView("view1")
+    assert(spark.sql("SELECT * FROM global_temp.view1").count() == 100)
+    spark.range(1000).createOrReplaceGlobalTempView("view1")
+    assert(spark.sql("SELECT * FROM global_temp.view1").count() == 1000)
+  }
+
+  test("version") {
+    assert(spark.version == SPARK_VERSION)
+  }
+
+  test("time") {
+    val timeFragments = Seq("Time taken: ", " ms")
+    testCapturedStdOut(spark.time(spark.sql("select 1").collect()), timeFragments: _*)
   }
 }
