@@ -31,16 +31,7 @@ object ResolveDataSourceVersion extends Rule[LogicalPlan] {
     case r@VersionUnresolvedRelation(
         source, dataSource, optionsWithPath, userSpecifiedSchema, _, _, _) =>
       val sparkSession = r.sparkSession
-      // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
-      // We can't be sure at this point whether we'll actually want to use V2,
-      // since we don't know the writer or whether the query is continuous.
-      val v1DataSource = dataSource.getOrElse {
-        DataSource(
-          sparkSession,
-          userSpecifiedSchema = userSpecifiedSchema,
-          className = source,
-          options = optionsWithPath)
-      }
+      val v1DataSource = dataSource.get
 
       val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
         getConstructor().newInstance() // TableProvider or Source

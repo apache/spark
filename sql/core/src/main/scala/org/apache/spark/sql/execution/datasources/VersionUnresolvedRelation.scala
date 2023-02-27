@@ -56,23 +56,3 @@ case class VersionUnresolvedRelation (
 
   override def toString: String = s"[Version Unresolved] $source"
 }
-
-//case class VersionUnresolvedRelation (
-//    dataSource: DataSource,
-//    output: Seq[Attribute],
-//    override val isStreaming: Boolean)(session: SparkSession)
-//  extends LeafNode with MultiInstanceRelation {
-//
-//  val sparkSession: SparkSession = session
-//  val source: String = dataSource.sourceInfo.name
-//  val options: Map[String, String] = dataSource.options
-//  val userSpecifiedSchema: Option[StructType] = dataSource.userSpecifiedSchema
-//
-//  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
-//
-//  override def computeStats(): Statistics = Statistics(
-//    sizeInBytes = BigInt(conf.defaultSizeInBytes)
-//  )
-//
-//  override def toString: String = s"[Version Unresolved] $source"
-//}
