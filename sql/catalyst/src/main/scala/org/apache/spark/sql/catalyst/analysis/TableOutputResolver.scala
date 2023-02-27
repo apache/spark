@@ -95,15 +95,15 @@ object TableOutputResolver {
           case (matchedType: StructType, expectedType: StructType) =>
             checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
             resolveStructType(
-              matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
+              matchedCol, matchedType, expectedCol, expectedType, conf, addError, newColPath)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
             resolveArrayType(
-              matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
+              matchedCol, matchedType, expectedCol, expectedType, conf, addError, newColPath)
           case (matchedType: MapType, expectedType: MapType) =>
             checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
             resolveMapType(
-              matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
+              matchedCol, matchedType, expectedCol, expectedType, conf, addError, newColPath)
           case _ =>
             checkField(expectedCol, matchedCol, byName = true, conf, addError, newColPath)
         }
@@ -139,33 +139,46 @@ object TableOutputResolver {
   private def resolveStructType(
       input: NamedExpression,
       inputType: StructType,
+      expectedCol: Attribute,
       expectedType: StructType,
-      expectedName: String,
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String]): Option[NamedExpression] = {
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       Alias(GetStructField(input, i, Some(f.name)), f.name)()
     }
-    val reordered = reorderColumnsByName(fields, expectedType.toAttributes, conf, addError, colPath)
-    if (reordered.length == expectedType.length) {
+    val fieldAttrs = createStructFieldAttrs(expectedCol, expectedType)
+    val reordered = reorderColumnsByName(fields, fieldAttrs, conf, addError, colPath)
+    if (reordered.length == fieldAttrs.length) {
       val struct = CreateStruct(reordered)
       val res = if (input.nullable) {
         If(IsNull(input), Literal(null, struct.dataType), struct)
       } else {
         struct
       }
-      Some(Alias(res, expectedName)())
+      Some(Alias(res, expectedCol.name)())
     } else {
       None
+    }
+  }
+
+  private def createStructFieldAttrs(attr: Attribute, attrType: StructType): Seq[Attribute] = {
+    CharVarcharUtils.getRawType(attr.metadata) match {
+      case Some(rawType: StructType) =>
+        // replace char/varchar with string but store the original type in field metadata
+        val attrTypeWithMetadata = CharVarcharUtils.replaceCharVarcharWithStringInSchema(rawType)
+        attrTypeWithMetadata.toAttributes
+
+      case _ =>
+        attrType.toAttributes
     }
   }
 
   private def resolveArrayType(
       input: NamedExpression,
       inputType: ArrayType,
+      expectedCol: Attribute,
       expectedType: ArrayType,
-      expectedName: String,
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String]): Option[NamedExpression] = {
@@ -174,22 +187,34 @@ object TableOutputResolver {
       None
     } else {
       val param = NamedLambdaVariable("x", inputType.elementType, inputType.containsNull)
-      val fakeAttr = AttributeReference("x", expectedType.elementType, expectedType.containsNull)()
+      val fakeAttr = createArrayElementAttr(expectedCol, expectedType)
       val res = reorderColumnsByName(Seq(param), Seq(fakeAttr), conf, addError, colPath)
       if (res.length == 1) {
         val func = LambdaFunction(res.head, Seq(param))
-        Some(Alias(ArrayTransform(input, func), expectedName)())
+        Some(Alias(ArrayTransform(input, func), expectedCol.name)())
       } else {
         None
       }
     }
   }
 
+  private def createArrayElementAttr(attr: Attribute, attrType: ArrayType): Attribute = {
+    CharVarcharUtils.getRawType(attr.metadata) match {
+      case Some(rawType: ArrayType) =>
+        val elementMetadata = CharVarcharUtils.createRawTypeMetadata(rawType.elementType)
+        val elementType = CharVarcharUtils.replaceCharVarcharWithString(rawType.elementType)
+        AttributeReference("x", elementType, rawType.containsNull, elementMetadata)()
+
+      case _ =>
+        AttributeReference("x", attrType.elementType, attrType.containsNull)()
+    }
+  }
+
   private def resolveMapType(
       input: NamedExpression,
       inputType: MapType,
+      expectedCol: Attribute,
       expectedType: MapType,
-      expectedName: String,
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String]): Option[NamedExpression] = {
@@ -197,14 +222,13 @@ object TableOutputResolver {
       addError(s"Cannot write nullable values to map of non-nulls: '${colPath.quoted}'")
       None
     } else {
+      val (fakeKeyAttr, fakeValueAttr) = createKeyAndValueMapAttrs(expectedCol, expectedType)
+
       val keyParam = NamedLambdaVariable("k", inputType.keyType, nullable = false)
-      val fakeKeyAttr = AttributeReference("k", expectedType.keyType, nullable = false)()
       val resKey = reorderColumnsByName(
         Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath :+ "key")
 
       val valueParam = NamedLambdaVariable("v", inputType.valueType, inputType.valueContainsNull)
-      val fakeValueAttr =
-        AttributeReference("v", expectedType.valueType, expectedType.valueContainsNull)()
       val resValue = reorderColumnsByName(
         Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath :+ "value")
 
@@ -213,12 +237,36 @@ object TableOutputResolver {
         val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
         val newKeys = ArrayTransform(MapKeys(input), keyFunc)
         val newValues = ArrayTransform(MapValues(input), valueFunc)
-        Some(Alias(MapFromArrays(newKeys, newValues), expectedName)())
+        Some(Alias(MapFromArrays(newKeys, newValues), expectedCol.name)())
       } else {
         None
       }
     }
   }
+
+  private def createKeyAndValueMapAttrs(
+      attr: Attribute,
+      attrType: MapType): (Attribute, Attribute) = {
+
+    CharVarcharUtils.getRawType(attr.metadata) match {
+      case Some(rawType: MapType) =>
+        val keyMetadata = CharVarcharUtils.createRawTypeMetadata(rawType.keyType)
+        val keyType = CharVarcharUtils.replaceCharVarcharWithString(rawType.keyType)
+        val key = AttributeReference("k", keyType, nullable = false, keyMetadata)()
+
+        val valueMetadata = CharVarcharUtils.createRawTypeMetadata(rawType.valueType)
+        val valueType = CharVarcharUtils.replaceCharVarcharWithString(rawType.valueType)
+        val value = AttributeReference("v", valueType, rawType.valueContainsNull, valueMetadata)()
+
+        key -> value
+
+      case _ =>
+        val key = AttributeReference("k", attrType.keyType, nullable = false)()
+        val value = AttributeReference("v", attrType.valueType, attrType.valueContainsNull)()
+        key -> value
+    }
+  }
+
 
   // For table insertions, capture the overflow errors and show proper message.
   // Without this method, the overflow errors of castings will show hints for turning off ANSI SQL

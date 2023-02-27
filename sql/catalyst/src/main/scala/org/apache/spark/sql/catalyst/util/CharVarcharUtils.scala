@@ -128,6 +128,12 @@ object CharVarcharUtils extends Logging {
     attr.withMetadata(cleaned)
   }
 
+  def createRawTypeMetadata(dt: DataType): Metadata = {
+    new MetadataBuilder()
+      .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, dt.catalogString)
+      .build()
+  }
+
   def getRawTypeString(metadata: Metadata): Option[String] = {
     if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
       Some(metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))
