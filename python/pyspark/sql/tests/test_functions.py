@@ -390,8 +390,18 @@ class FunctionsTestsMixin:
         ]
 
         df = self.spark.createDataFrame([["nick"]], schema=["name"])
-        self.assertRaisesRegex(
-            TypeError, "must be the same type", lambda: df.select(col("name").substr(0, lit(1)))
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.select(col("name").substr(0, lit(1)))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_SAME_TYPE",
+            message_parameters={
+                "arg_name1": "startPos",
+                "arg_name2": "length",
+                "arg_type1": "int",
+                "arg_type2": "Column",
+            },
         )
 
         for name in string_functions:
