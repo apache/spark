@@ -1970,6 +1970,10 @@ class PlanGenerationTestSuite
     simple.groupBy(Column("id")).pivot("a", Seq(1, 2, 3)).agg(functions.count(Column("b")))
   }
 
+  test("pivot without column values") {
+    simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
+  }
+
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
