@@ -545,7 +545,10 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         table, metrics = self._execute_and_fetch(req)
+        column_names = table.column_names
+        table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
         pdf = table.to_pandas()
+        pdf.columns = column_names
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
         return pdf
