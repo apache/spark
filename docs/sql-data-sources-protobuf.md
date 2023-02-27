@@ -103,7 +103,7 @@ output.printSchema()
 //  |    |-- id: long (nullable = true)
 //  |    |-- context: string (nullable = true)
 
-output = output.select(to_protobuf($"event", "org.sparkproject.spark-protobuf.protobuf.AppEvent") as $"event")
+output = output.select(to_protobuf($"event", "org.sparkproject.spark_protobuf.protobuf.AppEvent") as $"event")
 
 val query = output
 .writeStream
@@ -153,7 +153,7 @@ Dataset<Row> output = df
 Dataset<Row> output = df
 .select(
   from_protobuf(col("value"),
-  "org.sparkproject.spark-protobuf.protobuf.AppEvent").as("event"))
+  "org.sparkproject.spark_protobuf.protobuf.AppEvent").as("event"))
 .where("event.name == \"alice\"")
 
 output.printSchema()
@@ -165,7 +165,7 @@ output.printSchema()
 
 output = output.select(
   to_protobuf(col("event"),
-  "org.sparkproject.spark-protobuf.protobuf.AppEvent").as("event"));
+  "org.sparkproject.spark_protobuf.protobuf.AppEvent").as("event"));
 
 StreamingQuery query = output
 .writeStream()
@@ -213,7 +213,7 @@ output = df\
 # https://github.com/rangadi/shaded-protobuf-classes.
 
 output = df\
-.select(from_protobuf("value", "org.sparkproject.spark-protobuf.protobuf.AppEvent").alias("event"))\
+.select(from_protobuf("value", "org.sparkproject.spark_protobuf.protobuf.AppEvent").alias("event"))\
 .where('event.name == "alice"')
 
 output.printSchema()
@@ -224,7 +224,7 @@ output.printSchema()
 #  |   |-- context: string (nullable = true)
 
 output = output
-.select(to_protobuf("event", "org.sparkproject.spark-protobuf.protobuf.AppEvent").alias("event"))
+.select(to_protobuf("event", "org.sparkproject.spark_protobuf.protobuf.AppEvent").alias("event"))
 
 query = output\
 .writeStream\
