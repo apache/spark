@@ -251,7 +251,7 @@ class SQLTestUtils:
     def assert_close(a, b):
         c = [j[0] for j in b]
         diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k] for k, v in enumerate(a)]
-        return sum(diff) == len(a)
+        assert sum(diff) == len(a), f"sum: {sum(diff)}, len: {len(a)}"
 
 
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
