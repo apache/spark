@@ -111,6 +111,7 @@ class ResolveAliasesSuite extends AnalysisTest {
         // Brackets
         "getbit(11L, 2 + 1)" -> "getbit(11L, 2 + 1)",
         "string(int(shiftleft(int(-1), 31))+1)" -> "string(int(shiftleft(int(- 1), 31))+ 1)",
+        "map(1, 'a') [ 5 ]" -> "map(1, 'a')[5]",
         // Preserve type
         "CAST('123.a' AS long)" -> "CAST('123.a' AS long)",
         // Spaces
@@ -127,7 +128,9 @@ class ResolveAliasesSuite extends AnalysisTest {
         // Function invokes
         "like('a', 'Spark_')" -> "like('a', 'Spark_')",
         "substring('abcdef', 2)" -> "substring('abcdef', 2)",
-        "split('bcdef', 'e')" -> "split('bcdef', 'e')"
+        "split('bcdef', 'e')" -> "split('bcdef', 'e')",
+        "current_timestamp = current_timestamp" -> "current_timestamp = current_timestamp",
+        "'a' || 'b' || 'c'" -> "'a' || 'b' || 'c'"
       ).foreach { case (selectExpr, derivedAlias) =>
         checkAliasName(s"select $selectExpr", derivedAlias)
       }
