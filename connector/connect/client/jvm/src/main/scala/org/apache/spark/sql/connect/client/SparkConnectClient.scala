@@ -69,10 +69,12 @@ private[sql] class SparkConnectClient(
 
   /**
    * Dispatch the [[proto.ConfigRequest]] to the Spark Connect server.
-   * @return A [[proto.ConfigResponse]] from the Spark Connect server.
+   * @return
+   *   A [[proto.ConfigResponse]] from the Spark Connect server.
    */
   def config(operation: proto.ConfigRequest.Operation): proto.ConfigResponse = {
-    val request = proto.ConfigRequest.newBuilder()
+    val request = proto.ConfigRequest
+      .newBuilder()
       .setOperation(operation)
       .setClientId(sessionId)
       .setClientType(userAgent)

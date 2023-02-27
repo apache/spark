@@ -17,16 +17,16 @@
 package org.apache.spark.sql
 
 import org.apache.spark.connect.proto.{ConfigRequest, ConfigResponse, KeyValue}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.client.SparkConnectClient
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
  *
- * Options set here are automatically propagated to the Hadoop configuration during I/O.
- *
  * @since 3.4.0
  */
-class RuntimeConfig(client: SparkConnectClient) {
+class RuntimeConfig(client: SparkConnectClient) extends Logging {
+
   /**
    * Sets the given Spark runtime configuration property.
    *
@@ -55,8 +55,8 @@ class RuntimeConfig(client: SparkConnectClient) {
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
-   * @throws java.util.NoSuchElementException if the key is not set and does not have a default
-   *                                          value
+   * @throws java.util.NoSuchElementException
+   *   if the key is not set and does not have a default value
    * @since 3.4.0
    */
   @throws[NoSuchElementException]("if the key is not set")
@@ -120,12 +120,13 @@ class RuntimeConfig(client: SparkConnectClient) {
   }
 
   /**
-   * Indicates whether the configuration property with the given key
-   * is modifiable in the current session.
+   * Indicates whether the configuration property with the given key is modifiable in the current
+   * session.
    *
-   * @return `true` if the configuration property is modifiable. For static SQL, Spark Core,
-   *         invalid (not existing) and other non-modifiable configuration properties,
-   *         the returned value is `false`.
+   * @return
+   *   `true` if the configuration property is modifiable. For static SQL, Spark Core, invalid
+   *   (not existing) and other non-modifiable configuration properties, the returned value is
+   *   `false`.
    * @since 3.4.0
    */
   def isModifiable(key: String): Boolean = {
@@ -152,6 +153,10 @@ class RuntimeConfig(client: SparkConnectClient) {
   private def executeConfigRequest(f: ConfigRequest.Operation.Builder => Unit): ConfigResponse = {
     val builder = ConfigRequest.Operation.newBuilder()
     f(builder)
-    client.config(builder.build())
+    val response = client.config(builder.build())
+    response.getWarningsList.forEach { warning =>
+      logWarning(warning)
+    }
+    response
   }
 }

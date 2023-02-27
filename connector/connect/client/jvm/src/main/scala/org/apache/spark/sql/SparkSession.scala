@@ -66,9 +66,9 @@ class SparkSession(
   /**
    * Runtime configuration interface for Spark.
    *
-   * This is the interface through which the user can get and set all Spark configurations that are
-   * relevant to Spark SQL. When getting the value of a config, his defaults to the value set in
-   * server, if any.
+   * This is the interface through which the user can get and set all Spark configurations that
+   * are relevant to Spark SQL. When getting the value of a config, his defaults to the value set
+   * in server, if any.
    *
    * @since 3.4.0
    */
