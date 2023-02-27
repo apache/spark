@@ -740,7 +740,7 @@ class SparkConnectClient(object):
                             logger.debug("Received metric batch.")
                             m = b.metrics
                         if b.HasField("sql_command_result"):
-                            properties["is_sql_command"] = b.sql_command_result.is_command
+                            properties["sql_command_result"] = b.sql_command_result.relation
                         if b.HasField("arrow_batch"):
                             logger.debug(
                                 f"Received arrow batch rows={b.arrow_batch.row_count} "

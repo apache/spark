@@ -60,17 +60,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     processAsArrowBatches(request.getClientId, dataframe, responseObserver)
-    responseObserver.onNext(sendMetricsToResponse(request.getClientId, dataframe))
+    responseObserver.onNext(
+      SparkConnectStreamHandler.sendMetricsToResponse(request.getClientId, dataframe))
     responseObserver.onCompleted()
-  }
-
-  private def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
-    // Send a last batch with the metrics
-    ExecutePlanResponse
-      .newBuilder()
-      .setClientId(clientId)
-      .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
-      .build()
   }
 
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
@@ -84,7 +76,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 object SparkConnectStreamHandler {
   type Batch = (Array[Byte], Long)
 
-  private def rowToArrowConverter(
+  def rowToArrowConverter(
       schema: StructType,
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,
@@ -204,6 +196,15 @@ object SparkConnectStreamHandler {
         responseObserver.onNext(response.build())
       }
     }
+  }
+
+  def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
+    // Send a last batch with the metrics
+    ExecutePlanResponse
+      .newBuilder()
+      .setClientId(clientId)
+      .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
+      .build()
   }
 }
 

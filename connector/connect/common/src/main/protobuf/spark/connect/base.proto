@@ -166,7 +166,7 @@ message ExecutePlanResponse {
   Metrics metrics = 4;
 
   message SqlCommandResult {
-    bool is_command = 2;
+    Relation relation = 1;
   }
 
   // Batch results of metrics.

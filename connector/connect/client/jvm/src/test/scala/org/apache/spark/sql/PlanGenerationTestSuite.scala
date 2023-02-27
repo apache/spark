@@ -18,17 +18,20 @@ package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
+import io.grpc.inprocess.InProcessChannelBuilder
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
-import org.apache.spark.sql.connect.client.util.{ConnectFunSuite, RemoteSparkSession}
+import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
@@ -56,7 +59,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
 // scalastyle:on
 class PlanGenerationTestSuite
     extends ConnectFunSuite
-    with RemoteSparkSession
     with BeforeAndAfterAll
     with BeforeAndAfterEach
     with Logging {
@@ -99,10 +101,24 @@ class PlanGenerationTestSuite
 
   private val printer = JsonFormat.printer()
 
-  private def session: SparkSession = spark
+  private var session: SparkSession = _
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    val client = SparkConnectClient(
+      proto.UserContext.newBuilder().build(),
+      InProcessChannelBuilder.forName("/dev/null").build())
+    session =
+      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+  }
 
   override protected def beforeEach(): Unit = {
     session.resetPlanIdGenerator()
+  }
+
+  override protected def afterAll(): Unit = {
+    session.close()
+    super.afterAll()
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
@@ -213,14 +229,6 @@ class PlanGenerationTestSuite
   private def temporals = createLocalRelation(temporalsSchemaString)
 
   /* Spark Session API */
-  test("sql") {
-    session.sql("select 1")
-  }
-
-  test("parameterized sql") {
-    session.sql("select 1", Map("minId" -> "7", "maxId" -> "20"))
-  }
-
   test("range") {
     session.range(1, 10, 1, 2)
   }

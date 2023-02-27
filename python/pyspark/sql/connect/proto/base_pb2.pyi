@@ -419,15 +419,19 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     class SqlCommandResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        IS_COMMAND_FIELD_NUMBER: builtins.int
-        is_command: builtins.bool
+        RELATION_FIELD_NUMBER: builtins.int
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
         def __init__(
             self,
             *,
-            is_command: builtins.bool = ...,
+            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["relation", b"relation"]
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["is_command", b"is_command"]
+            self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
     class ArrowBatch(google.protobuf.message.Message):

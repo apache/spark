@@ -21,10 +21,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny}
+import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
@@ -40,12 +40,13 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
+import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.{QueryExecution}
-import org.apache.spark.sql.execution.arrow.{ArrowConverters}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
@@ -1467,15 +1468,66 @@ class SparkConnectPlanner(val session: SparkSession) {
       getSqlCommand: SqlCommand,
       clientId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+    // Eagerly execute commands of the provided SQL string.
     val df = session.sql(getSqlCommand.getSql, getSqlCommand.getArgsMap)
+    // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
+    val rows = df.logicalPlan match {
+      case lr: LocalRelation => lr.data
+      case cr: CommandResult => cr.rows
+      case _ => Seq.empty
+    }
+
+    // Convert the results to Arrow.
+    val schema = df.schema
+    val maxRecordsPerBatch = session.sessionState.conf.arrowMaxRecordsPerBatch
+    val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
+    val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
+
+    // Convert the data.
+    val bytes = if (rows.isEmpty) {
+      ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
+    } else {
+      val batches = ArrowConverters.toBatchWithSchemaIterator(
+        rows.iterator,
+        schema,
+        maxRecordsPerBatch,
+        maxBatchSize,
+        timeZoneId)
+      batches.reduce(_ ++ _)
+    }
+
+    // To avoid explicit handling of the result on the client, we build the expected input
+    // of the relation on the server. The client has to simply forward the result.
+    val result = SqlCommandResult.newBuilder()
+    if (isCommand) {
+      result.setRelation(
+        proto.Relation
+          .newBuilder()
+          .setLocalRelation(
+            proto.LocalRelation
+              .newBuilder()
+              .setData(ByteString.copyFrom(bytes))))
+    } else {
+      result.setRelation(
+        proto.Relation
+          .newBuilder()
+          .setSql(
+            proto.SQL
+              .newBuilder()
+              .setQuery(getSqlCommand.getSql)
+              .putAllArgs(getSqlCommand.getArgsMap)))
+    }
+    // Exactly one SQL Command Result Batch
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
         .setClientId(clientId)
-        .setSqlCommandResult(SqlCommandResult.newBuilder().setIsCommand(isCommand))
+        .setSqlCommandResult(result)
         .build())
-    SparkConnectStreamHandler.processAsArrowBatches(clientId, df, responseObserver)
+
+    // Semd Metrics
+    SparkConnectStreamHandler.sendMetricsToResponse(clientId, df)
   }
 
   private def handleRegisterUserDefinedFunction(

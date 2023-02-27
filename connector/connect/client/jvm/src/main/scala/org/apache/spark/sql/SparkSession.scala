@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.ByteString
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.Experimental
@@ -94,25 +93,14 @@ class SparkSession(
       val cmd = newCommand(b =>
         b.setSqlCommand(proto.SqlCommand.newBuilder().setSql(sqlText).putAllArgs(args)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val response = client.execute(plan.build())
-      val (data, isSqlCommand) =
-        response.asScala.foldLeft((Seq[ByteString](), false))((acc, resp) =>
-          if (resp.hasSqlCommandResult) {
-            (acc._1, resp.getSqlCommandResult.getIsCommand)
-          } else if (resp.hasArrowBatch) {
-            (acc._1 ++ Seq(resp.getArrowBatch.getData), acc._2)
-          } else {
-            acc
-          })
+      val responseIter = client.execute(plan.build())
 
-      // Handle the result behavior
-      if (isSqlCommand) {
-        assert(data.size <= 1)
-        builder.setLocalRelation(proto.LocalRelation.newBuilder().setData(data(0)))
-      } else {
-        builder
-          .setSql(proto.SQL.newBuilder().setQuery(sqlText).putAllArgs(args))
-      }
+      val response = responseIter.asScala
+        .find(_.hasSqlCommandResult)
+        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+
+      // Update the builder with the values from the result.
+      builder.mergeFrom(response.getSqlCommandResult.getRelation)
   }
 
   /**

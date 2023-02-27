@@ -1894,3 +1894,14 @@ class FrameMap(LogicalPlan):
         plan.frame_map.input.CopyFrom(self._child.plan(session))
         plan.frame_map.func.CopyFrom(self._func.to_plan_udf(session))
         return plan
+
+
+class CachedRelation(LogicalPlan):
+    def __init__(self, plan=proto.Relation) -> None:
+        super(CachedRelation, self).__init__(None)
+        self._plan = plan
+        # Update the plan ID based on the incremented counter.
+        self._plan.common.plan_id = self._plan_id
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return self._plan
