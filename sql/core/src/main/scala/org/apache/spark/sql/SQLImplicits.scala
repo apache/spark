@@ -48,7 +48,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
     }
   }
 
-  // Primitives
+  /** Primitives */
 
   /** @since 1.6.0 */
   implicit def newIntEncoder: Encoder[Int] = Encoders.scalaInt

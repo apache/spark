@@ -89,7 +89,7 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case ag: UnresolvedFunction if (containsStar(Seq(ag))) =>
+    case ag: UnresolvedFunction if (containsStar(Seq(ag))) || ag.isDistinct =>
       UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
