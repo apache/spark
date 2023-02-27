@@ -143,7 +143,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       // RelationalGroupedDataset
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.as"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.pivot"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.this"),
 
       // SparkSession
