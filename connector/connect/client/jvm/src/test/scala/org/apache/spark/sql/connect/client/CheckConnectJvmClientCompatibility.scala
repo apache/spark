@@ -30,9 +30,9 @@ import com.typesafe.tools.mima.lib.MiMaLib
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 
 /**
- * A tool for checking the binary compatibility of the connect client API against the spark SQL API
- * using MiMa. We did not write this check using a SBT build rule as the rule cannot provide the
- * same level of freedom as a test. With a test we can:
+ * A tool for checking the binary compatibility of the connect client API against the spark SQL
+ * API using MiMa. We did not write this check using a SBT build rule as the rule cannot provide
+ * the same level of freedom as a test. With a test we can:
  *   1. Specify any two jars to run the compatibility check.
  *   1. Easily make the test automatically pick up all new methods added while the client is being
  *      built.
@@ -52,9 +52,9 @@ object CheckConnectJvmClientCompatibility {
   def main(args: Array[String]): Unit = {
     var resultWriter: Writer = null
     try {
-      resultWriter =
-        Files.newBufferedWriter(Paths.get(
-          s"$sparkHome/.connect-mima-check-result"), StandardCharsets.UTF_8)
+      resultWriter = Files.newBufferedWriter(
+        Paths.get(s"$sparkHome/.connect-mima-check-result"),
+        StandardCharsets.UTF_8)
       val clientJar: File =
         findJar(
           "connector/connect/client/jvm",
