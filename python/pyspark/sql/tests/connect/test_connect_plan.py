@@ -834,9 +834,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         p = multi_type_lit.to_plan(None)
         self.assertIsNotNone(p)
 
-        lit_list_plan = lit([lit(10), lit("str")]).to_plan(None)
-        self.assertIsNotNone(lit_list_plan)
-
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases
         col0 = col("a").alias("martin")
