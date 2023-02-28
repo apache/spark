@@ -22,6 +22,7 @@ import org.scalatest.matchers.must.Matchers.the
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.catalyst.plans.logical.{Window => LogicalWindow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
@@ -1284,6 +1285,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
     val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
     val window2 = Window.partitionBy($"key").orderBy($"order".desc_nulls_first)
+    val window3 = Window.orderBy($"order".asc_nulls_first)
 
     Seq(-1, 100).foreach { threshold =>
       withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
@@ -1316,6 +1318,24 @@ class DataFrameWindowFunctionsSuite extends QueryTest
               Row("a", 4, "", 2.0, 1),
               Row("a", 4, "", 2.0, 1),
               Row("b", 1, "h", Double.NaN, 1),
+              Row("c", 2, null, 5.0, 1)
+            )
+          )
+
+          checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
+            Seq(
+              Row("c", 2, null, 5.0, 1)
+            )
+          )
+
+          checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
+            Seq(
+              Row("c", 2, null, 5.0, 1)
+            )
+          )
+
+          checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
+            Seq(
               Row("c", 2, null, 5.0, 1)
             )
           )
@@ -1352,6 +1372,29 @@ class DataFrameWindowFunctionsSuite extends QueryTest
               Row("b", 1, "h", Double.NaN, 1),
               Row("b", 1, "n", Double.PositiveInfinity, 2),
               Row("c", 1, "a", -4.0, 2),
+              Row("c", 2, null, 5.0, 1)
+            )
+          )
+
+          checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
+            Seq(
+              Row("a", 4, "", 2.0, 2),
+              Row("c", 2, null, 5.0, 1)
+            )
+          )
+
+          checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
+            Seq(
+              Row("a", 4, "", 2.0, 2),
+              Row("a", 4, "", 2.0, 2),
+              Row("c", 2, null, 5.0, 1)
+            )
+          )
+
+          checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
+            Seq(
+              Row("a", 4, "", 2.0, 2),
+              Row("a", 4, "", 2.0, 2),
               Row("c", 2, null, 5.0, 1)
             )
           )
@@ -1427,6 +1470,21 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           )
         )
       }
+    }
+  }
+
+  test("SPARK-42525: collapse two adjacent windows with the same partition/order in subquery") {
+    withTempView("t1") {
+      Seq((1, 1), (2, 2)).toDF("a", "b").createOrReplaceTempView("t1")
+      val df = sql(
+        """
+          |SELECT a, b, rk, row_number() OVER (PARTITION BY a ORDER BY b) AS rn
+          |FROM   (SELECT a, b, rank() OVER (PARTITION BY a ORDER BY b) AS rk
+          |        FROM t1) t2
+          |""".stripMargin)
+
+      val windows = df.queryExecution.optimizedPlan.collect { case w: LogicalWindow => w }
+      assert(windows.size === 1)
     }
   }
 }

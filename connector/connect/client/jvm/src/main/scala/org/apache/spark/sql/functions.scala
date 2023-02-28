@@ -17,7 +17,8 @@
 package org.apache.spark.sql
 
 import java.math.{BigDecimal => JBigDecimal}
-import java.time.LocalDate
+import java.sql.{Date, Timestamp}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Collections
 
 import scala.collection.JavaConverters._
@@ -26,10 +27,13 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -104,6 +108,14 @@ object functions {
         .setValue(value)
     }
 
+  private def createCalendarIntervalLiteral(months: Int, days: Int, microseconds: Long): Column =
+    createLiteral { builder =>
+      builder.getCalendarIntervalBuilder
+        .setMonths(months)
+        .setDays(days)
+        .setMicroseconds(microseconds)
+    }
+
   private val nullType =
     proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
 
@@ -136,6 +148,15 @@ object functions {
       case v: Array[Byte] => createLiteral(_.setBinary(ByteString.copyFrom(v)))
       case v: collection.mutable.WrappedArray[_] => lit(v.array)
       case v: LocalDate => createLiteral(_.setDate(v.toEpochDay.toInt))
+      case v: Decimal => createDecimalLiteral(Math.max(v.precision, v.scale), v.scale, v.toString)
+      case v: Instant => createLiteral(_.setTimestamp(DateTimeUtils.instantToMicros(v)))
+      case v: Timestamp => createLiteral(_.setTimestamp(DateTimeUtils.fromJavaTimestamp(v)))
+      case v: LocalDateTime =>
+        createLiteral(_.setTimestampNtz(DateTimeUtils.localDateTimeToMicros(v)))
+      case v: Date => createLiteral(_.setDate(DateTimeUtils.fromJavaDate(v)))
+      case v: Duration => createLiteral(_.setDayTimeInterval(IntervalUtils.durationToMicros(v)))
+      case v: Period => createLiteral(_.setYearMonthInterval(IntervalUtils.periodToMonths(v)))
+      case v: CalendarInterval => createCalendarIntervalLiteral(v.months, v.days, v.microseconds)
       case null => createLiteral(_.setNull(nullType))
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
@@ -380,6 +401,15 @@ object functions {
    * @since 3.4.0
    */
   def count(e: Column): Column = Column.fn("count", e)
+
+  /**
+   * Aggregate function: returns the number of items in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def count(columnName: String): TypedColumn[Any, Long] =
+    count(Column(columnName)).as(PrimitiveLongEncoder)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.

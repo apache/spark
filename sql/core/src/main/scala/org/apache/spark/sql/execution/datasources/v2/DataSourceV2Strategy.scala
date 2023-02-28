@@ -31,13 +31,13 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.structTypeToV2Columns
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
-import org.apache.spark.sql.connector.read.{LocalScan, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -178,6 +178,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
+      GeneratedColumn.validateGeneratedColumns(
+        newSchema, catalog.asTableCatalog, ident.asMultipartIdentifier, "CREATE TABLE")
+
       CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
@@ -201,6 +204,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
           schema, tableSpec.provider, "CREATE TABLE", false)
+      GeneratedColumn.validateGeneratedColumns(
+        newSchema, catalog.asTableCatalog, ident.asMultipartIdentifier, "CREATE TABLE")
+
       val v2Columns = structTypeToV2Columns(newSchema)
       catalog match {
         case staging: StagingTableCatalog =>
@@ -334,14 +340,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeColumn(r: ResolvedTable, column, isExtended, output) =>
       column match {
         case c: Attribute =>
-          val colStats =
-            r.table.asReadable.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
-            case s: SupportsReportStatistics =>
-              val stats = s.estimateStatistics()
-              Some(stats.columnStats().get(FieldReference.column(c.name)))
-            case _ => None
-          }
-          DescribeColumnExec(output, c, isExtended, colStats) :: Nil
+          DescribeColumnExec(output, c, isExtended, r.table) :: Nil
         case nested =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(nested))

@@ -157,7 +157,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
 
     overwriteCondition.foreach(builder.setOverwriteCondition)
 
-    ds.session.execute(proto.Command.newBuilder().setWriteOperationV2(builder).build())
+    ds.sparkSession.execute(proto.Command.newBuilder().setWriteOperationV2(builder).build())
   }
 }
 

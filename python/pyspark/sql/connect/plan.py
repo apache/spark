@@ -30,12 +30,17 @@ from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import SortOrder, ColumnReference, LiteralExpression
+from pyspark.sql.connect.expressions import (
+    SortOrder,
+    ColumnReference,
+    LiteralExpression,
+)
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark.sql.connect.udf import UserDefinedFunction
 
 
 class InputValidationError(Exception):
@@ -250,15 +255,14 @@ class DataSource(LogicalPlan):
 
     def __init__(
         self,
-        format: str,
+        format: Optional[str] = None,
         schema: Optional[str] = None,
         options: Optional[Mapping[str, str]] = None,
         paths: Optional[List[str]] = None,
     ) -> None:
         super().__init__(None)
 
-        assert isinstance(format, str) and format != ""
-
+        assert format is None or isinstance(format, str)
         assert schema is None or isinstance(schema, str)
 
         if options is not None:
@@ -277,7 +281,8 @@ class DataSource(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
-        plan.read.data_source.format = self._format
+        if self._format is not None:
+            plan.read.data_source.format = self._format
         if self._schema is not None:
             plan.read.data_source.schema = self._schema
         if self._options is not None and len(self._options) > 0:
@@ -602,23 +607,17 @@ class Drop(LogicalPlan):
     ) -> None:
         super().__init__(child)
         assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
-        self.columns = columns
-
-    def _convert_to_expr(
-        self, col: Union[Column, str], session: "SparkConnectClient"
-    ) -> proto.Expression:
-        expr = proto.Expression()
-        if isinstance(col, Column):
-            expr.CopyFrom(col.to_plan(session))
-        else:
-            expr.CopyFrom(self.unresolved_attr(col))
-        return expr
+        self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.drop.input.CopyFrom(self._child.plan(session))
-        plan.drop.cols.extend([self._convert_to_expr(c, session) for c in self.columns])
+        for c in self._columns:
+            if isinstance(c, Column):
+                plan.drop.columns.append(c.to_plan(session))
+            else:
+                plan.drop.column_names.append(c)
         return plan
 
 
@@ -1863,3 +1862,21 @@ class ListCatalogs(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
+
+
+class FrameMap(LogicalPlan):
+    """Logical plan object for a Frame Map API: mapInPandas, mapInArrow."""
+
+    def __init__(
+        self, child: Optional["LogicalPlan"], function: "UserDefinedFunction", cols: List[str]
+    ) -> None:
+        super().__init__(child)
+
+        self._func = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.frame_map.input.CopyFrom(self._child.plan(session))
+        plan.frame_map.func.CopyFrom(self._func.to_plan_udf(session))
+        return plan

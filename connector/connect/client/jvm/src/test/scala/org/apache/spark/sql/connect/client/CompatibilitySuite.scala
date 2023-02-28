@@ -22,7 +22,8 @@ import java.util.regex.Pattern
 
 import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.lib.MiMaLib
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 
 /**
@@ -38,17 +39,18 @@ import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
  *     spark-sql
  *     spark-connect-client-jvm
  * }}}
- * To build the above artifact, use e.g. `sbt package` or `mvn clean install -DskipTests`.
+ * To build the above artifact, use e.g. `build/sbt package` or `build/mvn clean install
+ * -DskipTests`.
  *
  * When debugging this test, if any changes to the client API, the client jar need to be built
  * before running the test. An example workflow with SBT for this test:
  *   1. Compatibility test has reported an unexpected client API change.
  *   1. Fix the wrong client API.
- *   1. Build the client jar: `sbt package`
- *   1. Run the test again: `sbt "testOnly
+ *   1. Build the client jar: `build/sbt package`
+ *   1. Run the test again: `build/sbt "testOnly
  *      org.apache.spark.sql.connect.client.CompatibilitySuite"`
  */
-class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
+class CompatibilitySuite extends ConnectFunSuite {
 
   private lazy val clientJar: File =
     findJar(
@@ -69,31 +71,118 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
     val mima = new MiMaLib(Seq(clientJar, sqlJar))
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
-      IncludeByName("org.apache.spark.sql.Column"),
-      IncludeByName("org.apache.spark.sql.Column$"),
-      IncludeByName("org.apache.spark.sql.Dataset"),
-      // TODO(SPARK-42175) Add the Dataset object definition
-      // IncludeByName("org.apache.spark.sql.Dataset$"),
-      IncludeByName("org.apache.spark.sql.DataFrame"),
+      IncludeByName("org.apache.spark.sql.Column.*"),
+      IncludeByName("org.apache.spark.sql.ColumnName.*"),
+      IncludeByName("org.apache.spark.sql.DataFrame.*"),
       IncludeByName("org.apache.spark.sql.DataFrameReader.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriter.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriterV2.*"),
-      IncludeByName("org.apache.spark.sql.SparkSession"),
-      IncludeByName("org.apache.spark.sql.SparkSession$")) ++ includeImplementedMethods(clientJar)
+      IncludeByName("org.apache.spark.sql.Dataset.*"),
+      IncludeByName("org.apache.spark.sql.functions.*"),
+      IncludeByName("org.apache.spark.sql.RelationalGroupedDataset.*"),
+      IncludeByName("org.apache.spark.sql.SparkSession.*"),
+      IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
+      IncludeByName("org.apache.spark.sql.TypedColumn.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
-      // Two sql overloading methods are marked experimental in the API and skipped in the client.
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
-      // Deprecated json methods and RDD related methods are skipped in the client.
+      // Note when muting errors for a method, checks on all overloading methods are also muted.
+
+      // Skip all shaded dependencies and proto files in the client.
+      ProblemFilters.exclude[Problem]("org.sparkproject.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
+
+      // DataFrame Reader & Writer
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.csv"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.jdbc"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriter.jdbc"),
-      // Skip all shaded dependencies in the client.
-      ProblemFilters.exclude[Problem]("org.sparkproject.*"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
-      // Disable Range until we support typed APIs
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.range"))
+
+      // Dataset
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.ofRows"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_TAG"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.COL_POS_KEY"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_KEY"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.curId"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.observe"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.as"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.na"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.stat"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.select"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupByKey"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.filter"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.map"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.mapPartitions"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.flatMap"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreach"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreachPartition"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.persist"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.storageLevel"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.writeStream"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.this"),
+
+      // functions
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.call_udf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.broadcast"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
+
+      // RelationalGroupedDataset
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.as"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.this"),
+
+      // SparkSession
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.active"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getDefaultSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getActiveSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sharedState"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sessionState"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sqlContext"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.streams"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.newSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.emptyDataFrame"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.emptyDataset"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.catalog"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.stop"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setActiveSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearActiveSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getActiveSession"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getDefaultSession"),
+
+      // RuntimeConfig
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
+
+      // TypedColumn
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"))
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
@@ -125,31 +214,6 @@ class CompatibilitySuite extends AnyFunSuite { // scalastyle:ignore funsuite
       .foreach(method => {
         assert(oldMethods.map(m => m.toString).contains(method))
       })
-  }
-
-  /**
-   * Find all methods that are implemented in the client jar. Once all major methods are
-   * implemented we can switch to include all methods under the class using ".*" e.g.
-   * "org.apache.spark.sql.Dataset.*"
-   */
-  private def includeImplementedMethods(clientJar: File): Seq[IncludeByName] = {
-    val clsNames = Seq(
-      "org.apache.spark.sql.Column",
-      // TODO(SPARK-42175) Add all overloading methods. Temporarily mute compatibility check for \
-      //  the Dataset methods, as too many overload methods are missing.
-      // "org.apache.spark.sql.Dataset",
-      "org.apache.spark.sql.SparkSession")
-
-    val clientClassLoader: URLClassLoader = new URLClassLoader(Seq(clientJar.toURI.toURL).toArray)
-    clsNames
-      .flatMap { clsName =>
-        val cls = clientClassLoader.loadClass(clsName)
-        // all distinct method names
-        cls.getMethods.map(m => s"$clsName.${m.getName}").toSet
-      }
-      .map { fullName =>
-        IncludeByName(fullName)
-      }
   }
 
   private case class IncludeByName(name: String) extends ProblemFilter {

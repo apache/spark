@@ -32,9 +32,9 @@ import org.apache.spark.util.Utils
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
- * Pre-running the tests, the spark connect artifact needs to be built using e.g. `sbt package`.
- * It is designed to start the server once but shared by all tests. It is equivalent to use the
- * following command to start the connect server via command line:
+ * Pre-running the tests, the spark connect artifact needs to be built using e.g. `build/sbt
+ * package`. It is designed to start the server once but shared by all tests. It is equivalent to
+ * use the following command to start the connect server via command line:
  *
  * {{{
  * bin/spark-shell \
@@ -109,9 +109,7 @@ object SparkConnectServerUtils {
   }
 }
 
-trait RemoteSparkSession
-    extends org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterAll {
+trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   import SparkConnectServerUtils._
   var spark: SparkSession = _
 

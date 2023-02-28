@@ -987,7 +987,11 @@ object TableFunctionRegistry {
     generator[Explode]("explode"),
     generator[Explode]("explode_outer", outer = true),
     generator[Inline]("inline"),
-    generator[Inline]("inline_outer", outer = true)
+    generator[Inline]("inline_outer", outer = true),
+    generator[JsonTuple]("json_tuple"),
+    generator[PosExplode]("posexplode"),
+    generator[PosExplode]("posexplode_outer", outer = true),
+    generator[Stack]("stack")
   )
 
   val builtin: SimpleTableFunctionRegistry = {

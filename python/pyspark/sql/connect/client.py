@@ -402,6 +402,19 @@ class AnalyzeResult:
         )
 
 
+class ConfigResult:
+    def __init__(self, pairs: List[Tuple[str, Optional[str]]], warnings: List[str]):
+        self.pairs = pairs
+        self.warnings = warnings
+
+    @classmethod
+    def fromProto(cls, pb: pb2.ConfigResponse) -> "ConfigResult":
+        return ConfigResult(
+            pairs=[(pair.key, pair.value if pair.HasField("value") else None) for pair in pb.pairs],
+            warnings=list(pb.warnings),
+        )
+
+
 class SparkConnectClient(object):
     """
     Conceptually the remote spark session that communicates with the server
@@ -494,7 +507,7 @@ class SparkConnectClient(object):
             deterministic=deterministic,
             arguments=[],
             function=py_udf,
-        ).to_command(self)
+        ).to_plan_udf(self)
 
         # construct the request
         req = self._execute_plan_request_with_metadata()
@@ -532,7 +545,10 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         table, metrics = self._execute_and_fetch(req)
+        column_names = table.column_names
+        table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
         pdf = table.to_pandas()
+        pdf.columns = column_names
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
         return pdf
@@ -735,6 +751,45 @@ class SparkConnectClient(object):
         table = pa.Table.from_batches(batches=batches)
         metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
         return table, metrics
+
+    def _config_request_with_metadata(self) -> pb2.ConfigRequest:
+        req = pb2.ConfigRequest()
+        req.client_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        return req
+
+    def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
+        """
+        Call the config RPC of Spark Connect.
+
+        Parameters
+        ----------
+        operation : str
+           Operation kind
+
+        Returns
+        -------
+        The result of the config call.
+        """
+        req = self._config_request_with_metadata()
+        req.operation.CopyFrom(operation)
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    resp = self._stub.Config(req, metadata=self._builder.metadata())
+                    if resp.client_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.client_id} != {self._session_id}"
+                        )
+                    return ConfigResult.fromProto(resp)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except grpc.RpcError as rpc_error:
+            self._handle_error(rpc_error)
 
     def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """

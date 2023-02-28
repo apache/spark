@@ -191,9 +191,11 @@ class SQLContext:
 
         .. versionadded:: 1.3.0
         """
-        self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
+        self.sparkSession.conf.set(key, value)
 
-    def getConf(self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue) -> str:
+    def getConf(
+        self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue
+    ) -> Optional[str]:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return
