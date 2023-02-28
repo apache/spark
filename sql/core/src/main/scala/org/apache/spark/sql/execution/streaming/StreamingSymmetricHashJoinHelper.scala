@@ -137,16 +137,16 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       rightKeys: Seq[Expression],
       condition: Option[Expression],
       eventTimeWatermarkForEviction: Option[Long],
-      useFirstEventTimeColumn: Boolean): (Option[Long], Option[Long]) = {
+      allowMultipleEventTimeColumns: Boolean): (Option[Long], Option[Long]) = {
 
     // Perform assertions against multiple event time columns in the same DataFrame. This method
     // assumes there is only one event time column per each side (left / right) and it is not very
     // clear to reason about the correctness if there are multiple event time columns. Disallow to
     // be conservative.
     WatermarkSupport.findEventTimeColumn(leftAttributes,
-      useFirstOccurrence = useFirstEventTimeColumn)
+      allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
     WatermarkSupport.findEventTimeColumn(rightAttributes,
-      useFirstOccurrence = useFirstEventTimeColumn)
+      allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
 
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
       leftKeys, rightKeys)
@@ -191,9 +191,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     // clear to reason about the correctness if there are multiple event time columns. Disallow to
     // be conservative.
     WatermarkSupport.findEventTimeColumn(leftAttributes,
-      useFirstOccurrence = useFirstEventTimeColumn)
+      allowMultipleEventTimeColumns = useFirstEventTimeColumn)
     WatermarkSupport.findEventTimeColumn(rightAttributes,
-      useFirstOccurrence = useFirstEventTimeColumn)
+      allowMultipleEventTimeColumns = useFirstEventTimeColumn)
 
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
       leftKeys, rightKeys)

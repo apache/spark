@@ -265,8 +265,10 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
     }
   }
 
-  override def getInputWatermarkForLateEvents(batchId: Long, stateOpId: Long): Long =
+  override def getInputWatermarkForLateEvents(batchId: Long, stateOpId: Long): Long = {
+    // We use watermark for previous microbatch to determine late events.
     getInputWatermark(batchId - 1, stateOpId)
+  }
 
   override def getInputWatermarkForEviction(batchId: Long, stateOpId: Long): Long =
     getInputWatermark(batchId, stateOpId)

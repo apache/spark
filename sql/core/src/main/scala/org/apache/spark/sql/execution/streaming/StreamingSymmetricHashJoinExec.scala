@@ -561,7 +561,7 @@ case class StreamingSymmetricHashJoinExec(
       : Iterator[InternalRow] = {
 
       val watermarkAttribute = WatermarkSupport.findEventTimeColumn(inputAttributes,
-        useFirstOccurrence = !allowMultipleStatefulOperators)
+        allowMultipleEventTimeColumns = !allowMultipleStatefulOperators)
       val nonLateRows =
         WatermarkSupport.watermarkExpression(
           watermarkAttribute, eventTimeWatermarkForLateEvents) match {

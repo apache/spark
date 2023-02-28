@@ -262,7 +262,7 @@ trait WatermarkSupport extends SparkPlan {
   private def watermarkExpression(watermark: Option[Long]): Option[Expression] = {
     WatermarkSupport.watermarkExpression(
       WatermarkSupport.findEventTimeColumn(child.output,
-        useFirstOccurrence = !allowMultipleStatefulOperators), watermark)
+        allowMultipleEventTimeColumns = !allowMultipleStatefulOperators), watermark)
   }
 
   /** Predicate based on keys that matches data older than the late event filtering watermark */
@@ -354,15 +354,15 @@ object WatermarkSupport {
    * Find the column which is marked as "event time" column.
    *
    * If there are multiple event time columns in given column list, the behavior depends on the
-   * parameter `useFirstOccurrence`. If it's set to true, the first occurred column will be
-   * returned. If not, this method will throw an AnalysisException as it is not allowed to have
+   * parameter `allowMultipleEventTimeColumns`. If it's set to true, the first occurred column will
+   * be returned. If not, this method will throw an AnalysisException as it is not allowed to have
    * multiple event time columns.
    */
   def findEventTimeColumn(
       attrs: Seq[Attribute],
-      useFirstOccurrence: Boolean): Option[Attribute] = {
+      allowMultipleEventTimeColumns: Boolean): Option[Attribute] = {
     val eventTimeCols = attrs.filter(_.metadata.contains(EventTimeWatermark.delayKey))
-    if (!useFirstOccurrence) {
+    if (!allowMultipleEventTimeColumns) {
       // There is a case projection leads the same column (same exprId) to appear more than one
       // time. Allowing them does not hurt the correctness of state row eviction, hence let's start
       // with allowing them.
