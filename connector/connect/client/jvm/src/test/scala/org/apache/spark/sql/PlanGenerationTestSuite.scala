@@ -2004,6 +2004,16 @@ class PlanGenerationTestSuite
       fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
+  test("function lit array") {
+    simple.select(
+      fn.lit(Array(Array(1), Array(2), Array(3))),
+      fn.lit(Array(Array(Array(1)), Array(Array(2)), Array(Array(3)))),
+      fn.lit(Array(1.toShort, 2.toShort, 3.toShort)),
+      fn.lit(Array(1, 2, 3)),
+      fn.lit(Array(1.toDouble, 2.toDouble, 3.toDouble))
+    )
+  }
+
   /* Window API */
   test("window") {
     simple.select(

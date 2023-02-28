@@ -172,6 +172,7 @@ message Expression {
       CalendarInterval calendar_interval = 19;
       int32 year_month_interval = 20;
       int64 day_time_interval = 21;
+      Array array = 22;
     }
 
     message Decimal {
@@ -188,6 +189,11 @@ message Expression {
       int32 months = 1;
       int32 days = 2;
       int64 microseconds = 3;
+    }
+
+    message Array {
+      DataType elementType = 1;
+      repeated Literal element = 2;
     }
   }
 

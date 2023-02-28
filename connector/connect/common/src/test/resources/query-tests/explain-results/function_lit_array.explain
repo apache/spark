@@ -1,0 +1,2 @@
+Project [[[1],[2],[3]] AS ARRAY(ARRAY(1), ARRAY(2), ARRAY(3))#0, [[[1]],[[2]],[[3]]] AS ARRAY(ARRAY(ARRAY(1)), ARRAY(ARRAY(2)), ARRAY(ARRAY(3)))#0, [1,2,3] AS ARRAY(1S, 2S, 3S)#0, [1,2,3] AS ARRAY(1, 2, 3)#0, [1.0,2.0,3.0] AS ARRAY(1.0D, 2.0D, 3.0D)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0]

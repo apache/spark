@@ -1,0 +1,212 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "expressions": [{
+      "literal": {
+        "array": {
+          "elementType": {
+            "array": {
+              "elementType": {
+                "integer": {
+                }
+              },
+              "containsNull": true
+            }
+          },
+          "containsNull": true,
+          "element": [{
+            "array": {
+              "elementType": {
+                "integer": {
+                }
+              },
+              "containsNull": true,
+              "element": [{
+                "integer": 1
+              }]
+            }
+          }, {
+            "array": {
+              "elementType": {
+                "integer": {
+                }
+              },
+              "containsNull": true,
+              "element": [{
+                "integer": 2
+              }]
+            }
+          }, {
+            "array": {
+              "elementType": {
+                "integer": {
+                }
+              },
+              "containsNull": true,
+              "element": [{
+                "integer": 3
+              }]
+            }
+          }]
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elementType": {
+            "array": {
+              "elementType": {
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
+                  },
+                  "containsNull": true
+                }
+              },
+              "containsNull": true
+            }
+          },
+          "containsNull": true,
+          "element": [{
+            "array": {
+              "elementType": {
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
+                  },
+                  "containsNull": true
+                }
+              },
+              "containsNull": true,
+              "element": [{
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
+                  },
+                  "containsNull": true,
+                  "element": [{
+                    "integer": 1
+                  }]
+                }
+              }]
+            }
+          }, {
+            "array": {
+              "elementType": {
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
+                  },
+                  "containsNull": true
+                }
+              },
+              "containsNull": true,
+              "element": [{
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
+                  },
+                  "containsNull": true,
+                  "element": [{
+                    "integer": 2
+                  }]
+                }
+              }]
+            }
+          }, {
+            "array": {
+              "elementType": {
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
+                  },
+                  "containsNull": true
+                }
+              },
+              "containsNull": true,
+              "element": [{
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
+                  },
+                  "containsNull": true,
+                  "element": [{
+                    "integer": 3
+                  }]
+                }
+              }]
+            }
+          }]
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elementType": {
+            "short": {
+            }
+          },
+          "containsNull": true,
+          "element": [{
+            "short": 1
+          }, {
+            "short": 2
+          }, {
+            "short": 3
+          }]
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elementType": {
+            "integer": {
+            }
+          },
+          "containsNull": true,
+          "element": [{
+            "integer": 1
+          }, {
+            "integer": 2
+          }, {
+            "integer": 3
+          }]
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elementType": {
+            "double": {
+            }
+          },
+          "containsNull": true,
+          "element": [{
+            "double": 1.0
+          }, {
+            "double": 2.0
+          }, {
+            "double": 3.0
+          }]
+        }
+      }
+    }]
+  }
+}

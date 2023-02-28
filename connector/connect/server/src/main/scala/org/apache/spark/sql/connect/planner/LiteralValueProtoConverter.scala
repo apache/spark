@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -97,6 +98,9 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
 
+      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+        expressions.Literal.create(
+          toArrayData(lit.getArray), toArrayType(lit.getArray.getElementType))
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
@@ -128,6 +132,110 @@ object LiteralValueProtoConverter {
       case d: Double => proto.Expression.Literal.newBuilder().setDouble(d).build()
       case s: String => proto.Expression.Literal.newBuilder().setString(s).build()
       case o => throw new Exception(s"Unsupported value type: $o")
+    }
+  }
+
+  private def toArrayData(array: proto.Expression.Literal.Array): Any = {
+    def makeArrayData[T](initFunc: Int => Array[T],
+        converter: proto.Expression.Literal => T): Array[T] = {
+      val elementList = array.getElementList
+      val data = initFunc(elementList.size())
+      var idx = 0
+      val iter = elementList.iterator()
+      while (iter.hasNext) {
+        data(idx) = converter(iter.next())
+        idx += 1
+      }
+      data
+    }
+
+    val elementType = array.getElementType
+    if (elementType.hasShort) {
+      makeArrayData(size => new Array[Short](size), v => v.getShort.toShort)
+    } else if (elementType.hasInteger) {
+      makeArrayData(size => new Array[Int](size), v => v.getInteger)
+    } else if (elementType.hasLong) {
+      makeArrayData(size => new Array[Long](size), v => v.getLong)
+    } else if (elementType.hasDouble) {
+      makeArrayData(size => new Array[Double](size), v => v.getDouble)
+    } else if (elementType.hasByte) {
+      makeArrayData(size => new Array[Byte](size), v => v.getByte.toByte)
+    } else if (elementType.hasFloat) {
+      makeArrayData(size => new Array[Float](size), v => v.getFloat)
+    } else if (elementType.hasBoolean) {
+      makeArrayData(size => new Array[Boolean](size), v => v.getBoolean)
+    } else if (elementType.hasString) {
+      makeArrayData(size => new Array[String](size), v => v.getString)
+    } else if (elementType.hasDate) {
+      makeArrayData(size => new Array[java.sql.Date](size),
+        v => DateTimeUtils.toJavaDate(v.getDate))
+    } else if (elementType.hasTimestamp) {
+      makeArrayData(size => new Array[java.sql.Timestamp](size),
+        v => DateTimeUtils.toJavaTimestamp(v.getTimestamp))
+    } else if (elementType.hasTimestampNtz) {
+      makeArrayData(size => new Array[java.time.LocalDateTime](size),
+        v => DateTimeUtils.microsToLocalDateTime(v.getTimestampNtz))
+    } else if (elementType.hasDayTimeInterval) {
+      makeArrayData(size => new Array[java.time.Duration](size),
+        v => IntervalUtils.microsToDuration(v.getDayTimeInterval))
+    } else if (elementType.hasYearMonthInterval) {
+      makeArrayData(size => new Array[java.time.Period](size),
+        v => IntervalUtils.monthsToPeriod(v.getYearMonthInterval))
+    } else if (elementType.hasDecimal) {
+      makeArrayData(size => new Array[Decimal](size), v => Decimal(v.getDecimal.getValue))
+    } else if (elementType.hasCalendarInterval) {
+      makeArrayData(size => new Array[CalendarInterval](size),
+        v => {
+          val interval = v.getCalendarInterval
+          new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
+        })
+    } else if (elementType.hasArray) {
+      makeArrayData(size => new Array[Any](size), v => toArrayData(v.getArray))
+    } else {
+      throw InvalidPlanInput(s"Unsupported Literal Type: $elementType)")
+    }
+  }
+
+  private def toArrayType(elementType: proto.DataType): ArrayType = {
+    if (elementType.hasShort) {
+      ArrayType(ShortType)
+    } else if (elementType.hasInteger) {
+      ArrayType(IntegerType)
+    } else if (elementType.hasLong) {
+      ArrayType(LongType)
+    } else if (elementType.hasDouble) {
+      ArrayType(DoubleType)
+    } else if (elementType.hasByte) {
+      ArrayType(ByteType)
+    } else if (elementType.hasFloat) {
+      ArrayType(FloatType)
+    } else if (elementType.hasBoolean) {
+      ArrayType(BooleanType)
+    } else if (elementType.hasString) {
+      ArrayType(StringType)
+    } else if (elementType.hasDate) {
+      ArrayType(DateType)
+    } else if (elementType.hasTimestamp) {
+      ArrayType(TimestampType)
+    } else if (elementType.hasTimestampNtz) {
+      ArrayType(TimestampNTZType)
+    } else if (elementType.hasDayTimeInterval) {
+      val interval = elementType.getDayTimeInterval
+      ArrayType(DayTimeIntervalType(
+        interval.getStartField.toByte, interval.getEndField.toByte))
+    } else if (elementType.hasYearMonthInterval) {
+      val interval = elementType.getYearMonthInterval
+      ArrayType(YearMonthIntervalType(
+        interval.getStartField.toByte, interval.getEndField.toByte))
+    } else if (elementType.hasDecimal) {
+      val decimal = elementType.getDecimal
+      ArrayType(DecimalType(decimal.getPrecision, decimal.getScale))
+    } else if (elementType.hasCalendarInterval) {
+      ArrayType(CalendarIntervalType)
+    } else if (elementType.hasArray) {
+      ArrayType(toArrayType(elementType.getArray.getElementType))
+    } else {
+      throw InvalidPlanInput(s"Unsupported Literal Type: $elementType)")
     }
   }
 }

@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
+import org.apache.spark.sql.converters._
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
@@ -100,6 +101,18 @@ object functions {
       builder.setLiteral(literalBuilder)
   }
 
+  private def createArrayLiteral(array: Array[_]): Column = Column {
+    builder =>
+      val elementType = componentTypeToProto(array.getClass.getComponentType)
+      val arrayBuilder = proto.Expression.Literal.Array.newBuilder()
+        .setElementType(elementType).setContainsNull(true)
+      // Need to optimize `lit(x).expr.getLiteral` ?
+      array.foreach(x => arrayBuilder.addElement(lit(x).expr.getLiteral))
+      val literalBuilder = proto.Expression.Literal.newBuilder()
+      literalBuilder.setArray(arrayBuilder)
+      builder.setLiteral(literalBuilder)
+  }
+
   private def createDecimalLiteral(precision: Int, scale: Int, value: String): Column =
     createLiteral { builder =>
       builder.getDecimalBuilder
@@ -156,6 +169,7 @@ object functions {
       case v: Date => createLiteral(_.setDate(DateTimeUtils.fromJavaDate(v)))
       case v: Duration => createLiteral(_.setDayTimeInterval(IntervalUtils.durationToMicros(v)))
       case v: Period => createLiteral(_.setYearMonthInterval(IntervalUtils.periodToMonths(v)))
+      case v: Array[_] => createArrayLiteral(v)
       case v: CalendarInterval => createCalendarIntervalLiteral(v.months, v.days, v.microseconds)
       case null => createLiteral(_.setNull(nullType))
       case _ => unsupported(s"literal $literal not supported (yet).")
