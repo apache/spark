@@ -417,6 +417,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class SqlCommandResult(google.protobuf.message.Message):
+        """A SQL command returns an opaque Relation that can be directly used as input for the next
+        call.
+        """
+
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         RELATION_FIELD_NUMBER: builtins.int
@@ -567,7 +571,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
     @property
-    def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult: ...
+    def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult:
+        """Special case for executing SQL commands."""
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""

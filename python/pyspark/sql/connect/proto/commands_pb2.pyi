@@ -145,6 +145,14 @@ class Command(google.protobuf.message.Message):
 global___Command = Command
 
 class SqlCommand(google.protobuf.message.Message):
+    """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
+
+    When the SQL provide as part of the message is a command it will be immediately evaluated
+    and the result will be collected and returned as part of a LocalRelation. If the result is
+    not a command, the operation will simply return a SQL Relation. This allows the client to be
+    almost oblivious to the server-side behavior.
+    """
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class ArgsEntry(google.protobuf.message.Message):
