@@ -117,6 +117,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
+  def cannotChangeDecimal128PrecisionError(
+      value: Decimal128,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext = null): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      messageParameters = Map(
+        "value" -> value.toPlainString,
+        "precision" -> decimalPrecision.toString,
+        "scale" -> decimalScale.toString,
+        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
   def invalidInputInCastToDatetimeError(
       value: Any,
       from: DataType,
@@ -1251,7 +1267,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unscaledValueTooLargeForPrecisionError(
-      value: Decimal,
+      value: java.math.BigDecimal,
       decimalPrecision: Int,
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {

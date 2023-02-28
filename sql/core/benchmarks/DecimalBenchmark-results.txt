@@ -1,0 +1,91 @@
+================================================================================================
+Benchmark for performance of decimal
+================================================================================================
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+Compare decimal addition:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Decimal: s1 + s2                                      6              8           5         17.7          56.3       1.0X
+Decimal128: s1 + s2                                   2              2           0         43.7          22.9       2.5X
+Decimal: s1 + s2 + s3 + s4                           15             16           1          6.8         146.5       0.4X
+Decimal128: s1 + s2 + s3 + s4                         7              8           1         15.1          66.4       0.8X
+Decimal: l1 + l2                                     13             14           1          7.4         134.9       0.4X
+Decimal128: l1 + l2                                   5              6           1         19.3          51.7       1.1X
+Decimal: l1 + l2 + l3 + l4                           37             38           1          2.7         368.3       0.2X
+Decimal128: l1 + l2 + l3 + l4                        16             16           0          6.4         156.6       0.4X
+Decimal: s2 + l3 + l1 + s4                           39             40           1          2.5         393.2       0.1X
+Decimal128: s2 + l3 + l1 + s4                        25             26           1          4.0         251.5       0.2X
+Decimal: lz1 + lz2                                   13             14           1          7.6         131.8       0.4X
+Decimal128: lz1 + lz2                                 5              5           0         19.7          50.7       1.1X
+Decimal: lz1 + lz2 + lz3 + lz4                       37             38           1          2.7         369.2       0.2X
+Decimal128: lz1 + lz2 + lz3 + lz4                    15             16           0          6.5         153.8       0.4X
+Decimal: s2 + lz3 + lz1 + s4                         38             39           1          2.6         379.5       0.1X
+Decimal128: s2 + lz3 + lz1 + s4                      26             26           0          3.9         255.8       0.2X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+Compare decimal multiply:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Decimal: s1 * s2                                      5              5           0         20.2          49.6       1.0X
+Decimal128: s1 * s2                                   2              2           0         44.3          22.6       2.2X
+Decimal: s1 * s2 * s5 * s6                           14             15           1          7.0         142.6       0.3X
+Decimal128: s1 * s2 * s5 * s6                         5              5           0         21.2          47.3       1.0X
+Decimal: s3 * s4                                      9              9           1         11.5          87.1       0.6X
+Decimal128: s3 * s4                                   3              3           0         32.5          30.8       1.6X
+Decimal: l2 * s2                                      9              9           0         11.3          88.6       0.6X
+Decimal128: l2 * s2                                   3              3           0         33.0          30.3       1.6X
+Decimal: l2 * s2 * s5 * s6                           23             24           1          4.3         232.9       0.2X
+Decimal128: l2 * s2 * s5 * s6                        11             12           0          9.1         109.7       0.5X
+Decimal: s1 * l2                                      9             10           0         10.7          93.0       0.5X
+Decimal128: s1 * l2                                   3              3           0         31.9          31.3       1.6X
+Decimal: l1 * l2                                     10             10           0         10.4          96.0       0.5X
+Decimal128: l1 * l2                                   3              3           0         31.7          31.6       1.6X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+Compare decimal division:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Decimal: s1 / s2                                     17             18           1          5.8         172.8       1.0X
+Decimal128: s1 / s2                                   4              4           0         24.5          40.8       4.2X
+Decimal: s1 / s2 / s2 / s2                           47             48           1          2.1         470.6       0.4X
+Decimal128: s1 / s2 / s2 / s2                         9             10           0         10.7          93.5       1.8X
+Decimal: s1 / s3                                     27             28           1          3.7         268.2       0.6X
+Decimal128: s1 / s3                                   4              4           0         24.2          41.3       4.2X
+Decimal: s2 / l1                                     24             25           1          4.1         245.0       0.7X
+Decimal128: s2 / l1                                   4              4           0         23.1          43.3       4.0X
+Decimal: l1 / s2                                     19             20           1          5.1         194.7       0.9X
+Decimal128: l1 / s2                                   4              4           0         24.2          41.4       4.2X
+Decimal: s3 / l1                                     28             29           1          3.5         282.5       0.6X
+Decimal128: s3 / l1                                   4              4           0         24.5          40.9       4.2X
+Decimal: l2 / l3                                     34             36           5          2.9         343.3       0.5X
+Decimal128: l2 / l3                                  15             16           1          6.5         153.2       1.1X
+Decimal: l2 / l4 / l4 / l4                           69             71           1          1.5         689.4       0.3X
+Decimal128: l2 / l4 / l4 / l4                        20             22           1          4.9         202.6       0.9X
+Decimal: l2 / s4 / s4 / s4                           57             59           4          1.8         570.9       0.3X
+Decimal128: l2 / s4 / s4 / s4                        39             41           1          2.5         394.1       0.4X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+Compare decimal modulo:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Decimal: s1 % s2                                     36             37           1          2.7         363.8       1.0X
+Decimal128: s1 % s2                                  18             19           1          5.5         181.4       2.0X
+Decimal: s1 % s2 % s2 % s2                           50             52           3          2.0         504.3       0.7X
+Decimal128: s1 % s2 % s2 % s2                        40             42           2          2.5         399.9       0.9X
+Decimal: s2 % l2                                      8              8           1         13.3          75.1       4.8X
+Decimal128: s2 % l2                                  13             14           1          7.6         132.0       2.8X
+Decimal: l3 % s3                                     50             51           1          2.0         495.5       0.7X
+Decimal128: l3 % s3                                  16             16           0          6.3         157.5       2.3X
+Decimal: s4 % l3                                      8              9           1         12.3          81.3       4.5X
+Decimal128: s4 % l3                                  14             15           1          7.2         138.3       2.6X
+Decimal: l2 % l3                                     14             15           1          7.0         142.4       2.6X
+Decimal128: l2 % l3                                  17             18           1          5.9         169.4       2.1X
+Decimal: l2 % l3 % l4 % l1                           85             87           2          1.2         845.7       0.4X
+Decimal128: l2 % l3 % l4 % l1                        52             53           1          1.9         519.7       0.7X
+
+
