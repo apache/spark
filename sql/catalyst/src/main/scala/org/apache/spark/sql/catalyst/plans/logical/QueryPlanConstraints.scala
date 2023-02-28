@@ -59,7 +59,8 @@ trait ConstraintHelper extends SQLConfHelper {
   lazy val constraintInferenceLimit = conf.getConf(SQLConf.CONSTRAINT_INFERENCE_LIMIT)
 
   /**
-   * Infers an additional set of constraints from a given set of equality constraints.
+   * Infers an additional set of constraints from a given set of equality constraints and returns
+   * them with the original constraint set.
    * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
    * additional constraint of the form `b = 5`.
    */
