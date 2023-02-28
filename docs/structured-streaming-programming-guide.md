@@ -1306,7 +1306,7 @@ anotherWindowedCounts = windowedCounts.groupBy(
 </div>
 </div>
 
-`window` function does not only take timestamp column, but also take the time window column. This is very useful for cases where users want to apply chained time window aggregations.
+`window` function does not only take timestamp column, but also take the time window column. This is specifically useful for cases where users want to apply chained time window aggregations.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
