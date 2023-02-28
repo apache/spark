@@ -1041,7 +1041,7 @@
   },
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
-      "Cannot create a persistent object <objName> of type <obj> because it references a temporary object <tempObjName> of type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
+      "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ]
   },
   "INVALID_TYPED_LITERAL" : {
