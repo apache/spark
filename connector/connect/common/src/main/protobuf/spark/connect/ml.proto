@@ -20,6 +20,7 @@ syntax = 'proto3';
 package spark.connect;
 
 import "spark/connect/relations.proto";
+import "spark/connect/expressions.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -93,4 +94,195 @@ message RemoteCall {
     string function_name = 2;
     repeated ArgValue arg_values = 3;
   }
+}
+
+// Invoking estimator / transformer / evaluator construction
+// in server side
+message CreateMlInstance {
+  // class name of Estimator/Transformer/Evaluator
+  string class_name = 1;
+  string uid = 2;
+}
+
+// invoking fit method on server side estimator instance
+message Fit {
+  string instance_id = 1;
+  Relation relation = 2;
+}
+
+// invoking transform method on server side transformer / model instance
+message Transform {
+  string instance_id = 1;
+  Relation relation = 2;
+}
+
+message ParamValue {
+  oneof one_of {
+    Expression.Literal literal = 1;
+    List list = 2;
+  }
+  message List {
+    repeated Expression.Literal element = 1;
+  }
+}
+
+message ParamMap {
+  repeated ParamPair param_pairs = 1;
+  message ParamPair {
+    string param_name = 1;
+    string parent_uid = 2;
+    ParamValue value = 3;
+  }
+}
+
+// Set param values for server side estimator / transformer / evaluator
+message SetParamMap {
+  string instance_id = 1;
+  ParamMap param_map = 2;
+}
+
+message GetParamMap {
+  string instance_id = 1;
+}
+
+// invoking `evaluate` method on server side evaluator instance.
+message Evaluate {
+  string instance_id = 1;
+}
+
+// invoking `model.xx` methods, this is for getting various attributes
+// or calling some specific model methods.
+message InvokeModelMethods {
+  string instance_id = 1;
+  repeated Expression.Literal arguments = 2;
+}
+
+// invoking methods of model summary instance on server side.
+message InvokeModelSummaryMethods {
+  string instance_id = 1;
+  repeated Expression.Literal arguments = 2;
+}
+
+// invoking loading a model
+message LoadModel {
+  string class_name = 1;
+  string path = 2;
+}
+
+// invoking saving a model
+message SaveModel {
+  string instance_id = 1;
+  string path = 2;
+  bool overwrite = 3;
+  map<string, string> options = 4;
+}
+
+message Vector {
+  oneof one_of {
+    Dense dense = 1;
+    Sparse sparse = 2;
+  }
+  message Dense {
+    bytes value_array_bytes = 1;
+  }
+  message Sparse {
+    int32 size = 1;
+    bytes indices_array_bytes = 2;
+    bytes value_array_bytes = 3;
+  }
+}
+
+message Matrix {
+  oneof one_of {
+    Dense dense = 1;
+    Sparse sparse = 2;
+  }
+  message Dense {
+    int32 num_rows = 1;
+    int32 num_cols = 2;
+    bytes value_array_bytes = 3;
+  }
+  message Sparse {
+    int32 num_rows = 1;
+    int32 num_cols = 2;
+    bytes colptr_array_bytes = 3;
+    bytes row_indices_array_bytes = 4;
+    bytes value_array_bytes = 5;
+  }
+}
+
+message RemoteInstance {
+  string instance_id = 1;
+}
+
+message ResponseValue {
+  oneof one_of {
+    // the instance might be created estimator / model / transformer / evaluator
+    // instance, or spark dataframe instance returned by
+    // `transform` / model attribute or method / model summary methods
+    RemoteInstance instance = 1;
+    // misc model methods / summary methods return Literal type values.
+    Expression.Literal literal = 2;
+    // Some model method returns vector type value
+    Vector vector = 3;
+    // Some model method returns matrix type value
+    Matrix matrix = 4;
+    // GetParamMap invocation returns a param map.
+    ParamMap param_map = 5;
+  }
+}
+
+message TreeNode {
+  message InternalNode {
+    double prediction = 1;
+    double impurity = 2;
+    double gain = 3;
+    TreeNode leftChild = 4;
+    TreeNode rightChild = 5;
+    oneof split {
+      ContinuousSplit continuous_split = 6;
+      CategoricalSplit categorical_split = 7;
+    }
+  }
+  message LeafNode {
+    double prediction = 1;
+    double impurity = 2;
+  }
+  message ContinuousSplit {
+    int32 featureIndex = 1;
+    double threshold = 2;
+  }
+  message CategoricalSplit {
+    int32 featureIndex = 1;
+    int32 numCategories = 2;
+    repeated double leftCategories = 3;
+    repeated double rightCategories = 4;
+  }
+}
+
+message LogisticRegressionModel {
+  bytes coefficients = 1;
+  bytes intercept = 2;
+  bytes coefficientMatrix = 3;
+  bytes interceptVector = 4;
+}
+
+message LogisticRegressionModelTransform {
+  LogisticRegressionModel model = 1;
+  Relation dataset = 2;
+}
+
+message MLEstimator {
+  string name = 1;
+  map<string, ParamValue> params = 2;
+}
+
+message GetModelSummaryAttribute {
+  // The id that is used to track the server side model instance.
+  string model_ref_id = 1;
+  // attribute name
+  string name = 2;
+  // Evaluation dataset. If not set, using the training dataset
+  // that trains the model
+  Relation evaluation_dataset = 3;
 }
