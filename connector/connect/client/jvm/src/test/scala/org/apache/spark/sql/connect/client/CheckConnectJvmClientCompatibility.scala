@@ -16,49 +16,74 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.File
+import java.io.{File, Writer}
 import java.net.URLClassLoader
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import java.util.regex.Pattern
 
-import com.typesafe.tools.mima.core._
+import scala.reflect.runtime.universe.runtimeMirror
+
+import com.typesafe.tools.mima.core.{Problem, ProblemFilter, ProblemFilters}
 import com.typesafe.tools.mima.lib.MiMaLib
 
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 
 /**
- * This test checks the binary compatibility of the connect client API against the spark SQL API
+ * A tool for checking the binary compatibility of the connect client API against the spark SQL API
  * using MiMa. We did not write this check using a SBT build rule as the rule cannot provide the
  * same level of freedom as a test. With a test we can:
  *   1. Specify any two jars to run the compatibility check.
  *   1. Easily make the test automatically pick up all new methods added while the client is being
  *      built.
  *
- * The test requires the following artifacts built before running:
- * {{{
- *     spark-sql
- *     spark-connect-client-jvm
- * }}}
- * To build the above artifact, use e.g. `build/sbt package` or `build/mvn clean install
- * -DskipTests`.
- *
- * When debugging this test, if any changes to the client API, the client jar need to be built
- * before running the test. An example workflow with SBT for this test:
- *   1. Compatibility test has reported an unexpected client API change.
- *   1. Fix the wrong client API.
- *   1. Build the client jar: `build/sbt package`
- *   1. Run the test again: `build/sbt "testOnly
- *      org.apache.spark.sql.connect.client.CompatibilitySuite"`
+ * We can run this check by executing the `dev/connect-jvm-client-mima-check`.
  */
-class CompatibilitySuite extends ConnectFunSuite {
+// scalastyle:off println
+object CheckConnectJvmClientCompatibility {
 
-  private lazy val clientJar: File =
-    findJar(
-      "connector/connect/client/jvm",
-      "spark-connect-client-jvm-assembly",
-      "spark-connect-client-jvm")
+  private lazy val sparkHome: String = {
+    if (!sys.env.contains("SPARK_HOME")) {
+      throw new IllegalArgumentException("SPARK_HOME is not set.")
+    }
+    sys.env("SPARK_HOME")
+  }
 
-  private lazy val sqlJar: File = findJar("sql/core", "spark-sql", "spark-sql")
+  def main(args: Array[String]): Unit = {
+    var resultWriter: Writer = null
+    try {
+      resultWriter =
+        Files.newBufferedWriter(Paths.get(
+          s"$sparkHome/.connect-mima-check-result"), StandardCharsets.UTF_8)
+      val clientJar: File =
+        findJar(
+          "connector/connect/client/jvm",
+          "spark-connect-client-jvm-assembly",
+          "spark-connect-client-jvm")
+      val sqlJar: File = findJar("sql/core", "spark-sql", "spark-sql")
+      val problems = checkMiMaCompatibility(clientJar, sqlJar)
+      if (problems.nonEmpty) {
+        resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and sql jar: $sqlJar \n")
+        resultWriter.write(s"problems: \n")
+        resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
+        resultWriter.write("\n")
+      }
+      val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
+      if (incompatibleApis.nonEmpty) {
+        resultWriter.write("ERROR: Dataset apis incompatible with the sql module include: \n")
+        resultWriter.write(incompatibleApis.mkString("\n"))
+        resultWriter.write("\n")
+      }
+    } catch {
+      case e: Throwable =>
+        println(e.getMessage)
+        resultWriter.write(s"ERROR: ${e.getMessage}")
+    } finally {
+      if (resultWriter != null) {
+        resultWriter.close()
+      }
+    }
+  }
 
   /**
    * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
@@ -67,7 +92,7 @@ class CompatibilitySuite extends ConnectFunSuite {
    * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
    * the client classes.
    */
-  test("compatibility MiMa tests") {
+  private def checkMiMaCompatibility(clientJar: File, sqlJar: File): List[Problem] = {
     val mima = new MiMaLib(Seq(clientJar, sqlJar))
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
@@ -190,30 +215,32 @@ class CompatibilitySuite extends ConnectFunSuite {
       .filter { p =>
         excludeRules.forall(rule => rule(p))
       }
-
-    if (problems.nonEmpty) {
-      fail(
-        s"\nComparing client jar: $clientJar\nand sql jar: $sqlJar\n" +
-          problems.map(p => p.description("client")).mkString("\n"))
-    }
+    problems
   }
 
-  test("compatibility API tests: Dataset") {
-    val clientClassLoader: URLClassLoader = new URLClassLoader(Seq(clientJar.toURI.toURL).toArray)
-    val sqlClassLoader: URLClassLoader = new URLClassLoader(Seq(sqlJar.toURI.toURL).toArray)
+  private def checkDatasetApiCompatibility(clientJar: File, sqlJar: File): Seq[String] = {
 
-    val clientClass = clientClassLoader.loadClass("org.apache.spark.sql.Dataset")
-    val sqlClass = sqlClassLoader.loadClass("org.apache.spark.sql.Dataset")
+    def methods(jar: File, className: String): Seq[String] = {
+      val classLoader: URLClassLoader = new URLClassLoader(Seq(jar.toURI.toURL).toArray)
+      val mirror = runtimeMirror(classLoader)
+      // scalastyle:off classforname
+      val classSymbol =
+        mirror.classSymbol(Class.forName(className, false, classLoader))
+      // scalastyle:on classforname
+      classSymbol.typeSignature.members
+        .filter(_.isMethod)
+        .map(_.asMethod)
+        .filter(m => m.isPublic)
+        .map(_.fullName)
+        .toSeq
+    }
 
-    val newMethods = clientClass.getMethods
-    val oldMethods = sqlClass.getMethods
+    val className = "org.apache.spark.sql.Dataset"
+    val clientMethods = methods(clientJar, className)
+    val sqlMethods = methods(sqlJar, className)
 
     // For now we simply check the new methods is a subset of the old methods.
-    newMethods
-      .map(m => m.toString)
-      .foreach(method => {
-        assert(oldMethods.map(m => m.toString).contains(method))
-      })
+    clientMethods.diff(sqlMethods)
   }
 
   private case class IncludeByName(name: String) extends ProblemFilter {
