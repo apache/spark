@@ -29,6 +29,7 @@ import scala.util.Try
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.util.VersionInfo
 import org.apache.hive.common.util.HiveVersionInfo
 
@@ -320,6 +321,22 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
+   * Check current Thread's SessionState type
+   * @return true when SessionState.get returns an instance of CliSessionState,
+   *         false when it gets non-CliSessionState instance or null
+   */
+  def isCliSessionState(): Boolean = {
+    val state = SessionState.get
+    var temp: Class[_] = if (state != null) state.getClass else null
+    var found = false
+    while (temp != null && !found) {
+      found = temp.getName == "org.apache.hadoop.hive.cli.CliSessionState"
+      temp = temp.getSuperclass
+    }
+    found
+  }
+
+  /**
    * Create a [[HiveClient]] used for execution.
    *
    * Currently this must always be the Hive built-in version that packaged
@@ -399,6 +416,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopConf = hadoopConf,
         config = configurations,
         isolationOn = false,
+        sessionStateIsolationOverride = Some(!isCliSessionState()),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {

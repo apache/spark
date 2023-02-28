@@ -180,6 +180,9 @@ private[hive] object IsolatedClientLoader extends Logging {
  * @param config   A set of options that will be added to the HiveConf of the constructed client.
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Spark's classloader.
+ * @param sessionStateIsolationOverride If present, this parameter will specify the value of
+ *                                      `sessionStateIsolationOn`. If empty (the default), the
+ *                                      value of `isolationOn` will be used.
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  */
 private[hive] class IsolatedClientLoader(
@@ -189,10 +192,18 @@ private[hive] class IsolatedClientLoader(
     val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
+    sessionStateIsolationOverride: Option[Boolean] = None,
     val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader,
     val sharedPrefixes: Seq[String] = Seq.empty,
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
+
+  /**
+   * This controls whether the generated clients maintain an independent/isolated copy of the
+   * Hive `SessionState`. If false, the Hive will leverage the global/static copy of
+   * `SessionState`; if true, it will generate a new copy of the state internally.
+   */
+  val sessionStateIsolationOn: Boolean = sessionStateIsolationOverride.getOrElse(isolationOn)
 
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
