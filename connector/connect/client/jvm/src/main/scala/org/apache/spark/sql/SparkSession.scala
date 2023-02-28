@@ -62,7 +62,7 @@ class SparkSession(
 
   private[this] val allocator = new RootAllocator()
 
-  def version: String = {
+  lazy val version: String = {
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
   }
 
