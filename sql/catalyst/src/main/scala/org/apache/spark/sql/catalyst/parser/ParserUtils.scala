@@ -20,7 +20,7 @@ import java.lang.{Long => JLong}
 import java.nio.CharBuffer
 import java.util
 
-import scala.collection.mutable.StringBuilder
+import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -260,47 +260,32 @@ object ParserUtils {
     }
   }
 
-  private def stripGap(sb: StringBuilder): Unit = {
-    if (sb.length > 0 && sb.charAt(sb.length - 1) == ' ') {
-      sb.setLength(sb.length - 1)
-    }
-  }
-
   /**
-   * Adds a gap after every term node except of '(', ')', '[', ']',
-   * and removes a gap before '(', ')', '[', ']', ','. For example:
-   *   ( columnA + 1 ) -> (columnA + 1)
-   *   map ( 1 , a ) [ 1 ] -> map(1, a)[1]
+   * Converts to the given parse tree to an alias. It adds a gap between two terms
+   * when both contains only either letters or digits.
    */
-  private def toExprAlias(ctx: ParseTree, sb: StringBuilder): Unit = {
-    val childCount = ctx.getChildCount
-    var i = 0
-    while (i < childCount) {
-      ctx.getChild(i) match {
-        case term: TerminalNodeImpl =>
-          val s = term.getText
-          s match {
-            case "(" | "[" | "," | "." | "]" | ")" => stripGap(sb)
-            case _ =>
-          }
-          sb.append(s)
-          s match {
-            case "(" | "[" | "." | "]" | ")" =>
-            case _ => sb.append(" ")
-          }
-        case child => toExprAlias(child, sb)
+  def toExprAlias(ctx: ParseTree): String = {
+    def getTerms(ctx: ParseTree, terms: ArrayBuffer[TerminalNodeImpl]): Unit = {
+      for (i <- 0 until ctx.getChildCount) {
+        ctx.getChild(i) match {
+          case term: TerminalNodeImpl => terms += term
+          case child => getTerms(child, terms)
+        }
       }
-      i = i + 1
     }
-  }
-
-  /**
-   * Gets a stable column alias for the given expression.
-   */
-  def toExprAlias(pt: ParseTree): String = {
-    val sb = new StringBuilder
-    toExprAlias(pt, sb)
-    stripGap(sb)
-    sb.toString
+    val terms = new ArrayBuffer[TerminalNodeImpl]()
+    getTerms(ctx, terms)
+    val sb = new StringBuilder()
+    for (i <- 0 until terms.length) {
+      val current = terms(i).getText
+      sb.append(current)
+      if (i < terms.length - 1) {
+        val next = terms(i + 1).getText
+        if (current.forall(_.isLetterOrDigit) && next.forall(_.isLetterOrDigit)) {
+          sb.append(" ")
+        }
+      }
+    }
+    sb.toString()
   }
 }
