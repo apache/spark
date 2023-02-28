@@ -934,8 +934,8 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
 
         val inputDF = sql("SELECT named_struct('n_i', 1, 'n_c', '123456') AS s")
 
-        val e = intercept[SparkException](inputDF.writeTo("t").append())
-        assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        val e = intercept[RuntimeException](inputDF.writeTo("t").append())
+        assert(e.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
       }
     }
   }
