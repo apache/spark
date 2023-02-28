@@ -1897,7 +1897,7 @@ class FrameMap(LogicalPlan):
 
 
 class CachedRelation(LogicalPlan):
-    def __init__(self, plan=proto.Relation) -> None:
+    def __init__(self, plan:proto.Relation) -> None:
         super(CachedRelation, self).__init__(None)
         self._plan = plan
         # Update the plan ID based on the incremented counter.

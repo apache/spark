@@ -344,7 +344,7 @@ class SparkSession:
 
     def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
-        data, properties = self.client.execute_command(cmd.command(self))
+        data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
             return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
         else:
