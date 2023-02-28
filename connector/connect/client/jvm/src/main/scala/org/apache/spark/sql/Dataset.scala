@@ -2147,7 +2147,7 @@ class Dataset[T] private[sql] (
       .addAllColumns(cols.map(_.expr).asJava)
   }
 
-  private def buildDropByNames(cols: Seq[String]): DataFrame = sparkSession.newDataset {
+  private def buildDropByNames(cols: Seq[String]): DataFrame = sparkSession.newDataFrame {
     builder =>
       builder.getDropBuilder
         .setInput(plan.getRoot)
