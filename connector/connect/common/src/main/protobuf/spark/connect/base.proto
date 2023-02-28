@@ -152,9 +152,11 @@ message ExecutePlanRequest {
 message ExecutePlanResponse {
   string client_id = 1;
 
+  // Union type for the different response messages.
   oneof response_type {
     ArrowBatch arrow_batch = 2;
 
+    // Special case for executing SQL commands.
     SqlCommandResult sql_command_result = 5;
 
     // Support arbitrary result objects.
@@ -165,6 +167,8 @@ message ExecutePlanResponse {
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
 
+  // A SQL command returns an opaque Relation that can be directly used as input for the next
+  // call.
   message SqlCommandResult {
     Relation relation = 1;
   }
