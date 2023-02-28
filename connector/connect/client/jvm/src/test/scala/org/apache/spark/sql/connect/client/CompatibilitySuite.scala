@@ -129,7 +129,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.writeStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.this"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sparkSession"),
 
       // functions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udf"),
@@ -152,7 +151,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getActiveSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.newSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sharedState"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sessionState"),
@@ -177,7 +175,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getActiveSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.range"),
 
       // RuntimeConfig
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
