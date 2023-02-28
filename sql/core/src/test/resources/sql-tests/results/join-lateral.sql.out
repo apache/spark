@@ -1569,6 +1569,213 @@ struct<>
 
 
 -- !query
+SELECT * FROM LATERAL posexplode(ARRAY(1, 2))
+-- !query schema
+struct<pos:int,col:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL posexplode(ARRAY(c1, c2)) t2(pos, c3)
+-- !query schema
+struct<c1:int,c2:int,pos:int,c3:int>
+-- !query output
+0	1	0	0
+0	1	1	1
+1	2	0	1
+1	2	1	2
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL posexplode(ARRAY(c1, c2)) t(pos, c3) ON t1.c1 = c3
+-- !query schema
+struct<c1:int,c2:int,pos:int,c3:int>
+-- !query output
+0	1	0	0
+1	2	0	1
+
+
+-- !query
+SELECT * FROM t3, LATERAL posexplode(c2) t2(pos, v)
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,v:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	0	2
+NULL	[4]	0	4
+
+
+-- !query
+SELECT * FROM t3 JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,c3:int>
+-- !query output
+0	[0,1]	0	0
+
+
+-- !query
+SELECT * FROM t3, LATERAL posexplode_outer(c2) t2(pos, v)
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,v:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	0	2
+2	[]	NULL	NULL
+NULL	[4]	0	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,c3:int>
+-- !query output
+0	[0,1]	0	0
+1	[2]	NULL	NULL
+2	[]	NULL	NULL
+NULL	[4]	NULL	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode_outer(c2) t(pos, c3) ON t3.c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,c3:int>
+-- !query output
+0	[0,1]	0	0
+1	[2]	NULL	NULL
+2	[]	NULL	NULL
+NULL	[4]	NULL	NULL
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW json_table(key, jstring) AS VALUES
+    ('1', '{"f1": "1", "f2": "2", "f3": 3, "f5": 5.23}'),
+    ('2', '{"f1": "1", "f3": "3", "f2": 2, "f4": 4.01}'),
+    ('3', '{"f1": 3, "f4": "4", "f3": "3", "f2": 2, "f5": 5.01}'),
+    ('4', cast(null as string)),
+    ('5', '{"f1": null, "f5": ""}'),
+    ('6', '[invalid JSON string]')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2
+-- !query schema
+struct<key:string,c0:string,c1:string,c2:string,c3:string,c4:string>
+-- !query output
+1	1	2	3	NULL	5.23
+2	1	2	3	4.01	NULL
+3	3	2	3	4	5.01
+4	NULL	NULL	NULL	NULL	NULL
+5	NULL	NULL	NULL	NULL	
+6	NULL	NULL	NULL	NULL	NULL
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2 WHERE t2.c0 IS NOT NULL
+-- !query schema
+struct<key:string,c0:string,c1:string,c2:string,c3:string,c4:string>
+-- !query output
+1	1	2	3	NULL	5.23
+2	1	2	3	4.01	NULL
+3	3	2	3	4	5.01
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1
+  JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1
+-- !query schema
+struct<key:string,f1:string,f2:string,f3:string,f4:string,f5:string>
+-- !query output
+1	1	2	3	NULL	5.23
+3	3	2	3	4	5.01
+
+
+-- !query
+SELECT t1.key, t2.* FROM json_table t1
+  LEFT JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1
+-- !query schema
+struct<key:string,f1:string,f2:string,f3:string,f4:string,f5:string>
+-- !query output
+1	1	2	3	NULL	5.23
+2	NULL	NULL	NULL	NULL	NULL
+3	3	2	3	4	5.01
+4	NULL	NULL	NULL	NULL	NULL
+5	NULL	NULL	NULL	NULL	NULL
+6	NULL	NULL	NULL	NULL	NULL
+
+
+-- !query
+DROP VIEW json_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT t.* FROM t1, LATERAL stack(2, 'Key', c1, 'Value', c2) t
+-- !query schema
+struct<col0:string,col1:int>
+-- !query output
+Key	0
+Key	1
+Value	1
+Value	2
+
+
+-- !query
+SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t(x, y)
+-- !query schema
+struct<x:int,y:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1 JOIN LATERAL stack(1, t1.c2, t3.c2) t
+-- !query schema
+struct<col0:int,col1:array<int>>
+-- !query output
+1	[0,1]
+2	[2]
+
+
+-- !query
+SELECT t.* FROM t1, LATERAL stack(c1, c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"outer(spark_catalog.default.t1.c1)\"",
+    "inputName" : "n",
+    "inputType" : "\"INT\"",
+    "sqlExpr" : "\"stack(outer(spark_catalog.default.t1.c1), outer(spark_catalog.default.t1.c2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 41,
+    "fragment" : "stack(c1, c2)"
+  } ]
+}
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>
