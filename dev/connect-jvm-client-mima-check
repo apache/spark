@@ -51,7 +51,14 @@ $JAVA_CMD \
   -cp "$TOOLS_CLASSPATH:$CORE_CLASSPATH:$CATALYST_CLASSPATH" \
   org.apache.spark.tools.CheckConnectJvmClientCompatibility
 
-ERRORS=$(grep ERROR .connect-mima-check-result | tail -n1)
+RESULT_SIZE=$(wc -l .connect-mima-check-result | awk '{print $1}')
+
+# The the file has no content if check passed.
+if [[ $RESULT_SIZE -eq "0" ]]; then
+  ERRORS=""
+else
+  ERRORS=$(grep ERROR .connect-mima-check-result | tail -n1)
+fi
 
 if test ! -z "$ERRORS"; then
   cat .connect-mima-check-result
