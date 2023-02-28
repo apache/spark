@@ -186,20 +186,12 @@ message ExecutePlanResponse {
 // Request to transfer client-local artifacts.
 message AddArtifactsRequest {
 
-  // Definition of an Artifact.
-  message Artifact {
-    // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
-    // sequence of directories and the final file element.
-    // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
-    // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
-    // The relative path of the file on the server's filesystem will be the same as the name of
-    // the provided artifact)
-    string name = 1;
-    // Raw data.
-    bytes data = 2;
-    // CRC to allow server to verify integrity of the artifact.
-    int64 crc = 3;
-  }
+  // The client_id is set by the client to be able to collate streaming responses from
+  // different queries.
+  string client_id = 1;
+
+  // User context
+  UserContext user_context = 2;
 
   // A chunk of an Artifact.
   message ArtifactChunk {
@@ -209,19 +201,28 @@ message AddArtifactsRequest {
     int64 crc = 2;
   }
 
-  // A number of small artifacts batched into a single RPC.
-  message Batch {
-    repeated Artifact artifacts = 1;
+  // An artifact that is contained in a single `ArtifactChunk`.
+  // Generally, this message represents tiny artifacts such as REPL-generated class files.
+  message SingleChunkArtifact {
+    // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+    // sequence of directories and the final file element.
+    // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
+    // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+    // The relative path of the file on the server's filesystem will be the same as the name of
+    // the provided artifact)
+    string name = 1;
+    // A single data chunk.
+    ArtifactChunk data = 2;
   }
 
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // A number of `SingleChunkArtifact` batched into a single RPC.
+  message Batch {
+    repeated SingleChunkArtifact artifacts = 1;
+  }
 
-  // User context
-  UserContext user_context = 2;
-
-  // Signals the start of a chunked artifact.
+  // Signals the beginning/start of a chunked artifact.
+  // A large artifact is transferred through a payload of `BeginChunkedArtifact` followed by a
+  // sequence of `ArtifactChunk`s.
   message BeginChunkedArtifact {
     // Name of the artifact undergoing chunking. Follows the same conventions as the `name` in
     // the `Artifact` message.
@@ -242,8 +243,8 @@ message AddArtifactsRequest {
     // The server side is notified about the total size of the large artifact as well as the
     // number of chunks to expect.
     BeginChunkedArtifact begin_chunk = 4;
-    // A chunk of an artifact excluding metadata. This can be any chunk of the artifact excluding
-    // the first chunk.
+    // A chunk of an artifact excluding metadata. This can be any chunk of a large artifact
+    // excluding the first chunk (which is included in `BeginChunkedArtifact`).
     ArtifactChunk chunk = 5;
   }
 }
