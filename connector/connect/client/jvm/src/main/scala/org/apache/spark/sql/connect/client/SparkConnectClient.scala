@@ -90,46 +90,53 @@ private[sql] class SparkConnectClient(
    *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
    */
   def analyze(
-      plan: proto.Plan,
       method: proto.AnalyzePlanRequest.AnalyzeCase,
+      plan: Option[proto.Plan] = None,
       explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
       : proto.AnalyzePlanResponse = {
     val builder = proto.AnalyzePlanRequest.newBuilder()
     method match {
       case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
+        assert(plan.isDefined)
         builder.setSchema(
           proto.AnalyzePlanRequest.Schema
             .newBuilder()
-            .setPlan(plan)
+            .setPlan(plan.get)
             .build())
       case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
         if (explainMode.isEmpty) {
           throw new IllegalArgumentException(s"ExplainMode is required in Explain request")
         }
+        assert(plan.isDefined)
         builder.setExplain(
           proto.AnalyzePlanRequest.Explain
             .newBuilder()
-            .setPlan(plan)
+            .setPlan(plan.get)
             .setExplainMode(explainMode.get)
             .build())
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
+        assert(plan.isDefined)
         builder.setIsLocal(
           proto.AnalyzePlanRequest.IsLocal
             .newBuilder()
-            .setPlan(plan)
+            .setPlan(plan.get)
             .build())
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
+        assert(plan.isDefined)
         builder.setIsStreaming(
           proto.AnalyzePlanRequest.IsStreaming
             .newBuilder()
-            .setPlan(plan)
+            .setPlan(plan.get)
             .build())
       case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
+        assert(plan.isDefined)
         builder.setInputFiles(
           proto.AnalyzePlanRequest.InputFiles
             .newBuilder()
-            .setPlan(plan)
+            .setPlan(plan.get)
             .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
+        builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
       case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
     }
     val request = builder
