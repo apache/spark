@@ -743,4 +743,21 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)
   }
+
+  test("SPARK-42608: use full column names for inner fields in resolution errors") {
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"x".int.notNull, $"y".int),
+      $"c".struct($"x".int, $"y".int)))
+    val query = TestRelation(Seq(
+      $"b".struct($"y".int, $"x".byte),
+      $"c".struct($"y".int, $"x".byte),
+      $"a".int))
+
+    val parsedPlan = byName(table, query)
+
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write nullable values to non-null column 'b.x'"))
+  }
 }
