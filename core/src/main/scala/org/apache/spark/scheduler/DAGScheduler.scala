@@ -233,6 +233,12 @@ private[spark] class DAGScheduler(
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
   /**
+   * Max stage attempts allowed before a stage is aborted.
+   */
+  private[scheduler] val maxStageAttempts =
+    Math.max(maxConsecutiveStageAttempts, sc.getConf.get(config.STAGE_MAX_ATTEMPTS))
+
+  /**
    * Whether ignore stage fetch failure caused by executor decommission when
    * count spark.stage.maxConsecutiveAttempts
    */
@@ -1350,6 +1356,12 @@ private[spark] class DAGScheduler(
 
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage): Unit = {
+    if (stage.getNextAttemptId() >= maxStageAttempts) {
+      val reason = s"$stage (name=${stage.name}) has resubmitted for the maximum allowable " +
+        s"number of times: $maxStageAttempts."
+      abortStage(stage, reason, None)
+    }
+
     val jobId = activeJobForStage(stage)
     if (jobId.isDefined) {
       logDebug(s"submitStage($stage (name=${stage.name};" +

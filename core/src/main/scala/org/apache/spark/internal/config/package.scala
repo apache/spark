@@ -2479,4 +2479,11 @@ package object config {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val STAGE_MAX_ATTEMPTS =
+    ConfigBuilder("spark.stage.maxAttempts")
+      .doc("TODO")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(8)
 }
